@@ -153,7 +153,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="h-16 bg-white border-b border-slate-200 sticky top-0 z-30 shrink-0 flex items-center">
-      <div className="w-full px-4 sm:px-6 lg:px-8 flex items-center justify-between">
+      <div className="w-full min-w-0 px-2 sm:px-6 lg:px-8 flex items-center justify-between gap-2">
         
         {/* Left Side: Navigation / Mobile Menu & Active Module Name */}
         <div className="flex items-center space-x-3">
