@@ -60,7 +60,7 @@ const AppContent: React.FC = () => {
   }
 
   return (
-    <div className="h-screen w-full bg-slate-50 text-slate-900 font-sans flex overflow-hidden">
+    <div className="h-[100dvh] w-full min-w-0 bg-slate-50 text-slate-900 font-sans flex overflow-hidden">
       {/* Side Navbar */}
       <Sidebar
         activeTab={activeTab}
@@ -73,7 +73,7 @@ const AppContent: React.FC = () => {
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col h-screen min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col h-[100dvh] min-w-0 overflow-hidden">
         {/* Top Header Bar (Fixed) */}
         <Header
           activeTab={activeTab}
@@ -86,8 +86,8 @@ const AppContent: React.FC = () => {
         />
 
         {/* Scrollable View Content Body */}
-        <div className="flex-1 overflow-y-auto flex flex-col">
-          <main className="flex-1 p-3 sm:p-5 lg:p-6 w-full max-w-[1700px] mx-auto">
+        <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden flex flex-col">
+          <main className="flex-1 min-w-0 p-3 sm:p-5 lg:p-6 w-full max-w-[1700px] mx-auto">
             {/* 1. Leave & Attendance Management (LAMS 2.0) */}
             {activeModule === 'lams' && (
               <>
