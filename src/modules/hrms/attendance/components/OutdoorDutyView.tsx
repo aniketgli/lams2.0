@@ -907,7 +907,7 @@ export const OutdoorDutyView: React.FC = () => {
               </span>
             </div>
 
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 flex-nowrap">
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 flex-nowrap responsive-filter-row">
               {/* 1. Employee Filter */}
               {canSeeTeamFilters && (
                 <div className="flex-1 min-w-[130px] max-w-[200px] shrink-0 sm:shrink">
@@ -1224,7 +1224,7 @@ export const OutdoorDutyView: React.FC = () => {
           </div>
         ) : (
           /* Table View - Uniform Theme Width & Proportional Grid */
-          <div className="w-full overflow-hidden">
+          <div className="w-full min-w-0 overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse table-fixed">
               <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 text-[11px]">
                 <tr className="h-10">
