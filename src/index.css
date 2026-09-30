@@ -169,6 +169,11 @@ a {
 /* Phones: reduce page gutters and prevent modal/dialog content from being
    clipped vertically when the viewport is short. */
 @media (max-width: 640px) {
+  aside {
+    width: min(16rem, calc(100vw - 1rem));
+    max-width: calc(100vw - 1rem);
+  }
+
   .fixed.inset-0.flex.items-center.justify-center > div {
     max-width: calc(100vw - 1rem);
     max-height: calc(100dvh - 1rem);
