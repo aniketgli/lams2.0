@@ -177,7 +177,7 @@ export const Header: React.FC<HeaderProps> = ({
             {activeTab && activeModule !== 'lobby' && (
               <>
                 <span className="text-slate-300 font-normal">/</span>
-                <span className="text-slate-700 font-extrabold">{getTabName(activeTab)}</span>
+                <span className="text-slate-700 font-extrabold truncate">{getTabName(activeTab)}</span>
               </>
             )}
           </div>
