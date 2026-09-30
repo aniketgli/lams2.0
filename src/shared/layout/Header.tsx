@@ -156,7 +156,7 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="w-full min-w-0 px-2 sm:px-6 lg:px-8 flex items-center justify-between gap-2">
         
         {/* Left Side: Navigation / Mobile Menu & Active Module Name */}
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
           {/* Mobile Menu Button */}
           <button
             onClick={() => setIsOpenMobile(true)}
