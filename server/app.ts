@@ -1,12 +1,13 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import type { Server as HttpServer } from 'http';
 import { createServer as createViteServer } from 'vite';
 import { emailRoutes } from './integrations/email/email.routes';
 import { slackRoutes } from './integrations/slack/slack.routes';
 import { errorHandler } from './middleware/errorHandler';
 
-export async function createApp() {
+export async function createApp(httpServer?: HttpServer) {
   const app = express();
 
   app.use(express.json({ limit: '10mb' }));
@@ -22,9 +23,15 @@ export async function createApp() {
   // Vite Middleware (Development) vs Static Assets (Production)
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        // Vite runs inside our Express HTTP server. Passing the parent
+        // server keeps HMR/WebSocket traffic on the same LAN port.
+        middlewareMode: httpServer ? { server: httpServer } : true,
+        hmr: httpServer ? { server: httpServer } : undefined
+      },
       appType: 'spa'
     });
+
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
