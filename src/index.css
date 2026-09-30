@@ -193,3 +193,81 @@ a {
     -webkit-overflow-scrolling: touch;
   }
 }
+
+
+/* -------------------------------------------------------------------------- */
+/* Dense data controls: mobile/tablet responsive behavior                     */
+/* -------------------------------------------------------------------------- */
+
+/* Keep dense administrative tables readable. On narrow screens the table
+   scrolls inside its card instead of squeezing columns into each other. */
+div:has(> table) {
+  scrollbar-gutter: stable;
+}
+
+div:has(> table) > table {
+  min-width: 100%;
+}
+
+/* Filter strips that contain several compact controls should wrap on phones
+   instead of forcing tiny controls or hidden horizontal overflow. */
+@media (max-width: 767px) {
+  .responsive-filter-row {
+    flex-wrap: wrap !important;
+    overflow-x: visible !important;
+    row-gap: 0.5rem;
+  }
+
+  .responsive-filter-row > * {
+    flex: 1 1 calc(50% - 0.25rem);
+    min-width: min(125px, calc(50% - 0.25rem)) !important;
+    max-width: none !important;
+  }
+
+  /* Dense tables use their natural column widths and scroll within the
+     table card. This prevents table-fixed percentage columns from crushing
+     headings, employee details and action buttons on 320–767px screens. */
+  div:has(> table) {
+    overflow-x: auto !important;
+    overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  div:has(> table)::-webkit-scrollbar {
+    display: block;
+    height: 6px;
+  }
+
+  div:has(> table)::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 999px;
+  }
+
+  div:has(> table) > table {
+    width: max-content !important;
+    min-width: 760px !important;
+    table-layout: auto !important;
+  }
+
+  /* Tables with actions/status columns need a little more working room. */
+  div:has(> table) > table th,
+  div:has(> table) > table td {
+    white-space: nowrap;
+  }
+
+  /* Let long descriptive cells wrap inside their own column without
+     shrinking the complete table. */
+  div:has(> table) > table td .break-words,
+  div:has(> table) > table td .break-all {
+    white-space: normal;
+  }
+}
+
+/* Very small phones: give dense tables additional room so action buttons and
+   headings never overlap. The user can swipe the table horizontally. */
+@media (max-width: 420px) {
+  div:has(> table) > table {
+    min-width: 840px !important;
+  }
+}
