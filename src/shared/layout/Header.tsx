@@ -173,7 +173,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Active Module Name / Menu Name */}
           <div className="hidden sm:flex items-center space-x-2 text-sm sm:text-base font-black text-slate-900 tracking-tight min-w-0 max-w-full">
-            <span>{getModuleName(activeModule)}</span>
+            <span className="truncate">{getModuleName(activeModule)}</span>
             {activeTab && activeModule !== 'lobby' && (
               <>
                 <span className="text-slate-300 font-normal">/</span>
