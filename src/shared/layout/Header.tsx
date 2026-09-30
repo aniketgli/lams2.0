@@ -184,7 +184,7 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Right Side: User Profile Dropdown */}
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-1 sm:space-x-2 shrink-0">
           <div className="relative">
             <button
                 onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
