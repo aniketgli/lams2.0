@@ -153,10 +153,10 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="h-16 bg-white border-b border-slate-200 sticky top-0 z-30 shrink-0 flex items-center">
-      <div className="w-full px-4 sm:px-6 lg:px-8 flex items-center justify-between">
+      <div className="w-full min-w-0 px-2 sm:px-6 lg:px-8 flex items-center justify-between gap-2">
         
         {/* Left Side: Navigation / Mobile Menu & Active Module Name */}
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
           {/* Mobile Menu Button */}
           <button
             onClick={() => setIsOpenMobile(true)}
@@ -172,19 +172,19 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* Active Module Name / Menu Name */}
-          <div className="hidden sm:flex items-center space-x-2 text-sm sm:text-base font-black text-slate-900 tracking-tight">
-            <span>{getModuleName(activeModule)}</span>
+          <div className="hidden sm:flex items-center space-x-2 text-sm sm:text-base font-black text-slate-900 tracking-tight min-w-0 max-w-full">
+            <span className="truncate">{getModuleName(activeModule)}</span>
             {activeTab && activeModule !== 'lobby' && (
               <>
                 <span className="text-slate-300 font-normal">/</span>
-                <span className="text-slate-700 font-extrabold">{getTabName(activeTab)}</span>
+                <span className="text-slate-700 font-extrabold truncate">{getTabName(activeTab)}</span>
               </>
             )}
           </div>
         </div>
 
         {/* Right Side: User Profile Dropdown */}
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-1 sm:space-x-2 shrink-0">
           <div className="relative">
             <button
                 onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}

@@ -214,7 +214,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({ onReturnToLobby }) => 
 
       {/* Claims Table */}
       <div className="bg-white border border-slate-200/90 rounded-2xl overflow-hidden shadow-2xs">
-        <div className="w-full overflow-hidden">
+        <div className="w-full min-w-0 overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse table-fixed">
             <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 text-[11px]">
               <tr className="h-10">
