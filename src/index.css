@@ -188,10 +188,3 @@ a {
     -webkit-overflow-scrolling: touch;
   }
 }
-
-/* Tablet/phone safe spacing for common full-width cards. */
-@media (max-width: 1024px) {
-  .min-w-full {
-    min-width: 0 !important;
-  }
-}
