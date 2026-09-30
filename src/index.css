@@ -84,3 +84,114 @@ select option:checked {
   color: #ffffff;
   font-weight: 700;
 }
+
+
+/* -------------------------------------------------------------------------- */
+/* Responsive layout safeguards                                               */
+/* -------------------------------------------------------------------------- */
+
+html {
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+body {
+  width: 100%;
+  min-width: 0;
+  min-height: 100dvh;
+  margin: 0;
+  overflow-x: hidden;
+}
+
+#root {
+  width: 100%;
+  min-width: 0;
+  min-height: 100dvh;
+}
+
+/* Prevent flex/grid children from creating an accidental page-wide overflow. */
+#root * {
+  min-width: 0;
+}
+
+/* Media and form controls must never force a narrow viewport wider. */
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+}
+
+input,
+select,
+textarea,
+button {
+  max-width: 100%;
+}
+
+/* Any container that directly owns a table becomes the horizontal scroll
+   boundary. This fixes dense administrative tables on phones/tablets while
+   preserving the full desktop table layout. */
+div:has(> table) {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto !important;
+  overscroll-behavior-x: contain;
+}
+
+/* Tables may keep their desktop column widths, but they can no longer expand
+   the page itself; the parent above handles the horizontal scroll. */
+div:has(> table) > table {
+  max-width: none;
+}
+
+/* Long IDs, emails, references and user-entered text should wrap instead of
+   creating an invisible horizontal overflow. */
+p,
+span,
+label,
+td,
+th,
+button,
+a {
+  overflow-wrap: anywhere;
+}
+
+/* Keep intentionally compact table cells readable on larger screens. */
+@media (min-width: 768px) {
+  div:has(> table) > table {
+    width: 100%;
+  }
+}
+
+/* Phones: reduce page gutters and prevent modal/dialog content from being
+   clipped vertically when the viewport is short. */
+@media (max-width: 640px) {
+  .fixed.inset-0.flex.items-center.justify-center > div {
+    max-width: calc(100vw - 1rem);
+    max-height: calc(100dvh - 1rem);
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  /* Header user menus must remain inside the viewport. */
+  header .absolute.right-0 {
+    width: min(20rem, calc(100vw - 1rem));
+    max-width: calc(100vw - 1rem);
+  }
+
+  /* Dense tables remain horizontally scrollable rather than shrinking into
+     unreadable columns. */
+  div:has(> table) {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Tablet/phone safe spacing for common full-width cards. */
+@media (max-width: 1024px) {
+  .min-w-full {
+    min-width: 0 !important;
+  }
+}
