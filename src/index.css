@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+@layer utilities {
+  /* Hide scrollbars across all browsers while retaining scroll functionality */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* Table specific zero-scrollbar utilities */
+  table::-webkit-scrollbar,
+  .table-container::-webkit-scrollbar {
+    display: none;
+  }
+  table,
+  .table-container {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Global table scrollbar suppression */
+div:has(> table) {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+div:has(> table)::-webkit-scrollbar {
+  display: none;
+}
+
+/* Uniform Modern Theme Dropdowns across Entire Software */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1rem 1rem;
+  padding-right: 2.25rem !important;
+  border-radius: 0.75rem;
+  border: 1px solid #cbd5e1;
+  background-color: #ffffff;
+  color: #0f172a;
+  font-weight: 600;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  transition: all 0.15s ease-in-out;
+  cursor: pointer;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+}
+
+select:hover {
+  border-color: #94a3b8;
+  background-color: #f8fafc;
+}
+
+select:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+  background-color: #ffffff;
+}
+
+select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background-color: #f1f5f9;
+}
+
+select option {
+  background-color: #ffffff;
+  color: #0f172a;
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+select option:checked {
+  background-color: #2563eb;
+  color: #ffffff;
+  font-weight: 700;
+}

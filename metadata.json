@@ -1,0 +1,6 @@
+{
+  "name": "Leave & Attendance Hub",
+  "description": "Role-based leave and attendance management system with integrated Enterprise Lobby supporting Project Management (PMS), Stock & Inventory (SIMS), Facility Management (FMS), and Finance TA/DA claims.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
