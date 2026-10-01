@@ -470,7 +470,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return saved ? JSON.parse(saved) : [
       {
         id: 'slk-init-1',
-        timestamp: '09:00:00 AM',
+        timestamp: '09:00:00',
         channel: '#leave-and-attendance-logs',
         sender: 'System Bot',
         title: '🔔 Slack Integration Operational',
@@ -480,7 +480,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       },
       {
         id: 'slk-init-2',
-        timestamp: '10:15:30 AM',
+        timestamp: '10:15:30',
         channel: '#leave-and-attendance-logs',
         sender: 'Anita Roy',
         title: '✅ OD Approved: Priya Verma',
@@ -490,7 +490,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       },
       {
         id: 'slk-init-3',
-        timestamp: '11:45:10 AM',
+        timestamp: '11:45:10',
         channel: '#leave-and-attendance-logs',
         sender: 'Dr. Rajesh Sharma',
         title: '📋 Leave Sanctioned: Dr. Sunita Rao',
@@ -500,7 +500,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       },
       {
         id: 'slk-init-4',
-        timestamp: '02:30:00 PM',
+        timestamp: '14:30:00',
         channel: '#leave-and-attendance-logs',
         sender: 'Biometric Daemon',
         title: '⚠️ Biometric Anomaly Detected',
@@ -541,7 +541,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         effectiveDate: '2026-08-01',
         notes: 'Promoted to Director of Research & statutory R&D portfolio reallocation.',
         transferredBy: 'Dr. Rajesh Sharma (Admin)',
-        timestamp: '2026-08-01 10:30 AM'
+        timestamp: '2026-08-01 10:30'
       },
       {
         id: 'trf-102',
@@ -554,7 +554,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         effectiveDate: '2026-07-15',
         notes: 'Deputed to National Mission on Himalayan Studies (NMHS) specialized research group.',
         transferredBy: 'Dr. Rajesh Sharma (Admin)',
-        timestamp: '2026-07-15 02:15 PM'
+        timestamp: '2026-07-15 14:15'
       },
       {
         id: 'trf-103',
@@ -567,7 +567,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         effectiveDate: '2026-07-01',
         notes: 'Project associate transfer to community forest outreach initiative.',
         transferredBy: 'Dr. Rajesh Sharma (Admin)',
-        timestamp: '2026-07-01 11:00 AM'
+        timestamp: '2026-07-01 11:00'
       }
     ];
   });
@@ -1059,7 +1059,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // --- ATTENDANCE ACTIONS ---
   const clockInToday = (mode: AttendanceRecord['workMode'], location: string = 'Main Campus') => {
     const todayStr = new Date().toISOString().split('T')[0];
-    const nowTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const nowTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
     const userShift = getUserShift(currentUser.id);
     const timingCalc = evaluateAttendanceByShift(nowTimeStr, undefined, userShift, mode);
     const shiftCode = `${userShift.code} (${userShift.startTime} - ${userShift.endTime})`;
@@ -1115,7 +1115,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const clockOutToday = () => {
     const todayStr = new Date().toISOString().split('T')[0];
-    const nowTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const nowTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
     const userShift = getUserShift(currentUser.id);
 
     setAttendanceRecords((prev) => {
@@ -1437,8 +1437,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             id: `att-${target.userId}-${dateStr}`,
             userId: target.userId,
             date: dateStr,
-            clockIn: target.startTime ? `${target.startTime} AM` : '09:00 AM',
-            clockOut: target.endTime ? `${target.endTime} PM` : '05:30 PM',
+            clockIn: target.startTime || '09:00',
+            clockOut: target.endTime || '17:30',
             workMode: 'field_od',
             status: 'od',
             totalHours: 8.5,
@@ -1913,8 +1913,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const [inH, inM] = target.requestedInTime.split(':').map(Number);
       const [outH, outM] = target.requestedOutTime.split(':').map(Number);
       const diffHours = Number(((outH * 60 + outM - (inH * 60 + inM)) / 60).toFixed(2));
-      const inFormatted = `${inH % 12 || 12}:${inM < 10 ? '0' + inM : inM} ${inH >= 12 ? 'PM' : 'AM'}`;
-      const outFormatted = `${outH % 12 || 12}:${outM < 10 ? '0' + outM : outM} ${outH >= 12 ? 'PM' : 'AM'}`;
+      const inFormatted = `${inH.toString().padStart(2, '0')}:${inM.toString().padStart(2, '0')}`;
+      const outFormatted = `${outH.toString().padStart(2, '0')}:${outM.toString().padStart(2, '0')}`;
 
       // Update or insert in attendanceRecords
       setAttendanceRecords((prev) => {
@@ -4286,7 +4286,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSlackLogs([
       {
         id: 'slk-init-reset',
-        timestamp: new Date().toLocaleTimeString(),
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
         channel: '#leave-and-attendance-logs',
         sender: 'System Admin',
         title: '🔄 Data Reset to Seed Defaults',

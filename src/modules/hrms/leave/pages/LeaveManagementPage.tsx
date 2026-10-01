@@ -60,6 +60,7 @@ import {
 } from '../utils/leaveCycleUtils';
 import { INITIAL_HOLIDAYS } from '../../holidays/data/holidayData';
 import { AppDatePicker } from '../../../../shared/components/AppDatePicker';
+import { formatTo24H } from '../../attendance/utils/attendanceUtils';
 
 // Legacy StationLeaveDatePicker wrapper using unified AppDatePicker
 const StationLeaveDatePicker: React.FC<{
@@ -245,8 +246,8 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
         date: rec.date,
         dayOfWeek: dayName,
         label,
-        clockIn: rec.clockIn || '09:00 AM',
-        clockOut: rec.clockOut || '05:30 PM',
+        clockIn: rec.clockIn ? formatTo24H(rec.clockIn) : '09:00',
+        clockOut: rec.clockOut ? formatTo24H(rec.clockOut) : '17:30',
         totalHours: rec.totalHours || 8.5,
         isHoliday: !!hol,
         holidayCategory: hol ? hol.category : 'Weekend Work'
@@ -259,8 +260,8 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
         date: '2026-08-08',
         dayOfWeek: 'Saturday',
         label: 'Saturday Full Duty',
-        clockIn: '09:15 AM',
-        clockOut: '05:45 PM',
+        clockIn: '09:15',
+        clockOut: '17:45',
         totalHours: 8.5,
         isHoliday: false,
         holidayCategory: 'Weekend Work'
@@ -270,8 +271,8 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
         date: '2026-08-09',
         dayOfWeek: 'Sunday',
         label: 'Sunday Campus Duty',
-        clockIn: '09:00 AM',
-        clockOut: '05:30 PM',
+        clockIn: '09:00',
+        clockOut: '17:30',
         totalHours: 8.5,
         isHoliday: false,
         holidayCategory: 'Weekend Work'
@@ -281,8 +282,8 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
         date: '2026-08-15',
         dayOfWeek: 'Saturday',
         label: 'Independence Day Duty',
-        clockIn: '08:45 AM',
-        clockOut: '05:30 PM',
+        clockIn: '08:45',
+        clockOut: '17:30',
         totalHours: 8.75,
         isHoliday: true,
         holidayCategory: 'Gazetted Holiday'
@@ -292,8 +293,8 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
         date: '2026-08-02',
         dayOfWeek: 'Sunday',
         label: 'Sunday Project Duty',
-        clockIn: '09:30 AM',
-        clockOut: '05:30 PM',
+        clockIn: '09:30',
+        clockOut: '17:30',
         totalHours: 8.0,
         isHoliday: false,
         holidayCategory: 'Weekend Work'
@@ -1518,7 +1519,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
   }
 
   return (
-    <div className="space-y-6">
+    <div className="w-full min-w-0 space-y-6">
       {/* Uniform Page Header */}
       <PageHeader
         icon={FileText}
@@ -1540,7 +1541,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
       />
 
       {/* Leave Summary Stat Cards: Placed immediately below PageHeader */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* 1. Approved Leaves */}
         <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-4 shadow-2xs flex items-center justify-between">
           <div>
@@ -1944,8 +1945,8 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
 
           {/* Tabular View for Leave Balances */}
           {balanceViewMode === 'table' ? (
-            <div className="w-full overflow-hidden rounded-xl border border-slate-200/80 shadow-2xs">
-              <table className="w-full text-left text-xs border-collapse table-fixed">
+            <div className="w-full overflow-x-auto rounded-xl border border-slate-200/80 shadow-2xs">
+              <table className="w-full text-left text-xs border-collapse table-auto min-w-[800px]">
                 <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 text-[11px]">
                   <tr className="h-10">
                     <th className="px-4 py-2.5 whitespace-nowrap align-middle w-[36%]">Leave Type &amp; Code</th>
@@ -2276,7 +2277,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
       )}
 
       {/* Leave Applications History / Requisitions Container */}
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-2xs overflow-hidden">
+      <div className="w-full min-w-0 bg-white border border-slate-200 rounded-2xl shadow-2xs overflow-hidden">
         {/* Header Bar with Count & Total Days */}
         <div className="p-3.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center space-x-3">
@@ -2304,8 +2305,8 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
             )}
           </div>
         ) : viewMode === 'table' ? (
-          <div className="w-full overflow-hidden">
-            <table className="w-full text-left text-xs border-collapse table-fixed">
+          <div className="w-full overflow-x-auto rounded-xl border border-slate-200/80 shadow-2xs">
+            <table className="w-full text-left text-xs border-collapse table-auto min-w-[950px]">
               <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 text-[11px]">
                 <tr className="h-10">
                   {!isUserView && (

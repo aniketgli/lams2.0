@@ -38,7 +38,6 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-300 mt-0.5 break-words">{subtitle}</p>
         </div>
       </div>
       {actions && (

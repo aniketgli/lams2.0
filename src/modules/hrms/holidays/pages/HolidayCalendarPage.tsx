@@ -589,7 +589,7 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
       />
 
       {/* Holiday Summary Stat Cards: Placed immediately below PageHeader */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* 1. Gazetted Holidays (GH) - GREEN */}
         <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-4 shadow-2xs flex items-center justify-between">
           <div>

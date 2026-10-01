@@ -110,7 +110,7 @@ export const MasterSettingsPage: React.FC = () => {
       punchMode: 'BOTH',
       countForAttendance: true,
       status: 'ACTIVE',
-      lastSync: 'Today, 08:30 AM',
+      lastSync: 'Today, 08:30',
       gateType: 'Main Entry / Exit Gate'
     },
     {
@@ -123,7 +123,7 @@ export const MasterSettingsPage: React.FC = () => {
       punchMode: 'BOTH',
       countForAttendance: true,
       status: 'ACTIVE',
-      lastSync: 'Today, 08:28 AM',
+      lastSync: 'Today, 08:28',
       gateType: 'Administration Wing'
     },
     {
@@ -136,7 +136,7 @@ export const MasterSettingsPage: React.FC = () => {
       punchMode: 'IN_ONLY',
       countForAttendance: true,
       status: 'ACTIVE',
-      lastSync: 'Today, 08:15 AM',
+      lastSync: 'Today, 08:15',
       gateType: 'Research Laboratory'
     },
     {
@@ -149,7 +149,7 @@ export const MasterSettingsPage: React.FC = () => {
       punchMode: 'BOTH',
       countForAttendance: false, // Excluded from official attendance calculation
       status: 'ACTIVE',
-      lastSync: 'Today, 08:00 AM',
+      lastSync: 'Today, 08:00',
       gateType: 'Cafeteria / Mess Counter'
     },
     {
@@ -162,7 +162,7 @@ export const MasterSettingsPage: React.FC = () => {
       punchMode: 'BOTH',
       countForAttendance: true,
       status: 'ACTIVE',
-      lastSync: 'Yesterday, 06:45 PM',
+      lastSync: 'Yesterday, 18:45',
       gateType: 'Regional Gate'
     },
     {

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../../../context/AppContext';
-import { getNormalizedStatusCode, ATTENDANCE_STATUS_MAP } from '../../attendance/utils/attendanceUtils';
+import { getNormalizedStatusCode, ATTENDANCE_STATUS_MAP, formatTo24H } from '../../attendance/utils/attendanceUtils';
 import {
   Users,
   CheckCircle,
@@ -445,7 +445,7 @@ export const ReportingManagerDashboard: React.FC<ReportingManagerDashboardProps>
                     })()}
                   </td>
                   <td className="px-4 py-2.5 text-slate-700 uppercase font-medium align-middle whitespace-nowrap">{workMode}</td>
-                  <td className="px-4 py-2.5 font-mono text-slate-600 align-middle whitespace-nowrap">{clockIn}</td>
+                  <td className="px-4 py-2.5 font-mono text-slate-600 align-middle whitespace-nowrap">{formatTo24H(clockIn)}</td>
                 </tr>
               ))}
             </tbody>

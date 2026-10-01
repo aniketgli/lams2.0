@@ -403,7 +403,7 @@ export const ShiftMasterSection: React.FC = () => {
                     onChange={(e) => setFormStartTime(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-indigo-600"
                   />
-                  <span className="text-[10px] text-slate-400 block">e.g. 09:30 AM</span>
+                  <span className="text-[10px] text-slate-400 block">e.g. 09:30 (24-hr)</span>
                 </div>
 
                 <div className="space-y-1.5">
@@ -417,7 +417,7 @@ export const ShiftMasterSection: React.FC = () => {
                     onChange={(e) => setFormEndTime(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-indigo-600"
                   />
-                  <span className="text-[10px] text-slate-400 block">e.g. 05:30 PM</span>
+                  <span className="text-[10px] text-slate-400 block">e.g. 17:30 (24-hr)</span>
                 </div>
 
                 <div className="space-y-1.5">

@@ -673,7 +673,7 @@ export const OutdoorDutyView: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in pb-12">
+    <div className="w-full min-w-0 space-y-6 animate-fade-in pb-12">
       {/* Toast Alert */}
       {toastMessage && (
         <div
@@ -713,7 +713,7 @@ export const OutdoorDutyView: React.FC = () => {
       />
 
       {/* Summary Stat Metrics: Exactly 4 Uniform Cards placed immediately below PageHeader */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* 1. Approved */}
         <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-4 shadow-2xs flex items-center justify-between">
           <div>
@@ -1021,7 +1021,7 @@ export const OutdoorDutyView: React.FC = () => {
       )}
 
       {/* Main Table / Grid Container */}
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-2xs overflow-hidden">
+      <div className="w-full min-w-0 bg-white border border-slate-200 rounded-2xl shadow-2xs overflow-hidden">
         {/* Table Title Bar */}
         <div className="p-3.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 min-h-[50px]">
           <div className="flex items-center space-x-3">
@@ -1225,7 +1225,7 @@ export const OutdoorDutyView: React.FC = () => {
         ) : (
           /* Table View - Uniform Theme Width & Proportional Grid */
           <div className="w-full min-w-0 overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse table-fixed">
+            <table className="w-full text-left text-xs border-collapse table-auto min-w-[950px]">
               <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 text-[11px]">
                 <tr className="h-10">
                   {/* Employee Column */}

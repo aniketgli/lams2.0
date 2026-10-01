@@ -8,7 +8,7 @@ export const sendSlackNotification = async (
   const newLog: SlackNotification = {
     ...notification,
     id: `slk-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
     deliveredStatus: 'simulated'
   };
 

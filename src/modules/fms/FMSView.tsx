@@ -141,7 +141,7 @@ export const FMSView: React.FC<FMSViewProps> = ({ onReturnToLobby }) => {
       </div>
 
       {/* Overview Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-2xs">
           <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500 uppercase tracking-wider">
             <Hotel className="w-4 h-4 text-purple-600" /> Guest House

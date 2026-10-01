@@ -200,7 +200,7 @@ export const PMSView: React.FC<PMSViewProps> = ({ onReturnToLobby }) => {
       </div>
 
       {/* Metrics Row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-2xs">
           <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Active Projects</div>
           <div className="text-2xl font-black text-slate-900 mt-1">{projects.length}</div>

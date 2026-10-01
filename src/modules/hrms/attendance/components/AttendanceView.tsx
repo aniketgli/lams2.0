@@ -9,7 +9,8 @@ import {
   getNormalizedStatusCode,
   getStatusLabel,
   ATTENDANCE_STATUS_MAP,
-  ALL_STATUS_CODES
+  ALL_STATUS_CODES,
+  formatTo24H
 } from '../utils/attendanceUtils';
 import {
   Clock,
@@ -365,8 +366,8 @@ export const AttendanceView: React.FC = () => {
         `"${u?.department || ''}"`,
         `"${rec.shiftCode || userShift?.code || 'GEN-01'}"`,
         `"${userShift ? `${userShift.startTime} - ${userShift.endTime}` : '-'}"`,
-        `"${rec.clockIn || '-'}"`,
-        `"${rec.clockOut || '-'}"`,
+        `"${formatTo24H(rec.clockIn)}"`,
+        `"${formatTo24H(rec.clockOut)}"`,
         rec.totalHours ? `${rec.totalHours} hrs` : '0 hrs',
         `"${code}"`,
         `"${label}"`,
@@ -437,8 +438,8 @@ export const AttendanceView: React.FC = () => {
         u?.name || rec.userId,
         rec.shiftCode || userShift?.code || 'GEN-01',
         userShift ? `${userShift.startTime}-${userShift.endTime}` : '-',
-        rec.clockIn || '-',
-        rec.clockOut || '-',
+        formatTo24H(rec.clockIn),
+        formatTo24H(rec.clockOut),
         rec.totalHours ? `${rec.totalHours} h` : '-',
         code,
         rec.remark || rec.notes || '-'
@@ -477,7 +478,7 @@ export const AttendanceView: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="w-full min-w-0 space-y-6">
       {/* Page Header Banner */}
       <PageHeader
         icon={Clock}
@@ -492,7 +493,7 @@ export const AttendanceView: React.FC = () => {
       />
 
       {/* Attendance Summary Stat Cards: Original 4 Cards placed immediately below PageHeader */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* 1. Present */}
         <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-4 shadow-2xs flex items-center justify-between">
           <div>
@@ -552,11 +553,11 @@ export const AttendanceView: React.FC = () => {
 
       {/* Professional Date Range & Related Filters Control Bar */}
       <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3.5">
-        {/* Top Bar: Clean Themed Date Pickers & Presets & Export Buttons */}
-        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3.5 border-b border-slate-100 pb-3.5">
+        {/* Top Bar: Clean Themed Date Pickers & Presets & Export Buttons in ONE ROW for Tab View */}
+        <div className="flex flex-row items-center justify-between gap-2.5 sm:gap-3.5 border-b border-slate-100 pb-3.5 flex-nowrap overflow-x-auto no-scrollbar">
           {/* Left: Date Pickers & Presets */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
               <AppDatePicker
                 size="sm"
                 placeholder="From Date"
@@ -575,26 +576,26 @@ export const AttendanceView: React.FC = () => {
               />
             </div>
 
-            {/* Quick Preset: Current Month (Only appears when dates are modified from default) */}
+            {/* Quick Preset: Current Month */}
             {(startDate !== DEFAULT_START_DATE || endDate !== DEFAULT_END_DATE) && (
-              <div>
-                <button
-                  onClick={handlePresetCurrentMonth}
-                  className="h-9 bg-slate-50/90 hover:bg-white border border-slate-200/90 rounded-xl px-3.5 text-xs font-bold text-slate-800 shadow-2xs flex items-center space-x-1.5 shrink-0 transition-all cursor-pointer"
-                  title="Reset dates to Current Month"
-                >
-                  <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Current Month</span>
-                </button>
-              </div>
+              <button
+                onClick={handlePresetCurrentMonth}
+                className="h-9 bg-slate-50/90 hover:bg-white border border-slate-200/90 rounded-xl px-2.5 sm:px-3.5 text-xs font-bold text-slate-800 shadow-2xs flex items-center space-x-1.5 shrink-0 transition-all cursor-pointer"
+                title="Reset dates to Current Month"
+              >
+                <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                <span className="hidden sm:inline">Current Month</span>
+                <span className="sm:hidden">Reset</span>
+              </button>
             )}
           </div>
 
           {/* Right: Export Buttons (CSV & PDF) */}
-          <div className="flex items-center space-x-2 shrink-0 self-end lg:self-auto">
+          <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
             <button
               onClick={handleExportCSV}
-              className="h-9 px-3.5 bg-white hover:bg-slate-50 text-slate-800 border border-slate-200/90 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer shadow-2xs"
+              className="h-9 px-2.5 sm:px-3.5 bg-white hover:bg-slate-50 text-slate-800 border border-slate-200/90 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer shadow-2xs shrink-0"
+              title="Export records to CSV"
             >
               <Download className="w-3.5 h-3.5 text-emerald-600" />
               <span>Export CSV</span>
@@ -602,7 +603,8 @@ export const AttendanceView: React.FC = () => {
 
             <button
               onClick={handleExportPDF}
-              className="h-9 px-3.5 bg-slate-900 hover:bg-slate-800 text-white border border-slate-900 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer shadow-2xs"
+              className="h-9 px-2.5 sm:px-3.5 bg-slate-900 hover:bg-slate-800 text-white border border-slate-900 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer shadow-2xs shrink-0"
+              title="Export records to PDF"
             >
               <FileText className="w-3.5 h-3.5 text-rose-400" />
               <span>Export PDF</span>
@@ -733,13 +735,13 @@ export const AttendanceView: React.FC = () => {
               )}
 
               {/* 4. Shift Filter (Available for All Roles) */}
-              <div className="flex-1 min-w-[125px] max-w-[200px] shrink-0 sm:shrink">
+              <div className="flex-1 min-w-[95px] max-w-[125px] shrink-0 sm:shrink">
                 <MultiSelectFilter
                   label="Shift"
                   icon={<Clock className="w-3.5 h-3.5" />}
                   selectedValues={selectedShiftFilter}
                   onChange={setSelectedShiftFilter}
-                  options={shifts.map((s) => ({ label: `${s.code} - ${s.name}`, value: s.code }))}
+                  options={shifts.map((s) => ({ label: s.code, value: s.code }))}
                 />
               </div>
 
@@ -775,7 +777,7 @@ export const AttendanceView: React.FC = () => {
               )}
 
               {/* 7. Status Filter (Available for ALL Roles) */}
-              <div className="flex-1 min-w-[115px] max-w-[170px] shrink-0 sm:shrink">
+              <div className="flex-1 min-w-[105px] max-w-[135px] shrink-0 sm:shrink">
                 <MultiSelectFilter
                   label="Status"
                   icon={<Filter className="w-3.5 h-3.5" />}
@@ -790,90 +792,87 @@ export const AttendanceView: React.FC = () => {
       </div>
 
       {/* Attendance Data Display (Table View vs Grid View) */}
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-2xs overflow-hidden">
+      <div className="w-full min-w-0 bg-white border border-slate-200 rounded-2xl shadow-2xs overflow-hidden">
         {/* Table Title Bar */}
         <div className="p-3.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 min-h-[50px]">
           <div className="flex items-center space-x-3">
             <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
               Attendance Records ({sortedRecords.length})
             </span>
-            <span className="text-[11px] text-slate-500 font-medium bg-slate-200/60 px-2.5 py-0.5 rounded-full border border-slate-200">
-              {formatDateAndDay(startDate)} - {formatDateAndDay(endDate)}
-            </span>
           </div>
         </div>
 
         {/* VIEW 1: ROW TABLE VIEW (Theme aligned layout) */}
         {viewMode === 'table' ? (
-          <div className="w-full min-w-0 overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse table-fixed">
+          <div className="w-full min-w-0 overflow-x-auto rounded-xl border border-slate-200/90 shadow-2xs">
+            <table className="w-full min-w-[1040px] text-left text-xs border-collapse">
               <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 text-[11px] shadow-2xs">
                 <tr className="h-10">
                   <th
                     onClick={() => handleSort('date')}
-                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[13%]"
+                    className="py-3 px-4 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle min-w-[140px]"
                     title="Click to sort by Date"
                   >
-                    <div className="flex items-center space-x-1.5">
+                    <div className="flex items-center space-x-1">
                       <span>Date (Day)</span>
                       {sortField === 'date' ? (
-                        sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-600 shrink-0" /> : <ArrowDown className="w-3 h-3 text-indigo-600 shrink-0" />
                       ) : (
-                        <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-40 shrink-0" />
+                        <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-40 shrink-0" />
                       )}
                     </div>
                   </th>
                   <th
                     onClick={() => handleSort('employee')}
-                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[23%]"
+                    className="py-3 px-4 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle min-w-[210px]"
                     title="Click to sort by Employee"
                   >
-                    <div className="flex items-center space-x-1.5">
-                      <span>Employee Details</span>
+                    <div className="flex items-center space-x-1">
+                      <span>Employee</span>
                       {sortField === 'employee' ? (
-                        sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-600 shrink-0" /> : <ArrowDown className="w-3 h-3 text-indigo-600 shrink-0" />
                       ) : (
-                        <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-40 shrink-0" />
+                        <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-40 shrink-0" />
                       )}
                     </div>
                   </th>
                   <th
                     onClick={() => handleSort('shift')}
-                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[12%]"
+                    className="py-3 px-4 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle min-w-[130px]"
                     title="Click to sort by Shift"
                   >
-                    <div className="flex items-center space-x-1.5">
+                    <div className="flex items-center space-x-1">
                       <span>Shift</span>
                       {sortField === 'shift' ? (
-                        sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-600 shrink-0" /> : <ArrowDown className="w-3 h-3 text-indigo-600 shrink-0" />
                       ) : (
-                        <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-40 shrink-0" />
+                        <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-40 shrink-0" />
                       )}
                     </div>
                   </th>
                   <th
                     onClick={() => handleSort('in')}
-                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[8%]"
+                    className="py-3 px-3.5 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle min-w-[85px]"
                     title="Click to sort by In Time"
                   >
-                    <div className="flex items-center space-x-1.5">
+                    <div className="flex items-center space-x-1">
                       <span>In</span>
                       {sortField === 'in' ? (
-                        sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-600 shrink-0" /> : <ArrowDown className="w-3 h-3 text-indigo-600 shrink-0" />
                       ) : (
-                        <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-40 shrink-0" />
+                        <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-40 shrink-0" />
                       )}
                     </div>
                   </th>
                   <th
                     onClick={() => handleSort('out')}
-                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[8%]"
+                    className="py-3 px-3.5 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle min-w-[85px]"
                     title="Click to sort by Out Time"
                   >
-                    <div className="flex items-center space-x-1.5">
+                    <div className="flex items-center space-x-1">
                       <span>Out</span>
                       {sortField === 'out' ? (
-                        sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-600 shrink-0" /> : <ArrowDown className="w-3 h-3 text-indigo-600 shrink-0" />
                       ) : (
                         <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-40 shrink-0" />
                       )}
@@ -881,33 +880,33 @@ export const AttendanceView: React.FC = () => {
                   </th>
                   <th
                     onClick={() => handleSort('hours')}
-                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[8%]"
+                    className="py-3 px-3.5 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle min-w-[85px]"
                     title="Click to sort by Hours"
                   >
-                    <div className="flex items-center space-x-1.5">
+                    <div className="flex items-center space-x-1">
                       <span>Hours</span>
                       {sortField === 'hours' ? (
-                        sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-600 shrink-0" /> : <ArrowDown className="w-3 h-3 text-indigo-600 shrink-0" />
                       ) : (
-                        <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-40 shrink-0" />
+                        <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-40 shrink-0" />
                       )}
                     </div>
                   </th>
                   <th
                     onClick={() => handleSort('status')}
-                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[11%]"
+                    className="py-3 px-4 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle min-w-[115px]"
                     title="Click to sort by Status"
                   >
-                    <div className="flex items-center space-x-1.5">
+                    <div className="flex items-center space-x-1">
                       <span>Status</span>
                       {sortField === 'status' ? (
-                        sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" /> : <ArrowDown className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-600 shrink-0" /> : <ArrowDown className="w-3 h-3 text-indigo-600 shrink-0" />
                       ) : (
-                        <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-40 shrink-0" />
+                        <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-40 shrink-0" />
                       )}
                     </div>
                   </th>
-                  <th className="py-2.5 px-3 font-bold whitespace-nowrap align-middle w-[17%]">
+                  <th className="py-3 px-4 font-bold whitespace-nowrap align-middle min-w-[180px]">
                     Remark
                   </th>
                 </tr>
@@ -939,15 +938,15 @@ export const AttendanceView: React.FC = () => {
                     return (
                       <tr key={rec.id} className="hover:bg-indigo-50/40 transition-colors">
                         {/* 1. Date */}
-                        <td className="py-2 px-3 font-semibold text-slate-900 whitespace-nowrap">
+                        <td className="py-3 px-4 font-semibold text-slate-900 whitespace-nowrap text-xs min-w-[140px]">
                           {dateAndDayFormatted}
                         </td>
 
                         {/* 2. Employee Details */}
-                        <td className="py-2.5 px-3 min-w-[170px]">
-                          <div className="flex items-start space-x-2">
+                        <td className="py-3 px-4 min-w-[210px]">
+                          <div className="flex items-start space-x-2.5 min-w-0">
                             <img src={u?.avatar} alt={u?.name} className="w-7 h-7 rounded-full object-cover shrink-0 border border-slate-200 mt-0.5 shadow-2xs" />
-                            <div className="min-w-0">
+                            <div className="min-w-0 flex-1">
                               <span className="font-bold text-slate-900 block leading-tight truncate text-xs">{u?.name || rec.userId}</span>
                               <span className="text-[11px] text-slate-500 font-medium block leading-tight truncate mt-0.5">
                                 {u?.designation || 'Staff'}
@@ -960,7 +959,7 @@ export const AttendanceView: React.FC = () => {
                         </td>
 
                         {/* 3. Shift Code & Timings (No divider line) */}
-                        <td className="py-2 px-3 whitespace-nowrap">
+                        <td className="py-3 px-4 whitespace-nowrap min-w-[130px]">
                           {(() => {
                             const userShift = shifts.find((s) => s.code === rec.shiftCode) || getUserShift(rec.userId);
                             const rawCode = rec.shiftCode || userShift.code || 'GEN-01';
@@ -976,7 +975,7 @@ export const AttendanceView: React.FC = () => {
                                     {formattedCode}
                                   </span>
                                   {isLate && (
-                                    <span className="text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-300 px-1 py-0.2 rounded">
+                                    <span className="text-[8px] font-bold text-amber-700 bg-amber-50 border border-amber-300 px-1 py-0.2 rounded">
                                       Late
                                     </span>
                                   )}
@@ -990,22 +989,22 @@ export const AttendanceView: React.FC = () => {
                         </td>
 
                         {/* 4. In */}
-                        <td className="py-2 px-3 font-mono font-bold text-slate-900 whitespace-nowrap">
-                          {rec.clockIn || '-'}
+                        <td className="py-3 px-3.5 font-mono font-bold text-slate-900 whitespace-nowrap text-xs min-w-[85px]">
+                          {formatTo24H(rec.clockIn)}
                         </td>
 
                         {/* 5. Out */}
-                        <td className="py-2 px-3 font-mono font-bold text-slate-900 whitespace-nowrap">
-                          {rec.clockOut || '-'}
+                        <td className="py-3 px-3.5 font-mono font-bold text-slate-900 whitespace-nowrap text-xs min-w-[85px]">
+                          {formatTo24H(rec.clockOut)}
                         </td>
 
                         {/* 6. Hours */}
-                        <td className="py-2 px-3 font-mono text-slate-800 font-bold whitespace-nowrap">
+                        <td className="py-3 px-3.5 font-mono text-slate-800 font-bold whitespace-nowrap text-xs min-w-[85px]">
                           {rec.totalHours ? `${rec.totalHours} hrs` : '-'}
                         </td>
 
                         {/* 7. Status Column (Primary Badge + Application Status Underneath without repetition) */}
-                        <td className="py-2 px-3 whitespace-nowrap">
+                        <td className="py-3 px-4 whitespace-nowrap min-w-[115px]">
                           {(() => {
                             const matchingOD = odRequests.find(
                               (od) => od.userId === rec.userId && rec.date >= od.startDate && rec.date <= od.endDate
@@ -1064,12 +1063,12 @@ export const AttendanceView: React.FC = () => {
 
                                 {appStatusObj && (
                                   <span
-                                    className={`inline-flex items-center text-[9px] px-1.5 py-0.2 rounded border leading-none tracking-tight ${getAppStatusBadgeStyle(
+                                    className={`inline-flex items-center text-[9px] px-1.5 py-0.5 rounded border leading-none tracking-tight font-extrabold ${getAppStatusBadgeStyle(
                                       appStatusObj.status
                                     )}`}
                                     title={`${appStatusObj.typeLabel}: ${formatStatusLabel(appStatusObj.status)}`}
                                   >
-                                    {formatStatusLabel(appStatusObj.status)}
+                                    {appStatusObj.typeLabel}: {formatStatusLabel(appStatusObj.status)}
                                   </span>
                                 )}
                               </div>
@@ -1078,10 +1077,10 @@ export const AttendanceView: React.FC = () => {
                         </td>
 
                         {/* 8. Remark Column */}
-                        <td className="py-2 px-3 text-slate-700 text-[11px]">
+                        <td className="py-3 px-4 text-slate-700 text-xs min-w-[180px]">
                           {isLongRemark ? (
                             <div className="flex items-center space-x-1">
-                              <span className="truncate max-w-[180px]">{remarkText.slice(0, 30)}...</span>
+                              <span className="truncate max-w-[120px] md:max-w-[200px] inline-block" title={remarkText}>{remarkText.slice(0, 30)}...</span>
                               <button
                                 onClick={() =>
                                   setActiveRemarkModal({
@@ -1090,14 +1089,14 @@ export const AttendanceView: React.FC = () => {
                                     remark: remarkText
                                   })
                                 }
-                                className="text-blue-600 font-bold hover:underline inline-flex items-center space-x-0.5 cursor-pointer shrink-0 ml-1"
+                                className="text-blue-600 font-bold hover:underline inline-flex items-center space-x-0.5 cursor-pointer shrink-0 ml-0.5 text-[10px]"
                               >
                                 <span>More</span>
-                                <Eye className="w-3 h-3 text-blue-600 shrink-0" />
+                                <Eye className="w-2.5 h-2.5 text-blue-600 shrink-0" />
                               </button>
                             </div>
                           ) : (
-                            <span>{remarkText}</span>
+                            <span className="truncate max-w-[160px] md:max-w-none inline-block" title={remarkText}>{remarkText}</span>
                           )}
                         </td>
                       </tr>
@@ -1245,7 +1244,7 @@ export const AttendanceView: React.FC = () => {
                         <div className="flex justify-between items-center text-slate-600 text-[11px]">
                           <span>In / Out:</span>
                           <span className="font-mono font-bold text-slate-900">
-                            {rec.clockIn || '-'} - {rec.clockOut || '-'}
+                            {formatTo24H(rec.clockIn)} - {formatTo24H(rec.clockOut)}
                           </span>
                         </div>
 
@@ -1414,13 +1413,13 @@ export const AttendanceView: React.FC = () => {
                 <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
                   <span className="text-[10px] uppercase font-bold text-slate-400 block">Biometric In</span>
                   <span className="font-mono font-bold text-slate-900">
-                    {activeShiftModal.clockIn || 'No In-Punch'}
+                    {formatTo24H(activeShiftModal.clockIn)}
                   </span>
                 </div>
                 <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
                   <span className="text-[10px] uppercase font-bold text-slate-400 block">Biometric Out</span>
                   <span className="font-mono font-bold text-slate-900">
-                    {activeShiftModal.clockOut || 'No Out-Punch'}
+                    {formatTo24H(activeShiftModal.clockOut)}
                   </span>
                 </div>
                 <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">

@@ -1363,7 +1363,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       />
 
       {/* Employee Profile Summary Stat Cards: Exactly 4 Uniform Cards matching standard theme */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* 1. Total Personnel */}
         <div className="bg-blue-50/70 border border-blue-200/90 rounded-xl p-4 shadow-2xs flex items-center justify-between">
           <div>
@@ -2566,8 +2566,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
         {/* User Controls Table */}
           <div className="bg-white border border-slate-200/90 rounded-2xl shadow-2xs overflow-hidden">
-            <div className="w-full">
-              <table className="w-full text-left text-xs border-collapse table-fixed">
+            <div className="w-full overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse table-auto min-w-[950px]">
                 <thead className="sticky top-0 z-10 bg-slate-100/90 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 text-[11px] shadow-2xs">
                   <tr className="h-10">
                     <th className="px-3.5 py-2.5 whitespace-nowrap align-middle w-[28%]">Employee Details</th>
@@ -2914,7 +2914,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
           {/* Transfer History Table */}
           <div className="bg-white border border-slate-200/90 rounded-2xl shadow-2xs overflow-hidden">
             <div className="w-full overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse table-fixed min-w-[760px]">
+              <table className="w-full text-left text-xs border-collapse table-auto min-w-[950px]">
                 <thead className="bg-slate-100/90 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 text-[11px]">
                   <tr className="h-10">
                     <th className="px-3.5 py-2.5 whitespace-nowrap align-middle w-[24%]">Employee Details</th>

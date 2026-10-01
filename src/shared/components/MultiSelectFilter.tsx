@@ -76,7 +76,10 @@ export const MultiSelectFilter: React.FC<MultiSelectFilterProps> = ({
   useEffect(() => {
     if (isOpen) {
       updatePopoverCoords();
-      const handleScrollOrResize = () => {
+      const handleScrollOrResize = (e: Event) => {
+        if (popoverRef.current && popoverRef.current.contains(e.target as Node)) {
+          return;
+        }
         setIsOpen(false);
       };
       window.addEventListener('resize', handleScrollOrResize);
@@ -198,7 +201,7 @@ export const MultiSelectFilter: React.FC<MultiSelectFilterProps> = ({
               ...(coords.left !== undefined ? { left: `${coords.left}px` } : {}),
               ...(coords.right !== undefined ? { right: `${coords.right}px` } : {})
             }}
-            className="z-[9999] w-64 sm:w-72 max-w-[calc(100vw-1rem)] bg-white border border-slate-200/90 rounded-2xl shadow-xl p-3 space-y-2.5 animate-in fade-in slide-in-from-top-1 duration-150 text-xs"
+            className="z-[9999] w-48 sm:w-52 max-w-[calc(100vw-1rem)] bg-white border border-slate-200/90 rounded-2xl shadow-xl p-3 space-y-2.5 animate-in fade-in slide-in-from-top-1 duration-150 text-xs"
           >
             {/* Header & Quick Action */}
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">

@@ -20,14 +20,14 @@ export const ATTENDANCE_STATUS_MAP: Record<string, StatusDefinition> = {
   },
   PA: {
     code: 'PA',
-    label: '1st half Present 2nd half Absent',
-    description: '1st half Present 2nd half Absent',
+    label: '1st Half Present',
+    description: '1st Half Present',
     badgeStyle: 'bg-amber-50 text-amber-800 border-amber-200/90'
   },
   AP: {
     code: 'AP',
-    label: '1st half Absent 2nd half Present',
-    description: '1st half Absent 2nd half Present',
+    label: '2nd Half Present',
+    description: '2nd Half Present',
     badgeStyle: 'bg-orange-50 text-orange-800 border-orange-200/90'
   },
   WW: {
@@ -126,4 +126,26 @@ export const getNormalizedStatusCode = (status: string | undefined | null): stri
 export const getStatusLabel = (status: string | undefined | null): string => {
   const code = getNormalizedStatusCode(status);
   return ATTENDANCE_STATUS_MAP[code]?.label || 'Present';
+};
+
+// Formats any time string ("09:05 AM", "06:10 PM", "9:05", "18:10") into strict 24-hr "HH:mm"
+export const formatTo24H = (timeStr?: string | null): string => {
+  if (!timeStr || timeStr.trim() === '' || timeStr.trim() === '--:--' || timeStr.trim() === '-') return '-';
+  const str = timeStr.trim();
+  const ampmMatch = str.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (ampmMatch) {
+    let hours = parseInt(ampmMatch[1], 10);
+    const minutes = parseInt(ampmMatch[2], 10);
+    const meridiem = ampmMatch[3].toUpperCase();
+    if (meridiem === 'PM' && hours < 12) hours += 12;
+    if (meridiem === 'AM' && hours === 12) hours = 0;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  }
+  const match24 = str.match(/^(\d{1,2}):(\d{2})/);
+  if (match24) {
+    const hours = parseInt(match24[1], 10);
+    const minutes = parseInt(match24[2], 10);
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  }
+  return timeStr;
 };

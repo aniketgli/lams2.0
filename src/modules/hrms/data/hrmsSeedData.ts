@@ -580,7 +580,7 @@ export const INITIAL_OD_REQUESTS: OutdoorDutyRequest[] = [
     reportingManagerId: 'usr-2',
     approverComments: 'Approved. Please submit travel vouchers and meeting summary upon return.',
     actionBy: 'Anita Roy',
-    actionAt: '2026-08-02 10:30 AM'
+    actionAt: '2026-08-02 10:30'
   },
   {
     id: 'od-103',
@@ -623,7 +623,7 @@ export const INITIAL_OD_REQUESTS: OutdoorDutyRequest[] = [
     reportingManagerId: 'usr-3',
     approverComments: 'Approved. Essential technical collaboration for the National Elephant Corridor Project.',
     actionBy: 'Vikram Singh',
-    actionAt: '2026-08-05 02:45 PM'
+    actionAt: '2026-08-05 14:45'
   },
   {
     id: 'od-105',
@@ -666,7 +666,7 @@ export const INITIAL_OD_REQUESTS: OutdoorDutyRequest[] = [
     reportingManagerId: 'usr-1',
     approverComments: 'Approved. Deputation mandated under Section 50 of Wildlife Protection Act.',
     actionBy: 'Dr. Rajesh Sharma',
-    actionAt: '2026-08-03 11:15 AM'
+    actionAt: '2026-08-03 11:15'
   },
   {
     id: 'od-107',
@@ -709,7 +709,7 @@ export const INITIAL_OD_REQUESTS: OutdoorDutyRequest[] = [
     reportingManagerId: 'usr-1',
     approverComments: 'Approved. Ensure PFMS expenditure sheets are fully endorsed.',
     actionBy: 'Dr. Rajesh Sharma',
-    actionAt: '2026-08-02 09:30 AM'
+    actionAt: '2026-08-02 09:30'
   },
   {
     id: 'od-109',
@@ -732,7 +732,7 @@ export const INITIAL_OD_REQUESTS: OutdoorDutyRequest[] = [
     reportingManagerId: 'usr-1',
     approverComments: 'Approved under Ministry official deputation order #MOEF-CITES-2026-89.',
     actionBy: 'Director General',
-    actionAt: '2026-08-03 04:00 PM'
+    actionAt: '2026-08-03 16:00'
   },
   {
     id: 'od-110',
@@ -755,7 +755,7 @@ export const INITIAL_OD_REQUESTS: OutdoorDutyRequest[] = [
     reportingManagerId: 'usr-2',
     approverComments: 'Please attach written supervisor recommendation letter and resubmit.',
     actionBy: 'Anita Roy',
-    actionAt: '2026-07-30 03:20 PM'
+    actionAt: '2026-07-30 15:20'
   }
 ];
 
@@ -785,14 +785,14 @@ export const INITIAL_LEAVE_REQUESTS: LeaveRequest[] = [
       approverName: 'Dr. Sanjay Verma',
       status: 'approved',
       comments: 'Recommended for sanction under CCS Leave Rules.',
-      actionAt: '2026-08-28 11:30 AM'
+      actionAt: '2026-08-28 11:30'
     },
     level2Approval: {
       approverId: 'usr-3',
       approverName: 'Dr. Sanjay Verma',
       status: 'approved',
       comments: 'Earned Leave sanctioned with LTC permission per delegation of powers.',
-      actionAt: '2026-08-29 02:15 PM'
+      actionAt: '2026-08-29 14:15'
     },
     appliedDate: '2026-08-25'
   },
@@ -818,14 +818,14 @@ export const INITIAL_LEAVE_REQUESTS: LeaveRequest[] = [
       approverName: 'Dr. Rajesh Sharma',
       status: 'approved',
       comments: 'Recommended for sanction.',
-      actionAt: '2026-09-01 10:00 AM'
+      actionAt: '2026-09-01 10:00'
     },
     level2Approval: {
       approverId: 'usr-3',
       approverName: 'Dr. Vikram Singh',
       status: 'approved',
       comments: 'Sanctioned under CCS (Leave) Rules.',
-      actionAt: '2026-09-01 04:30 PM'
+      actionAt: '2026-09-01 16:30'
     },
     joiningReport: {
       id: 'jr-el-102',
@@ -839,7 +839,7 @@ export const INITIAL_LEAVE_REQUESTS: LeaveRequest[] = [
       joiningStatus: 'on_time',
       stationReturned: true,
       remarks: 'Returned from personal leave and reported on duty in Forenoon session.',
-      submittedAt: '2026-09-13 09:30 AM',
+      submittedAt: '2026-09-13 09:30',
       status: 'submitted'
     },
     appliedDate: '2026-08-30'
@@ -885,7 +885,7 @@ export const INITIAL_LEAVE_REQUESTS: LeaveRequest[] = [
       approverName: 'Anita Roy',
       status: 'approved',
       comments: 'Recommended for scientific field expedition approval under project charter.',
-      actionAt: '2026-08-10 03:15 PM'
+      actionAt: '2026-08-10 15:15'
     },
     appliedDate: '2026-08-08'
   },
@@ -931,7 +931,7 @@ export const INITIAL_LEAVE_REQUESTS: LeaveRequest[] = [
       approverName: 'Anita Roy',
       status: 'approved',
       comments: 'Exam permission granted.',
-      actionAt: '2026-07-30 11:00 AM'
+      actionAt: '2026-07-30 11:00'
     },
     appliedDate: '2026-07-28'
   },
@@ -959,14 +959,14 @@ export const INITIAL_LEAVE_REQUESTS: LeaveRequest[] = [
       approverName: 'Vikram Singh',
       status: 'approved',
       comments: 'Medical certificate verified from CMO panel hospital.',
-      actionAt: '2026-08-02 04:30 PM'
+      actionAt: '2026-08-02 16:30'
     },
     level2Approval: {
       approverId: 'usr-1',
       approverName: 'Dr. Rajesh Sharma',
       status: 'approved',
       comments: 'Commuted leave debited 10 days against HPL per CCS Rule 30.',
-      actionAt: '2026-08-03 09:15 AM'
+      actionAt: '2026-08-03 09:15'
     },
     joiningReport: {
       id: 'jr-205',
@@ -982,15 +982,15 @@ export const INITIAL_LEAVE_REQUESTS: LeaveRequest[] = [
       fitnessCertificateAttached: true,
       fitnessCertificateName: 'Medical_Fitness_Cert_DrRao.pdf',
       remarks: 'Resumed duty in Forenoon after recovery. Fitness certificate submitted to Medical Officer.',
-      submittedAt: '2026-08-08 09:45 AM',
+      submittedAt: '2026-08-08 09:45',
       status: 'accepted',
       forwardedBy: 'usr-2',
       forwardedByName: 'Anita Roy',
-      forwardedAt: '2026-08-08 10:15 AM',
+      forwardedAt: '2026-08-08 10:15',
       forwardRemarks: 'Reported on duty on time in Forenoon session. Recommended and forwarded to HoD for acceptance.',
       verifiedBy: 'usr-1',
       verifiedByName: 'Dr. Rajesh Sharma',
-      verifiedAt: '2026-08-08 11:30 AM',
+      verifiedAt: '2026-08-08 11:30',
       verificationRemarks: 'Fitness certificate verified and joining accepted on record.'
     },
     appliedDate: '2026-08-01'
@@ -1035,7 +1035,7 @@ export const INITIAL_LEAVE_REQUESTS: LeaveRequest[] = [
       approverName: 'Dr. Rajesh Sharma',
       status: 'approved',
       comments: 'RH verified from 2026 roster.',
-      actionAt: '2026-08-12 11:30 AM'
+      actionAt: '2026-08-12 11:30'
     },
     appliedDate: '2026-08-10'
   },
@@ -1060,7 +1060,7 @@ export const INITIAL_LEAVE_REQUESTS: LeaveRequest[] = [
       approverName: 'Dr. Sunita Rao',
       status: 'approved',
       comments: 'Get well soon. Approved.',
-      actionAt: '2026-08-11 08:30 AM'
+      actionAt: '2026-08-11 08:30'
     },
     appliedDate: '2026-08-11'
   },
@@ -1090,7 +1090,7 @@ export const INITIAL_LEAVE_REQUESTS: LeaveRequest[] = [
       approverName: 'Dr. Rajesh Sharma',
       status: 'approved',
       comments: 'LTC block 2026-2029 entitlement checked. Approved with 10 days EL encashment.',
-      actionAt: '2026-08-03 02:30 PM'
+      actionAt: '2026-08-03 14:30'
     },
     appliedDate: '2026-08-01'
   },
@@ -1115,7 +1115,7 @@ export const INITIAL_LEAVE_REQUESTS: LeaveRequest[] = [
       approverName: 'Anita Roy',
       status: 'approved',
       comments: 'Server on-call backup handed over to Rahul Kumar. Approved.',
-      actionAt: '2026-08-12 04:00 PM'
+      actionAt: '2026-08-12 16:00'
     },
     appliedDate: '2026-08-10'
   },
@@ -1141,7 +1141,7 @@ export const INITIAL_LEAVE_REQUESTS: LeaveRequest[] = [
       approverName: 'Anita Roy',
       status: 'approved',
       comments: 'CCL spell #01 recommended for approval per CCS Rule 43-C.',
-      actionAt: '2026-08-11 11:45 AM'
+      actionAt: '2026-08-11 11:45'
     },
     appliedDate: '2026-08-08'
   },
@@ -1166,7 +1166,7 @@ export const INITIAL_LEAVE_REQUESTS: LeaveRequest[] = [
       approverName: 'Dr. Rajesh Sharma',
       status: 'approved',
       comments: 'Sunday duty attendance verified in security register.',
-      actionAt: '2026-08-05 10:00 AM'
+      actionAt: '2026-08-05 10:00'
     },
     appliedDate: '2026-08-03'
   },
@@ -1191,7 +1191,7 @@ export const INITIAL_LEAVE_REQUESTS: LeaveRequest[] = [
       approverName: 'Anita Roy',
       status: 'rejected',
       comments: 'Clashes with scheduled MoEFCC CAMPA tiger advisory project review. Please reschedule.',
-      actionAt: '2026-08-04 02:15 PM'
+      actionAt: '2026-08-04 14:15'
     },
     appliedDate: '2026-08-02'
   },
@@ -1216,7 +1216,7 @@ export const INITIAL_LEAVE_REQUESTS: LeaveRequest[] = [
       approverName: 'Dr. Sunita Rao',
       status: 'approved',
       comments: 'Approved per institutional sports nomination guidelines.',
-      actionAt: '2026-08-12 03:30 PM'
+      actionAt: '2026-08-12 15:30'
     },
     appliedDate: '2026-08-10'
   }
@@ -1232,7 +1232,7 @@ export const INITIAL_MANUAL_ATTENDANCE_REQUESTS: ManualAttendanceRegularizationR
     date: '2026-08-11',
     requestedInTime: '09:15',
     requestedOutTime: '17:45',
-    originalInTime: '09:15 AM',
+    originalInTime: '09:15',
     reasonCategory: 'Biometric Issue',
     reason: 'Biometric Gate-02 scanner hardware error during morning punch; lab specimen transfer in evening.',
     reportingManagerId: 'usr-1',
@@ -1249,7 +1249,7 @@ export const INITIAL_MANUAL_ATTENDANCE_REQUESTS: ManualAttendanceRegularizationR
     date: '2026-08-07',
     requestedInTime: '09:30',
     requestedOutTime: '18:00',
-    originalInTime: '09:30 AM',
+    originalInTime: '09:30',
     reasonCategory: 'Urgent OD',
     reason: 'Attended urgent institutional GIS server maintenance with IT team off-station.',
     reportingManagerId: 'usr-2',
@@ -1401,7 +1401,7 @@ export const INITIAL_MANUAL_ATTENDANCE_REQUESTS: ManualAttendanceRegularizationR
     appliedAt: '2026-08-04',
     actionDate: '2026-08-04',
     actionBy: 'Anita Roy',
-    managerComment: 'Morning loading register shows departure was at 11:30 AM, not 09:45 AM. Request rejected.'
+    managerComment: 'Morning loading register shows departure was at 11:30, not 09:45. Request rejected.'
   },
   {
     id: 'man_att_111',
@@ -1456,8 +1456,8 @@ export const generateSeedAttendance = (): AttendanceRecord[] => {
       const userShift = INITIAL_SHIFTS.find((s) => s.id === u.shiftId) || INITIAL_SHIFTS[0];
       let status: AttendanceRecord['status'] = 'present';
       let workMode: AttendanceRecord['workMode'] = 'in_office';
-      let clockIn = '09:14 AM';
-      let clockOut = '05:35 PM';
+      let clockIn = '09:14';
+      let clockOut = '17:35';
       let shiftCode = `${userShift.code} (${userShift.startTime} - ${userShift.endTime})`;
       let totalHours = 8.0;
       let remark = `Biometric Punch IN via Terminal #BIO-GATE-01. Shift: ${userShift.code}. Facial match verified. Punch OUT captured at Exit Gate.`;
@@ -1479,8 +1479,8 @@ export const generateSeedAttendance = (): AttendanceRecord[] => {
       } else if (day === 5 && u.id === 'usr-4') {
         status = 'od';
         workMode = 'field_od';
-        clockIn = '08:45 AM';
-        clockOut = '06:15 PM';
+        clockIn = '08:45';
+        clockOut = '18:15';
         shiftCode = 'FLD-01 (08:30 - 18:00)';
         totalHours = 9.5;
         remark = 'Approved Outdoor Duty requisition #OD-102 at State Biodiversity Board HQ, New Delhi. Mobile geo-fenced biometric check-in verified by GPS coordinate 28.6139° N, 77.2090° E.';
@@ -1508,15 +1508,15 @@ export const generateSeedAttendance = (): AttendanceRecord[] => {
       } else if (day === 8 && u.id === 'usr-5') {
         status = 'late';
         workMode = 'in_office';
-        clockIn = '09:52 AM';
-        clockOut = '05:40 PM';
+        clockIn = '09:52';
+        clockOut = '17:40';
         totalHours = 7.8;
         remark = 'Late Punch IN recorded at Terminal #BIO-GATE-02 (22 minutes past grace period limit). Automated email alert dispatched to reporting manager Anita Roy.';
       } else if (day === 12 && u.id === 'usr-6') {
         status = 'od';
         workMode = 'field_od';
-        clockIn = '08:30 AM';
-        clockOut = '06:30 PM';
+        clockIn = '08:30';
+        clockOut = '18:30';
         shiftCode = 'FLD-01 (08:30 - 18:00)';
         totalHours = 10.0;
         remark = 'Field Survey Outdoor Duty at Jim Corbett Reserve. Biometric handheld device #BIO-MOBILE-04 synced via satellite link.';
@@ -1530,8 +1530,8 @@ export const generateSeedAttendance = (): AttendanceRecord[] => {
       } else if (day === 18 && (u.id === 'usr-6' || u.id === 'usr-10')) {
         status = 'od';
         workMode = 'field_od';
-        clockIn = '08:00 AM';
-        clockOut = '06:00 PM';
+        clockIn = '08:00';
+        clockOut = '18:00';
         shiftCode = 'FLD-01 (08:00 - 18:00)';
         totalHours = 10.0;
         remark = 'On Approved Field Outdoor Duty. Geo-fenced mobile biometric log verified.';
@@ -1545,28 +1545,28 @@ export const generateSeedAttendance = (): AttendanceRecord[] => {
       } else if (day === 10 && u.id === 'usr-11') {
         status = 'late';
         workMode = 'in_office';
-        clockIn = '09:55 AM';
-        clockOut = '06:30 PM';
+        clockIn = '09:55';
+        clockOut = '18:30';
         totalHours = 8.58;
         remark = 'Late Punch IN at Main Gate Terminal. Total shift hours fulfilled with evening extension.';
       } else if (day === 4 && u.id === 'usr-2') {
         status = 'half_day';
         workMode = 'in_office';
-        clockIn = '09:10 AM';
-        clockOut = '01:30 PM';
+        clockIn = '09:10';
+        clockOut = '13:30';
         totalHours = 4.33;
         remark = 'Half-day duty recorded. First half present, second half afternoon session off.';
       } else if (day === 3 && u.id === 'usr-1') {
-        clockIn = '09:05 AM';
-        clockOut = '06:10 PM';
+        clockIn = '09:05';
+        clockOut = '18:10';
         totalHours = 9.08;
         remark = 'Executive Gate Biometric Terminal #BIO-EXEC-01 punch log.';
       } else {
         // Vary punch times slightly for realistic biometric look
         const inMins = 10 + ((day * 3 + userIdx * 7) % 18);
         const outMins = 30 + ((day * 5 + userIdx * 11) % 25);
-        clockIn = `09:${inMins < 10 ? '0' + inMins : inMins} AM`;
-        clockOut = `05:${outMins < 10 ? '0' + outMins : outMins} PM`;
+        clockIn = `09:${inMins < 10 ? '0' + inMins : inMins}`;
+        clockOut = `17:${outMins < 10 ? '0' + outMins : outMins}`;
         totalHours = Number((8 + (outMins - inMins) / 60).toFixed(2));
         remark = `Biometric fingerprint & iris scan verified at Terminal #BIO-GATE-0${(day % 3) + 1}. Entry card #EMP-${u.id.replace('usr-', '90')}. Log ID #BIO-LOG-${date.replace(/-/g, '')}-${u.id}.`;
       }
