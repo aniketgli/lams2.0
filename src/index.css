@@ -22,13 +22,34 @@
   }
 }
 
-/* Global table scrollbar suppression */
-div:has(> table) {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+/* Custom Visible Horizontal Scrollbar for Data Tables (especially on tablets & desktops) */
+.custom-table-scrollbar {
+  -ms-overflow-style: auto !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: #94a3b8 #f1f5f9 !important;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch;
 }
-div:has(> table)::-webkit-scrollbar {
-  display: none;
+
+.custom-table-scrollbar::-webkit-scrollbar {
+  display: block !important;
+  height: 8px !important;
+  width: 8px !important;
+}
+
+.custom-table-scrollbar::-webkit-scrollbar-track {
+  background: #f1f5f9 !important;
+  border-radius: 4px !important;
+}
+
+.custom-table-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #94a3b8 !important;
+  border-radius: 4px !important;
+  border: 2px solid #f1f5f9 !important;
+}
+
+.custom-table-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #64748b !important;
 }
 
 /* Uniform Modern Theme Dropdowns across Entire Software */

@@ -110,6 +110,20 @@ export const AttendanceView: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string[]>(['all']);
 
+  // Check if any filter or search query is currently active
+  const hasActiveFilters = Boolean(
+    searchTerm.trim() !== '' ||
+    startDate !== DEFAULT_START_DATE ||
+    endDate !== DEFAULT_END_DATE ||
+    (!selectedStatusFilter.includes('all') && selectedStatusFilter.length > 0) ||
+    (!selectedShiftFilter.includes('all') && selectedShiftFilter.length > 0) ||
+    (!selectedUserFilter.includes('all') && selectedUserFilter.length > 0) ||
+    (!selectedDeptFilter.includes('all') && selectedDeptFilter.length > 0) ||
+    (!selectedPostFilter.includes('all') && selectedPostFilter.length > 0) ||
+    (!selectedRepManagerFilter.includes('all') && selectedRepManagerFilter.length > 0) ||
+    (!selectedEmpTypeFilter.includes('all') && selectedEmpTypeFilter.length > 0)
+  );
+
   // Derived Filter Dropdown Option Lists
   const departmentList = React.useMemo(() => {
     const depts = new Set<string>();
@@ -495,118 +509,130 @@ export const AttendanceView: React.FC = () => {
       {/* Attendance Summary Stat Cards: Original 4 Cards placed immediately below PageHeader */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* 1. Present */}
-        <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-4 shadow-2xs flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">Present</p>
-            <p className="text-2xl font-black text-emerald-900 mt-1">{presentCount}</p>
-            <p className="text-[10px] text-emerald-700 font-semibold mt-0.5">
-              {startDate === endDate ? `Today (${formatDateAndDay(startDate)})` : `${formatDateAndDay(startDate)} - ${formatDateAndDay(endDate)}`}
-            </p>
+        <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 truncate">Present</p>
+              <p className="text-xl sm:text-2xl font-black text-emerald-900 mt-0.5">{presentCount}</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-100 border border-emerald-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <CheckCircle2 className="w-4 h-4 text-emerald-700" />
+            </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-100 border border-emerald-300/80 flex items-center justify-center shrink-0">
-            <CheckCircle2 className="w-5 h-5 text-emerald-700" />
+          <div className="mt-1.5 pt-1.5 border-t border-emerald-200/60 text-[10px] sm:text-[11px] font-semibold text-emerald-700 whitespace-nowrap overflow-hidden text-ellipsis">
+            {startDate === endDate ? `Today (${formatDateAndDay(startDate)})` : `${startDate.split('-').reverse().join('/')} - ${endDate.split('-').reverse().join('/')}`}
           </div>
         </div>
 
         {/* 2. Absent */}
-        <div className="bg-rose-50/70 border border-rose-200/90 rounded-xl p-4 shadow-2xs flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-rose-800">Absent</p>
-            <p className="text-2xl font-black text-rose-900 mt-1">{absentCount}</p>
-            <p className="text-[10px] text-rose-700 font-semibold mt-0.5">
-              {startDate === endDate ? `Today (${formatDateAndDay(startDate)})` : `${formatDateAndDay(startDate)} - ${formatDateAndDay(endDate)}`}
-            </p>
+        <div className="bg-rose-50/70 border border-rose-200/90 rounded-xl p-3.5 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-rose-800 truncate">Absent</p>
+              <p className="text-xl sm:text-2xl font-black text-rose-900 mt-0.5">{absentCount}</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-rose-100 border border-rose-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <XCircle className="w-4 h-4 text-rose-700" />
+            </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-rose-100 border border-rose-300/80 flex items-center justify-center shrink-0">
-            <XCircle className="w-5 h-5 text-rose-700" />
+          <div className="mt-1.5 pt-1.5 border-t border-rose-200/60 text-[10px] sm:text-[11px] font-semibold text-rose-700 whitespace-nowrap overflow-hidden text-ellipsis">
+            {startDate === endDate ? `Today (${formatDateAndDay(startDate)})` : `${startDate.split('-').reverse().join('/')} - ${endDate.split('-').reverse().join('/')}`}
           </div>
         </div>
 
-        {/* 3. Outdoor Duty (OD) */}
-        <div className="bg-blue-50/70 border border-blue-200/90 rounded-xl p-4 shadow-2xs flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-blue-800">Outdoor Duty (OD)</p>
-            <p className="text-2xl font-black text-blue-900 mt-1">{odCount}</p>
-            <p className="text-[10px] text-blue-700 font-semibold mt-0.5">
-              {startDate === endDate ? `Today (${formatDateAndDay(startDate)})` : `${formatDateAndDay(startDate)} - ${formatDateAndDay(endDate)}`}
-            </p>
+        {/* 3. Outdoor */}
+        <div className="bg-blue-50/70 border border-blue-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-blue-800 truncate">Outdoor</p>
+              <p className="text-xl sm:text-2xl font-black text-blue-900 mt-0.5">{odCount}</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-100 border border-blue-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <Building className="w-4 h-4 text-blue-700" />
+            </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-blue-100 border border-blue-300/80 flex items-center justify-center shrink-0">
-            <Building className="w-5 h-5 text-blue-700" />
+          <div className="mt-1.5 pt-1.5 border-t border-blue-200/60 text-[10px] sm:text-[11px] font-semibold text-blue-700 whitespace-nowrap overflow-hidden text-ellipsis">
+            {startDate === endDate ? `Today (${formatDateAndDay(startDate)})` : `${startDate.split('-').reverse().join('/')} - ${endDate.split('-').reverse().join('/')}`}
           </div>
         </div>
 
         {/* 4. On Leave */}
-        <div className="bg-purple-50/70 border border-purple-200/90 rounded-xl p-4 shadow-2xs flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-purple-800">On Leave</p>
-            <p className="text-2xl font-black text-purple-900 mt-1">{leaveCount}</p>
-            <p className="text-[10px] text-purple-700 font-semibold mt-0.5">
-              {startDate === endDate ? `Today (${formatDateAndDay(startDate)})` : `${formatDateAndDay(startDate)} - ${formatDateAndDay(endDate)}`}
-            </p>
+        <div className="bg-purple-50/70 border border-purple-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-purple-800 truncate">On Leave</p>
+              <p className="text-xl sm:text-2xl font-black text-purple-900 mt-0.5">{leaveCount}</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-purple-100 border border-purple-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <Calendar className="w-4 h-4 text-purple-700" />
+            </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-purple-100 border border-purple-300/80 flex items-center justify-center shrink-0">
-            <Calendar className="w-5 h-5 text-purple-700" />
+          <div className="mt-1.5 pt-1.5 border-t border-purple-200/60 text-[10px] sm:text-[11px] font-semibold text-purple-700 whitespace-nowrap overflow-hidden text-ellipsis">
+            {startDate === endDate ? `Today (${formatDateAndDay(startDate)})` : `${startDate.split('-').reverse().join('/')} - ${endDate.split('-').reverse().join('/')}`}
           </div>
         </div>
       </div>
 
       {/* Professional Date Range & Related Filters Control Bar */}
       <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3.5">
-        {/* Top Bar: Clean Themed Date Pickers & Presets & Export Buttons in ONE ROW for Tab View */}
-        <div className="flex flex-row items-center justify-between gap-2.5 sm:gap-3.5 border-b border-slate-100 pb-3.5 flex-nowrap overflow-x-auto no-scrollbar">
-          {/* Left: Date Pickers & Presets */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
-              <AppDatePicker
-                size="sm"
-                placeholder="From Date"
-                value={startDate}
-                onChange={(dStr) => setStartDate(dStr)}
-              />
+        {/* Top Bar: Clean Themed Date Pickers & Presets & Export Buttons */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3.5 border-b border-slate-100 pb-3">
+          {/* Row 1 on mobile (Left on tab/desktop): Date Pickers & Presets */}
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="flex items-center space-x-1.5 flex-1 sm:flex-initial min-w-0">
+              <div className="flex-1 sm:flex-initial min-w-0">
+                <AppDatePicker
+                  size="sm"
+                  placeholder="From Date"
+                  value={startDate}
+                  onChange={(dStr) => setStartDate(dStr)}
+                />
+              </div>
 
-              <span className="text-slate-300 font-bold">—</span>
+              <span className="text-slate-300 font-bold shrink-0">—</span>
 
-              <AppDatePicker
-                size="sm"
-                placeholder="To Date"
-                value={endDate}
-                onChange={(dStr) => setEndDate(dStr)}
-                isRightColumn={true}
-              />
+              <div className="flex-1 sm:flex-initial min-w-0">
+                <AppDatePicker
+                  size="sm"
+                  placeholder="To Date"
+                  value={endDate}
+                  onChange={(dStr) => setEndDate(dStr)}
+                  isRightColumn={true}
+                />
+              </div>
             </div>
 
             {/* Quick Preset: Current Month */}
             {(startDate !== DEFAULT_START_DATE || endDate !== DEFAULT_END_DATE) && (
               <button
                 onClick={handlePresetCurrentMonth}
-                className="h-9 bg-slate-50/90 hover:bg-white border border-slate-200/90 rounded-xl px-2.5 sm:px-3.5 text-xs font-bold text-slate-800 shadow-2xs flex items-center space-x-1.5 shrink-0 transition-all cursor-pointer"
+                className="h-9 bg-slate-50/90 hover:bg-white border border-slate-200/90 rounded-xl px-2.5 sm:px-3 text-xs font-bold text-slate-800 shadow-2xs flex items-center space-x-1.5 shrink-0 transition-all cursor-pointer"
                 title="Reset dates to Current Month"
               >
-                <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                <Calendar className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                 <span className="hidden sm:inline">Current Month</span>
                 <span className="sm:hidden">Reset</span>
               </button>
             )}
           </div>
 
-          {/* Right: Export Buttons (CSV & PDF) */}
-          <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
+          {/* Row 2 on mobile (Right on tab/desktop): Export Buttons (CSV & PDF) - Right aligned */}
+          <div className="flex items-center justify-end gap-2 shrink-0 w-full sm:w-auto ml-auto">
             <button
               onClick={handleExportCSV}
-              className="h-9 px-2.5 sm:px-3.5 bg-white hover:bg-slate-50 text-slate-800 border border-slate-200/90 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer shadow-2xs shrink-0"
+              className="h-9 px-3 bg-white hover:bg-slate-50 text-slate-800 border border-slate-200/90 rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer shadow-2xs shrink-0"
               title="Export records to CSV"
             >
-              <Download className="w-3.5 h-3.5 text-emerald-600" />
+              <Download className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
               <span>Export CSV</span>
             </button>
 
             <button
               onClick={handleExportPDF}
-              className="h-9 px-2.5 sm:px-3.5 bg-slate-900 hover:bg-slate-800 text-white border border-slate-900 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer shadow-2xs shrink-0"
+              className="h-9 px-3 bg-slate-900 hover:bg-slate-800 text-white border border-slate-900 rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer shadow-2xs shrink-0"
               title="Export records to PDF"
             >
-              <FileText className="w-3.5 h-3.5 text-rose-400" />
+              <FileText className="w-3.5 h-3.5 text-rose-400 shrink-0" />
               <span>Export PDF</span>
             </button>
           </div>
@@ -614,22 +640,22 @@ export const AttendanceView: React.FC = () => {
 
         {/* Bottom Bar: Search Keyword, Filters & View Toggle Switch */}
         <div className="flex flex-col gap-3">
-          {/* Top Row of Controls: Search box + Reset + View mode */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          {/* Row: Search box + Reset Filters (Icon Only) + View Mode Toggle in ONE Single Row */}
+          <div className="flex items-center gap-2 w-full">
             {/* Search Box */}
-            <div className="relative flex-1 min-w-[240px]">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <div className="relative flex-1 min-w-0">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
-                placeholder="Search employee, designation, department, date or remark..."
+                placeholder="Search employee, designation, date..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="h-9 w-full pl-10 pr-9 bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200/80 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 transition-all shadow-2xs"
+                className="h-9 w-full pl-9 pr-8 bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200/80 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 transition-all shadow-2xs"
               />
               {searchTerm && (
                 <button
                   onClick={() => setSearchTerm('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-200 transition-colors cursor-pointer"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-200 transition-colors cursor-pointer"
                   title="Clear search"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -637,63 +663,46 @@ export const AttendanceView: React.FC = () => {
               )}
             </div>
 
-            <div className="flex items-center space-x-2 shrink-0 self-end sm:self-auto">
-              {(searchTerm !== '' ||
-                startDate !== DEFAULT_START_DATE ||
-                endDate !== DEFAULT_END_DATE ||
-                !selectedStatusFilter.includes('all') ||
-                !selectedShiftFilter.includes('all') ||
-                !selectedUserFilter.includes('all') ||
-                !selectedDeptFilter.includes('all') ||
-                !selectedPostFilter.includes('all') ||
-                !selectedRepManagerFilter.includes('all') ||
-                !selectedEmpTypeFilter.includes('all')) && (
-                <button
-                  onClick={handleResetFilters}
-                  className="h-9 px-3.5 bg-blue-50/90 hover:bg-blue-100 text-blue-900 border border-blue-200/90 rounded-xl text-xs font-bold flex items-center space-x-1.5 shrink-0 transition-all cursor-pointer shadow-2xs"
-                  title="Reset all search and filter selections"
-                >
-                  <RotateCcw className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Reset All Filters</span>
-                </button>
-              )}
+            {/* Reset Filters (Only Icon - Appears ONLY when any filter or search query is active) */}
+            {hasActiveFilters && (
+              <button
+                onClick={handleResetFilters}
+                className="h-9 w-9 rounded-xl border bg-blue-50/90 hover:bg-blue-100 text-blue-700 border-blue-200/90 flex items-center justify-center shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95 animate-in fade-in zoom-in-95 duration-150"
+                title="Reset active filters and search"
+              >
+                <RotateCcw className="w-4 h-4 text-blue-600" />
+              </button>
+            )}
 
-              {/* View Mode Toggle */}
-              <div className="h-9 flex items-center p-1 bg-slate-100/90 border border-slate-200/90 rounded-xl gap-1 shrink-0">
-                <button
-                  onClick={() => setViewMode('table')}
-                  title="Table View"
-                  className={`h-7 px-2 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
-                    viewMode === 'table'
-                      ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
-                      : 'text-slate-400 hover:text-slate-700'
-                  }`}
-                >
-                  <TableIcon className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setViewMode('grid')}
-                  title="Grid View"
-                  className={`h-7 px-2 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
-                    viewMode === 'grid'
-                      ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
-                      : 'text-slate-400 hover:text-slate-700'
-                  }`}
-                >
-                  <LayoutGrid className="w-4 h-4" />
-                </button>
-              </div>
+            {/* View Mode Toggle (Table / Card) */}
+            <div className="h-9 flex items-center p-1 bg-slate-100/90 border border-slate-200/90 rounded-xl gap-1 shrink-0">
+              <button
+                onClick={() => setViewMode('table')}
+                title="Table View"
+                className={`h-7 px-2 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
+                  viewMode === 'table'
+                    ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
+                    : 'text-slate-400 hover:text-slate-700'
+                }`}
+              >
+                <TableIcon className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('grid')}
+                title="Card View"
+                className={`h-7 px-2 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
+                  viewMode === 'grid'
+                    ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
+                    : 'text-slate-400 hover:text-slate-700'
+                }`}
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
           {/* Filter Dropdowns Uniform Flex Wrap */}
-          <div className="pt-2 border-t border-slate-100 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-                FILTERS
-              </span>
-            </div>
-
+          <div className="pt-2 border-t border-slate-100">
             <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 flex-nowrap responsive-filter-row">
               {/* 1. Employee Dropdown (Reporting Manager / PI, Reviewing Manager, Admin) */}
               {canSeeTeamFilters && (
@@ -804,8 +813,8 @@ export const AttendanceView: React.FC = () => {
 
         {/* VIEW 1: ROW TABLE VIEW (Theme aligned layout) */}
         {viewMode === 'table' ? (
-          <div className="w-full min-w-0 overflow-x-auto rounded-xl border border-slate-200/90 shadow-2xs">
-            <table className="w-full min-w-[1040px] text-left text-xs border-collapse">
+          <div className="w-full min-w-0 overflow-x-auto custom-table-scrollbar pb-1">
+            <table className="w-full min-w-[1080px] text-left text-xs border-collapse">
               <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 text-[11px] shadow-2xs">
                 <tr className="h-10">
                   <th
@@ -906,7 +915,7 @@ export const AttendanceView: React.FC = () => {
                       )}
                     </div>
                   </th>
-                  <th className="py-3 px-4 font-bold whitespace-nowrap align-middle min-w-[180px]">
+                  <th className="py-3 px-4 font-bold whitespace-nowrap align-middle w-[200px] min-w-[200px] max-w-[200px]">
                     Remark
                   </th>
                 </tr>
@@ -1076,11 +1085,13 @@ export const AttendanceView: React.FC = () => {
                           })()}
                         </td>
 
-                        {/* 8. Remark Column */}
-                        <td className="py-3 px-4 text-slate-700 text-xs min-w-[180px]">
-                          {isLongRemark ? (
-                            <div className="flex items-center space-x-1">
-                              <span className="truncate max-w-[120px] md:max-w-[200px] inline-block" title={remarkText}>{remarkText.slice(0, 30)}...</span>
+                        {/* 8. Remark Column - Perfectly uniform width across all rows */}
+                        <td className="py-3 px-4 text-slate-700 text-xs w-[200px] min-w-[200px] max-w-[200px]">
+                          <div className="w-[170px] max-w-[170px] flex items-center justify-between gap-1.5">
+                            <span className="truncate text-xs text-slate-700 font-medium flex-1 min-w-0" title={remarkText}>
+                              {remarkText}
+                            </span>
+                            {isLongRemark && (
                               <button
                                 onClick={() =>
                                   setActiveRemarkModal({
@@ -1089,15 +1100,14 @@ export const AttendanceView: React.FC = () => {
                                     remark: remarkText
                                   })
                                 }
-                                className="text-blue-600 font-bold hover:underline inline-flex items-center space-x-0.5 cursor-pointer shrink-0 ml-0.5 text-[10px]"
+                                className="text-blue-600 hover:text-blue-800 font-bold inline-flex items-center space-x-0.5 cursor-pointer shrink-0 ml-0.5 text-[10px] hover:underline"
+                                title="View full remark"
                               >
                                 <span>More</span>
-                                <Eye className="w-2.5 h-2.5 text-blue-600 shrink-0" />
+                                <Eye className="w-2.5 h-2.5 shrink-0" />
                               </button>
-                            </div>
-                          ) : (
-                            <span className="truncate max-w-[160px] md:max-w-none inline-block" title={remarkText}>{remarkText}</span>
-                          )}
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -1105,14 +1115,6 @@ export const AttendanceView: React.FC = () => {
                 )}
               </tbody>
             </table>
-            <TablePagination
-              currentPage={attPage}
-              totalPages={Math.ceil(sortedRecords.length / attPageSize)}
-              totalItems={sortedRecords.length}
-              pageSize={attPageSize}
-              onPageChange={setAttPage}
-              onPageSizeChange={setAttPageSize}
-            />
           </div>
         ) : (
           /* VIEW 2: GRID / CALENDAR CARD VIEW (Minimal cards layout) */
@@ -1256,11 +1258,14 @@ export const AttendanceView: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Bottom: Minimal Remark */}
-                      <div className="pt-2 border-t border-slate-100 text-[10px] text-slate-500">
-                        {isLongRemark ? (
-                          <div>
-                            <span>{remarkText.slice(0, 32)}... </span>
+                      {/* Bottom: Minimal Remark - uniform width across cards */}
+                      <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-500 flex items-center justify-between gap-1.5 w-full">
+                        <span className="font-semibold text-slate-400 shrink-0">Remark:</span>
+                        <div className="flex-1 min-w-0 flex items-center justify-end gap-1">
+                          <span className="truncate text-right text-slate-700 font-medium text-[11px] flex-1 min-w-0" title={remarkText}>
+                            {remarkText}
+                          </span>
+                          {isLongRemark && (
                             <button
                               onClick={() =>
                                 setActiveRemarkModal({
@@ -1269,14 +1274,14 @@ export const AttendanceView: React.FC = () => {
                                   remark: remarkText
                                 })
                               }
-                              className="text-blue-600 font-bold hover:underline inline-flex items-center space-x-0.5 ml-0.5 cursor-pointer"
+                              className="text-blue-600 hover:text-blue-800 font-bold inline-flex items-center space-x-0.5 ml-0.5 cursor-pointer shrink-0 text-[10px] hover:underline"
+                              title="View full remark"
                             >
                               <span>More</span>
+                              <Eye className="w-2.5 h-2.5 shrink-0" />
                             </button>
-                          </div>
-                        ) : (
-                          <span className="truncate block">{remarkText}</span>
-                        )}
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
@@ -1285,6 +1290,18 @@ export const AttendanceView: React.FC = () => {
             )}
           </div>
         )}
+
+        {/* Stable Full-Width Footer & Pagination (Fixed at bottom of card, outside horizontal scroll) */}
+        <div className="w-full border-t border-slate-200/90 bg-white">
+          <TablePagination
+            currentPage={attPage}
+            totalPages={Math.ceil(sortedRecords.length / attPageSize)}
+            totalItems={sortedRecords.length}
+            pageSize={attPageSize}
+            onPageChange={setAttPage}
+            onPageSizeChange={setAttPageSize}
+          />
+        </div>
       </div>
 
       {/* Remark Modal for Reading Full Long Remarks */}

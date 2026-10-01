@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../../../context/AppContext';
 import { Shift, parseTimeToMinutes } from '../../../../types';
+import { AppTimePicker } from '../../../../shared/components/AppTimePicker';
 import {
   Clock,
   Plus,
@@ -393,29 +394,23 @@ export const ShiftMasterSection: React.FC = () => {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block font-bold text-slate-700">
-                    Start Time <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="time"
-                    required
+                  <AppTimePicker
+                    label="Start Time"
+                    required={true}
                     value={formStartTime}
-                    onChange={(e) => setFormStartTime(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                    onChange={(val) => setFormStartTime(val)}
+                    presets={['08:00', '08:30', '09:00', '09:30', '10:00']}
                   />
                   <span className="text-[10px] text-slate-400 block">e.g. 09:30 (24-hr)</span>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block font-bold text-slate-700">
-                    End Time <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="time"
-                    required
+                  <AppTimePicker
+                    label="End Time"
+                    required={true}
                     value={formEndTime}
-                    onChange={(e) => setFormEndTime(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                    onChange={(val) => setFormEndTime(val)}
+                    presets={['17:00', '17:30', '18:00', '18:30', '19:00']}
                   />
                   <span className="text-[10px] text-slate-400 block">e.g. 17:30 (24-hr)</span>
                 </div>
@@ -434,12 +429,11 @@ export const ShiftMasterSection: React.FC = () => {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block font-bold text-slate-700">Half-Day Cutoff Time</label>
-                  <input
-                    type="time"
+                  <AppTimePicker
+                    label="Half-Day Cutoff Time"
                     value={formHalfDayCutoff}
-                    onChange={(e) => setFormHalfDayCutoff(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                    onChange={(val) => setFormHalfDayCutoff(val)}
+                    presets={['12:00', '13:00', '13:30', '14:00']}
                   />
                   <span className="text-[10px] text-slate-400 block">Punch-in after this triggers half-day</span>
                 </div>

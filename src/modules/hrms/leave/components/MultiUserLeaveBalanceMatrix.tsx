@@ -801,13 +801,7 @@ export const MultiUserLeaveBalanceMatrix: React.FC<MultiUserLeaveBalanceMatrixPr
         </div>
 
         {/* Row 3: Role-Based Filter Dropdowns Uniform Flex Wrap */}
-        <div className="pt-2 border-t border-slate-100 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-              FILTERS
-            </span>
-          </div>
-
+        <div className="pt-2 border-t border-slate-100">
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 flex-nowrap">
             {/* Employee Filter */}
             <div className="flex-1 min-w-[130px] max-w-[200px] shrink-0 sm:shrink">

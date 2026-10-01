@@ -6,6 +6,7 @@ import { AppDatePicker } from '../../../../shared/components/AppDatePicker';
 import { MultiSelectFilter, matchesMultiSelect } from '../../../../shared/components/MultiSelectFilter';
 import { TablePagination } from '../../../../shared/components/TablePagination';
 import { AppSelect } from '../../../../shared/components/AppSelect';
+import { AppTimePicker } from '../../../../shared/components/AppTimePicker';
 import {
   MapPin,
   PlusCircle,
@@ -38,7 +39,8 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  ChevronDown
+  ChevronDown,
+  CheckCheck
 } from 'lucide-react';
 
 import jsPDF from 'jspdf';
@@ -140,6 +142,25 @@ export const OutdoorDutyView: React.FC = () => {
   const [filterEndDate, setFilterEndDate] = useState<string>(DEFAULT_END_DATE);
   const [searchTerm, setSearchTerm] = useState<string>('');
 
+  const [activePurposeModal, setActivePurposeModal] = useState<{
+    employeeName: string;
+    duration: string;
+    location: string;
+    purpose: string;
+  } | null>(null);
+
+  const hasActiveFilters = Boolean(
+    searchTerm.trim() !== '' ||
+    (!filterStatus.includes('all') && filterStatus.length > 0) ||
+    (!filterOdType.includes('all') && filterOdType.length > 0) ||
+    (!filterDept.includes('all') && filterDept.length > 0) ||
+    (!filterUser.includes('all') && filterUser.length > 0) ||
+    (!filterDesignation.includes('all') && filterDesignation.length > 0) ||
+    (!filterReportingManager.includes('all') && filterReportingManager.length > 0) ||
+    filterStartDate !== DEFAULT_START_DATE ||
+    filterEndDate !== DEFAULT_END_DATE
+  );
+
   const handleResetFilters = () => {
     setFilterStatus(['all']);
     setFilterOdType(['all']);
@@ -155,6 +176,24 @@ export const OutdoorDutyView: React.FC = () => {
   const handlePresetCurrentMonth = () => {
     setFilterStartDate(DEFAULT_START_DATE);
     setFilterEndDate(DEFAULT_END_DATE);
+  };
+
+  // Date & Day Formatter e.g. "11/08/2026 (Tue)"
+  const formatDateAndDay = (dateStr: string): string => {
+    try {
+      const parts = dateStr.split('-');
+      if (parts.length !== 3) return dateStr;
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      const dateObj = new Date(year, month, day);
+      const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+      const dayStr = parts[2].padStart(2, '0');
+      const monthStr = parts[1].padStart(2, '0');
+      return `${dayStr}/${monthStr}/${year} (${dayName})`;
+    } catch {
+      return dateStr;
+    }
   };
 
   // Accessible Scope for User List
@@ -316,6 +355,7 @@ export const OutdoorDutyView: React.FC = () => {
     let pending = 0;
     let rejected = 0;
     let totalFunds = 0;
+    let totalDays = 0;
 
     filteredReportODs.forEach((od) => {
       if (od.status === 'approved') {
@@ -326,6 +366,7 @@ export const OutdoorDutyView: React.FC = () => {
         rejected++;
       }
       totalFunds += od.estimatedFunds || 0;
+      totalDays += (od.daysCount || 1);
     });
 
     return {
@@ -333,7 +374,8 @@ export const OutdoorDutyView: React.FC = () => {
       approved,
       pending,
       rejected,
-      totalFunds
+      totalFunds,
+      totalDays
     };
   }, [filteredReportODs]);
 
@@ -699,13 +741,13 @@ export const OutdoorDutyView: React.FC = () => {
         subtitle="Official tour, field duty & travel regularization requests"
         action={
           canApplyOd ? (
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center justify-end space-x-2 ml-auto">
               <button
                 onClick={() => handleOpenApplyModal()}
-                className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
+                className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer ml-auto"
               >
                 <PlusCircle className="w-4 h-4" />
-                <span>Apply for OD</span>
+                <span>Apply OD</span>
               </button>
             </div>
           ) : undefined
@@ -715,54 +757,62 @@ export const OutdoorDutyView: React.FC = () => {
       {/* Summary Stat Metrics: Exactly 4 Uniform Cards placed immediately below PageHeader */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* 1. Approved */}
-        <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-4 shadow-2xs flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">Approved &amp; Synced</p>
-            <p className="text-2xl font-black text-emerald-900 mt-1">{odStats.approved}</p>
-            <p className="text-[10px] text-emerald-700 font-semibold mt-0.5">Approved Field Tours</p>
+        <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-3.5 sm:p-4 shadow-2xs flex items-center justify-between gap-2 min-w-0">
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 truncate">Approved</p>
+            <p className="text-xl sm:text-2xl font-black text-emerald-900 mt-0.5 sm:mt-1">{odStats.approved}</p>
+            <p className="text-[10px] text-emerald-700 font-semibold mt-0.5 truncate" title={filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${formatDateAndDay(filterStartDate)} - ${formatDateAndDay(filterEndDate)}`}>
+              <span className="sm:hidden">{filterStartDate === filterEndDate ? formatDateAndDay(filterStartDate) : `${filterStartDate.split('-').reverse().join('/')} - ${filterEndDate.split('-').reverse().join('/')}`}</span>
+              <span className="hidden sm:inline">{filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${formatDateAndDay(filterStartDate)} - ${formatDateAndDay(filterEndDate)}`}</span>
+            </p>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-100 border border-emerald-300/80 flex items-center justify-center shrink-0">
-            <CheckCircle2 className="w-5 h-5 text-emerald-700" />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-100 border border-emerald-300/80 flex items-center justify-center shrink-0">
+            <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-700" />
           </div>
         </div>
 
         {/* 2. Pending Approvals */}
-        <div className="bg-amber-50/70 border border-amber-200/90 rounded-xl p-4 shadow-2xs flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800">Pending Approvals</p>
-            <p className="text-2xl font-black text-amber-900 mt-1">{odStats.pending}</p>
-            <p className="text-[10px] text-amber-700 font-semibold mt-0.5">Awaiting Manager Decision</p>
+        <div className="bg-amber-50/70 border border-amber-200/90 rounded-xl p-3.5 sm:p-4 shadow-2xs flex items-center justify-between gap-2 min-w-0">
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800 truncate">Pending</p>
+            <p className="text-xl sm:text-2xl font-black text-amber-900 mt-0.5 sm:mt-1">{odStats.pending}</p>
+            <p className="text-[10px] text-amber-700 font-semibold mt-0.5 truncate" title={filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${formatDateAndDay(filterStartDate)} - ${formatDateAndDay(filterEndDate)}`}>
+              <span className="sm:hidden">{filterStartDate === filterEndDate ? formatDateAndDay(filterStartDate) : `${filterStartDate.split('-').reverse().join('/')} - ${filterEndDate.split('-').reverse().join('/')}`}</span>
+              <span className="hidden sm:inline">{filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${formatDateAndDay(filterStartDate)} - ${formatDateAndDay(filterEndDate)}`}</span>
+            </p>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-300/80 flex items-center justify-center shrink-0">
-            <Clock className="w-5 h-5 text-amber-700 animate-spin" />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-100 border border-amber-300/80 flex items-center justify-center shrink-0">
+            <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-amber-700 animate-spin" />
           </div>
         </div>
 
         {/* 3. Total OD Requisitions */}
-        <div className="bg-blue-50/70 border border-blue-200/90 rounded-xl p-4 shadow-2xs flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-blue-800">Total Requisitions</p>
-            <p className="text-2xl font-black text-blue-900 mt-1">{odStats.total}</p>
-            <p className="text-[10px] text-blue-700 font-semibold mt-0.5">
-              {filterStartDate && filterEndDate ? `${filterStartDate} - ${filterEndDate}` : 'Logged Field Tours'}
+        <div className="bg-blue-50/70 border border-blue-200/90 rounded-xl p-3.5 sm:p-4 shadow-2xs flex items-center justify-between gap-2 min-w-0">
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-blue-800 truncate" title="Total Requisitions">Total Applied</p>
+            <p className="text-xl sm:text-2xl font-black text-blue-900 mt-0.5 sm:mt-1">{odStats.total}</p>
+            <p className="text-[10px] text-blue-700 font-semibold mt-0.5 truncate" title={filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${formatDateAndDay(filterStartDate)} - ${formatDateAndDay(filterEndDate)}`}>
+              <span className="sm:hidden">{filterStartDate === filterEndDate ? formatDateAndDay(filterStartDate) : `${filterStartDate.split('-').reverse().join('/')} - ${filterEndDate.split('-').reverse().join('/')}`}</span>
+              <span className="hidden sm:inline">{filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${formatDateAndDay(filterStartDate)} - ${formatDateAndDay(filterEndDate)}`}</span>
             </p>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-blue-100 border border-blue-300/80 flex items-center justify-center shrink-0">
-            <MapPin className="w-5 h-5 text-blue-700" />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-100 border border-blue-300/80 flex items-center justify-center shrink-0">
+            <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-blue-700" />
           </div>
         </div>
 
-        {/* 4. Estimated Tour Funds */}
-        <div className="bg-purple-50/70 border border-purple-200/90 rounded-xl p-4 shadow-2xs flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-purple-800">Estimated Tour Funds</p>
-            <p className="text-2xl font-black text-purple-900 mt-1">₹{odStats.totalFunds.toLocaleString()}</p>
-            <p className="text-[10px] text-purple-700 font-semibold mt-0.5">
-              Official Tour Budget Allocation
+        {/* 4. Total OD Days */}
+        <div className="bg-purple-50/70 border border-purple-200/90 rounded-xl p-3.5 sm:p-4 shadow-2xs flex items-center justify-between gap-2 min-w-0">
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-purple-800 truncate" title="Total OD Days">OD Days</p>
+            <p className="text-xl sm:text-2xl font-black text-purple-900 mt-0.5 sm:mt-1">{odStats.totalDays}</p>
+            <p className="text-[10px] text-purple-700 font-semibold mt-0.5 truncate" title={filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${formatDateAndDay(filterStartDate)} - ${formatDateAndDay(filterEndDate)}`}>
+              <span className="sm:hidden">{filterStartDate === filterEndDate ? formatDateAndDay(filterStartDate) : `${filterStartDate.split('-').reverse().join('/')} - ${filterEndDate.split('-').reverse().join('/')}`}</span>
+              <span className="hidden sm:inline">{filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${formatDateAndDay(filterStartDate)} - ${formatDateAndDay(filterEndDate)}`}</span>
             </p>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-purple-100 border border-purple-300/80 flex items-center justify-center shrink-0">
-            <Globe className="w-5 h-5 text-purple-700" />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-purple-100 border border-purple-300/80 flex items-center justify-center shrink-0">
+            <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-purple-700" />
           </div>
         </div>
       </div>
@@ -770,9 +820,9 @@ export const OutdoorDutyView: React.FC = () => {
       {/* Main Filter & Search Control Bar */}
       <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3.5">
         {/* Top Bar: Clean Themed Date Pickers & Presets & Export Buttons */}
-        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3.5 border-b border-slate-100 pb-3.5">
-          {/* Left: Date Pickers & Presets */}
-          <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3.5 border-b border-slate-100 pb-3">
+          {/* Row 1 on mobile (Left on tab/desktop): Date Pickers & Presets */}
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <div className="flex items-center space-x-2">
               <AppDatePicker
                 size="sm"
@@ -797,7 +847,7 @@ export const OutdoorDutyView: React.FC = () => {
               <div>
                 <button
                   onClick={handlePresetCurrentMonth}
-                  className="h-9 bg-slate-50/90 hover:bg-white border border-slate-200/90 rounded-xl px-3.5 text-xs font-bold text-slate-800 shadow-2xs flex items-center space-x-1.5 shrink-0 transition-all cursor-pointer"
+                  className="h-9 bg-slate-50/90 hover:bg-white border border-slate-200/90 rounded-xl px-3 text-xs font-bold text-slate-800 shadow-2xs flex items-center space-x-1.5 shrink-0 transition-all cursor-pointer"
                   title="Reset dates to Current Month"
                 >
                   <Calendar className="w-3.5 h-3.5 text-slate-500" />
@@ -807,8 +857,8 @@ export const OutdoorDutyView: React.FC = () => {
             )}
           </div>
 
-          {/* Right: Export Buttons (CSV & PDF) */}
-          <div className="flex items-center space-x-2 shrink-0 self-end lg:self-auto">
+          {/* Row 2 on mobile (Right on tab/desktop): Export Buttons (CSV & PDF) */}
+          <div className="flex items-center justify-end space-x-2 shrink-0 w-full sm:w-auto ml-auto">
             <button
               onClick={handleExportCSV}
               className="h-9 px-3.5 bg-white hover:bg-slate-50 text-slate-800 border border-slate-200/90 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer shadow-2xs"
@@ -827,86 +877,69 @@ export const OutdoorDutyView: React.FC = () => {
           </div>
         </div>
 
-        {/* Second Row: Search Keyword, Reset & View Toggle Switch */}
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-            {/* Search Box */}
-            <div className="relative flex-1 min-w-[240px]">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Search staff, location, purpose, department, funding..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="h-9 w-full pl-10 pr-9 bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200/80 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 transition-all shadow-2xs"
-              />
-              {searchTerm && (
-                <button
-                  onClick={() => setSearchTerm('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-200 transition-colors cursor-pointer"
-                  title="Clear search"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-
-            <div className="flex items-center space-x-2 shrink-0 self-end sm:self-auto">
-              {(searchTerm !== '' ||
-                !filterStatus.includes('all') ||
-                !filterOdType.includes('all') ||
-                !filterUser.includes('all') ||
-                !filterDesignation.includes('all') ||
-                !filterDept.includes('all') ||
-                !filterReportingManager.includes('all') ||
-                filterStartDate !== DEFAULT_START_DATE ||
-                filterEndDate !== DEFAULT_END_DATE) && (
-                <button
-                  onClick={handleResetFilters}
-                  className="h-9 px-3.5 bg-blue-50/90 hover:bg-blue-100 text-blue-900 border border-blue-200/90 rounded-xl text-xs font-bold flex items-center space-x-1.5 shrink-0 transition-all cursor-pointer shadow-2xs"
-                  title="Reset all search and filter selections"
-                >
-                  <RotateCcw className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Reset All Filters</span>
-                </button>
-              )}
-
-              {/* View Mode Toggle */}
-              <div className="h-9 flex items-center p-1 bg-slate-100/90 border border-slate-200/90 rounded-xl gap-1 shrink-0">
-                <button
-                  onClick={() => setViewMode('table')}
-                  title="Table View"
-                  className={`h-7 px-2 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
-                    viewMode === 'table'
-                      ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
-                      : 'text-slate-400 hover:text-slate-700'
-                  }`}
-                >
-                  <TableIcon className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setViewMode('grid')}
-                  title="Grid View"
-                  className={`h-7 px-2 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
-                    viewMode === 'grid'
-                      ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
-                      : 'text-slate-400 hover:text-slate-700'
-                  }`}
-                >
-                  <LayoutGrid className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
+        {/* Row: Search box + Reset Filters (Icon Only) + View Mode Toggle in ONE Single Row */}
+        <div className="flex items-center gap-2 w-full">
+          {/* Search Box */}
+          <div className="relative flex-1 min-w-0">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search staff, location, purpose, department, funding..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="h-9 w-full pl-10 pr-9 bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200/80 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 transition-all shadow-2xs"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-200 transition-colors cursor-pointer"
+                title="Clear search"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
-          {/* Third Row: Filter Dropdowns Uniform Flex Wrap */}
-          <div className="pt-2 border-t border-slate-100 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-                FILTERS
-              </span>
-            </div>
+          {/* Reset Filters (Only Icon - Appears ONLY when any filter or search query is active) */}
+          {hasActiveFilters && (
+            <button
+              onClick={handleResetFilters}
+              className="h-9 w-9 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200/90 rounded-xl flex items-center justify-center shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
+              title="Reset all search and filter selections"
+            >
+              <RotateCcw className="w-4 h-4 text-blue-600" />
+            </button>
+          )}
 
+          {/* View Mode Toggle Switch */}
+          <div className="h-9 flex items-center p-1 bg-slate-100/90 border border-slate-200/90 rounded-xl gap-1 shrink-0">
+            <button
+              onClick={() => setViewMode('table')}
+              title="Table View"
+              className={`h-7 px-2 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
+                viewMode === 'table'
+                  ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
+                  : 'text-slate-400 hover:text-slate-700'
+              }`}
+            >
+              <TableIcon className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('grid')}
+              title="Grid View"
+              className={`h-7 px-2 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
+                viewMode === 'grid'
+                  ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
+                  : 'text-slate-400 hover:text-slate-700'
+              }`}
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+          {/* Third Row: Filter Dropdowns Uniform Flex Wrap */}
+          <div className="pt-2 border-t border-slate-100">
             <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 flex-nowrap responsive-filter-row">
               {/* 1. Employee Filter */}
               {canSeeTeamFilters && (
@@ -991,7 +1024,6 @@ export const OutdoorDutyView: React.FC = () => {
             </div>
           </div>
         </div>
-      </div>
 
       {/* Pending Manager Queue Alert Banner */}
       {(isReportingManager || isAdmin) && pendingManagerQueue.length > 0 && (
@@ -1026,10 +1058,7 @@ export const OutdoorDutyView: React.FC = () => {
         <div className="p-3.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 min-h-[50px]">
           <div className="flex items-center space-x-3">
             <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-              Outdoor Duty Requisitions ({sortedODs.length})
-            </span>
-            <span className="text-[11px] text-slate-500 font-medium bg-slate-200/60 px-2.5 py-0.5 rounded-full border border-slate-200">
-              Total Budget: <strong className="text-slate-900 font-mono">₹{sortedODs.reduce((acc, curr) => acc + (curr.estimatedFunds || 0), 0).toLocaleString()}</strong>
+              Outdoors ({sortedODs.length})
             </span>
           </div>
         </div>
@@ -1224,18 +1253,18 @@ export const OutdoorDutyView: React.FC = () => {
           </div>
         ) : (
           /* Table View - Uniform Theme Width & Proportional Grid */
-          <div className="w-full min-w-0 overflow-x-auto">
+          <div className="w-full min-w-0 overflow-x-auto custom-table-scrollbar pb-1">
             <table className="w-full text-left text-xs border-collapse table-auto min-w-[950px]">
               <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 text-[11px]">
                 <tr className="h-10">
                   {/* Employee Column */}
                   <th
                     onClick={() => handleSort('employee')}
-                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[18%]"
-                    title="Click to sort by Employee Details"
+                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[19%]"
+                    title="Click to sort by Employee"
                   >
                     <div className="flex items-center space-x-1.5">
-                      <span>Employee Details</span>
+                      <span>Employee</span>
                       {sortField === 'employee' ? (
                         sortOrder === 'asc' ? (
                           <ArrowUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
@@ -1248,14 +1277,14 @@ export const OutdoorDutyView: React.FC = () => {
                     </div>
                   </th>
 
-                  {/* Dates & Timings Column */}
+                  {/* Duration Column */}
                   <th
                     onClick={() => handleSort('dates')}
-                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[17%]"
-                    title="Click to sort by Dates"
+                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[16%]"
+                    title="Click to sort by Duration"
                   >
                     <div className="flex items-center space-x-1.5">
-                      <span>Dates &amp; Timings</span>
+                      <span>Duration</span>
                       {sortField === 'dates' ? (
                         sortOrder === 'asc' ? (
                           <ArrowUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
@@ -1288,14 +1317,14 @@ export const OutdoorDutyView: React.FC = () => {
                     </div>
                   </th>
 
-                  {/* Location & Type Column (Combined) */}
+                  {/* Location Column */}
                   <th
                     onClick={() => handleSort('location')}
-                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[17%]"
-                    title="Click to sort by Location & Type"
+                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[14%]"
+                    title="Click to sort by Location"
                   >
                     <div className="flex items-center space-x-1.5">
-                      <span>Location &amp; Type</span>
+                      <span>Location</span>
                       {sortField === 'location' || sortField === 'type' ? (
                         sortOrder === 'asc' ? (
                           <ArrowUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
@@ -1311,7 +1340,7 @@ export const OutdoorDutyView: React.FC = () => {
                   {/* Purpose Column */}
                   <th
                     onClick={() => handleSort('purpose')}
-                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[12%]"
+                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[19%]"
                     title="Click to sort by Purpose"
                   >
                     <div className="flex items-center space-x-1.5">
@@ -1349,7 +1378,7 @@ export const OutdoorDutyView: React.FC = () => {
                   </th>
 
                   {/* Actions Column */}
-                  <th className="py-2.5 px-3 text-right font-bold whitespace-nowrap align-middle w-[17%]">Actions</th>
+                  <th className="py-2.5 px-3 text-right font-bold whitespace-nowrap align-middle w-[11%]">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1363,6 +1392,7 @@ export const OutdoorDutyView: React.FC = () => {
                     (reqUser?.reportingManagerId ? usersMap.get(reqUser.reportingManagerId)?.name : undefined) ||
                     (reqUser as any)?.reportingManagerName ||
                     (od.userId === 'usr-admin-1' ? 'Director / Admin' : undefined);
+                  const isLongPurpose = (od.purpose || '').length > 22;
 
                   return (
                     <tr key={od.id} className="hover:bg-slate-50 transition-colors">
@@ -1386,7 +1416,7 @@ export const OutdoorDutyView: React.FC = () => {
                         </div>
                       </td>
 
-                      {/* Dates & Timings */}
+                      {/* Duration */}
                       <td className="py-2.5 px-2 whitespace-nowrap align-middle">
                         <div className="font-bold text-slate-900 flex items-center space-x-1">
                           <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
@@ -1413,9 +1443,9 @@ export const OutdoorDutyView: React.FC = () => {
                         </div>
                       </td>
 
-                      {/* Location & Type (Combined) */}
+                      {/* Location */}
                       <td className="py-2.5 px-2 align-middle">
-                        <div className="flex items-center space-x-1 min-w-0 max-w-[170px] lg:max-w-[210px]">
+                        <div className="flex items-center space-x-1 min-w-0 max-w-[130px] lg:max-w-[150px]">
                           <MapPin className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                           <span className="font-semibold text-slate-800 text-xs truncate" title={od.location}>
                             {od.location}
@@ -1434,11 +1464,30 @@ export const OutdoorDutyView: React.FC = () => {
                         </div>
                       </td>
 
-                      {/* Purpose */}
+                      {/* Purpose with View More */}
                       <td className="py-2.5 px-2 align-middle">
-                        <p className="text-slate-700 text-xs line-clamp-2 leading-snug max-w-[130px] lg:max-w-[160px] italic" title={od.purpose}>
-                          "{od.purpose}"
-                        </p>
+                        <div className="flex items-center justify-between gap-1.5 max-w-[190px]">
+                          <span className="text-slate-700 text-xs truncate flex-1 min-w-0 font-medium italic" title={od.purpose}>
+                            "{od.purpose}"
+                          </span>
+                          {isLongPurpose && (
+                            <button
+                              onClick={() =>
+                                setActivePurposeModal({
+                                  employeeName: reqUser?.name || od.userName || od.userId,
+                                  duration: `${od.startDate} to ${od.endDate} (${od.daysCount} d)`,
+                                  location: od.location,
+                                  purpose: od.purpose
+                                })
+                              }
+                              className="text-blue-600 hover:text-blue-800 font-bold inline-flex items-center space-x-0.5 cursor-pointer shrink-0 ml-0.5 text-[10px] hover:underline"
+                              title="View full purpose"
+                            >
+                              <span>More</span>
+                              <Eye className="w-2.5 h-2.5 shrink-0" />
+                            </button>
+                          )}
+                        </div>
                       </td>
 
                       {/* Status */}
@@ -1543,57 +1592,59 @@ export const OutdoorDutyView: React.FC = () => {
                 })}
               </tbody>
             </table>
-            <TablePagination
-              currentPage={odPage}
-              totalPages={Math.ceil(sortedODs.length / odPageSize)}
-              totalItems={sortedODs.length}
-              pageSize={odPageSize}
-              onPageChange={setOdPage}
-              onPageSizeChange={setOdPageSize}
-            />
           </div>
         )}
+
+        {/* Stable Full-Width Footer & Pagination (Fixed at bottom of card, outside horizontal scroll) */}
+        <div className="w-full border-t border-slate-200/90 bg-white">
+          <TablePagination
+            currentPage={odPage}
+            totalPages={Math.ceil(sortedODs.length / odPageSize)}
+            totalItems={sortedODs.length}
+            pageSize={odPageSize}
+            onPageChange={setOdPage}
+            onPageSizeChange={setOdPageSize}
+          />
+        </div>
       </div>
 
       {/* APPLY / EDIT OD MODAL */}
       {showApplyModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-800 flex items-center justify-center font-bold">
-                  <MapPin className="w-4 h-4" />
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 my-8">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 px-4 sm:px-6 py-3.5 sm:py-4 text-white flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-white/10 rounded-xl backdrop-blur-md shrink-0">
+                  <Globe className="w-5 h-5 text-blue-300" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">
-                    {editingOd ? 'Edit Outdoor Duty Requisition' : 'Apply for Outdoor Duty (OD)'}
-                  </h3>
-                  <p className="text-[11px] text-slate-500">
-                    Official tour requisition &amp; travel allowance application
-                  </p>
+                  <h2 className="text-base font-bold tracking-wide">
+                    Outdoor Duty (OD)
+                  </h2>
                 </div>
               </div>
               <button
                 onClick={() => setShowApplyModal(false)}
-                className="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 transition-colors"
+                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            {formError && (
-              <div className="bg-rose-50 border border-rose-200 text-rose-800 p-3 rounded-xl text-xs font-semibold flex items-center space-x-2">
-                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                <span>{formError}</span>
-              </div>
-            )}
+            <form onSubmit={handleFormSubmit} className="p-4 sm:p-6 space-y-3.5 max-h-[82vh] overflow-y-auto">
+              {formError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center space-x-2 text-xs text-rose-800">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{formError}</span>
+                </div>
+              )}
 
-            <form onSubmit={handleFormSubmit} className="space-y-4 text-xs">
               {/* Select Staff / Employee Dropdown for Admin */}
-              {isAdmin && (
-                <div className="bg-blue-50/70 border border-blue-200/80 p-3 rounded-xl space-y-1.5">
-                  <label className="block font-bold text-blue-950 uppercase tracking-wider text-[10px]">
-                    Select Staff / Employee <span className="text-rose-500">*</span>
+              {isAdmin && !editingOd && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Apply on Behalf of Employee *
                   </label>
                   <AppSelect
                     value={formUserId}
@@ -1604,47 +1655,41 @@ export const OutdoorDutyView: React.FC = () => {
                       description: `${u.designation || u.department || u.role} (${u.email})`
                     }))}
                   />
-                  <p className="text-[10px] text-blue-700 font-medium">
-                    As Administrator, you can submit an Outdoor Duty on behalf of any staff member.
-                  </p>
                 </div>
               )}
 
               {/* OD Type */}
               <div>
-                <label className="block font-bold text-slate-700 uppercase tracking-wider text-[10px] mb-1">
-                  Outdoor Duty Type <span className="text-rose-500">*</span>
-                </label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => setFormOdType('Domestic')}
-                    className={`py-2 px-3 rounded-xl font-bold flex items-center justify-center space-x-1.5 border transition-all cursor-pointer ${
+                    className={`py-2 px-3 rounded-xl font-bold flex items-center justify-center space-x-1.5 border transition-all cursor-pointer text-xs ${
                       formOdType === 'Domestic'
                         ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
                         : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                     }`}
                   >
                     <Briefcase className="w-3.5 h-3.5" />
-                    <span>Domestic Tour</span>
+                    <span>Domestic</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setFormOdType('International')}
-                    className={`py-2 px-3 rounded-xl font-bold flex items-center justify-center space-x-1.5 border transition-all cursor-pointer ${
+                    className={`py-2 px-3 rounded-xl font-bold flex items-center justify-center space-x-1.5 border transition-all cursor-pointer text-xs ${
                       formOdType === 'International'
-                        ? 'bg-purple-600 text-white border-purple-600 shadow-2xs'
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
                         : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                     }`}
                   >
                     <Globe className="w-3.5 h-3.5" />
-                    <span>International Duty</span>
+                    <span>International</span>
                   </button>
                 </div>
               </div>
 
               {/* Dates */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
                 <AppDatePicker
                   label="Start Date *"
                   value={formStartDate}
@@ -1660,37 +1705,28 @@ export const OutdoorDutyView: React.FC = () => {
               </div>
 
               {/* Timings */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 uppercase tracking-wider text-[10px] mb-1">
-                    Departure / Start Time <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="time"
-                    value={formStartTime}
-                    onChange={(e) => setFormStartTime(e.target.value)}
-                    required
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-semibold text-slate-900 focus:bg-white focus:outline-none focus:border-blue-600"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-700 uppercase tracking-wider text-[10px] mb-1">
-                    Return / End Time <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="time"
-                    value={formEndTime}
-                    onChange={(e) => setFormEndTime(e.target.value)}
-                    required
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-semibold text-slate-900 focus:bg-white focus:outline-none focus:border-blue-600"
-                  />
-                </div>
+              <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+                <AppTimePicker
+                  label="Start Time"
+                  required={true}
+                  value={formStartTime}
+                  onChange={(val) => setFormStartTime(val)}
+                  presets={['08:00', '09:00', '09:30', '10:00']}
+                />
+                <AppTimePicker
+                  label="End Time"
+                  required={true}
+                  value={formEndTime}
+                  onChange={(val) => setFormEndTime(val)}
+                  presets={['17:00', '17:30', '18:00', '19:00']}
+                  align="right"
+                />
               </div>
 
               {/* Location */}
               <div>
-                <label className="block font-bold text-slate-700 uppercase tracking-wider text-[10px] mb-1">
-                  Outdoor Duty Location / Site <span className="text-rose-500">*</span>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Location *
                 </label>
                 <input
                   type="text"
@@ -1698,14 +1734,14 @@ export const OutdoorDutyView: React.FC = () => {
                   value={formLocation}
                   onChange={(e) => setFormLocation(e.target.value)}
                   required
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:bg-white focus:outline-none focus:border-blue-600"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
                 />
               </div>
 
               {/* Funds & Source */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 uppercase tracking-wider text-[10px] mb-1">
+                  <label className="block text-xs font-bold text-slate-700 mb-1 truncate">
                     Estimated Funds (₹)
                   </label>
                   <input
@@ -1714,52 +1750,53 @@ export const OutdoorDutyView: React.FC = () => {
                     placeholder="0"
                     value={formEstimatedFunds}
                     onChange={(e) => setFormEstimatedFunds(Number(e.target.value))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono text-slate-900 focus:bg-white focus:outline-none focus:border-blue-600"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-mono font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 uppercase tracking-wider text-[10px] mb-1">
-                    Funding Source / Project
+                  <label className="block text-xs font-bold text-slate-700 mb-1 truncate">
+                    Budget Head
                   </label>
                   <input
                     type="text"
                     placeholder="e.g. CAMPA Project / Inst. Fund"
                     value={formFundingSource}
                     onChange={(e) => setFormFundingSource(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:bg-white focus:outline-none focus:border-blue-600"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
                   />
                 </div>
               </div>
 
               {/* Purpose */}
               <div>
-                <label className="block font-bold text-slate-700 uppercase tracking-wider text-[10px] mb-1">
-                  Official Purpose &amp; Agenda <span className="text-rose-500">*</span>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Official Purpose &amp; Agenda *
                 </label>
                 <textarea
-                  rows={3}
+                  rows={2}
                   placeholder="Detail the scientific, administrative or project purpose of this outdoor duty..."
                   value={formPurpose}
                   onChange={(e) => setFormPurpose(e.target.value)}
                   required
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-900 focus:bg-white focus:outline-none focus:border-blue-600"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white resize-none"
                 />
               </div>
 
-              {/* Submit Buttons */}
-              <div className="pt-2 flex items-center justify-end space-x-2">
+              {/* Actions */}
+              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setShowApplyModal(false)}
-                  className="px-4 py-2 font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                  className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-2xs transition-all cursor-pointer active:scale-95"
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer flex items-center space-x-1.5"
                 >
-                  {editingOd ? 'Update Request' : 'Submit OD Request'}
+                  <CheckCheck className="w-4 h-4" />
+                  <span>{editingOd ? 'Update' : 'Submit'}</span>
                 </button>
               </div>
             </form>
@@ -2063,7 +2100,7 @@ export const OutdoorDutyView: React.FC = () => {
                   </span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase block">Funding Source</span>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase block">Budget Head</span>
                   <span className="font-semibold text-slate-800">{detailModalOd.fundingSource || 'N/A'}</span>
                 </div>
               </div>
@@ -2115,6 +2152,41 @@ export const OutdoorDutyView: React.FC = () => {
               <button
                 onClick={() => setDetailModalOd(null)}
                 className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Purpose Modal for Reading Full OD Purpose */}
+      {activePurposeModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-lg w-full border border-slate-200 shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Outdoor Duty Purpose &amp; Agenda</h3>
+                <p className="text-xs text-slate-500">
+                  {activePurposeModal.employeeName} • {activePurposeModal.location} • {activePurposeModal.duration}
+                </p>
+              </div>
+              <button
+                onClick={() => setActivePurposeModal(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-xs text-slate-800 leading-relaxed font-sans whitespace-pre-wrap">
+              "{activePurposeModal.purpose}"
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                onClick={() => setActivePurposeModal(null)}
+                className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-4 py-1.5 rounded-lg text-xs cursor-pointer"
               >
                 Close
               </button>

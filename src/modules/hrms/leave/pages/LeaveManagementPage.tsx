@@ -1526,11 +1526,11 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
         title="Leaves"
         subtitle={`Central Civil Services (CCS) Leave Rules 1972 workflow tailored for ${currentUser.employmentType.replace('_', ' ')}`}
         rightAction={
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center justify-end space-x-2 ml-auto">
             {canApplyLeave && (
               <button
                 onClick={handleOpenApplyModal}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center space-x-1.5 transition-all shadow-2xs cursor-pointer active:scale-95"
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center space-x-1.5 transition-all shadow-2xs cursor-pointer active:scale-95 ml-auto"
               >
                 <PlusCircle className="w-4 h-4" />
                 <span>Apply for Leave</span>
@@ -1715,13 +1715,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
           </div>
 
           {/* Third Row: Role-Based Filter Dropdowns Uniform Flex Wrap */}
-          <div className="pt-2 border-t border-slate-100 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-                FILTERS
-              </span>
-            </div>
-
+          <div className="pt-2 border-t border-slate-100">
             <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 flex-nowrap">
               {/* Employee Filter (Reporting Manager, HoD, Admin) */}
               {(isReportingManager || isReviewingManager || isAdmin) && (
@@ -2578,14 +2572,6 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
               })}
               </tbody>
             </table>
-            <TablePagination
-              currentPage={tablePage}
-              totalPages={Math.ceil(filteredLeaves.length / tablePageSize)}
-              totalItems={filteredLeaves.length}
-              pageSize={tablePageSize}
-              onPageChange={setTablePage}
-              onPageSizeChange={setTablePageSize}
-            />
           </div>
         ) : (
           /* Grid View */
@@ -2684,6 +2670,18 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
             ))}
           </div>
         )}
+
+        {/* Stable Full-Width Footer & Pagination (Fixed at bottom of card, outside horizontal scroll) */}
+        <div className="w-full border-t border-slate-200/90 bg-white">
+          <TablePagination
+            currentPage={tablePage}
+            totalPages={Math.ceil(filteredLeaves.length / tablePageSize)}
+            totalItems={filteredLeaves.length}
+            pageSize={tablePageSize}
+            onPageChange={setTablePage}
+            onPageSizeChange={setTablePageSize}
+          />
+        </div>
       </div>
 
       {/* Apply Leave Modal */}
@@ -3719,7 +3717,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                   className="px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 active:scale-98 text-white transition-all shadow-md shadow-indigo-600/20 flex items-center space-x-2 cursor-pointer"
                 >
                   <Send className="w-4 h-4" />
-                  <span>Submit Application</span>
+                  <span>Submit</span>
                 </button>
               </div>
             </form>

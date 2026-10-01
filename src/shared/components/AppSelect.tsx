@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Check, Search, X } from 'lucide-react';
 
@@ -35,9 +35,16 @@ export const AppSelect: React.FC<AppSelectProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [coords, setCoords] = useState<{ top: number; left?: number; right?: number; width: number }>({
-    top: 0,
-    width: 200
+  const [coords, setCoords] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+  }>({
+    left: 0,
+    width: 200,
+    maxHeight: 240
   });
 
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -52,39 +59,53 @@ export const AppSelect: React.FC<AppSelectProps> = ({
   // Auto enable search if > 7 options unless explicitly disabled
   const showSearch = searchable !== undefined ? searchable : normalizedOptions.length > 7;
 
-  const updatePopoverCoords = () => {
+  const updatePopoverCoords = useCallback(() => {
     if (!buttonRef.current) return;
     const rect = buttonRef.current.getBoundingClientRect();
     const spaceBelow = window.innerHeight - rect.bottom;
-    const popoverHeight = Math.min(300, normalizedOptions.length * 36 + 60);
+    const spaceAbove = rect.top;
 
-    let top = rect.bottom + 4;
-    if (spaceBelow < popoverHeight && rect.top > popoverHeight + 8) {
-      top = Math.max(8, rect.top - popoverHeight - 4);
-    }
+    // Prefer opening downwards unless space below is tight and space above is larger
+    const openUpward = spaceBelow < 170 && spaceAbove > spaceBelow;
 
-    const popoverWidth = Math.max(rect.width, 220);
+    let top: number | undefined;
+    let bottom: number | undefined;
+    let maxHeight: number;
 
-    if (align === 'right' || window.innerWidth - rect.left < popoverWidth + 16) {
-      setCoords({
-        top,
-        right: Math.max(8, window.innerWidth - rect.right),
-        width: popoverWidth
-      });
+    if (openUpward) {
+      bottom = window.innerHeight - rect.top + 4;
+      top = undefined;
+      maxHeight = Math.min(260, Math.max(120, spaceAbove - 16));
     } else {
-      setCoords({
-        top,
-        left: Math.max(8, rect.left),
-        width: popoverWidth
-      });
+      top = rect.bottom + 4;
+      bottom = undefined;
+      maxHeight = Math.min(260, Math.max(120, spaceBelow - 16));
     }
-  };
+
+    const targetWidth = rect.width;
+    const popoverWidth = Math.min(targetWidth, window.innerWidth - 16);
+
+    let left: number;
+    if (align === 'right') {
+      left = Math.max(8, rect.right - popoverWidth);
+    } else {
+      left = Math.max(8, Math.min(rect.left, window.innerWidth - popoverWidth - 8));
+    }
+
+    setCoords({
+      top,
+      bottom,
+      left,
+      width: popoverWidth,
+      maxHeight
+    });
+  }, [align]);
 
   useEffect(() => {
     if (isOpen) {
       updatePopoverCoords();
       const handleScrollOrResize = () => {
-        setIsOpen(false);
+        updatePopoverCoords();
       };
       window.addEventListener('resize', handleScrollOrResize);
       window.addEventListener('scroll', handleScrollOrResize, true);
@@ -95,7 +116,7 @@ export const AppSelect: React.FC<AppSelectProps> = ({
     } else {
       setSearchTerm('');
     }
-  }, [isOpen, align]);
+  }, [isOpen, updatePopoverCoords]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -109,10 +130,20 @@ export const AppSelect: React.FC<AppSelectProps> = ({
         setIsOpen(false);
       }
     };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsOpen(false);
+      }
+    };
+
     if (isOpen) {
       document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleKeyDown);
     }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, [isOpen]);
 
   const sizeClasses =
@@ -161,15 +192,16 @@ export const AppSelect: React.FC<AppSelectProps> = ({
             ref={popoverRef}
             style={{
               position: 'fixed',
-              top: `${coords.top}px`,
-              ...(coords.left !== undefined ? { left: `${coords.left}px` } : {}),
-              ...(coords.right !== undefined ? { right: `${coords.right}px` } : {}),
-              width: `${coords.width}px`
+              ...(coords.top !== undefined ? { top: `${coords.top}px` } : {}),
+              ...(coords.bottom !== undefined ? { bottom: `${coords.bottom}px` } : {}),
+              left: `${coords.left}px`,
+              width: `${coords.width}px`,
+              maxHeight: `${coords.maxHeight}px`
             }}
-            className="z-[9999] bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden p-1.5 space-y-1 animate-in fade-in zoom-in-95 duration-100 text-xs"
+            className="z-[9999] bg-white border border-slate-200/90 rounded-xl shadow-2xl overflow-hidden p-1.5 space-y-1 animate-in fade-in zoom-in-95 duration-100 text-xs flex flex-col"
           >
             {showSearch && (
-              <div className="relative p-1 pb-1.5 border-b border-slate-100">
+              <div className="relative p-1 pb-1.5 border-b border-slate-100 shrink-0">
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
@@ -191,7 +223,10 @@ export const AppSelect: React.FC<AppSelectProps> = ({
               </div>
             )}
 
-            <div className="max-h-56 overflow-y-auto space-y-0.5 no-scrollbar py-0.5">
+            <div
+              style={{ maxHeight: `${coords.maxHeight - (showSearch ? 45 : 12)}px` }}
+              className="overflow-y-auto space-y-0.5 no-scrollbar py-0.5 flex-1"
+            >
               {filteredOptions.length === 0 ? (
                 <div className="py-4 text-center text-xs text-slate-400 font-medium">
                   No matching options
@@ -224,8 +259,8 @@ export const AppSelect: React.FC<AppSelectProps> = ({
                           {opt.description && (
                             <div
                               className={`text-[10px] font-medium truncate ${
-                                isSelected ? 'text-blue-100' : 'text-slate-400'
-                              }`}
+                              isSelected ? 'text-blue-100' : 'text-slate-400'
+                            }`}
                             >
                               {opt.description}
                             </div>

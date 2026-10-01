@@ -775,13 +775,7 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
           </div>
 
           {/* Third Row: Filter Dropdowns */}
-          <div className="pt-2 border-t border-slate-100 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-                FILTERS
-              </span>
-            </div>
-
+          <div className="pt-2 border-t border-slate-100">
             <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 flex-nowrap">
               {/* 1. Holiday Type Filter */}
               <div className="flex-1 min-w-[140px] max-w-[220px] shrink-0 sm:shrink">

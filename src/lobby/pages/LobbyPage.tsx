@@ -124,8 +124,8 @@ export const LobbyPage: React.FC<LobbyPageProps> = ({ onSelectModule, onLogout }
           </p>
         </div>
 
-        {/* 5 Cards Row (strictly matching the clean layout of Pic 1) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-5 sm:gap-6 w-full">
+        {/* 5 Cards Row - Responsive: Mobile 1 card, Tab max 3 cards (centered), Display max 5 cards */}
+        <div className="flex flex-wrap items-stretch justify-center gap-4 sm:gap-5 lg:gap-5 xl:gap-6 w-full max-w-7xl mx-auto">
           {LOBBY_MODULES.map((mod) => {
             const Icon = mod.icon;
             const allowed = isModuleAllowed(mod);
@@ -134,7 +134,7 @@ export const LobbyPage: React.FC<LobbyPageProps> = ({ onSelectModule, onLogout }
               <div
                 key={mod.id}
                 onClick={() => allowed && onSelectModule(mod.id)}
-                className={`group relative bg-white border rounded-2xl p-7 flex flex-col items-center text-center transition-all duration-200 select-none ${
+                className={`group relative bg-white border rounded-2xl p-6 sm:p-7 flex flex-col items-center text-center transition-all duration-200 select-none w-full max-w-[340px] sm:max-w-none sm:w-[calc(33.333%-14px)] md:w-[calc(33.333%-18px)] lg:w-[calc(20%-16px)] xl:w-[calc(20%-20px)] shrink-0 ${
                   allowed
                     ? 'border-slate-200/90 hover:border-slate-300 hover:shadow-lg hover:-translate-y-1 cursor-pointer'
                     : 'border-slate-200 opacity-60 cursor-not-allowed'

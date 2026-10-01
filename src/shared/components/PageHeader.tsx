@@ -4,7 +4,7 @@ import { LucideIcon, Sparkles } from 'lucide-react';
 interface PageHeaderProps {
   icon?: LucideIcon;
   title: string;
-  subtitle: string;
+  subtitle?: string;
   badge?: string;
   badgeColor?: string;
   rightAction?: React.ReactNode;
@@ -41,7 +41,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
         </div>
       </div>
       {actions && (
-        <div className="flex items-center space-x-2 shrink-0 flex-wrap w-full md:w-auto md:justify-end">
+        <div className="flex items-center justify-end space-x-2 shrink-0 flex-wrap w-full md:w-auto ml-auto">
           {actions}
         </div>
       )}

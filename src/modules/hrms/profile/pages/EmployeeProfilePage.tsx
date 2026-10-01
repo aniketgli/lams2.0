@@ -1536,14 +1536,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                 </div>
 
                 {/* Third Row: Filters Row */}
-                <div className="pt-2 border-t border-slate-100 space-y-2">
-                  {/* FILTERS Label */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-extrabold text-slate-400 tracking-wider uppercase">
-                      FILTERS
-                    </span>
-                  </div>
-
+                <div className="pt-2 border-t border-slate-100">
                 {/* Single-line Filter Bar - All filters in one line */}
                 <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 flex-nowrap">
                   {/* 1. Employee Dropdown Pill */}
@@ -2505,13 +2498,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
               </div>
 
               {/* Third Row: FILTERS */}
-              <div className="pt-2 border-t border-slate-100 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-                    FILTERS
-                  </span>
-                </div>
-
+              <div className="pt-2 border-t border-slate-100">
               <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 flex-nowrap">
                 {/* 1. Module Filter Pill */}
                 <div className="flex-1 min-w-[150px] max-w-[240px] shrink-0 sm:shrink">
@@ -2871,13 +2858,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
               </div>
 
               {/* Third Row: FILTERS */}
-              <div className="pt-2 border-t border-slate-100 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-                    FILTERS
-                  </span>
-                </div>
-
+              <div className="pt-2 border-t border-slate-100">
                 <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 flex-nowrap">
                   {/* 1. Department Filter Pill */}
                   <div className="flex-1 min-w-[160px] max-w-[260px] shrink-0 sm:shrink">

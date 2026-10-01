@@ -6,6 +6,7 @@ import { AppDatePicker } from '../../../../shared/components/AppDatePicker';
 import { MultiSelectFilter, matchesMultiSelect } from '../../../../shared/components/MultiSelectFilter';
 import { TablePagination } from '../../../../shared/components/TablePagination';
 import { AppSelect } from '../../../../shared/components/AppSelect';
+import { AppTimePicker } from '../../../../shared/components/AppTimePicker';
 import {
   Clock,
   PlusCircle,
@@ -259,6 +260,19 @@ export const ManualAttendanceView: React.FC = () => {
   const [filterEndDate, setFilterEndDate] = useState<string>(DEFAULT_END_DATE);
   const [searchTerm, setSearchTerm] = useState<string>('');
 
+  // Check if any filter or search query is currently active
+  const hasActiveFilters = Boolean(
+    searchTerm.trim() !== '' ||
+    filterStartDate !== DEFAULT_START_DATE ||
+    filterEndDate !== DEFAULT_END_DATE ||
+    (!filterStatus.includes('all') && filterStatus.length > 0) ||
+    (!filterDept.includes('all') && filterDept.length > 0) ||
+    (!filterUser.includes('all') && filterUser.length > 0) ||
+    (!filterDesignation.includes('all') && filterDesignation.length > 0) ||
+    (!filterReportingManager.includes('all') && filterReportingManager.length > 0) ||
+    (!filterReasonCategory.includes('all') && filterReasonCategory.length > 0)
+  );
+
   const handleResetFilters = () => {
     setFilterStatus(['all']);
     setFilterDept(['all']);
@@ -270,6 +284,24 @@ export const ManualAttendanceView: React.FC = () => {
     setFilterEndDate(DEFAULT_END_DATE);
     setSearchTerm('');
     setTabFilter('all');
+  };
+
+  // Date & Day Formatter e.g. "11/08/2026 (Tue)"
+  const formatDateAndDay = (dateStr: string): string => {
+    try {
+      const parts = dateStr.split('-');
+      if (parts.length !== 3) return dateStr;
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      const dateObj = new Date(year, month, day);
+      const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+      const dayStr = parts[2].padStart(2, '0');
+      const monthStr = parts[1].padStart(2, '0');
+      return `${dayStr}/${monthStr}/${year} (${dayName})`;
+    } catch {
+      return dateStr;
+    }
   };
 
   // Accessible Users
@@ -890,16 +922,15 @@ export const ManualAttendanceView: React.FC = () => {
       <PageHeader
         icon={Clock}
         title="Manual Attendance"
-        subtitle="Apply & approve forgotten past punch corrections with automated time auto-fill and hierarchy governance"
         rightAction={
           canApplyRegularization ? (
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center justify-end space-x-2 ml-auto">
               <button
                 onClick={() => handleOpenApplyModal()}
-                className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
+                className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer ml-auto"
               >
                 <PlusCircle className="w-4 h-4" />
-                <span>Apply for Manual Attendance</span>
+                <span>Apply Manual Attendance</span>
               </button>
             </div>
           ) : undefined
@@ -909,50 +940,62 @@ export const ManualAttendanceView: React.FC = () => {
       {/* Summary Stat Metrics: Exactly 4 Uniform Cards matching standard theme */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* 1. Approved */}
-        <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-4 shadow-2xs flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">Approved Corrections</p>
-            <p className="text-2xl font-black text-emerald-900 mt-1">{stats.approved}</p>
-            <p className="text-[10px] text-emerald-700 font-semibold mt-0.5">Punches Regularized</p>
+        <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-3.5 sm:p-4 shadow-2xs flex items-center justify-between gap-2 min-w-0">
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 truncate">Approved</p>
+            <p className="text-xl sm:text-2xl font-black text-emerald-900 mt-0.5 sm:mt-1">{stats.approved}</p>
+            <p className="text-[10px] text-emerald-700 font-semibold mt-0.5 truncate" title={filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${formatDateAndDay(filterStartDate)} - ${formatDateAndDay(filterEndDate)}`}>
+              <span className="sm:hidden">{filterStartDate === filterEndDate ? formatDateAndDay(filterStartDate) : `${filterStartDate.split('-').reverse().join('/')} - ${filterEndDate.split('-').reverse().join('/')}`}</span>
+              <span className="hidden sm:inline">{filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${formatDateAndDay(filterStartDate)} - ${formatDateAndDay(filterEndDate)}`}</span>
+            </p>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-100 border border-emerald-300/80 flex items-center justify-center shrink-0">
-            <CheckCircle2 className="w-5 h-5 text-emerald-700" />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-100 border border-emerald-300/80 flex items-center justify-center shrink-0">
+            <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-700" />
           </div>
         </div>
 
         {/* 2. Pending Approvals */}
-        <div className="bg-amber-50/70 border border-amber-200/90 rounded-xl p-4 shadow-2xs flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800">Pending Approvals</p>
-            <p className="text-2xl font-black text-amber-900 mt-1">{stats.pending}</p>
-            <p className="text-[10px] text-amber-700 font-semibold mt-0.5">Awaiting Manager Decision</p>
+        <div className="bg-amber-50/70 border border-amber-200/90 rounded-xl p-3.5 sm:p-4 shadow-2xs flex items-center justify-between gap-2 min-w-0">
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800 truncate">Pending</p>
+            <p className="text-xl sm:text-2xl font-black text-amber-900 mt-0.5 sm:mt-1">{stats.pending}</p>
+            <p className="text-[10px] text-amber-700 font-semibold mt-0.5 truncate" title={filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${formatDateAndDay(filterStartDate)} - ${formatDateAndDay(filterEndDate)}`}>
+              <span className="sm:hidden">{filterStartDate === filterEndDate ? formatDateAndDay(filterStartDate) : `${filterStartDate.split('-').reverse().join('/')} - ${filterEndDate.split('-').reverse().join('/')}`}</span>
+              <span className="hidden sm:inline">{filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${formatDateAndDay(filterStartDate)} - ${formatDateAndDay(filterEndDate)}`}</span>
+            </p>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-300/80 flex items-center justify-center shrink-0">
-            <Clock className="w-5 h-5 text-amber-700 animate-spin" />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-100 border border-amber-300/80 flex items-center justify-center shrink-0">
+            <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-amber-700 animate-spin" />
           </div>
         </div>
 
         {/* 3. Total Applications */}
-        <div className="bg-blue-50/70 border border-blue-200/90 rounded-xl p-4 shadow-2xs flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-blue-800">Total Applications</p>
-            <p className="text-2xl font-black text-blue-900 mt-1">{stats.total}</p>
-            <p className="text-[10px] text-blue-700 font-semibold mt-0.5">Regularization Requests Filed</p>
+        <div className="bg-blue-50/70 border border-blue-200/90 rounded-xl p-3.5 sm:p-4 shadow-2xs flex items-center justify-between gap-2 min-w-0">
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-blue-800 truncate" title="Total Applications">Total Applied</p>
+            <p className="text-xl sm:text-2xl font-black text-blue-900 mt-0.5 sm:mt-1">{stats.total}</p>
+            <p className="text-[10px] text-blue-700 font-semibold mt-0.5 truncate" title={filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${formatDateAndDay(filterStartDate)} - ${formatDateAndDay(filterEndDate)}`}>
+              <span className="sm:hidden">{filterStartDate === filterEndDate ? formatDateAndDay(filterStartDate) : `${filterStartDate.split('-').reverse().join('/')} - ${filterEndDate.split('-').reverse().join('/')}`}</span>
+              <span className="hidden sm:inline">{filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${formatDateAndDay(filterStartDate)} - ${formatDateAndDay(filterEndDate)}`}</span>
+            </p>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-blue-100 border border-blue-300/80 flex items-center justify-center shrink-0">
-            <FileText className="w-5 h-5 text-blue-700" />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-100 border border-blue-300/80 flex items-center justify-center shrink-0">
+            <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-blue-700" />
           </div>
         </div>
 
         {/* 4. Rejected / Cancelled */}
-        <div className="bg-rose-50/70 border border-rose-200/90 rounded-xl p-4 shadow-2xs flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-rose-800">Rejected / Cancelled</p>
-            <p className="text-2xl font-black text-rose-900 mt-1">{stats.rejected}</p>
-            <p className="text-[10px] text-rose-700 font-semibold mt-0.5">Declined or Withdrawn</p>
+        <div className="bg-rose-50/70 border border-rose-200/90 rounded-xl p-3.5 sm:p-4 shadow-2xs flex items-center justify-between gap-2 min-w-0">
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-rose-800 truncate">Rejected</p>
+            <p className="text-xl sm:text-2xl font-black text-rose-900 mt-0.5 sm:mt-1">{stats.rejected}</p>
+            <p className="text-[10px] text-rose-700 font-semibold mt-0.5 truncate" title={filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${formatDateAndDay(filterStartDate)} - ${formatDateAndDay(filterEndDate)}`}>
+              <span className="sm:hidden">{filterStartDate === filterEndDate ? formatDateAndDay(filterStartDate) : `${filterStartDate.split('-').reverse().join('/')} - ${filterEndDate.split('-').reverse().join('/')}`}</span>
+              <span className="hidden sm:inline">{filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${formatDateAndDay(filterStartDate)} - ${formatDateAndDay(filterEndDate)}`}</span>
+            </p>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-rose-100 border border-rose-300/80 flex items-center justify-center shrink-0">
-            <XCircle className="w-5 h-5 text-rose-700" />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-rose-100 border border-rose-300/80 flex items-center justify-center shrink-0">
+            <XCircle className="w-4 h-4 sm:w-5 sm:h-5 text-rose-700" />
           </div>
         </div>
       </div>
@@ -960,80 +1003,86 @@ export const ManualAttendanceView: React.FC = () => {
       {/* Main Filter & Search Control Bar */}
       <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3.5">
         {/* Top Bar: Clean Themed Date Pickers & Presets & Export Buttons */}
-        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3.5 border-b border-slate-100 pb-3.5">
-          {/* Left: Date Pickers & Presets */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center space-x-2">
-              <AppDatePicker
-                size="sm"
-                placeholder="From Date"
-                value={filterStartDate}
-                onChange={(dStr) => setFilterStartDate(dStr)}
-              />
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3.5 border-b border-slate-100 pb-3">
+          {/* Row 1 on mobile (Left on tab/desktop): Date Pickers & Presets */}
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="flex items-center space-x-1.5 flex-1 sm:flex-initial min-w-0">
+              <div className="flex-1 sm:flex-initial min-w-0">
+                <AppDatePicker
+                  size="sm"
+                  placeholder="From Date"
+                  value={filterStartDate}
+                  onChange={(dStr) => setFilterStartDate(dStr)}
+                />
+              </div>
 
-              <span className="text-slate-300 font-bold">—</span>
+              <span className="text-slate-300 font-bold shrink-0">—</span>
 
-              <AppDatePicker
-                size="sm"
-                placeholder="To Date"
-                value={filterEndDate}
-                onChange={(dStr) => setFilterEndDate(dStr)}
-                isRightColumn={true}
-              />
+              <div className="flex-1 sm:flex-initial min-w-0">
+                <AppDatePicker
+                  size="sm"
+                  placeholder="To Date"
+                  value={filterEndDate}
+                  onChange={(dStr) => setFilterEndDate(dStr)}
+                  isRightColumn={true}
+                />
+              </div>
             </div>
 
-            {/* Quick Preset: Current Month (Only appears when dates are modified from default) */}
+            {/* Quick Preset: Current Month */}
             {(filterStartDate !== DEFAULT_START_DATE || filterEndDate !== DEFAULT_END_DATE) && (
-              <div>
-                <button
-                  onClick={handlePresetCurrentMonth}
-                  className="h-9 bg-slate-50/90 hover:bg-white border border-slate-200/90 rounded-xl px-3.5 text-xs font-bold text-slate-800 shadow-2xs flex items-center space-x-1.5 shrink-0 transition-all cursor-pointer"
-                  title="Reset dates to Current Month"
-                >
-                  <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Current Month</span>
-                </button>
-              </div>
+              <button
+                onClick={handlePresetCurrentMonth}
+                className="h-9 bg-slate-50/90 hover:bg-white border border-slate-200/90 rounded-xl px-2.5 sm:px-3 text-xs font-bold text-slate-800 shadow-2xs flex items-center space-x-1.5 shrink-0 transition-all cursor-pointer"
+                title="Reset dates to Current Month"
+              >
+                <Calendar className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                <span className="hidden sm:inline">Current Month</span>
+                <span className="sm:hidden">Reset</span>
+              </button>
             )}
           </div>
 
-          {/* Right: Export Buttons (CSV & PDF) */}
-          <div className="flex items-center space-x-2 shrink-0 self-end lg:self-auto">
+          {/* Row 2 on mobile (Right on tab/desktop): Export Buttons (CSV & PDF) - Right aligned */}
+          <div className="flex items-center justify-end gap-2 shrink-0 w-full sm:w-auto ml-auto">
             <button
               onClick={handleExportCSV}
-              className="h-9 px-3.5 bg-white hover:bg-slate-50 text-slate-800 border border-slate-200/90 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer shadow-2xs"
+              className="h-9 px-3 bg-white hover:bg-slate-50 text-slate-800 border border-slate-200/90 rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer shadow-2xs shrink-0"
+              title="Export records to CSV"
             >
-              <Download className="w-3.5 h-3.5 text-emerald-600" />
+              <Download className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
               <span>Export CSV</span>
             </button>
 
             <button
               onClick={handleExportPDF}
-              className="h-9 px-3.5 bg-slate-900 hover:bg-slate-800 text-white border border-slate-900 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer shadow-2xs"
+              className="h-9 px-3 bg-slate-900 hover:bg-slate-800 text-white border border-slate-900 rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer shadow-2xs shrink-0"
+              title="Export records to PDF"
             >
-              <FileText className="w-3.5 h-3.5 text-rose-400" />
+              <FileText className="w-3.5 h-3.5 text-rose-400 shrink-0" />
               <span>Export PDF</span>
             </button>
           </div>
         </div>
 
-        {/* Second Row: Search Keyword, Reset & View Toggle Switch */}
+        {/* Second Row: Search Keyword, Reset (Icon Only) & View Toggle Switch */}
         <div className="flex flex-col gap-3">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          {/* Row: Search box + Reset Filters (Icon Only) + View Mode Toggle in ONE Single Row */}
+          <div className="flex items-center gap-2 w-full">
             {/* Search Box */}
-            <div className="relative flex-1 min-w-[240px]">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <div className="relative flex-1 min-w-0">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Search employee, department, reason, date..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="h-9 w-full pl-10 pr-9 bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200/80 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 transition-all shadow-2xs"
+                className="h-9 w-full pl-9 pr-8 bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200/80 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 transition-all shadow-2xs"
               />
               {searchTerm && (
                 <button
                   onClick={() => setSearchTerm('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-200 transition-colors cursor-pointer"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-200 transition-colors cursor-pointer"
                   title="Clear search"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -1041,62 +1090,46 @@ export const ManualAttendanceView: React.FC = () => {
               )}
             </div>
 
-            <div className="flex items-center space-x-2 shrink-0 self-end sm:self-auto">
-              {(searchTerm !== '' ||
-                !filterStatus.includes('all') ||
-                !filterReasonCategory.includes('all') ||
-                !filterUser.includes('all') ||
-                !filterDesignation.includes('all') ||
-                !filterDept.includes('all') ||
-                !filterReportingManager.includes('all') ||
-                filterStartDate !== DEFAULT_START_DATE ||
-                filterEndDate !== DEFAULT_END_DATE) && (
-                <button
-                  onClick={handleResetFilters}
-                  className="h-9 px-3.5 bg-blue-50/90 hover:bg-blue-100 text-blue-900 border border-blue-200/90 rounded-xl text-xs font-bold flex items-center space-x-1.5 shrink-0 transition-all cursor-pointer shadow-2xs"
-                  title="Reset all search and filter selections"
-                >
-                  <RotateCcw className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Reset All Filters</span>
-                </button>
-              )}
+            {/* Reset Filters (Only Icon - Appears ONLY when any filter or search query is active) */}
+            {hasActiveFilters && (
+              <button
+                onClick={handleResetFilters}
+                className="h-9 w-9 rounded-xl border bg-blue-50/90 hover:bg-blue-100 text-blue-700 border-blue-200/90 flex items-center justify-center shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95 animate-in fade-in zoom-in-95 duration-150"
+                title="Reset active filters and search"
+              >
+                <RotateCcw className="w-4 h-4 text-blue-600" />
+              </button>
+            )}
 
-              {/* View Mode Toggle */}
-              <div className="h-9 flex items-center p-1 bg-slate-100/90 border border-slate-200/90 rounded-xl gap-1 shrink-0">
-                <button
-                  onClick={() => setViewMode('table')}
-                  title="Table View"
-                  className={`h-7 px-2 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
-                    viewMode === 'table'
-                      ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
-                      : 'text-slate-400 hover:text-slate-700'
-                  }`}
-                >
-                  <TableIcon className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setViewMode('grid')}
-                  title="Grid View"
-                  className={`h-7 px-2 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
-                    viewMode === 'grid'
-                      ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
-                      : 'text-slate-400 hover:text-slate-700'
-                  }`}
-                >
-                  <LayoutGrid className="w-4 h-4" />
-                </button>
-              </div>
+            {/* View Mode Toggle */}
+            <div className="h-9 flex items-center p-1 bg-slate-100/90 border border-slate-200/90 rounded-xl gap-1 shrink-0">
+              <button
+                onClick={() => setViewMode('table')}
+                title="Table View"
+                className={`h-7 px-2 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
+                  viewMode === 'table'
+                    ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
+                    : 'text-slate-400 hover:text-slate-700'
+                }`}
+              >
+                <TableIcon className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('grid')}
+                title="Grid View"
+                className={`h-7 px-2 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
+                  viewMode === 'grid'
+                    ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
+                    : 'text-slate-400 hover:text-slate-700'
+                }`}
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
           {/* Third Row: Filter Dropdowns Uniform Flex Wrap */}
-          <div className="pt-2 border-t border-slate-100 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-                FILTERS
-              </span>
-            </div>
-
+          <div className="pt-2 border-t border-slate-100">
             <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 flex-nowrap responsive-filter-row">
               {/* 1. Employee Filter (Reporting Manager / PI, Reviewing Manager, Admin) */}
               {canSeeTeamFilters && (
@@ -1150,10 +1183,10 @@ export const ManualAttendanceView: React.FC = () => {
                 </div>
               )}
 
-              {/* 5. Reason Category Filter */}
-              <div className="flex-1 min-w-[130px] max-w-[200px] shrink-0 sm:shrink">
+              {/* 5. Category Filter */}
+              <div className="flex-1 min-w-[115px] max-w-[180px] shrink-0 sm:shrink">
                 <MultiSelectFilter
-                  label="Reason Category"
+                  label="Category"
                   icon={<Filter className="w-3.5 h-3.5" />}
                   selectedValues={filterReasonCategory}
                   onChange={setFilterReasonCategory}
@@ -1216,9 +1249,6 @@ export const ManualAttendanceView: React.FC = () => {
             <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
               Manual Attendance Records ({filteredRequests.length})
             </span>
-            <span className="text-[11px] text-slate-500 font-medium bg-slate-200/60 px-2.5 py-0.5 rounded-full border border-slate-200">
-              Rule: <strong className="text-slate-900">Strictly past dates (≤ {maxDateStr})</strong>
-            </span>
           </div>
         </div>
 
@@ -1237,7 +1267,7 @@ export const ManualAttendanceView: React.FC = () => {
           </div>
         ) : viewMode === 'table' ? (
           /* Table View */
-          <div className="w-full min-w-0 overflow-x-auto">
+          <div className="w-full min-w-0 overflow-x-auto custom-table-scrollbar pb-1">
             <table className="w-full text-left text-xs border-collapse table-auto min-w-[950px]">
               <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 text-[11px]">
                 <tr className="h-10">
@@ -1245,10 +1275,10 @@ export const ManualAttendanceView: React.FC = () => {
                   <th
                     onClick={() => handleSort('employee')}
                     className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[18%]"
-                    title="Click to sort by Employee Details"
+                    title="Click to sort by Employee"
                   >
                     <div className="flex items-center space-x-1.5">
-                      <span>Employee Details</span>
+                      <span>Employee</span>
                       {sortField === 'employee' ? (
                         sortOrder === 'asc' ? (
                           <ArrowUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
@@ -1261,14 +1291,14 @@ export const ManualAttendanceView: React.FC = () => {
                     </div>
                   </th>
 
-                  {/* Forgotten Date & Timings Column */}
+                  {/* Forget Column */}
                   <th
                     onClick={() => handleSort('forgottenDate')}
                     className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[18%]"
-                    title="Click to sort by Forgotten Date & Timings"
+                    title="Click to sort by Forget"
                   >
                     <div className="flex items-center space-x-1.5">
-                      <span>Forgotten Date &amp; Timings</span>
+                      <span>Forget</span>
                       {sortField === 'forgottenDate' ? (
                         sortOrder === 'asc' ? (
                           <ArrowUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
@@ -1520,14 +1550,6 @@ export const ManualAttendanceView: React.FC = () => {
                 })}
               </tbody>
             </table>
-            <TablePagination
-              currentPage={manualPage}
-              totalPages={Math.ceil(sortedRequests.length / manualPageSize)}
-              totalItems={sortedRequests.length}
-              pageSize={manualPageSize}
-              onPageChange={setManualPage}
-              onPageSizeChange={setManualPageSize}
-            />
           </div>
         ) : (
           /* Grid View */
@@ -1589,7 +1611,7 @@ export const ManualAttendanceView: React.FC = () => {
                       <span className="font-semibold text-slate-700 text-[11px]">{req.appliedAt || req.date}</span>
                     </div>
                     <div className="flex items-center justify-between text-slate-700 font-semibold">
-                      <span className="text-slate-500 text-[11px]">Reason Category:</span>
+                      <span className="text-slate-500 text-[11px]">Category:</span>
                       <span className={`font-bold border px-2 py-0.5 rounded text-[10px] ${catInfo.badgeClass}`}>
                         {catInfo.label}
                       </span>
@@ -1682,24 +1704,34 @@ export const ManualAttendanceView: React.FC = () => {
             })}
           </div>
         )}
+
+        {/* Stable Full-Width Footer & Pagination (Fixed at bottom of card, outside horizontal scroll) */}
+        <div className="w-full border-t border-slate-200/90 bg-white">
+          <TablePagination
+            currentPage={manualPage}
+            totalPages={Math.ceil(sortedRequests.length / manualPageSize)}
+            totalItems={sortedRequests.length}
+            pageSize={manualPageSize}
+            onPageChange={setManualPage}
+            onPageSizeChange={setManualPageSize}
+          />
+        </div>
       </div>
 
       {/* --- APPLY / EDIT MODAL --- */}
       {showApplyModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 my-8">
-            <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 px-6 py-4 text-white flex items-center justify-between">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 px-4 sm:px-6 py-3.5 sm:py-4 text-white flex items-center justify-between">
               <div className="flex items-center space-x-3">
-                <div className="p-2 bg-white/10 rounded-xl backdrop-blur-md">
+                <div className="p-2 bg-white/10 rounded-xl backdrop-blur-md shrink-0">
                   <Clock className="w-5 h-5 text-blue-300" />
                 </div>
                 <div>
                   <h2 className="text-base font-bold tracking-wide">
-                    {editingRequest ? 'Edit Manual Attendance Request' : 'Apply for Manual Attendance'}
+                    Manual Attendance
                   </h2>
-                  <p className="text-xs text-slate-300">
-                    Regularize past forgotten punch logs with Reporting Officer approval
-                  </p>
                 </div>
               </div>
               <button
@@ -1710,7 +1742,7 @@ export const ManualAttendanceView: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleFormSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+            <form onSubmit={handleFormSubmit} className="p-4 sm:p-6 space-y-3.5 max-h-[82vh] overflow-y-auto">
               {formError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center space-x-2 text-xs text-rose-800">
                   <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
@@ -1740,11 +1772,11 @@ export const ManualAttendanceView: React.FC = () => {
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-bold text-slate-700 flex items-center space-x-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                    <span>Select Forgotten / Incomplete Punch Date *</span>
+                    <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    <span>Forget punch date *</span>
                   </label>
-                  <span className="text-[11px] font-semibold text-blue-600">
-                    {candidateMissingDates.length} Missing Dates Found
+                  <span className="text-[11px] font-semibold text-blue-600 shrink-0">
+                    {candidateMissingDates.length} Missing Dates
                   </span>
                 </div>
 
@@ -1757,17 +1789,17 @@ export const ManualAttendanceView: React.FC = () => {
                           key={cand.date}
                           type="button"
                           onClick={() => handleDateChange(cand.date)}
-                          className={`w-full text-left p-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-between cursor-pointer ${
+                          className={`w-full text-left p-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-between gap-1.5 cursor-pointer select-none ${
                             isSelected
                               ? 'bg-blue-600 text-white shadow-xs'
                               : 'bg-white text-slate-800 hover:bg-blue-50 border border-slate-200/80'
                           }`}
                         >
-                          <div className="flex items-center space-x-2">
-                            <Calendar className={`w-3.5 h-3.5 ${isSelected ? 'text-white' : 'text-blue-600'}`} />
-                            <span>{cand.date}</span>
+                          <div className="flex items-center space-x-1.5 min-w-0 flex-1 truncate">
+                            <Calendar className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-white' : 'text-blue-600'}`} />
+                            <span className="font-mono text-xs shrink-0 whitespace-nowrap">{cand.date}</span>
                             <span
-                              className={`text-[10px] px-1.5 py-0.2 rounded font-bold ${
+                              className={`text-[9.5px] px-1.5 py-0.5 rounded font-bold shrink-0 whitespace-nowrap ${
                                 isSelected
                                   ? 'bg-blue-700 text-blue-100'
                                   : cand.type === 'missing_both'
@@ -1782,8 +1814,8 @@ export const ManualAttendanceView: React.FC = () => {
                                 : `Out: ${cand.clockOut}`}
                             </span>
                           </div>
-                          <span className={`text-[10px] font-normal ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
-                            {isSelected ? 'Selected' : 'Pick Date'}
+                          <span className={`text-[10px] font-medium shrink-0 whitespace-nowrap ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
+                            {isSelected ? 'Selected' : 'Pick'}
                           </span>
                         </button>
                       );
@@ -1801,37 +1833,28 @@ export const ManualAttendanceView: React.FC = () => {
               </div>
 
               {/* Timings */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Regularized Check-In Time *
-                  </label>
-                  <input
-                    type="time"
-                    value={formInTime}
-                    onChange={(e) => setFormInTime(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white cursor-pointer"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Regularized Check-Out Time *
-                  </label>
-                  <input
-                    type="time"
-                    value={formOutTime}
-                    onChange={(e) => setFormOutTime(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white cursor-pointer"
-                    required
-                  />
-                </div>
+              <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+                <AppTimePicker
+                  label="Punch In Time"
+                  required={true}
+                  value={formInTime}
+                  onChange={(val) => setFormInTime(val)}
+                  presets={['09:00', '09:30', '10:00', '10:30']}
+                />
+                <AppTimePicker
+                  label="Punch Out Time"
+                  required={true}
+                  value={formOutTime}
+                  onChange={(val) => setFormOutTime(val)}
+                  presets={['17:00', '17:30', '18:00', '18:30']}
+                  align="right"
+                />
               </div>
 
               {/* Reason Dropdown (Standard Options) */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Reason Category *
+                  Category *
                 </label>
                 <AppSelect
                   value={formReasonCategory}
@@ -1843,7 +1866,7 @@ export const ManualAttendanceView: React.FC = () => {
               {/* Specific Remarks / Explanation */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Specific Remarks / Explanation (Optional)
+                  Remark
                 </label>
                 <textarea
                   value={formReason}
@@ -1869,7 +1892,7 @@ export const ManualAttendanceView: React.FC = () => {
                   className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all disabled:opacity-50 cursor-pointer flex items-center space-x-1.5"
                 >
                   <CheckCheck className="w-4 h-4" />
-                  <span>{isSubmitting ? 'Submitting...' : editingRequest ? 'Update Request' : 'Submit Application'}</span>
+                  <span>{isSubmitting ? 'Submitting...' : editingRequest ? 'Update' : 'Submit'}</span>
                 </button>
               </div>
             </form>
@@ -1941,7 +1964,7 @@ export const ManualAttendanceView: React.FC = () => {
                 </span>
               </div>
               <div className="flex justify-between border-b border-slate-100 pb-2">
-                <span className="font-bold text-slate-500">Reason Category:</span>
+                <span className="font-bold text-slate-500">Category:</span>
                 {(() => {
                   const catInfo = formatReasonCategory(detailModalReq.reasonCategory);
                   return (
@@ -2099,7 +2122,7 @@ export const ManualAttendanceView: React.FC = () => {
                 <div className="text-slate-700 space-y-1 pt-1 text-[11px]">
                   <p>🗓️ Date: <strong className="text-slate-900">{cancelModalReq.date}</strong></p>
                   <p>⏰ Regularized Timings: <strong className="text-slate-900">{cancelModalReq.requestedInTime} - {cancelModalReq.requestedOutTime}</strong></p>
-                  <p>🏷️ Reason Category: <strong className="text-slate-900">{cancelModalReq.reasonCategory || 'Forget to punch'}</strong></p>
+                  <p>🏷️ Category: <strong className="text-slate-900">{cancelModalReq.reasonCategory || 'Forget to punch'}</strong></p>
                 </div>
               </div>
 
@@ -2171,7 +2194,7 @@ export const ManualAttendanceView: React.FC = () => {
                 <div className="text-slate-700 space-y-1 pt-1">
                   <p>🗓️ Date: <strong className="text-slate-900">{actionModalReq.date}</strong></p>
                   <p>⏰ Requested Timings: <strong className="text-blue-700">{actionModalReq.requestedInTime} - {actionModalReq.requestedOutTime}</strong></p>
-                  <p>🏷️ Reason Category: <strong className="text-slate-900">{actionModalReq.reasonCategory || 'Forget to punch'}</strong></p>
+                  <p>🏷️ Category: <strong className="text-slate-900">{actionModalReq.reasonCategory || 'Forget to punch'}</strong></p>
                 </div>
                 <div className="bg-white p-2.5 rounded-xl border border-slate-200 text-slate-700 italic">
                   "{actionModalReq.reason}"
