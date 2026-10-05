@@ -94,30 +94,70 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate, onOp
           </button>
         </div>
       </div>
-      {/* 4 Stat Cards Grid - Clean Minimalism */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
-          <div className="text-xs text-slate-500 font-medium">Permanent Staff</div>
-          <div className="text-2xl font-bold text-slate-900 mt-1">{permanentCount}</div>
-          <div className="text-[11px] text-slate-500 font-medium mt-1">CL (12), EL (30), HPL (20), RH (2)</div>
+      {/* 4 Stat Cards Grid matching Attendance theme */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {/* 1. Permanent Staff */}
+        <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 truncate">Permanent Staff</p>
+              <p className="text-xl sm:text-2xl font-black text-emerald-900 mt-0.5">{permanentCount}</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-100 border border-emerald-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <ShieldCheck className="w-4 h-4 text-emerald-700" />
+            </div>
+          </div>
+          <div className="mt-1.5 pt-1.5 border-t border-emerald-200/60 text-[10px] sm:text-[11px] font-semibold text-emerald-700 whitespace-nowrap overflow-hidden text-ellipsis">
+            CL (12), EL (30), HPL (20), RH (2)
+          </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
-          <div className="text-xs text-slate-500 font-medium">Contractual Personnel</div>
-          <div className="text-2xl font-bold text-slate-900 mt-1">{contractualCount}</div>
-          <div className="text-[11px] text-slate-500 font-medium mt-1">Casual (8), Sick Leave (6)</div>
+        {/* 2. Contractual Personnel */}
+        <div className="bg-amber-50/70 border border-amber-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800 truncate">Contractual Personnel</p>
+              <p className="text-xl sm:text-2xl font-black text-amber-900 mt-0.5">{contractualCount}</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-100 border border-amber-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <Building className="w-4 h-4 text-amber-700" />
+            </div>
+          </div>
+          <div className="mt-1.5 pt-1.5 border-t border-amber-200/60 text-[10px] sm:text-[11px] font-semibold text-amber-700 whitespace-nowrap overflow-hidden text-ellipsis">
+            Casual (8), Sick Leave (6)
+          </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
-          <div className="text-xs text-slate-500 font-medium">Research Fellows</div>
-          <div className="text-2xl font-bold text-slate-900 mt-1">{researchersCount}</div>
-          <div className="text-[11px] text-slate-500 font-medium mt-1">Field Work (30), Academic (15)</div>
+        {/* 3. Research Fellows */}
+        <div className="bg-blue-50/70 border border-blue-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-blue-800 truncate">Research Fellows</p>
+              <p className="text-xl sm:text-2xl font-black text-blue-900 mt-0.5">{researchersCount}</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-100 border border-blue-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <Users className="w-4 h-4 text-blue-700" />
+            </div>
+          </div>
+          <div className="mt-1.5 pt-1.5 border-t border-blue-200/60 text-[10px] sm:text-[11px] font-semibold text-blue-700 whitespace-nowrap overflow-hidden text-ellipsis">
+            Field Work (30), Academic (15)
+          </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
-          <div className="text-xs text-slate-500 font-medium">Trainees &amp; Students</div>
-          <div className="text-2xl font-bold text-slate-900 mt-1">{traineesCount}</div>
-          <div className="text-[11px] text-slate-500 font-medium mt-1">Stipend Off (6), Contingency (5)</div>
+        {/* 4. Trainees & Students */}
+        <div className="bg-purple-50/70 border border-purple-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-purple-800 truncate">Trainees &amp; Students</p>
+              <p className="text-xl sm:text-2xl font-black text-purple-900 mt-0.5">{traineesCount}</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-purple-100 border border-purple-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <Layers className="w-4 h-4 text-purple-700" />
+            </div>
+          </div>
+          <div className="mt-1.5 pt-1.5 border-t border-purple-200/60 text-[10px] sm:text-[11px] font-semibold text-purple-700 whitespace-nowrap overflow-hidden text-ellipsis">
+            Stipend Off (6), Contingency (5)
+          </div>
         </div>
       </div>
 

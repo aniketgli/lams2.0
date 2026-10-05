@@ -7,6 +7,7 @@ import {
   MapPin,
   Calendar,
   CheckCircle,
+  CheckCircle2,
   FileText,
   AlertCircle,
   Send,
@@ -35,6 +36,20 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onNavigate }) =>
 
   const myPendingODs = odRequests.filter((o) => o.userId === currentUser.id && o.status === 'pending');
   const myPendingLeaves = leaveRequests.filter((l) => l.userId === currentUser.id && l.status.startsWith('pending'));
+
+  const currentMonthStr = todayStr.substring(0, 7);
+  const myMonthAttendance = attendanceRecords.filter((a) => a.userId === currentUser.id && a.date.startsWith(currentMonthStr));
+  const myPresentCount = myMonthAttendance.filter((a) => a.status === 'present' || a.status === 'late').length;
+
+  const totalLeaveBalance = Object.values(currentUser.leaveBalances || {}).reduce<number>(
+    (acc, b) => acc + Math.max(0, (b as { total: number; used: number }).total - (b as { total: number; used: number }).used),
+    0
+  );
+
+  const totalPendingRequests = myPendingODs.length + myPendingLeaves.length;
+
+  const myApprovedODs = odRequests.filter((o) => o.userId === currentUser.id && o.status === 'approved');
+  const totalODDays = myApprovedODs.reduce((acc, o) => acc + (o.daysCount || 1), 0);
 
   const getEmploymentLabel = (type: string) => {
     switch (type) {
@@ -132,6 +147,73 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onNavigate }) =>
             <Building className="w-5 h-5 text-slate-600 shrink-0" />
             <span>My Profile</span>
           </button>
+        </div>
+      </div>
+
+      {/* 4 Stat Cards Grid matching Attendance theme */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {/* 1. Present This Month */}
+        <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 truncate">Attendance (Month)</p>
+              <p className="text-xl sm:text-2xl font-black text-emerald-900 mt-0.5">{myPresentCount} Days</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-100 border border-emerald-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <CheckCircle2 className="w-4 h-4 text-emerald-700" />
+            </div>
+          </div>
+          <div className="mt-1.5 pt-1.5 border-t border-emerald-200/60 text-[10px] sm:text-[11px] font-semibold text-emerald-700 whitespace-nowrap overflow-hidden text-ellipsis">
+            Punches logged in {new Date().toLocaleString('default', { month: 'short', year: 'numeric' })}
+          </div>
+        </div>
+
+        {/* 2. Leave Balance */}
+        <div className="bg-blue-50/70 border border-blue-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-blue-800 truncate">Available Leaves</p>
+              <p className="text-xl sm:text-2xl font-black text-blue-900 mt-0.5">{totalLeaveBalance} Days</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-100 border border-blue-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <Calendar className="w-4 h-4 text-blue-700" />
+            </div>
+          </div>
+          <div className="mt-1.5 pt-1.5 border-t border-blue-200/60 text-[10px] sm:text-[11px] font-semibold text-blue-700 whitespace-nowrap overflow-hidden text-ellipsis">
+            Total remaining across quotas
+          </div>
+        </div>
+
+        {/* 3. Pending Approvals */}
+        <div className="bg-amber-50/70 border border-amber-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800 truncate">Pending Requests</p>
+              <p className="text-xl sm:text-2xl font-black text-amber-900 mt-0.5">{totalPendingRequests}</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-100 border border-amber-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <Clock className="w-4 h-4 text-amber-700" />
+            </div>
+          </div>
+          <div className="mt-1.5 pt-1.5 border-t border-amber-200/60 text-[10px] sm:text-[11px] font-semibold text-amber-700 whitespace-nowrap overflow-hidden text-ellipsis">
+            {totalPendingRequests > 0 ? 'Under supervisor review' : 'All applications processed'}
+          </div>
+        </div>
+
+        {/* 4. Outdoor Duty */}
+        <div className="bg-purple-50/70 border border-purple-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-purple-800 truncate">Outdoor Duty (OD)</p>
+              <p className="text-xl sm:text-2xl font-black text-purple-900 mt-0.5">{totalODDays} Days</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-purple-100 border border-purple-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <MapPin className="w-4 h-4 text-purple-700" />
+            </div>
+          </div>
+          <div className="mt-1.5 pt-1.5 border-t border-purple-200/60 text-[10px] sm:text-[11px] font-semibold text-purple-700 whitespace-nowrap overflow-hidden text-ellipsis">
+            Field tour &amp; site visit sanctioned
+          </div>
         </div>
       </div>
 
@@ -287,7 +369,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onNavigate }) =>
               return (
                 <div
                   key={typeKey}
-                  className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs flex flex-col justify-between"
+                  className="bg-white border border-slate-200/90 rounded-xl p-3.5 shadow-2xs flex flex-col justify-between hover:shadow-xs transition-shadow"
                 >
                   <div>
                     <div className="flex items-center justify-between mb-2">

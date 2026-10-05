@@ -100,36 +100,68 @@ export const ReviewingManagerDashboard: React.FC<ReviewingManagerDashboardProps>
           </button>
         </div>
       </div>
-      {/* 4 Stat Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
-          <div className="text-xs text-slate-500 font-medium">Department Attendance</div>
-          <div className="text-2xl font-bold text-slate-900 mt-1">{attendanceRate}%</div>
-          <div className="text-[11px] text-emerald-600 font-medium mt-1">
+      {/* 4 Stat Cards Grid matching Attendance theme */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {/* 1. Department Attendance */}
+        <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 truncate">Dept. Attendance</p>
+              <p className="text-xl sm:text-2xl font-black text-emerald-900 mt-0.5">{attendanceRate}%</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-100 border border-emerald-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <CheckCircle className="w-4 h-4 text-emerald-700" />
+            </div>
+          </div>
+          <div className="mt-1.5 pt-1.5 border-t border-emerald-200/60 text-[10px] sm:text-[11px] font-semibold text-emerald-700 whitespace-nowrap overflow-hidden text-ellipsis">
             {presentCount} of {subTeam.length} active personnel
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
-          <div className="text-xs text-slate-500 font-medium">Level-2 Approvals Pending</div>
-          <div className="text-2xl font-bold text-slate-900 mt-1">{pendingLevel2.length}</div>
-          <div className="text-[11px] text-amber-600 font-medium mt-1">
+        {/* 2. Level-2 Approvals Pending */}
+        <div className="bg-amber-50/70 border border-amber-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800 truncate">L2 Pending</p>
+              <p className="text-xl sm:text-2xl font-black text-amber-900 mt-0.5">{pendingLevel2.length}</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-100 border border-amber-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <ShieldAlert className="w-4 h-4 text-amber-700" />
+            </div>
+          </div>
+          <div className="mt-1.5 pt-1.5 border-t border-amber-200/60 text-[10px] sm:text-[11px] font-semibold text-amber-700 whitespace-nowrap overflow-hidden text-ellipsis">
             {pendingLevel2.length > 0 ? 'Escalated Level-2 applications' : 'All requests cleared'}
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
-          <div className="text-xs text-slate-500 font-medium">Department Head Jurisdiction</div>
-          <div className="text-2xl font-bold text-slate-900 mt-1">{subTeam.length}</div>
-          <div className="text-[11px] text-slate-500 font-medium mt-1">
+        {/* 3. Department Head Jurisdiction */}
+        <div className="bg-blue-50/70 border border-blue-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-blue-800 truncate">Jurisdiction</p>
+              <p className="text-xl sm:text-2xl font-black text-blue-900 mt-0.5">{subTeam.length}</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-100 border border-blue-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <Users className="w-4 h-4 text-blue-700" />
+            </div>
+          </div>
+          <div className="mt-1.5 pt-1.5 border-t border-blue-200/60 text-[10px] sm:text-[11px] font-semibold text-blue-700 whitespace-nowrap overflow-hidden text-ellipsis">
             Reporting &amp; Reviewing members
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
-          <div className="text-xs text-slate-500 font-medium">Compliance Rate</div>
-          <div className="text-2xl font-bold text-slate-900 mt-1">98.5%</div>
-          <div className="text-[11px] text-emerald-600 font-medium mt-1">
+        {/* 4. Compliance Rate */}
+        <div className="bg-purple-50/70 border border-purple-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-purple-800 truncate">Compliance Rate</p>
+              <p className="text-xl sm:text-2xl font-black text-purple-900 mt-0.5">98.5%</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-purple-100 border border-purple-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <Award className="w-4 h-4 text-purple-700" />
+            </div>
+          </div>
+          <div className="mt-1.5 pt-1.5 border-t border-purple-200/60 text-[10px] sm:text-[11px] font-semibold text-purple-700 whitespace-nowrap overflow-hidden text-ellipsis">
             Level-1 &amp; Level-2 policy adherence
           </div>
         </div>

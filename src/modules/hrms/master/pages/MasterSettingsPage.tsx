@@ -355,54 +355,68 @@ export const MasterSettingsPage: React.FC = () => {
       />
 
       {/* Master Configuration Summary Stat Cards: Placed immediately below PageHeader */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* 1. Sub-Master Modules */}
-        <div className="bg-blue-50/70 border border-blue-200/90 rounded-xl p-4 shadow-2xs flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-blue-800">Sub-Master Modules</p>
-            <p className="text-2xl font-black text-blue-900 mt-1">4 Active</p>
-            <p className="text-[10px] text-blue-700 font-semibold mt-0.5">Attendance, Machine, Leave &amp; Org</p>
+        <div className="bg-blue-50/70 border border-blue-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-blue-800 truncate">Sub-Master Modules</p>
+              <p className="text-xl sm:text-2xl font-black text-blue-900 mt-0.5">4 Active</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-100 border border-blue-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <Sliders className="w-4 h-4 text-blue-700" />
+            </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-blue-100 border border-blue-300/80 flex items-center justify-center shrink-0">
-            <Sliders className="w-5 h-5 text-blue-700" />
+          <div className="mt-1.5 pt-1.5 border-t border-blue-200/60 text-[10px] sm:text-[11px] font-semibold text-blue-700 whitespace-nowrap overflow-hidden text-ellipsis">
+            Attendance, Machine, Leave &amp; Org
           </div>
         </div>
 
         {/* 2. Biometric Machine Devices */}
-        <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-4 shadow-2xs flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">Biometric Devices</p>
-            <p className="text-2xl font-black text-emerald-900 mt-1">{biometricMachines.length}</p>
-            <p className="text-[10px] text-emerald-700 font-semibold mt-0.5">
-              {biometricMachines.filter((m) => m.status === 'ACTIVE').length} Devices Operational
-            </p>
+        <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 truncate">Biometric Devices</p>
+              <p className="text-xl sm:text-2xl font-black text-emerald-900 mt-0.5">{biometricMachines.length}</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-100 border border-emerald-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <Cpu className="w-4 h-4 text-emerald-700" />
+            </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-100 border border-emerald-300/80 flex items-center justify-center shrink-0">
-            <Cpu className="w-5 h-5 text-emerald-700" />
+          <div className="mt-1.5 pt-1.5 border-t border-emerald-200/60 text-[10px] sm:text-[11px] font-semibold text-emerald-700 whitespace-nowrap overflow-hidden text-ellipsis">
+            {biometricMachines.filter((m) => m.status === 'ACTIVE').length} Devices Operational
           </div>
         </div>
 
         {/* 3. Shift Timings & Rules */}
-        <div className="bg-purple-50/70 border border-purple-200/90 rounded-xl p-4 shadow-2xs flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-purple-800">Shifts &amp; Rules</p>
-            <p className="text-2xl font-black text-purple-900 mt-1">{shifts.length}</p>
-            <p className="text-[10px] text-purple-700 font-semibold mt-0.5">Configured Work Schedules</p>
+        <div className="bg-purple-50/70 border border-purple-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-purple-800 truncate">Shifts &amp; Rules</p>
+              <p className="text-xl sm:text-2xl font-black text-purple-900 mt-0.5">{shifts.length}</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-purple-100 border border-purple-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <Clock className="w-4 h-4 text-purple-700" />
+            </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-purple-100 border border-purple-300/80 flex items-center justify-center shrink-0">
-            <Clock className="w-5 h-5 text-purple-700" />
+          <div className="mt-1.5 pt-1.5 border-t border-purple-200/60 text-[10px] sm:text-[11px] font-semibold text-purple-700 whitespace-nowrap overflow-hidden text-ellipsis">
+            Configured Work Schedules
           </div>
         </div>
 
         {/* 4. Active Departments */}
-        <div className="bg-amber-50/70 border border-amber-200/90 rounded-xl p-4 shadow-2xs flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800">Departments &amp; Wings</p>
-            <p className="text-2xl font-black text-amber-900 mt-1">{departments.length}</p>
-            <p className="text-[10px] text-amber-700 font-semibold mt-0.5">Organizational Units</p>
+        <div className="bg-amber-50/70 border border-amber-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800 truncate">Departments &amp; Wings</p>
+              <p className="text-xl sm:text-2xl font-black text-amber-900 mt-0.5">{departments.length}</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-100 border border-amber-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <Building2 className="w-4 h-4 text-amber-700" />
+            </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-300/80 flex items-center justify-center shrink-0">
-            <Building2 className="w-5 h-5 text-amber-700" />
+          <div className="mt-1.5 pt-1.5 border-t border-amber-200/60 text-[10px] sm:text-[11px] font-semibold text-amber-700 whitespace-nowrap overflow-hidden text-ellipsis">
+            Organizational Units
           </div>
         </div>
       </div>

@@ -754,65 +754,69 @@ export const OutdoorDutyView: React.FC = () => {
         }
       />
 
-      {/* Summary Stat Metrics: Exactly 4 Uniform Cards placed immediately below PageHeader */}
+      {/* Summary Stat Metrics: Exactly 4 Uniform Cards matching Attendance theme */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* 1. Approved */}
-        <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-3.5 sm:p-4 shadow-2xs flex items-center justify-between gap-2 min-w-0">
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 truncate">Approved</p>
-            <p className="text-xl sm:text-2xl font-black text-emerald-900 mt-0.5 sm:mt-1">{odStats.approved}</p>
-            <p className="text-[10px] text-emerald-700 font-semibold mt-0.5 truncate" title={filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${formatDateAndDay(filterStartDate)} - ${formatDateAndDay(filterEndDate)}`}>
-              <span className="sm:hidden">{filterStartDate === filterEndDate ? formatDateAndDay(filterStartDate) : `${filterStartDate.split('-').reverse().join('/')} - ${filterEndDate.split('-').reverse().join('/')}`}</span>
-              <span className="hidden sm:inline">{filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${formatDateAndDay(filterStartDate)} - ${formatDateAndDay(filterEndDate)}`}</span>
-            </p>
+        <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 truncate">Approved</p>
+              <p className="text-xl sm:text-2xl font-black text-emerald-900 mt-0.5">{odStats.approved}</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-100 border border-emerald-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <CheckCircle2 className="w-4 h-4 text-emerald-700" />
+            </div>
           </div>
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-100 border border-emerald-300/80 flex items-center justify-center shrink-0">
-            <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-700" />
+          <div className="mt-1.5 pt-1.5 border-t border-emerald-200/60 text-[10px] sm:text-[11px] font-semibold text-emerald-700 whitespace-nowrap overflow-hidden text-ellipsis">
+            {filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${filterStartDate.split('-').reverse().join('/')} - ${filterEndDate.split('-').reverse().join('/')}`}
           </div>
         </div>
 
         {/* 2. Pending Approvals */}
-        <div className="bg-amber-50/70 border border-amber-200/90 rounded-xl p-3.5 sm:p-4 shadow-2xs flex items-center justify-between gap-2 min-w-0">
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800 truncate">Pending</p>
-            <p className="text-xl sm:text-2xl font-black text-amber-900 mt-0.5 sm:mt-1">{odStats.pending}</p>
-            <p className="text-[10px] text-amber-700 font-semibold mt-0.5 truncate" title={filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${formatDateAndDay(filterStartDate)} - ${formatDateAndDay(filterEndDate)}`}>
-              <span className="sm:hidden">{filterStartDate === filterEndDate ? formatDateAndDay(filterStartDate) : `${filterStartDate.split('-').reverse().join('/')} - ${filterEndDate.split('-').reverse().join('/')}`}</span>
-              <span className="hidden sm:inline">{filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${formatDateAndDay(filterStartDate)} - ${formatDateAndDay(filterEndDate)}`}</span>
-            </p>
+        <div className="bg-amber-50/70 border border-amber-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800 truncate">Pending</p>
+              <p className="text-xl sm:text-2xl font-black text-amber-900 mt-0.5">{odStats.pending}</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-100 border border-amber-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <Clock className="w-4 h-4 text-amber-700" />
+            </div>
           </div>
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-100 border border-amber-300/80 flex items-center justify-center shrink-0">
-            <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-amber-700 animate-spin" />
+          <div className="mt-1.5 pt-1.5 border-t border-amber-200/60 text-[10px] sm:text-[11px] font-semibold text-amber-700 whitespace-nowrap overflow-hidden text-ellipsis">
+            {filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${filterStartDate.split('-').reverse().join('/')} - ${filterEndDate.split('-').reverse().join('/')}`}
           </div>
         </div>
 
         {/* 3. Total OD Requisitions */}
-        <div className="bg-blue-50/70 border border-blue-200/90 rounded-xl p-3.5 sm:p-4 shadow-2xs flex items-center justify-between gap-2 min-w-0">
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-blue-800 truncate" title="Total Requisitions">Total Applied</p>
-            <p className="text-xl sm:text-2xl font-black text-blue-900 mt-0.5 sm:mt-1">{odStats.total}</p>
-            <p className="text-[10px] text-blue-700 font-semibold mt-0.5 truncate" title={filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${formatDateAndDay(filterStartDate)} - ${formatDateAndDay(filterEndDate)}`}>
-              <span className="sm:hidden">{filterStartDate === filterEndDate ? formatDateAndDay(filterStartDate) : `${filterStartDate.split('-').reverse().join('/')} - ${filterEndDate.split('-').reverse().join('/')}`}</span>
-              <span className="hidden sm:inline">{filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${formatDateAndDay(filterStartDate)} - ${formatDateAndDay(filterEndDate)}`}</span>
-            </p>
+        <div className="bg-blue-50/70 border border-blue-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-blue-800 truncate" title="Total Requisitions">Total Applied</p>
+              <p className="text-xl sm:text-2xl font-black text-blue-900 mt-0.5">{odStats.total}</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-100 border border-blue-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <MapPin className="w-4 h-4 text-blue-700" />
+            </div>
           </div>
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-100 border border-blue-300/80 flex items-center justify-center shrink-0">
-            <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-blue-700" />
+          <div className="mt-1.5 pt-1.5 border-t border-blue-200/60 text-[10px] sm:text-[11px] font-semibold text-blue-700 whitespace-nowrap overflow-hidden text-ellipsis">
+            {filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${filterStartDate.split('-').reverse().join('/')} - ${filterEndDate.split('-').reverse().join('/')}`}
           </div>
         </div>
 
         {/* 4. Total OD Days */}
-        <div className="bg-purple-50/70 border border-purple-200/90 rounded-xl p-3.5 sm:p-4 shadow-2xs flex items-center justify-between gap-2 min-w-0">
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-purple-800 truncate" title="Total OD Days">OD Days</p>
-            <p className="text-xl sm:text-2xl font-black text-purple-900 mt-0.5 sm:mt-1">{odStats.totalDays}</p>
-            <p className="text-[10px] text-purple-700 font-semibold mt-0.5 truncate" title={filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${formatDateAndDay(filterStartDate)} - ${formatDateAndDay(filterEndDate)}`}>
-              <span className="sm:hidden">{filterStartDate === filterEndDate ? formatDateAndDay(filterStartDate) : `${filterStartDate.split('-').reverse().join('/')} - ${filterEndDate.split('-').reverse().join('/')}`}</span>
-              <span className="hidden sm:inline">{filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${formatDateAndDay(filterStartDate)} - ${formatDateAndDay(filterEndDate)}`}</span>
-            </p>
+        <div className="bg-purple-50/70 border border-purple-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-purple-800 truncate" title="Total OD Days">OD Days</p>
+              <p className="text-xl sm:text-2xl font-black text-purple-900 mt-0.5">{odStats.totalDays}</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-purple-100 border border-purple-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <Calendar className="w-4 h-4 text-purple-700" />
+            </div>
           </div>
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-purple-100 border border-purple-300/80 flex items-center justify-center shrink-0">
-            <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-purple-700" />
+          <div className="mt-1.5 pt-1.5 border-t border-purple-200/60 text-[10px] sm:text-[11px] font-semibold text-purple-700 whitespace-nowrap overflow-hidden text-ellipsis">
+            {filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${filterStartDate.split('-').reverse().join('/')} - ${filterEndDate.split('-').reverse().join('/')}`}
           </div>
         </div>
       </div>

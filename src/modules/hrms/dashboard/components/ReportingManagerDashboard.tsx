@@ -4,6 +4,7 @@ import { getNormalizedStatusCode, ATTENDANCE_STATUS_MAP, formatTo24H } from '../
 import {
   Users,
   CheckCircle,
+  CheckCircle2,
   XCircle,
   MapPin,
   FileText,
@@ -129,38 +130,70 @@ export const ReportingManagerDashboard: React.FC<ReportingManagerDashboardProps>
           </button>
         </div>
       </div>
-      {/* 4 Stat Cards Grid - Clean Minimalism */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
-          <div className="text-xs text-slate-500 font-medium">Team Attendance Rate</div>
-          <div className="text-2xl font-bold text-slate-900 mt-1">{attendanceRate}%</div>
-          <div className="text-[11px] text-emerald-600 font-medium mt-1">
+      {/* 4 Stat Cards Grid matching Attendance theme */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {/* 1. Team Attendance Rate */}
+        <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 truncate">Team Attendance</p>
+              <p className="text-xl sm:text-2xl font-black text-emerald-900 mt-0.5">{attendanceRate}%</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-100 border border-emerald-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <CheckCircle2 className="w-4 h-4 text-emerald-700" />
+            </div>
+          </div>
+          <div className="mt-1.5 pt-1.5 border-t border-emerald-200/60 text-[10px] sm:text-[11px] font-semibold text-emerald-700 whitespace-nowrap overflow-hidden text-ellipsis">
             {presentCount} of {myTeam.length} present today
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
-          <div className="text-xs text-slate-500 font-medium">Pending Approvals</div>
-          <div className="text-2xl font-bold text-slate-900 mt-1">{totalPending}</div>
-          <div className="text-[11px] text-amber-600 font-medium mt-1">
+        {/* 2. Pending Approvals */}
+        <div className="bg-amber-50/70 border border-amber-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800 truncate">Pending Approvals</p>
+              <p className="text-xl sm:text-2xl font-black text-amber-900 mt-0.5">{totalPending}</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-100 border border-amber-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <Clock className="w-4 h-4 text-amber-700" />
+            </div>
+          </div>
+          <div className="mt-1.5 pt-1.5 border-t border-amber-200/60 text-[10px] sm:text-[11px] font-semibold text-amber-700 whitespace-nowrap overflow-hidden text-ellipsis">
             {totalPending > 0 ? 'Requires action by EOD' : 'Queue up to date'}
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
-          <div className="text-xs text-slate-500 font-medium">Outdoor (OD) Duty</div>
-          <div className="text-2xl font-bold text-slate-900 mt-1">{odCount.toString().padStart(2, '0')}</div>
-          <div className="text-[11px] text-slate-500 font-medium mt-1">
+        {/* 3. Outdoor (OD) Duty */}
+        <div className="bg-blue-50/70 border border-blue-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-blue-800 truncate">Outdoor (OD) Duty</p>
+              <p className="text-xl sm:text-2xl font-black text-blue-900 mt-0.5">{odCount.toString().padStart(2, '0')}</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-100 border border-blue-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <MapPin className="w-4 h-4 text-blue-700" />
+            </div>
+          </div>
+          <div className="mt-1.5 pt-1.5 border-t border-blue-200/60 text-[10px] sm:text-[11px] font-semibold text-blue-700 whitespace-nowrap overflow-hidden text-ellipsis">
             Employees at client site / field
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
-          <div className="text-xs text-slate-500 font-medium">Leave Coverage</div>
-          <div className="text-2xl font-bold text-slate-900 mt-1">
-            {Math.max(0, 100 - Math.round((pendingLeaves.length / (myTeam.length || 1)) * 100))}%
+        {/* 4. Leave Coverage */}
+        <div className="bg-purple-50/70 border border-purple-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-purple-800 truncate">Leave Coverage</p>
+              <p className="text-xl sm:text-2xl font-black text-purple-900 mt-0.5">
+                {Math.max(0, 100 - Math.round((pendingLeaves.length / (myTeam.length || 1)) * 100))}%
+              </p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-purple-100 border border-purple-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <ShieldCheck className="w-4 h-4 text-purple-700" />
+            </div>
           </div>
-          <div className="text-[11px] text-emerald-600 font-medium mt-1">
+          <div className="mt-1.5 pt-1.5 border-t border-purple-200/60 text-[10px] sm:text-[11px] font-semibold text-purple-700 whitespace-nowrap overflow-hidden text-ellipsis">
             No critical gaps identified
           </div>
         </div>

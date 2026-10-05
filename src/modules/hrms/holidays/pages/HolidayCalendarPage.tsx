@@ -591,58 +591,66 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
       {/* Holiday Summary Stat Cards: Placed immediately below PageHeader */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* 1. Gazetted Holidays (GH) - GREEN */}
-        <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-4 shadow-2xs flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">Gazetted Holidays (GH)</p>
-            <p className="text-2xl font-black text-emerald-900 mt-1">{stats.gazettedCount}</p>
-            <p className="text-[10px] text-emerald-700 font-semibold mt-0.5">
-              Compulsory Closed Offices ({currentYear})
-            </p>
+        <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 truncate">Gazetted Holidays (GH)</p>
+              <p className="text-xl sm:text-2xl font-black text-emerald-900 mt-0.5">{stats.gazettedCount}</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-100 border border-emerald-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <CalendarCheck className="w-4 h-4 text-emerald-700" />
+            </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-100 border border-emerald-300/80 flex items-center justify-center shrink-0">
-            <CalendarCheck className="w-5 h-5 text-emerald-700" />
+          <div className="mt-1.5 pt-1.5 border-t border-emerald-200/60 text-[10px] sm:text-[11px] font-semibold text-emerald-700 whitespace-nowrap overflow-hidden text-ellipsis">
+            Compulsory Closed Offices ({currentYear})
           </div>
         </div>
 
         {/* 2. Restricted Holidays */}
-        <div className="bg-amber-50/70 border border-amber-200/90 rounded-xl p-4 shadow-2xs flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800">Restricted Holidays (RH)</p>
-            <p className="text-2xl font-black text-amber-900 mt-1">{stats.restrictedCount}</p>
-            <p className="text-[10px] text-amber-700 font-semibold mt-0.5">
-              Optional Festival List ({currentYear})
-            </p>
+        <div className="bg-amber-50/70 border border-amber-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800 truncate">Restricted Holidays (RH)</p>
+              <p className="text-xl sm:text-2xl font-black text-amber-900 mt-0.5">{stats.restrictedCount}</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-100 border border-amber-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <Tag className="w-4 h-4 text-amber-700" />
+            </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-300/80 flex items-center justify-center shrink-0">
-            <Tag className="w-5 h-5 text-amber-700" />
+          <div className="mt-1.5 pt-1.5 border-t border-amber-200/60 text-[10px] sm:text-[11px] font-semibold text-amber-700 whitespace-nowrap overflow-hidden text-ellipsis">
+            Optional Festival List ({currentYear})
           </div>
         </div>
 
         {/* 3. Long Weekends (LW) - RED */}
-        <div className="bg-rose-50/70 border border-rose-200/90 rounded-xl p-4 shadow-2xs flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-rose-800">Long Weekends (LW)</p>
-            <p className="text-2xl font-black text-rose-900 mt-1">{stats.longWeekends}</p>
-            <p className="text-[10px] text-rose-700 font-semibold mt-0.5">
-              3–4 Days Continuous Breaks
-            </p>
+        <div className="bg-rose-50/70 border border-rose-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-rose-800 truncate">Long Weekends (LW)</p>
+              <p className="text-xl sm:text-2xl font-black text-rose-900 mt-0.5">{stats.longWeekends}</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-rose-100 border border-rose-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <SunMedium className="w-4 h-4 text-rose-700" />
+            </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-rose-100 border border-rose-300/80 flex items-center justify-center shrink-0">
-            <SunMedium className="w-5 h-5 text-rose-700" />
+          <div className="mt-1.5 pt-1.5 border-t border-rose-200/60 text-[10px] sm:text-[11px] font-semibold text-rose-700 whitespace-nowrap overflow-hidden text-ellipsis">
+            3–4 Days Continuous Breaks
           </div>
         </div>
 
         {/* 4. RH Quota */}
-        <div className="bg-indigo-50/70 border border-indigo-200/90 rounded-xl p-4 shadow-2xs flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-800">RH Allowed Quota</p>
-            <p className="text-2xl font-black text-indigo-900 mt-1">2 / Year</p>
-            <p className="text-[10px] text-indigo-700 font-semibold mt-0.5">
-              Max 2 RH Availment / Employee
-            </p>
+        <div className="bg-indigo-50/70 border border-indigo-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-800 truncate">RH Allowed Quota</p>
+              <p className="text-xl sm:text-2xl font-black text-indigo-900 mt-0.5">2 / Year</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-indigo-100 border border-indigo-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <CalendarDays className="w-4 h-4 text-indigo-700" />
+            </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-indigo-100 border border-indigo-300/80 flex items-center justify-center shrink-0">
-            <CalendarDays className="w-5 h-5 text-indigo-700" />
+          <div className="mt-1.5 pt-1.5 border-t border-indigo-200/60 text-[10px] sm:text-[11px] font-semibold text-indigo-700 whitespace-nowrap overflow-hidden text-ellipsis">
+            Max 2 RH Availment / Employee
           </div>
         </div>
       </div>

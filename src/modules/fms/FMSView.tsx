@@ -140,35 +140,70 @@ export const FMSView: React.FC<FMSViewProps> = ({ onReturnToLobby }) => {
         </div>
       </div>
 
-      {/* Overview Cards */}
+      {/* Overview Cards matching Attendance theme */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-2xs">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500 uppercase tracking-wider">
-            <Hotel className="w-4 h-4 text-purple-600" /> Guest House
+        {/* 1. Guest House */}
+        <div className="bg-purple-50/70 border border-purple-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-purple-800 truncate">Guest House</p>
+              <p className="text-xl sm:text-2xl font-black text-purple-900 mt-0.5">28 Suites</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-purple-100 border border-purple-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <Hotel className="w-4 h-4 text-purple-700" />
+            </div>
           </div>
-          <div className="text-2xl font-black text-slate-900 mt-1">28 Suites</div>
-          <div className="text-[11px] text-emerald-700 font-semibold mt-1">19 Available for Booking</div>
+          <div className="mt-1.5 pt-1.5 border-t border-purple-200/60 text-[10px] sm:text-[11px] font-semibold text-purple-700 whitespace-nowrap overflow-hidden text-ellipsis">
+            19 Available for Booking
+          </div>
         </div>
-        <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-2xs">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500 uppercase tracking-wider">
-            <Car className="w-4 h-4 text-blue-600" /> Fleet Vehicles
+
+        {/* 2. Fleet Vehicles */}
+        <div className="bg-blue-50/70 border border-blue-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-blue-800 truncate">Fleet Vehicles</p>
+              <p className="text-xl sm:text-2xl font-black text-blue-900 mt-0.5">14 Vehicles</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-100 border border-blue-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <Car className="w-4 h-4 text-blue-700" />
+            </div>
           </div>
-          <div className="text-2xl font-black text-slate-900 mt-1">14 Vehicles</div>
-          <div className="text-[11px] text-slate-500 font-medium mt-1">8 on Field Expedition</div>
+          <div className="mt-1.5 pt-1.5 border-t border-blue-200/60 text-[10px] sm:text-[11px] font-semibold text-blue-700 whitespace-nowrap overflow-hidden text-ellipsis">
+            8 on Field Expedition
+          </div>
         </div>
-        <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-2xs">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500 uppercase tracking-wider">
-            <Calendar className="w-4 h-4 text-amber-600" /> Auditoriums
+
+        {/* 3. Auditoriums */}
+        <div className="bg-amber-50/70 border border-amber-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800 truncate">Auditoriums</p>
+              <p className="text-xl sm:text-2xl font-black text-amber-900 mt-0.5">3 Venues</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-100 border border-amber-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <Calendar className="w-4 h-4 text-amber-700" />
+            </div>
           </div>
-          <div className="text-2xl font-black text-slate-900 mt-1">3 Venues</div>
-          <div className="text-[11px] text-slate-500 font-medium mt-1">Seminar &amp; Board Rooms</div>
+          <div className="mt-1.5 pt-1.5 border-t border-amber-200/60 text-[10px] sm:text-[11px] font-semibold text-amber-700 whitespace-nowrap overflow-hidden text-ellipsis">
+            Seminar &amp; Board Rooms
+          </div>
         </div>
-        <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-2xs">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500 uppercase tracking-wider">
-            <Wrench className="w-4 h-4 text-slate-600" /> Estate Tickets
+
+        {/* 4. Estate Tickets */}
+        <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 truncate">Estate Tickets</p>
+              <p className="text-xl sm:text-2xl font-black text-emerald-900 mt-0.5">98% Resolved</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-100 border border-emerald-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <Wrench className="w-4 h-4 text-emerald-700" />
+            </div>
           </div>
-          <div className="text-2xl font-black text-slate-900 mt-1">98% Resolved</div>
-          <div className="text-[11px] text-slate-500 font-medium mt-1">Civil &amp; Electrical Maintenance</div>
+          <div className="mt-1.5 pt-1.5 border-t border-emerald-200/60 text-[10px] sm:text-[11px] font-semibold text-emerald-700 whitespace-nowrap overflow-hidden text-ellipsis">
+            Civil &amp; Electrical Maintenance
+          </div>
         </div>
       </div>
 
