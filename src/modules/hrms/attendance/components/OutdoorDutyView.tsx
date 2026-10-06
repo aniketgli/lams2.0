@@ -72,7 +72,7 @@ export const OutdoorDutyView: React.FC = () => {
 
   const canSeeReportingManagerFilter = isAdmin || isReviewingManager;
   const canSeeTeamFilters = isAdmin || isReviewingManager || isReportingManagerOrPI;
-  const canApplyOd = isAdmin || (!isReportingManager && !isReviewingManager);
+  const canApplyOd = true; // Uniform for all roles
 
   // Success / Alert Toast
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
@@ -130,8 +130,9 @@ export const OutdoorDutyView: React.FC = () => {
   };
 
   // --- REQUISITION FILTERS (Multi-select supported) ---
-  const DEFAULT_START_DATE = '2026-08-01';
-  const DEFAULT_END_DATE = '2026-09-30';
+  const isManagerOrAdmin = isAdmin || isReportingManager || isReviewingManager;
+  const DEFAULT_START_DATE = isManagerOrAdmin ? todayStr : '2026-08-01';
+  const DEFAULT_END_DATE = isManagerOrAdmin ? todayStr : '2026-09-30';
   const [filterStatus, setFilterStatus] = useState<string[]>(['all']);
   const [filterOdType, setFilterOdType] = useState<string[]>(['all']);
   const [filterDept, setFilterDept] = useState<string[]>(['all']);
@@ -1258,28 +1259,30 @@ export const OutdoorDutyView: React.FC = () => {
         ) : (
           /* Table View - Uniform Theme Width & Proportional Grid */
           <div className="w-full min-w-0 overflow-x-auto custom-table-scrollbar pb-1">
-            <table className="w-full text-left text-xs border-collapse table-auto min-w-[950px]">
+            <table className={`w-full text-left text-xs border-collapse table-auto ${canSeeTeamFilters ? 'min-w-[950px]' : 'min-w-[780px]'}`}>
               <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 text-[11px]">
                 <tr className="h-10">
-                  {/* Employee Column */}
-                  <th
-                    onClick={() => handleSort('employee')}
-                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[19%]"
-                    title="Click to sort by Employee"
-                  >
-                    <div className="flex items-center space-x-1.5">
-                      <span>Employee</span>
-                      {sortField === 'employee' ? (
-                        sortOrder === 'asc' ? (
-                          <ArrowUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                  {/* Employee Column - Visible for Team/Manager/Admin */}
+                  {canSeeTeamFilters && (
+                    <th
+                      onClick={() => handleSort('employee')}
+                      className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[19%]"
+                      title="Click to sort by Employee"
+                    >
+                      <div className="flex items-center space-x-1.5">
+                        <span>Employee</span>
+                        {sortField === 'employee' ? (
+                          sortOrder === 'asc' ? (
+                            <ArrowUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                          ) : (
+                            <ArrowDown className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                          )
                         ) : (
-                          <ArrowDown className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                        )
-                      ) : (
-                        <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-40 shrink-0" />
-                      )}
-                    </div>
-                  </th>
+                          <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-40 shrink-0" />
+                        )}
+                      </div>
+                    </th>
+                  )}
 
                   {/* Duration Column */}
                   <th
@@ -1400,25 +1403,27 @@ export const OutdoorDutyView: React.FC = () => {
 
                   return (
                     <tr key={od.id} className="hover:bg-slate-50 transition-colors">
-                      {/* Employee Column */}
-                      <td className="py-2.5 px-2.5 align-middle">
-                        <div className="flex items-center space-x-2.5 min-w-0">
-                          <img
-                            src={reqUser?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'}
-                            alt={od.userName}
-                            className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0 shadow-2xs"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <span className="font-bold text-slate-900 block truncate text-xs">{od.userName}</span>
-                            <span className="text-[11px] text-slate-500 font-medium block truncate mt-0.5">
-                              {reqUser?.designation || 'Staff'}
-                            </span>
-                            <span className="text-[10px] text-slate-400 font-mono tracking-tight block truncate mt-0.5">
-                              {reqUser?.biometricId ? `Bio ID: ${reqUser.biometricId}` : (od.userId ? `Bio ID: ${od.userId}` : 'Bio ID: N/A')}
-                            </span>
+                      {/* Employee Column - Visible for Team/Manager/Admin */}
+                      {canSeeTeamFilters && (
+                        <td className="py-2.5 px-2.5 align-middle">
+                          <div className="flex items-center space-x-2.5 min-w-0">
+                            <img
+                              src={reqUser?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'}
+                              alt={od.userName}
+                              className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0 shadow-2xs"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <span className="font-bold text-slate-900 block truncate text-xs">{od.userName}</span>
+                              <span className="text-[11px] text-slate-500 font-medium block truncate mt-0.5">
+                                {reqUser?.designation || 'Staff'}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-mono tracking-tight block truncate mt-0.5">
+                                {reqUser?.biometricId ? `Bio ID: ${reqUser.biometricId}` : (od.userId ? `Bio ID: ${od.userId}` : 'Bio ID: N/A')}
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      </td>
+                        </td>
+                      )}
 
                       {/* Duration */}
                       <td className="py-2.5 px-2 whitespace-nowrap align-middle">

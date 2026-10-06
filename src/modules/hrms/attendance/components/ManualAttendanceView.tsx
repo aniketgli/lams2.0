@@ -170,6 +170,7 @@ export const ManualAttendanceView: React.FC = () => {
   const isAdmin = currentUser.role === 'administrator';
   const isReportingManager = currentUser.role === 'reporting_manager';
   const isReviewingManager = currentUser.role === 'reviewing_manager';
+  // Apply permission: User can apply for self; Admin can apply on behalf of others; RM & HoD CANNOT apply.
   const canApplyRegularization = isAdmin || (!isReportingManager && !isReviewingManager);
 
   // Role Visibility Matrix Flags (per specification table)
@@ -248,8 +249,14 @@ export const ManualAttendanceView: React.FC = () => {
   const [tabFilter, setTabFilter] = useState<'all' | 'my' | 'pending'>('all');
 
   // --- FILTERS (Multi-select supported) ---
-  const DEFAULT_START_DATE = '2026-08-01';
-  const DEFAULT_END_DATE = '2026-09-30';
+  const currentYear = todayObj.getFullYear();
+  const currentMonthStr = (todayObj.getMonth() + 1).toString().padStart(2, '0');
+  const firstDayOfCurrentMonthStr = `${currentYear}-${currentMonthStr}-01`;
+  const lastDayOfCurrentMonthObj = new Date(currentYear, todayObj.getMonth() + 1, 0);
+  const lastDayOfCurrentMonthStr = `${currentYear}-${currentMonthStr}-${lastDayOfCurrentMonthObj.getDate().toString().padStart(2, '0')}`;
+
+  const DEFAULT_START_DATE = firstDayOfCurrentMonthStr;
+  const DEFAULT_END_DATE = lastDayOfCurrentMonthStr;
   const [filterStatus, setFilterStatus] = useState<string[]>(['all']);
   const [filterDept, setFilterDept] = useState<string[]>(['all']);
   const [filterUser, setFilterUser] = useState<string[]>(['all']);
@@ -352,9 +359,12 @@ export const ManualAttendanceView: React.FC = () => {
   }, [users]);
 
   // --- CANDIDATE MISSING PUNCH DATES GENERATION ---
-  // Checks past working days (excluding Sundays, up to yesterday) where punch is missing or incomplete
+  // Checks past working days (excluding Sundays, up to yesterday) where punch is missing or incomplete,
+  // excluding any dates that already have a pending or approved manual attendance request.
   const candidateMissingDates = useMemo(() => {
-    const targetUserId = formUserId || currentUser.id;
+    const targetUserId = formUserId || (isAdmin ? '' : currentUser.id);
+    if (!targetUserId) return [];
+
     const candidates: Array<{
       date: string;
       label: string;
@@ -373,6 +383,15 @@ export const ManualAttendanceView: React.FC = () => {
       if (dayOfWeek === 0) continue; // Skip Sunday
 
       const dateStr = d.toISOString().split('T')[0];
+
+      // Exclude dates that already have a pending or approved manual attendance request for targetUserId
+      const existingReq = manualAttendanceRequests.find(
+        (m) => m.userId === targetUserId && m.date === dateStr
+      );
+      if (existingReq && (existingReq.status === 'pending' || existingReq.status === 'approved')) {
+        continue;
+      }
+
       const record = attendanceRecords.find((a) => a.userId === targetUserId && a.date === dateStr);
 
       const hasIn = record && record.clockIn && record.clockIn.trim() !== '' && record.clockIn.trim() !== '--:--';
@@ -412,7 +431,7 @@ export const ManualAttendanceView: React.FC = () => {
     }
 
     return candidates;
-  }, [formUserId, currentUser.id, attendanceRecords, todayObj]);
+  }, [formUserId, currentUser.id, attendanceRecords, manualAttendanceRequests, todayObj]);
 
   // Auto-detect punch whenever formDate or formUserId changes
   const autoDetectPunchForDate = (date: string, userId: string) => {
@@ -455,53 +474,20 @@ export const ManualAttendanceView: React.FC = () => {
     return true;
   };
 
-  // 2. Manager Can Approve / Reject: Reporting Manager of the request or Admin (Reviewing Manager view-only)
+  // 2. Manager Can Approve / Reject: Reporting Manager of the request or Admin
   const canManagerAction = (req: ManualAttendanceRegularizationRequest) => {
     if (req.status !== 'pending') return false;
-    if (isReviewingManager) return false; // Reviewing Manager is strictly view-only
-    if (isAdmin || currentUser.baseRole === 'administrator') {
-      if (req.userId === currentUser.id && currentUser.role !== 'administrator') return false;
+    if (isAdmin || isReportingManager || isReportingManagerOrPI || currentUser.role === 'reporting_manager') {
       return true;
-    }
-    if (isReportingManager || isReportingManagerOrPI || currentUser.role === 'reporting_manager') {
-      if (req.userId === currentUser.id) return false; // Cannot approve own request
-      const reqUser = users.find((u) => u.id === req.userId);
-      const mgrId = req.reportingManagerId || reqUser?.reportingManagerId;
-      return (
-        mgrId === currentUser.id ||
-        !mgrId ||
-        req.reportingManagerName === currentUser.name ||
-        reqUser?.piName === currentUser.name ||
-        reqUser?.hodName === currentUser.name ||
-        users.some((u) => u.id === req.userId && u.reportingManagerId === currentUser.id) ||
-        accessibleUserIds.includes(req.userId)
-      );
     }
     return false;
   };
 
-  // 3. Manager Can Cancel / Revoke Approved Attendance: Reporting Manager of the request or Admin before applicable date
+  // 3. Manager Can Cancel / Revoke Approved Attendance: Reporting Manager or Admin
   const canManagerCancelApproval = (req: ManualAttendanceRegularizationRequest) => {
     if (req.status !== 'approved') return false;
-    if (isReviewingManager) return false; // Reviewing Manager is strictly view-only
-    if (isAdmin || currentUser.baseRole === 'administrator') {
-      if (req.userId === currentUser.id && currentUser.role !== 'administrator') return false;
+    if (isAdmin || isReportingManager || isReportingManagerOrPI || currentUser.role === 'reporting_manager') {
       return true;
-    }
-    if (!isBeforeOrOnApplicableDate(req.date)) return false; // Approved record can be cancelled before applicable date
-    if (isReportingManager || isReportingManagerOrPI || currentUser.role === 'reporting_manager') {
-      if (req.userId === currentUser.id) return false;
-      const reqUser = users.find((u) => u.id === req.userId);
-      const mgrId = req.reportingManagerId || reqUser?.reportingManagerId;
-      return (
-        mgrId === currentUser.id ||
-        !mgrId ||
-        req.reportingManagerName === currentUser.name ||
-        reqUser?.piName === currentUser.name ||
-        reqUser?.hodName === currentUser.name ||
-        users.some((u) => u.id === req.userId && u.reportingManagerId === currentUser.id) ||
-        accessibleUserIds.includes(req.userId)
-      );
     }
     return false;
   };
@@ -510,17 +496,23 @@ export const ManualAttendanceView: React.FC = () => {
   const pendingManagerQueue = useMemo(() => {
     return manualAttendanceRequests.filter((r) => {
       if (r.status !== 'pending') return false;
+      if (r.userId === currentUser.id) return false;
       if (isAdmin) return true;
       if (isReportingManager) {
-        return r.reportingManagerId === currentUser.id;
+        return r.reportingManagerId === currentUser.id || r.reportingManagerName === currentUser.name;
       }
       return false;
     });
-  }, [manualAttendanceRequests, isAdmin, isReportingManager, currentUser.id]);
+  }, [manualAttendanceRequests, isAdmin, isReportingManager, currentUser.id, currentUser.name]);
 
   // Filtered Requests
   const filteredRequests = useMemo(() => {
     return manualAttendanceRequests.filter((req) => {
+      // Filter out self records for Reporting Manager, HoD, and Administrator roles
+      if ((isAdmin || isReportingManager || isReviewingManager || isReportingManagerOrPI) && req.userId === currentUser.id) {
+        return false;
+      }
+
       // Tab Filtering
       if (tabFilter === 'my' && req.userId !== currentUser.id) return false;
       if (tabFilter === 'pending' && req.status !== 'pending') return false;
@@ -657,13 +649,18 @@ export const ManualAttendanceView: React.FC = () => {
       setDetectedOutPunch(reqToEdit.originalOutTime || null);
     } else {
       setEditingRequest(null);
-      const targetUid = currentUser.id;
-      setFormUserId(targetUid);
-      const initialDate = candidateMissingDates.length > 0 ? candidateMissingDates[0].date : maxDateStr;
-      setFormDate(initialDate);
+      if (isAdmin) {
+        setFormUserId(''); // No default employee selected for Administrator
+        setFormDate('');
+      } else {
+        const targetUid = currentUser.id;
+        setFormUserId(targetUid);
+        const initialDate = candidateMissingDates.length > 0 ? candidateMissingDates[0].date : maxDateStr;
+        setFormDate(initialDate);
+        autoDetectPunchForDate(initialDate, targetUid);
+      }
       setFormReasonCategory('Forgot to Punch');
       setFormReason('');
-      autoDetectPunchForDate(initialDate, targetUid);
     }
     setShowApplyModal(true);
   };
@@ -671,19 +668,29 @@ export const ManualAttendanceView: React.FC = () => {
   // Date selection change handler in Modal
   const handleDateChange = (newDate: string) => {
     setFormDate(newDate);
-    autoDetectPunchForDate(newDate, formUserId);
+    if (formUserId) {
+      autoDetectPunchForDate(newDate, formUserId);
+    }
   };
 
   // User selection change handler (for Admin)
   const handleUserChange = (newUserId: string) => {
     setFormUserId(newUserId);
-    autoDetectPunchForDate(formDate, newUserId);
+    setFormDate('');
+    if (newUserId) {
+      autoDetectPunchForDate('', newUserId);
+    }
   };
 
   // Form Submit (Create or Edit)
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
+
+    if (isAdmin && !formUserId && !editingRequest) {
+      setFormError('Please select an employee.');
+      return;
+    }
 
     if (!formDate) {
       setFormError('Please select a forgotten attendance date.');
@@ -1032,19 +1039,6 @@ export const ManualAttendanceView: React.FC = () => {
                 />
               </div>
             </div>
-
-            {/* Quick Preset: Current Month */}
-            {(filterStartDate !== DEFAULT_START_DATE || filterEndDate !== DEFAULT_END_DATE) && (
-              <button
-                onClick={handlePresetCurrentMonth}
-                className="h-9 bg-slate-50/90 hover:bg-white border border-slate-200/90 rounded-xl px-2.5 sm:px-3 text-xs font-bold text-slate-800 shadow-2xs flex items-center space-x-1.5 shrink-0 transition-all cursor-pointer"
-                title="Reset dates to Current Month"
-              >
-                <Calendar className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                <span className="hidden sm:inline">Current Month</span>
-                <span className="sm:hidden">Reset</span>
-              </button>
-            )}
           </div>
 
           {/* Row 2 on mobile (Right on tab/desktop): Export Buttons (CSV & PDF) - Right aligned */}
@@ -1236,7 +1230,17 @@ export const ManualAttendanceView: React.FC = () => {
           <button
             onClick={() => {
               setTabFilter('pending');
-              setFilterStatus('pending');
+              setFilterStatus(['pending']);
+              if (pendingManagerQueue.length > 0) {
+                const dates = pendingManagerQueue.map((r) => r.date).filter(Boolean);
+                if (dates.length > 0) {
+                  const sortedDates = [...dates].sort();
+                  const minPendingDate = sortedDates[0];
+                  const maxPendingDate = sortedDates[sortedDates.length - 1];
+                  setFilterStartDate((prevStart) => (prevStart < minPendingDate ? prevStart : minPendingDate));
+                  setFilterEndDate((prevEnd) => (prevEnd > maxPendingDate ? prevEnd : maxPendingDate));
+                }
+              }
             }}
             className="bg-[#ea580c] hover:bg-[#c2410c] active:bg-[#9a3412] text-white font-bold text-xs px-5 py-2 rounded-full shadow-2xs transition-all cursor-pointer shrink-0 flex items-center space-x-1.5"
           >
@@ -1272,28 +1276,30 @@ export const ManualAttendanceView: React.FC = () => {
         ) : viewMode === 'table' ? (
           /* Table View */
           <div className="w-full min-w-0 overflow-x-auto custom-table-scrollbar pb-1">
-            <table className="w-full text-left text-xs border-collapse table-auto min-w-[950px]">
+            <table className={`w-full text-left text-xs border-collapse table-auto ${canSeeTeamFilters ? 'min-w-[950px]' : 'min-w-[780px]'}`}>
               <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 text-[11px]">
                 <tr className="h-10">
-                  {/* Employee Column */}
-                  <th
-                    onClick={() => handleSort('employee')}
-                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[18%]"
-                    title="Click to sort by Employee"
-                  >
-                    <div className="flex items-center space-x-1.5">
-                      <span>Employee</span>
-                      {sortField === 'employee' ? (
-                        sortOrder === 'asc' ? (
-                          <ArrowUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                  {/* Employee Column - Visible for Team/Manager/Admin */}
+                  {canSeeTeamFilters && (
+                    <th
+                      onClick={() => handleSort('employee')}
+                      className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[18%]"
+                      title="Click to sort by Employee"
+                    >
+                      <div className="flex items-center space-x-1.5">
+                        <span>Employee</span>
+                        {sortField === 'employee' ? (
+                          sortOrder === 'asc' ? (
+                            <ArrowUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                          ) : (
+                            <ArrowDown className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                          )
                         ) : (
-                          <ArrowDown className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                        )
-                      ) : (
-                        <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-40 shrink-0" />
-                      )}
-                    </div>
-                  </th>
+                          <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-40 shrink-0" />
+                        )}
+                      </div>
+                    </th>
+                  )}
 
                   {/* Forget Column */}
                   <th
@@ -1411,24 +1417,26 @@ export const ManualAttendanceView: React.FC = () => {
 
                   return (
                     <tr key={req.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="py-2.5 px-3 align-middle">
-                        <div className="flex items-center space-x-2.5 min-w-0">
-                          <img
-                            src={targetUser?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'}
-                            alt={req.userName}
-                            className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0 shadow-2xs"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <span className="font-bold text-slate-900 block truncate max-w-[160px] text-xs">{req.userName}</span>
-                            <span className="text-[11px] text-slate-500 font-medium block truncate max-w-[160px] mt-0.5">
-                              {req.userDesignation || targetUser?.designation || 'Staff'}
-                            </span>
-                            <span className="text-[10px] text-slate-400 font-mono tracking-tight block truncate max-w-[160px] mt-0.5">
-                              {targetUser?.biometricId ? `Bio ID: ${targetUser.biometricId}` : (req.userId ? `Bio ID: ${req.userId}` : 'Bio ID: N/A')}
-                            </span>
+                      {canSeeTeamFilters && (
+                        <td className="py-2.5 px-3 align-middle">
+                          <div className="flex items-center space-x-2.5 min-w-0">
+                            <img
+                              src={targetUser?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'}
+                              alt={req.userName}
+                              className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0 shadow-2xs"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <span className="font-bold text-slate-900 block truncate max-w-[160px] text-xs">{req.userName}</span>
+                              <span className="text-[11px] text-slate-500 font-medium block truncate max-w-[160px] mt-0.5">
+                                {req.userDesignation || targetUser?.designation || 'Staff'}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-mono tracking-tight block truncate max-w-[160px] mt-0.5">
+                                {targetUser?.biometricId ? `Bio ID: ${targetUser.biometricId}` : (req.userId ? `Bio ID: ${req.userId}` : 'Bio ID: N/A')}
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      </td>
+                        </td>
+                      )}
                       <td className="py-2.5 px-3 whitespace-nowrap align-middle">
                         <div className="font-bold text-slate-900 flex items-center space-x-1.5">
                           <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
@@ -1456,38 +1464,49 @@ export const ManualAttendanceView: React.FC = () => {
                         </p>
                       </td>
                       <td className="py-2.5 px-2.5 whitespace-nowrap align-middle">
-                        {req.status === 'approved' && (
-                          <span className="inline-flex items-center space-x-1 bg-emerald-100 text-emerald-800 font-bold px-2.5 py-0.5 rounded text-[10px] border border-emerald-200">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                            <span>Approved</span>
+                        <div className="flex flex-col items-start space-y-1">
+                          {req.status === 'approved' && (
+                            <span className="inline-flex items-center space-x-1 bg-emerald-100 text-emerald-800 font-bold px-2.5 py-0.5 rounded text-[10px] border border-emerald-200">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              <span>Approved</span>
+                            </span>
+                          )}
+                          {req.status === 'pending' && (
+                            <span className="inline-flex items-center space-x-1 bg-amber-100 text-amber-800 font-bold px-2.5 py-0.5 rounded text-[10px] border border-amber-200">
+                              <Clock className="w-3 h-3 text-amber-600 animate-spin" />
+                              <span>Pending</span>
+                            </span>
+                          )}
+                          {req.status === 'rejected' && (
+                            <span className="inline-flex items-center space-x-1 bg-rose-100 text-rose-800 font-bold px-2.5 py-0.5 rounded text-[10px] border border-rose-200">
+                              <XCircle className="w-3 h-3 text-rose-600" />
+                              <span>Rejected</span>
+                            </span>
+                          )}
+                          <span className="text-[10px] text-slate-500 font-semibold block truncate max-w-[120px]">
+                            by {req.status === 'pending' ? req.userName : (req.actionBy || req.reportingManagerName || req.userName)}
                           </span>
-                        )}
-                        {req.status === 'pending' && (
-                          <span className="inline-flex items-center space-x-1 bg-amber-100 text-amber-800 font-bold px-2.5 py-0.5 rounded text-[10px] border border-amber-200">
-                            <Clock className="w-3 h-3 text-amber-600 animate-spin" />
-                            <span>Pending</span>
-                          </span>
-                        )}
-                        {req.status === 'rejected' && (
-                          <span className="inline-flex items-center space-x-1 bg-rose-100 text-rose-800 font-bold px-2.5 py-0.5 rounded text-[10px] border border-rose-200">
-                            <XCircle className="w-3 h-3 text-rose-600" />
-                            <span>Rejected</span>
-                          </span>
-                        )}
+                        </div>
                       </td>
                       <td className="py-2.5 px-3 text-right whitespace-nowrap align-middle">
                         <div className="flex items-center justify-end space-x-1">
-                          {/* View details */}
+                          {/* View details - Color indicator: Gray for Pending, Green for Approved, Red for Rejected */}
                           <button
                             onClick={() => setDetailModalReq(req)}
-                            className="w-7 h-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 inline-flex items-center justify-center text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95"
+                            className={`w-7 h-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 inline-flex items-center justify-center border rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95 ${
+                              req.status === 'pending'
+                                ? 'bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200'
+                                : req.status === 'approved'
+                                ? 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100'
+                                : 'bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100'
+                            }`}
                             title="View Full Details"
                           >
-                            <Eye className="w-3.5 h-3.5 text-slate-600 stroke-[2]" />
+                            <Eye className="w-3.5 h-3.5 stroke-[2]" />
                           </button>
 
-                          {/* Edit button */}
-                          {editable && (
+                          {/* Edit button (Admin only) */}
+                          {isAdmin && editable && (
                             <button
                               onClick={() => handleOpenApplyModal(req)}
                               className="w-7 h-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 inline-flex items-center justify-center text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95"
@@ -1497,8 +1516,8 @@ export const ManualAttendanceView: React.FC = () => {
                             </button>
                           )}
 
-                          {/* Delete button */}
-                          {editable && (
+                          {/* Delete button (Admin only) */}
+                          {isAdmin && editable && (
                             <button
                               onClick={() => setDeleteConfirmId(req.id)}
                               className="w-7 h-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 inline-flex items-center justify-center text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95"
@@ -1508,7 +1527,7 @@ export const ManualAttendanceView: React.FC = () => {
                             </button>
                           )}
 
-                          {/* Approve / Reject Action Buttons for Pending */}
+                          {/* Approve / Reject Action Buttons for Pending (Reporting Manager & Admin) */}
                           {canAct && (
                             <>
                               <button
@@ -1534,7 +1553,7 @@ export const ManualAttendanceView: React.FC = () => {
                             </>
                           )}
 
-                          {/* Cancel Approval Button for Approved Record */}
+                          {/* Cancel Approval Button for Approved Record (Reporting Manager & Admin) */}
                           {canCancel && (
                             <button
                               onClick={() => {
@@ -1576,7 +1595,7 @@ export const ManualAttendanceView: React.FC = () => {
                       <span className="text-[10px] text-slate-500 font-medium">{req.userDepartment} {req.userDesignation ? `• ${req.userDesignation}` : ''}</span>
                     </div>
 
-                    <div className="shrink-0">
+                    <div className="shrink-0 flex flex-col items-end space-y-1">
                       {req.status === 'approved' && (
                         <span className="inline-flex items-center space-x-1 bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded text-[10px] border border-emerald-200">
                           <CheckCircle2 className="w-3 h-3 text-emerald-600" />
@@ -1595,6 +1614,9 @@ export const ManualAttendanceView: React.FC = () => {
                           <span>Rejected</span>
                         </span>
                       )}
+                      <span className="text-[10px] text-slate-500 font-semibold block truncate max-w-[120px]">
+                        by {req.status === 'pending' ? req.userName : (req.actionBy || req.reportingManagerName || req.userName)}
+                      </span>
                     </div>
                   </div>
 
@@ -1633,12 +1655,18 @@ export const ManualAttendanceView: React.FC = () => {
                     <div className="flex items-center space-x-1.5">
                       <button
                         onClick={() => setDetailModalReq(req)}
-                        className="w-7 h-7 flex items-center justify-center text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition-all cursor-pointer shadow-2xs"
+                        className={`w-7 h-7 flex items-center justify-center border rounded-lg transition-all cursor-pointer shadow-2xs ${
+                          req.status === 'pending'
+                            ? 'bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200'
+                            : req.status === 'approved'
+                            ? 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100'
+                            : 'bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100'
+                        }`}
                         title="View Full Details"
                       >
-                        <Eye className="w-3.5 h-3.5" />
+                        <Eye className="w-3.5 h-3.5 stroke-[2]" />
                       </button>
-                      {editable && (
+                      {isAdmin && editable && (
                         <button
                           onClick={() => handleOpenApplyModal(req)}
                           className="w-7 h-7 flex items-center justify-center text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-all cursor-pointer shadow-2xs"
@@ -1647,7 +1675,7 @@ export const ManualAttendanceView: React.FC = () => {
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                       )}
-                      {editable && (
+                      {isAdmin && editable && (
                         <button
                           onClick={() => setDeleteConfirmId(req.id)}
                           className="w-7 h-7 flex items-center justify-center text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-all cursor-pointer shadow-2xs"
@@ -1758,83 +1786,94 @@ export const ManualAttendanceView: React.FC = () => {
               {isAdmin && !editingRequest && (
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Apply on Behalf of Employee *
+                    Employee *
                   </label>
                   <AppSelect
                     value={formUserId}
                     onChange={(val) => handleUserChange(val)}
-                    options={users.map((u) => ({
-                      label: u.name,
-                      value: u.id,
-                      description: `${u.department} - ${u.designation || 'Staff'}`
-                    }))}
+                    options={users
+                      .filter((u) => u.id !== currentUser.id && u.role !== 'administrator')
+                      .map((u) => ({
+                        label: u.name,
+                        value: u.id,
+                        description: `${u.department} - ${u.designation || 'Staff'}`
+                      }))}
+                    placeholder="Select Employee..."
+                    showSearch={true}
                   />
                 </div>
               )}
 
               {/* Candidate Missing Punch Dates Selector */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-bold text-slate-700 flex items-center space-x-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                    <span>Forget punch date *</span>
-                  </label>
-                  <span className="text-[11px] font-semibold text-blue-600 shrink-0">
-                    {candidateMissingDates.length} Missing Dates
-                  </span>
+              {isAdmin && !formUserId && !editingRequest ? (
+                <div className="p-4 bg-amber-50/80 border border-amber-200/90 rounded-xl text-center text-xs text-amber-900 font-semibold flex items-center justify-center space-x-2">
+                  <UserIcon className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Please select an employee above to view their available missing punch dates.</span>
                 </div>
+              ) : (
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold text-slate-700 flex items-center space-x-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                      <span>Forget punch date *</span>
+                    </label>
+                    <span className="text-[11px] font-semibold text-blue-600 shrink-0">
+                      {candidateMissingDates.length} Missing Dates
+                    </span>
+                  </div>
 
-                {candidateMissingDates.length > 0 ? (
-                  <div className="grid grid-cols-1 gap-1.5 max-h-48 overflow-y-auto p-1.5 bg-slate-50 border border-slate-200 rounded-xl">
-                    {candidateMissingDates.map((cand) => {
-                      const isSelected = formDate === cand.date;
-                      return (
-                        <button
-                          key={cand.date}
-                          type="button"
-                          onClick={() => handleDateChange(cand.date)}
-                          className={`w-full text-left p-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-between gap-1.5 cursor-pointer select-none ${
-                            isSelected
-                              ? 'bg-blue-600 text-white shadow-xs'
-                              : 'bg-white text-slate-800 hover:bg-blue-50 border border-slate-200/80'
-                          }`}
-                        >
-                          <div className="flex items-center space-x-1.5 min-w-0 flex-1 truncate">
-                            <Calendar className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-white' : 'text-blue-600'}`} />
-                            <span className="font-mono text-xs shrink-0 whitespace-nowrap">{cand.date}</span>
-                            <span
-                              className={`text-[9.5px] px-1.5 py-0.5 rounded font-bold shrink-0 whitespace-nowrap ${
-                                isSelected
-                                  ? 'bg-blue-700 text-blue-100'
-                                  : cand.type === 'missing_both'
-                                  ? 'bg-rose-100 text-rose-800'
-                                  : 'bg-amber-100 text-amber-800'
-                              }`}
-                            >
-                              {cand.type === 'missing_both'
-                                ? 'Absent / No Punch'
-                                : cand.type === 'missing_out'
-                                ? `In: ${cand.clockIn}`
-                                : `Out: ${cand.clockOut}`}
+                  {candidateMissingDates.length > 0 ? (
+                    <div className="grid grid-cols-1 gap-1.5 max-h-48 overflow-y-auto p-1.5 bg-slate-50 border border-slate-200 rounded-xl">
+                      {candidateMissingDates.map((cand) => {
+                        const isSelected = formDate === cand.date;
+                        return (
+                          <button
+                            key={cand.date}
+                            type="button"
+                            onClick={() => handleDateChange(cand.date)}
+                            className={`w-full text-left p-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-between gap-1.5 cursor-pointer select-none ${
+                              isSelected
+                                ? 'bg-blue-600 text-white shadow-xs'
+                                : 'bg-white text-slate-800 hover:bg-blue-50 border border-slate-200/80'
+                            }`}
+                          >
+                            <div className="flex items-center space-x-1.5 min-w-0 flex-1 truncate">
+                              <Calendar className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-white' : 'text-blue-600'}`} />
+                              <span className="font-mono text-xs shrink-0 whitespace-nowrap">{cand.date}</span>
+                              <span
+                                className={`text-[9.5px] px-1.5 py-0.5 rounded font-bold shrink-0 whitespace-nowrap ${
+                                  isSelected
+                                    ? 'bg-blue-700 text-blue-100'
+                                    : cand.type === 'missing_both'
+                                    ? 'bg-rose-100 text-rose-800'
+                                    : 'bg-amber-100 text-amber-800'
+                                }`}
+                              >
+                                {cand.type === 'missing_both'
+                                  ? 'Absent / No Punch'
+                                  : cand.type === 'missing_out'
+                                  ? `In: ${cand.clockIn}`
+                                  : `Out: ${cand.clockOut}`}
+                              </span>
+                            </div>
+                            <span className={`text-[10px] font-medium shrink-0 whitespace-nowrap ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
+                              {isSelected ? 'Selected' : 'Pick'}
                             </span>
-                          </div>
-                          <span className={`text-[10px] font-medium shrink-0 whitespace-nowrap ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
-                            {isSelected ? 'Selected' : 'Pick'}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div>
-                    <AppDatePicker
-                      value={formDate}
-                      maxDate={maxDateStr}
-                      onChange={(dStr) => handleDateChange(dStr)}
-                    />
-                  </div>
-                )}
-              </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div>
+                      <AppDatePicker
+                        value={formDate}
+                        maxDate={maxDateStr}
+                        onChange={(dStr) => handleDateChange(dStr)}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Timings */}
               <div className="grid grid-cols-2 gap-2.5 sm:gap-3">

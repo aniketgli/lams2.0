@@ -234,9 +234,8 @@ div:has(> table) > table {
    instead of forcing tiny controls or hidden horizontal overflow. */
 @media (max-width: 767px) {
   .responsive-filter-row {
-    flex-wrap: wrap !important;
-    overflow-x: visible !important;
-    row-gap: 0.5rem;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
   }
 
   .responsive-filter-row > * {

@@ -114,17 +114,14 @@ export const LobbyPage: React.FC<LobbyPageProps> = ({ onSelectModule, onLogout }
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-6 sm:px-10 lg:px-12 py-10 lg:py-16 flex flex-col justify-center">
-        {/* Welcome Headline (matching Pic 1) */}
+        {/* Welcome Headline */}
         <div className="mb-10 sm:mb-12">
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-slate-900 tracking-tight">
             Welcome back, {currentUser.name}!
           </h1>
-          <p className="text-sm text-slate-500 mt-1 font-medium">
-            Wildlife Institute of India Enterprise Suite. Select a module below to launch your authorized workspace.
-          </p>
         </div>
 
-        {/* 5 Cards Row - Responsive: Mobile 1 card, Tab max 3 cards (centered), Display max 5 cards */}
+        {/* 5 Cards Row - Responsive */}
         <div className="flex flex-wrap items-stretch justify-center gap-4 sm:gap-5 lg:gap-5 xl:gap-6 w-full max-w-7xl mx-auto">
           {LOBBY_MODULES.map((mod) => {
             const Icon = mod.icon;
@@ -158,19 +155,6 @@ export const LobbyPage: React.FC<LobbyPageProps> = ({ onSelectModule, onLogout }
                 <p className="text-xs text-slate-500 font-normal leading-relaxed max-w-[190px]">
                   {mod.subtitle}
                 </p>
-
-                {/* Hover affordance indicator */}
-                {allowed ? (
-                  <div className="mt-4 pt-3 border-t border-slate-100 w-full flex items-center justify-center gap-1 text-[11px] font-semibold text-slate-400 group-hover:text-blue-600 transition-colors">
-                    <span>Open Module</span>
-                    <ArrowUpRight className="w-3 h-3 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-                  </div>
-                ) : (
-                  <div className="mt-4 pt-3 border-t border-slate-100 w-full flex items-center justify-center gap-1 text-[11px] font-medium text-amber-700">
-                    <Lock className="w-3 h-3" />
-                    <span>Restricted</span>
-                  </div>
-                )}
               </div>
             );
           })}

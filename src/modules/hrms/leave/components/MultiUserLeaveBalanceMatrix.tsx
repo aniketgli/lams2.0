@@ -706,12 +706,12 @@ export const MultiUserLeaveBalanceMatrix: React.FC<MultiUserLeaveBalanceMatrixPr
         </div>
       </div>
 
-      {/* Date Range, Search & Filters Control Bar: Exact match to Snap 2 */}
+      {/* Date Range, Search & Filters Control Bar: Exact match to Attendance theme */}
       <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3.5">
         {/* Row 1: Themed Leave Accounting Cycle Dropdown (CY / FY) & Export Buttons */}
-        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3.5 border-b border-slate-100 pb-3.5">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3.5 border-b border-slate-100 pb-3">
           {/* Left: Leave Accounting Cycle Dropdown */}
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
             <LeaveCycleDropdown
               selectedCycle={selectedYear}
               onChange={handleYearSelect}
@@ -720,61 +720,63 @@ export const MultiUserLeaveBalanceMatrix: React.FC<MultiUserLeaveBalanceMatrixPr
           </div>
 
           {/* Right: Export Buttons (CSV & PDF) */}
-          <div className="flex items-center space-x-2 shrink-0 self-end lg:self-auto">
+          <div className="flex items-center justify-end gap-2 shrink-0 w-full sm:w-auto ml-auto">
             <button
               type="button"
               onClick={handleExportCSV}
-              className="h-9 px-3.5 bg-white hover:bg-slate-50 text-slate-800 border border-slate-200/90 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer shadow-2xs"
+              className="h-9 px-3 bg-white hover:bg-slate-50 text-slate-800 border border-slate-200/90 rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer shadow-2xs shrink-0"
+              title="Export records to CSV"
             >
-              <Download className="w-3.5 h-3.5 text-emerald-600" />
+              <Download className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
               <span>Export CSV</span>
             </button>
 
             <button
               type="button"
               onClick={handleExportPDF}
-              className="h-9 px-3.5 bg-slate-900 hover:bg-slate-800 text-white border border-slate-900 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer shadow-2xs"
+              className="h-9 px-3 bg-slate-900 hover:bg-slate-800 text-white border border-slate-900 rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer shadow-2xs shrink-0"
+              title="Export records to PDF"
             >
-              <FileText className="w-3.5 h-3.5 text-rose-400" />
+              <FileText className="w-3.5 h-3.5 text-rose-400 shrink-0" />
               <span>Export PDF</span>
             </button>
           </div>
         </div>
 
-        {/* Row 2: Search Box & View Mode Toggle (Table / Grid) */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          {/* Search Box */}
-          <div className="relative flex-1 min-w-[240px]">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Search employee, department, leave type, date..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-9 w-full pl-10 pr-9 bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200/80 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 transition-all shadow-2xs"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-200 transition-colors cursor-pointer"
-                title="Clear search"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
+        {/* Row 2: Search Box, Reset Button (Icon Only) & View Mode Toggle in ONE Single Row */}
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-2 w-full">
+            {/* Search Box */}
+            <div className="relative flex-1 min-w-0">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search employee, department, designation, date..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-9 w-full pl-9 pr-8 bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200/80 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 transition-all shadow-2xs"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-200 transition-colors cursor-pointer"
+                  title="Clear search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
 
-          <div className="flex items-center space-x-2 shrink-0 self-end sm:self-auto">
+            {/* Reset Filters (Only Icon - Appears ONLY when any filter or search query is active) */}
             {hasActiveFilters && (
               <button
                 type="button"
                 onClick={handleResetFilters}
-                className="h-9 px-3.5 bg-blue-50/90 hover:bg-blue-100 text-blue-900 border border-blue-200/90 rounded-xl text-xs font-bold flex items-center space-x-1.5 shrink-0 transition-all cursor-pointer shadow-2xs"
-                title="Reset all search and filter selections"
+                className="h-9 w-9 rounded-xl border bg-blue-50/90 hover:bg-blue-100 text-blue-700 border-blue-200/90 flex items-center justify-center shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95 animate-in fade-in zoom-in-95 duration-150"
+                title="Reset active filters and search"
               >
-                <RotateCcw className="w-3.5 h-3.5 text-blue-600" />
-                <span>Reset All Filters</span>
+                <RotateCcw className="w-4 h-4 text-blue-600" />
               </button>
             )}
 

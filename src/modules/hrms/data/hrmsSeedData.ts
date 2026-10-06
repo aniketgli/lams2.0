@@ -1587,5 +1587,82 @@ export const generateSeedAttendance = (): AttendanceRecord[] => {
     });
   }
 
+  // Ensure attendance records exist for current date (today) so managers and admins see live employee attendance
+  const todayStr = new Date().toISOString().split('T')[0];
+  if (!records.some((r) => r.date === todayStr)) {
+    const todayRecords = generateTodayAttendanceRecords(users, todayStr);
+    records.push(...todayRecords);
+  }
+
   return records;
+};
+
+// Export helper to generate realistic today's attendance records for any list of users
+export const generateTodayAttendanceRecords = (usersList: typeof INITIAL_USERS, targetDate?: string): AttendanceRecord[] => {
+  const todayStr = targetDate || new Date().toISOString().split('T')[0];
+  const todayObj = new Date(todayStr + 'T10:00:00');
+  const dayOfWeek = todayObj.getDay();
+  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+  return usersList.map((u, userIdx) => {
+    const userShift = INITIAL_SHIFTS.find((s) => s.id === u.shiftId) || INITIAL_SHIFTS[0];
+    let status: AttendanceRecord['status'] = 'present';
+    let workMode: AttendanceRecord['workMode'] = 'in_office';
+    let clockIn = '09:15';
+    let clockOut = '17:35';
+    let shiftCode = `${userShift.code} (${userShift.startTime} - ${userShift.endTime})`;
+    let totalHours = 8.0;
+    let remark = `Biometric Punch IN via Terminal #BIO-GATE-01. Facial match verified. Entry log synced.`;
+
+    if (isWeekend) {
+      status = 'weekend';
+      clockIn = '-';
+      clockOut = '-';
+      totalHours = 0;
+      remark = 'Scheduled Weekend Off.';
+    } else if (u.id === 'usr-4' || u.id === 'usr-6') {
+      status = 'od';
+      workMode = 'field_od';
+      clockIn = '08:45';
+      clockOut = '18:15';
+      shiftCode = 'FLD-01 (08:30 - 18:00)';
+      totalHours = 9.5;
+      remark = 'Approved Outdoor Duty (OD). Field tracking and data collection in progress.';
+    } else if (u.id === 'usr-8') {
+      status = 'leave';
+      workMode = 'on_leave';
+      clockIn = '-';
+      clockOut = '-';
+      totalHours = 0;
+      remark = 'Approved Commuted Leave on Medical Grounds. Regularized via HR Leave Approval.';
+    } else if (u.id === 'usr-5' || u.id === 'usr-11') {
+      status = 'late';
+      workMode = 'in_office';
+      clockIn = '09:48';
+      clockOut = '17:45';
+      totalHours = 7.95;
+      remark = 'Late Punch IN recorded at Terminal #BIO-GATE-02 (past grace period limit).';
+    } else {
+      const inMins = 5 + ((userIdx * 4) % 18);
+      const outMins = 30 + ((userIdx * 6) % 25);
+      clockIn = `09:${inMins < 10 ? '0' + inMins : inMins}`;
+      clockOut = `17:${outMins < 10 ? '0' + outMins : outMins}`;
+      totalHours = Number((8 + (outMins - inMins) / 60).toFixed(2));
+      remark = `Biometric fingerprint & iris scan verified at Terminal #BIO-GATE-0${(userIdx % 3) + 1}. Entry card #EMP-${u.id.replace('usr-', '90')}.`;
+    }
+
+    return {
+      id: `att-${u.id}-${todayStr}`,
+      userId: u.id,
+      date: todayStr,
+      clockIn,
+      clockOut,
+      shiftCode,
+      workMode,
+      status,
+      totalHours,
+      location: workMode === 'field_od' ? 'External Field Site' : 'Main Campus HQ',
+      remark
+    };
+  });
 };

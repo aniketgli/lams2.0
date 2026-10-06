@@ -9,11 +9,15 @@ export class SlackController {
         return res.status(400).json({ error: 'Missing webhookUrl' });
       }
 
+      if (webhookUrl.includes('T00000000') || webhookUrl.includes('XXXXXXXXXXXXXXXXXXXXXXXX')) {
+        return res.json({ success: false, message: 'Mock or default webhook URL provided' });
+      }
+
       const result = await SlackService.notifyWebhook({ webhookUrl, text, blocks });
       res.json(result);
     } catch (err: any) {
-      console.error('Slack Controller Error:', err);
-      res.status(500).json({ error: err?.message || 'Failed to dispatch to Slack' });
+      console.warn('Slack notification result:', err?.message || err);
+      res.status(200).json({ success: false, error: err?.message || 'Failed to dispatch to Slack' });
     }
   }
 }

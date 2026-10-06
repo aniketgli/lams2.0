@@ -1,10 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../../../context/AppContext';
-import { AttendanceStatus, Shift } from '../../../../types';
+import { AttendanceRecord, AttendanceStatus, Shift } from '../../../../types';
 import { PageHeader } from '../../../../shared/components/PageHeader';
 import { AppDatePicker } from '../../../../shared/components/AppDatePicker';
 import { MultiSelectFilter, matchesMultiSelect } from '../../../../shared/components/MultiSelectFilter';
 import { TablePagination } from '../../../../shared/components/TablePagination';
+import { generateTodayAttendanceRecords } from '../../data/hrmsSeedData';
 import {
   getNormalizedStatusCode,
   getStatusLabel,
@@ -84,9 +85,16 @@ export const AttendanceView: React.FC = () => {
   // Display View Mode: 'table' (Row View) or 'grid' (Calendar/Grid Card View)
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
 
-  // Default Date: Current Month by default
-  const DEFAULT_START_DATE = '2026-08-01';
-  const DEFAULT_END_DATE = '2026-09-30';
+  // Current date (today) YYYY-MM-DD
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+
+  // Default Dates:
+  // For Reporting Manager, HoD (Reviewing Manager), and Administrator: by default show current date's attendance
+  // For General Staff: default to full month range
+  const isManagerOrAdmin = isAdmin || isReportingManager || isReviewingManager;
+  const DEFAULT_START_DATE = isManagerOrAdmin ? todayStr : '2026-08-01';
+  const DEFAULT_END_DATE = isManagerOrAdmin ? todayStr : '2026-09-30';
+
   const [startDate, setStartDate] = useState<string>(DEFAULT_START_DATE);
   const [endDate, setEndDate] = useState<string>(DEFAULT_END_DATE);
 
@@ -99,6 +107,10 @@ export const AttendanceView: React.FC = () => {
 
   const canSeeReportingManagerFilter = isAdmin || isReviewingManager;
   const canSeeTeamFilters = isAdmin || isReviewingManager || isReportingManagerOrPI;
+
+  // User (General Staff) role check: Shift column is removed ONLY for user role
+  const isUserRole = currentUser.role === 'general_staff';
+  const showShiftColumn = !isUserRole;
 
   // Search & Filter States (Multi-select supported)
   const [selectedUserFilter, setSelectedUserFilter] = useState<string[]>(['all']);
@@ -219,8 +231,17 @@ export const AttendanceView: React.FC = () => {
     }
   };
 
+  // Ensure attendance records exist for todayStr for all users so managers/admins immediately see their staff logs
+  const effectiveAttendanceRecords = useMemo(() => {
+    if (attendanceRecords.some((r) => r.date === todayStr)) {
+      return attendanceRecords;
+    }
+    const todayRecords = generateTodayAttendanceRecords(users as any, todayStr);
+    return [...attendanceRecords, ...todayRecords];
+  }, [attendanceRecords, todayStr, users]);
+
   // Apply Role Scope, Employee, Department, Designation, Reporting Manager, Type & Status Filters
-  const filteredRecords = attendanceRecords.filter((rec) => {
+  const filteredRecords = effectiveAttendanceRecords.filter((rec) => {
     // 1. Accessibility Check based on Role
     if (!accessibleUserIds.includes(rec.userId)) return false;
 
@@ -281,10 +302,10 @@ export const AttendanceView: React.FC = () => {
   });
 
   // Table Column Sort State
-  const [sortField, setSortField] = useState<'date' | 'employee' | 'shift' | 'in' | 'out' | 'hours' | 'status'>('date');
+  const [sortField, setSortField] = useState<'date' | 'employee' | 'reportingManager' | 'shift' | 'in' | 'out' | 'hours' | 'status'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
-  const handleSort = (field: 'date' | 'employee' | 'shift' | 'in' | 'out' | 'hours' | 'status') => {
+  const handleSort = (field: 'date' | 'employee' | 'reportingManager' | 'shift' | 'in' | 'out' | 'hours' | 'status') => {
     if (sortField === field) {
       setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
     } else {
@@ -302,6 +323,12 @@ export const AttendanceView: React.FC = () => {
       const userA = users.find((u) => u.id === a.userId)?.name || '';
       const userB = users.find((u) => u.id === b.userId)?.name || '';
       cmp = userA.localeCompare(userB);
+    } else if (sortField === 'reportingManager') {
+      const uA = users.find((u) => u.id === a.userId);
+      const uB = users.find((u) => u.id === b.userId);
+      const mgrA = uA?.reportingManagerId ? (users.find((m) => m.id === uA.reportingManagerId)?.name || '') : '';
+      const mgrB = uB?.reportingManagerId ? (users.find((m) => m.id === uB.reportingManagerId)?.name || '') : '';
+      cmp = mgrA.localeCompare(mgrB);
     } else if (sortField === 'shift') {
       cmp = (a.shiftCode || '').localeCompare(b.shiftCode || '');
     } else if (sortField === 'in') {
@@ -333,15 +360,193 @@ export const AttendanceView: React.FC = () => {
   const odCount = sortedRecords.filter((r) => getNormalizedStatusCode(r.status) === 'OD').length;
   const leaveCount = sortedRecords.filter((r) => getNormalizedStatusCode(r.status) === 'ST').length;
 
+  // Resolves attendance status code, styling, and application tracking per specifications:
+  // a. Present to green + PP
+  // b. Half day / absent to red + AP / PA / AA
+  // c. Weekend / holiday to Blue + WW / GH / approved RH
+  // Application status: code + Yellow if pending, Red if rejected, Green/Blue if approved
+  const resolveRecordStatusDisplay = (rec: AttendanceRecord) => {
+    const matchingOD = odRequests.find(
+      (od) => od.userId === rec.userId && rec.date >= od.startDate && rec.date <= od.endDate
+    );
+    const matchingManual = manualAttendanceRequests.find(
+      (m) => m.userId === rec.userId && m.date === rec.date
+    );
+    const matchingLeave = leaveRequests.find(
+      (lv) =>
+        lv.userId === rec.userId &&
+        rec.date >= lv.startDate &&
+        rec.date <= lv.endDate &&
+        lv.status !== 'cancelled'
+    );
+
+    // 1. Leave application present
+    if (matchingLeave) {
+      let code = 'LV';
+      let typeLabel = 'Leave';
+      const lt = matchingLeave.leaveType?.toLowerCase() || '';
+      const ltName = matchingLeave.leaveTypeName?.toLowerCase() || '';
+
+      if (lt === 'restricted' || ltName.includes('restricted')) {
+        code = 'RH';
+        typeLabel = 'RH';
+      } else if (lt === 'station' || ltName.includes('station')) {
+        code = 'ST';
+        typeLabel = 'Station';
+      } else if (lt === 'casual') {
+        code = 'CL';
+        typeLabel = 'Casual';
+      } else if (lt === 'earned') {
+        code = 'EL';
+        typeLabel = 'Earned';
+      } else if (lt === 'medical') {
+        code = 'ML';
+        typeLabel = 'Medical';
+      } else if (lt === 'paternity') {
+        code = 'PL';
+        typeLabel = 'Paternity';
+      } else if (lt === 'maternity') {
+        code = 'MAT';
+        typeLabel = 'Maternity';
+      } else if (lt === 'lwp' || lt.includes('without')) {
+        code = 'LW';
+        typeLabel = 'LWP';
+      } else {
+        code = matchingLeave.leaveType?.toUpperCase() || 'LV';
+        typeLabel = matchingLeave.leaveTypeName || 'Leave';
+      }
+
+      const isPending = matchingLeave.status?.startsWith('pending');
+      const isRejected = matchingLeave.status === 'rejected';
+      const isApproved = matchingLeave.status === 'approved';
+
+      let badgeStyle = 'bg-emerald-50 text-emerald-700 border-emerald-300';
+      let tagStyle = 'bg-emerald-100 text-emerald-800 border-emerald-300';
+
+      if (isPending) {
+        badgeStyle = 'bg-amber-50 text-amber-800 border-amber-300 font-black';
+        tagStyle = 'bg-amber-100 text-amber-900 border-amber-300 font-bold';
+      } else if (isRejected) {
+        badgeStyle = 'bg-rose-50 text-rose-700 border-rose-300 font-black';
+        tagStyle = 'bg-rose-100 text-rose-800 border-rose-300 font-bold';
+      } else if (isApproved && code === 'RH') {
+        badgeStyle = 'bg-blue-50 text-blue-700 border-blue-300 font-black';
+        tagStyle = 'bg-blue-100 text-blue-800 border-blue-300 font-bold';
+      }
+
+      const statusText = isPending ? 'Pending' : isRejected ? 'Rejected' : 'Approved';
+
+      return {
+        code,
+        label: `${typeLabel} (${statusText})`,
+        badgeStyle,
+        appTag: {
+          text: `${typeLabel}: ${statusText}`,
+          style: tagStyle
+        }
+      };
+    }
+
+    // 2. OD application present
+    if (matchingOD) {
+      const isPending = matchingOD.status?.startsWith('pending');
+      const isRejected = matchingOD.status === 'rejected';
+
+      let badgeStyle = 'bg-emerald-50 text-emerald-700 border-emerald-300';
+      let tagStyle = 'bg-emerald-100 text-emerald-800 border-emerald-300';
+
+      if (isPending) {
+        badgeStyle = 'bg-amber-50 text-amber-800 border-amber-300 font-black';
+        tagStyle = 'bg-amber-100 text-amber-900 border-amber-300 font-bold';
+      } else if (isRejected) {
+        badgeStyle = 'bg-rose-50 text-rose-700 border-rose-300 font-black';
+        tagStyle = 'bg-rose-100 text-rose-800 border-rose-300 font-bold';
+      }
+
+      const statusText = isPending ? 'Pending' : isRejected ? 'Rejected' : 'Approved';
+
+      return {
+        code: 'OD',
+        label: `Outdoor Duty (${statusText})`,
+        badgeStyle,
+        appTag: {
+          text: `OD: ${statusText}`,
+          style: tagStyle
+        }
+      };
+    }
+
+    // 3. Manual attendance application present
+    if (matchingManual) {
+      const isPending = matchingManual.status?.startsWith('pending');
+      const isRejected = matchingManual.status === 'rejected';
+
+      let badgeStyle = 'bg-emerald-50 text-emerald-700 border-emerald-300';
+      let tagStyle = 'bg-emerald-100 text-emerald-800 border-emerald-300';
+
+      if (isPending) {
+        badgeStyle = 'bg-amber-50 text-amber-800 border-amber-300 font-black';
+        tagStyle = 'bg-amber-100 text-amber-900 border-amber-300 font-bold';
+      } else if (isRejected) {
+        badgeStyle = 'bg-rose-50 text-rose-700 border-rose-300 font-black';
+        tagStyle = 'bg-rose-100 text-rose-800 border-rose-300 font-bold';
+      }
+
+      const statusText = isPending ? 'Pending' : isRejected ? 'Rejected' : 'Approved';
+
+      return {
+        code: 'PP',
+        label: `Manual Attendance (${statusText})`,
+        badgeStyle,
+        appTag: {
+          text: `Manual: ${statusText}`,
+          style: tagStyle
+        }
+      };
+    }
+
+    // 4. Regular attendance records without application
+    // a. Present -> Green + PP
+    // b. Half day / Absent -> Red + AP / PA / AA
+    // c. Weekend / Holiday -> Blue + WW / GH / approved RH
+    const code = getNormalizedStatusCode(rec.status);
+    const def = ATTENDANCE_STATUS_MAP[code] || ATTENDANCE_STATUS_MAP.PP;
+
+    let badgeStyle = def.badgeStyle;
+    if (code === 'PP') {
+      badgeStyle = 'bg-emerald-50 text-emerald-700 border-emerald-300';
+    } else if (code === 'AP' || code === 'PA' || code === 'AA' || code === 'LW') {
+      badgeStyle = 'bg-rose-50 text-rose-700 border-rose-300';
+    } else if (code === 'WW' || code === 'WW#' || code === 'GH' || code === 'HH' || code === 'HH#' || code === 'RH') {
+      badgeStyle = 'bg-blue-50 text-blue-700 border-blue-300';
+    }
+
+    return {
+      code,
+      label: def.label,
+      badgeStyle,
+      appTag: null
+    };
+  };
+
   // Status Badge Component: Strictly displays 2-character / short code
   const renderStatusBadge = (status: AttendanceStatus | string) => {
     const code = getNormalizedStatusCode(status);
     const def = ATTENDANCE_STATUS_MAP[code] || ATTENDANCE_STATUS_MAP.PP;
 
+    let badgeStyle = def.badgeStyle;
+    if (code === 'PP') {
+      badgeStyle = 'bg-emerald-50 text-emerald-700 border-emerald-300';
+    } else if (code === 'AP' || code === 'PA' || code === 'AA' || code === 'LW') {
+      badgeStyle = 'bg-rose-50 text-rose-700 border-rose-300';
+    } else if (code === 'WW' || code === 'WW#' || code === 'GH' || code === 'HH' || code === 'HH#' || code === 'RH') {
+      badgeStyle = 'bg-blue-50 text-blue-700 border-blue-300';
+    }
+
     return (
       <span
         title={`${code} - ${def.label}`}
-        className={`inline-flex items-center justify-center font-mono font-black px-2 py-0.5 rounded text-[11px] uppercase tracking-wider border shadow-2xs min-w-[38px] text-center ${def.badgeStyle}`}
+        className={`inline-flex items-center justify-center font-mono font-black px-2 py-0.5 rounded text-[11px] uppercase tracking-wider border shadow-2xs min-w-[38px] text-center ${badgeStyle}`}
       >
         {code}
       </span>
@@ -492,7 +697,7 @@ export const AttendanceView: React.FC = () => {
   };
 
   return (
-    <div className="w-full min-w-0 space-y-6">
+    <div className="w-full min-w-0 space-y-6 pb-24">
       {/* Page Header Banner */}
       <PageHeader
         icon={Clock}
@@ -601,19 +806,6 @@ export const AttendanceView: React.FC = () => {
                 />
               </div>
             </div>
-
-            {/* Quick Preset: Current Month */}
-            {(startDate !== DEFAULT_START_DATE || endDate !== DEFAULT_END_DATE) && (
-              <button
-                onClick={handlePresetCurrentMonth}
-                className="h-9 bg-slate-50/90 hover:bg-white border border-slate-200/90 rounded-xl px-2.5 sm:px-3 text-xs font-bold text-slate-800 shadow-2xs flex items-center space-x-1.5 shrink-0 transition-all cursor-pointer"
-                title="Reset dates to Current Month"
-              >
-                <Calendar className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                <span className="hidden sm:inline">Current Month</span>
-                <span className="sm:hidden">Reset</span>
-              </button>
-            )}
           </div>
 
           {/* Row 2 on mobile (Right on tab/desktop): Export Buttons (CSV & PDF) - Right aligned */}
@@ -743,16 +935,18 @@ export const AttendanceView: React.FC = () => {
                 </div>
               )}
 
-              {/* 4. Shift Filter (Available for All Roles) */}
-              <div className="flex-1 min-w-[95px] max-w-[125px] shrink-0 sm:shrink">
-                <MultiSelectFilter
-                  label="Shift"
-                  icon={<Clock className="w-3.5 h-3.5" />}
-                  selectedValues={selectedShiftFilter}
-                  onChange={setSelectedShiftFilter}
-                  options={shifts.map((s) => ({ label: s.code, value: s.code }))}
-                />
-              </div>
+              {/* 4. Shift Filter (Team/Manager/Admin Roles) */}
+              {canSeeTeamFilters && (
+                <div className="flex-1 min-w-[95px] max-w-[125px] shrink-0 sm:shrink">
+                  <MultiSelectFilter
+                    label="Shift"
+                    icon={<Clock className="w-3.5 h-3.5" />}
+                    selectedValues={selectedShiftFilter}
+                    onChange={setSelectedShiftFilter}
+                    options={shifts.map((s) => ({ label: s.code, value: s.code }))}
+                  />
+                </div>
+              )}
 
               {/* 5. Reporting Manager Filter (Reviewing Manager & Administrator) */}
               {canSeeReportingManagerFilter && (
@@ -801,9 +995,9 @@ export const AttendanceView: React.FC = () => {
       </div>
 
       {/* Attendance Data Display (Table View vs Grid View) */}
-      <div className="w-full min-w-0 bg-white border border-slate-200 rounded-2xl shadow-2xs overflow-hidden">
+      <div className="w-full min-w-0 bg-white border border-slate-200 rounded-2xl shadow-2xs relative">
         {/* Table Title Bar */}
-        <div className="p-3.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 min-h-[50px]">
+        <div className="p-3.5 bg-slate-50 border-b border-slate-200 rounded-t-2xl flex flex-wrap items-center justify-between gap-3 min-h-[50px]">
           <div className="flex items-center space-x-3">
             <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
               Attendance Records ({sortedRecords.length})
@@ -814,7 +1008,7 @@ export const AttendanceView: React.FC = () => {
         {/* VIEW 1: ROW TABLE VIEW (Theme aligned layout) */}
         {viewMode === 'table' ? (
           <div className="w-full min-w-0 overflow-x-auto custom-table-scrollbar pb-1">
-            <table className="w-full min-w-[1080px] text-left text-xs border-collapse">
+            <table className={`w-full text-left text-xs border-collapse ${canSeeTeamFilters ? 'min-w-[1080px]' : 'min-w-[640px]'}`}>
               <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 text-[11px] shadow-2xs">
                 <tr className="h-10">
                   <th
@@ -831,34 +1025,42 @@ export const AttendanceView: React.FC = () => {
                       )}
                     </div>
                   </th>
-                  <th
-                    onClick={() => handleSort('employee')}
-                    className="py-3 px-4 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle min-w-[210px]"
-                    title="Click to sort by Employee"
-                  >
-                    <div className="flex items-center space-x-1">
-                      <span>Employee</span>
-                      {sortField === 'employee' ? (
-                        sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-600 shrink-0" /> : <ArrowDown className="w-3 h-3 text-indigo-600 shrink-0" />
-                      ) : (
-                        <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-40 shrink-0" />
-                      )}
-                    </div>
-                  </th>
-                  <th
-                    onClick={() => handleSort('shift')}
-                    className="py-3 px-4 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle min-w-[130px]"
-                    title="Click to sort by Shift"
-                  >
-                    <div className="flex items-center space-x-1">
-                      <span>Shift</span>
-                      {sortField === 'shift' ? (
-                        sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-600 shrink-0" /> : <ArrowDown className="w-3 h-3 text-indigo-600 shrink-0" />
-                      ) : (
-                        <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-40 shrink-0" />
-                      )}
-                    </div>
-                  </th>
+
+                  {/* Employee Column - Shown ONLY for Team / Manager / Admin Views */}
+                  {canSeeTeamFilters && (
+                    <th
+                      onClick={() => handleSort('employee')}
+                      className="py-3 px-4 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle min-w-[210px]"
+                      title="Click to sort by Employee"
+                    >
+                      <div className="flex items-center space-x-1">
+                        <span>Employee</span>
+                        {sortField === 'employee' ? (
+                          sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-600 shrink-0" /> : <ArrowDown className="w-3 h-3 text-indigo-600 shrink-0" />
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-40 shrink-0" />
+                        )}
+                      </div>
+                    </th>
+                  )}
+
+                  {/* Shift Column - Shown for Manager / Admin / HoD, removed ONLY for User role */}
+                  {showShiftColumn && (
+                    <th
+                      onClick={() => handleSort('shift')}
+                      className="py-3 px-4 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle min-w-[130px]"
+                      title="Click to sort by Shift"
+                    >
+                      <div className="flex items-center space-x-1">
+                        <span>Shift</span>
+                        {sortField === 'shift' ? (
+                          sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-600 shrink-0" /> : <ArrowDown className="w-3 h-3 text-indigo-600 shrink-0" />
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-40 shrink-0" />
+                        )}
+                      </div>
+                    </th>
+                  )}
                   <th
                     onClick={() => handleSort('in')}
                     className="py-3 px-3.5 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle min-w-[85px]"
@@ -923,7 +1125,7 @@ export const AttendanceView: React.FC = () => {
               <tbody className="divide-y divide-slate-100">
                 {sortedRecords.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="text-center py-10 text-slate-400">
+                    <td colSpan={5 + (canSeeTeamFilters ? 1 : 0) + (showShiftColumn ? 1 : 0)} className="text-center py-10 text-slate-400">
                       <div className="max-w-xs mx-auto space-y-2">
                         <Clock className="w-8 h-8 mx-auto text-slate-300" />
                         <p className="text-xs font-semibold text-slate-600">No attendance logs found for this date range.</p>
@@ -931,7 +1133,7 @@ export const AttendanceView: React.FC = () => {
                           onClick={handleResetFilters}
                           className="text-xs text-blue-600 font-bold hover:underline cursor-pointer"
                         >
-                          Reset filters to current month
+                          Reset filters to {isManagerOrAdmin ? 'today' : 'current month'}
                         </button>
                       </div>
                     </td>
@@ -942,7 +1144,6 @@ export const AttendanceView: React.FC = () => {
                     const dateAndDayFormatted = formatDateAndDay(rec.date);
                     const remarkText = rec.remark || rec.notes || '-';
                     const isLongRemark = remarkText.length > 35;
-                    const reportingManagerObj = u?.reportingManagerId ? users.find((m) => m.id === u.reportingManagerId) : null;
 
                     return (
                       <tr key={rec.id} className="hover:bg-indigo-50/40 transition-colors">
@@ -951,51 +1152,47 @@ export const AttendanceView: React.FC = () => {
                           {dateAndDayFormatted}
                         </td>
 
-                        {/* 2. Employee Details */}
-                        <td className="py-3 px-4 min-w-[210px]">
-                          <div className="flex items-start space-x-2.5 min-w-0">
-                            <img src={u?.avatar} alt={u?.name} className="w-7 h-7 rounded-full object-cover shrink-0 border border-slate-200 mt-0.5 shadow-2xs" />
-                            <div className="min-w-0 flex-1">
-                              <span className="font-bold text-slate-900 block leading-tight truncate text-xs">{u?.name || rec.userId}</span>
-                              <span className="text-[11px] text-slate-500 font-medium block leading-tight truncate mt-0.5">
-                                {u?.designation || 'Staff'}
-                              </span>
-                              <span className="text-[10px] text-slate-400 font-mono tracking-tight block leading-tight mt-0.5">
-                                {u?.biometricId ? `Bio ID: ${u.biometricId}` : (rec.userId ? `Bio ID: ${rec.userId}` : 'Bio ID: N/A')}
-                              </span>
+                        {/* 2. Employee Details (Only in Team/Manager/Admin views, hidden for General Staff) */}
+                        {canSeeTeamFilters && (
+                          <td className="py-3 px-4 min-w-[210px]">
+                            <div className="flex items-start space-x-2.5 min-w-0">
+                              <img src={u?.avatar} alt={u?.name} className="w-7 h-7 rounded-full object-cover shrink-0 border border-slate-200 mt-0.5 shadow-2xs" />
+                              <div className="min-w-0 flex-1">
+                                <span className="font-bold text-slate-900 block leading-tight truncate text-xs">{u?.name || rec.userId}</span>
+                                <span className="text-[11px] text-slate-500 font-medium block leading-tight truncate mt-0.5">
+                                  {u?.designation || 'Staff'}
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-mono tracking-tight block leading-tight mt-0.5">
+                                  {u?.biometricId ? `Bio ID: ${u.biometricId}` : (rec.userId ? `Bio ID: ${rec.userId}` : 'Bio ID: N/A')}
+                                </span>
+                              </div>
                             </div>
-                          </div>
-                        </td>
+                          </td>
+                        )}
 
-                        {/* 3. Shift Code & Timings (No divider line) */}
-                        <td className="py-3 px-4 whitespace-nowrap min-w-[130px]">
-                          {(() => {
-                            const userShift = shifts.find((s) => s.code === rec.shiftCode) || getUserShift(rec.userId);
-                            const rawCode = rec.shiftCode || userShift.code || 'GEN-01';
-                            const cleanCode = rawCode.split('(')[0].trim();
-                            const formattedCode = cleanCode.includes('-') && !cleanCode.includes(' - ')
-                              ? cleanCode.replace('-', ' - ')
-                              : cleanCode;
-                            const isLate = rec.remark?.toLowerCase().includes('late') || rec.status === 'Late' || (rec.status === 'PA' && rec.remark?.toLowerCase().includes('late'));
-                            return (
-                              <div className="flex flex-col items-start text-left space-y-0.5">
-                                <div className="flex items-center space-x-1 w-full">
+                        {/* 3. Shift Code & Timings (Removed ONLY for User role, visible for Manager/Admin/HoD - No tags/badges) */}
+                        {showShiftColumn && (
+                          <td className="py-3 px-4 whitespace-nowrap min-w-[130px]">
+                            {(() => {
+                              const userShift = shifts.find((s) => s.code === rec.shiftCode) || getUserShift(rec.userId);
+                              const rawCode = rec.shiftCode || userShift.code || 'GEN-01';
+                              const cleanCode = rawCode.split('(')[0].trim();
+                              const formattedCode = cleanCode.includes('-') && !cleanCode.includes(' - ')
+                                ? cleanCode.replace('-', ' - ')
+                                : cleanCode;
+                              return (
+                                <div className="flex flex-col items-start text-left space-y-0.5">
                                   <span className="font-mono text-[11px] font-extrabold text-slate-800">
                                     {formattedCode}
                                   </span>
-                                  {isLate && (
-                                    <span className="text-[8px] font-bold text-amber-700 bg-amber-50 border border-amber-300 px-1 py-0.2 rounded">
-                                      Late
-                                    </span>
-                                  )}
+                                  <span className="text-[10px] text-slate-500 font-mono font-medium">
+                                    {userShift.startTime} - {userShift.endTime}
+                                  </span>
                                 </div>
-                                <span className="text-[10px] text-slate-500 font-mono font-medium">
-                                  {userShift.startTime} - {userShift.endTime}
-                                </span>
-                              </div>
-                            );
-                          })()}
-                        </td>
+                              );
+                            })()}
+                          </td>
+                        )}
 
                         {/* 4. In */}
                         <td className="py-3 px-3.5 font-mono font-bold text-slate-900 whitespace-nowrap text-xs min-w-[85px]">
@@ -1012,72 +1209,25 @@ export const AttendanceView: React.FC = () => {
                           {rec.totalHours ? `${rec.totalHours} hrs` : '-'}
                         </td>
 
-                        {/* 7. Status Column (Primary Badge + Application Status Underneath without repetition) */}
+                        {/* 7. Status Column (Role-based status rules & application code tracking) */}
                         <td className="py-3 px-4 whitespace-nowrap min-w-[115px]">
                           {(() => {
-                            const matchingOD = odRequests.find(
-                              (od) => od.userId === rec.userId && rec.date >= od.startDate && rec.date <= od.endDate
-                            );
-                            const matchingManual = manualAttendanceRequests.find(
-                              (m) => m.userId === rec.userId && m.date === rec.date
-                            );
-                            const matchingLeave = leaveRequests.find(
-                              (lv) =>
-                                lv.userId === rec.userId &&
-                                rec.date >= lv.startDate &&
-                                rec.date <= lv.endDate &&
-                                lv.status !== 'cancelled'
-                            );
-                            const isStationLeave =
-                              matchingLeave?.leaveType === 'station' ||
-                              matchingLeave?.leaveTypeName?.toLowerCase().includes('station');
-
-                            // Determine Primary Badge:
-                            // If OD applied -> OD
-                            // If Leave applied -> ST (station) or LW (leave)
-                            // If Manual applied -> PP (if approved) or PA/AA
-                            let primaryStatus = rec.status;
-                            let appStatusObj: { typeLabel: string; status: string } | null = null;
-
-                            if (matchingOD) {
-                              primaryStatus = 'OD';
-                              appStatusObj = { typeLabel: 'OD', status: matchingOD.status };
-                            } else if (matchingLeave) {
-                              primaryStatus = isStationLeave ? 'ST' : 'LW';
-                              appStatusObj = { typeLabel: isStationLeave ? 'Station Leave' : 'Leave', status: matchingLeave.status };
-                            } else if (matchingManual) {
-                              if (matchingManual.status === 'approved') {
-                                primaryStatus = 'PP';
-                              }
-                              appStatusObj = { typeLabel: 'Manual', status: matchingManual.status };
-                            }
-
-                            const formatStatusLabel = (status?: string) => {
-                              if (!status) return 'Pending';
-                              if (status.startsWith('pending')) return 'Pending';
-                              if (status === 'approved') return 'Approved';
-                              if (status === 'rejected') return 'Rejected';
-                              return status.charAt(0).toUpperCase() + status.slice(1);
-                            };
-
-                            const getAppStatusBadgeStyle = (status?: string) => {
-                              if (status === 'approved') return 'bg-emerald-50 text-emerald-800 border-emerald-300';
-                              if (status === 'rejected') return 'bg-rose-50 text-rose-800 border-rose-300';
-                              return 'bg-amber-50 text-amber-800 border-amber-300 font-extrabold';
-                            };
+                            const statusInfo = resolveRecordStatusDisplay(rec);
 
                             return (
-                              <div className="flex flex-col items-start space-y-0.5">
-                                {renderStatusBadge(primaryStatus)}
+                              <div className="flex flex-col items-start space-y-1">
+                                <span
+                                  title={`${statusInfo.code} - ${statusInfo.label}`}
+                                  className={`inline-flex items-center justify-center font-mono font-black px-2 py-0.5 rounded text-[11px] uppercase tracking-wider border shadow-2xs min-w-[38px] text-center ${statusInfo.badgeStyle}`}
+                                >
+                                  {statusInfo.code}
+                                </span>
 
-                                {appStatusObj && (
+                                {statusInfo.appTag && (
                                   <span
-                                    className={`inline-flex items-center text-[9px] px-1.5 py-0.5 rounded border leading-none tracking-tight font-extrabold ${getAppStatusBadgeStyle(
-                                      appStatusObj.status
-                                    )}`}
-                                    title={`${appStatusObj.typeLabel}: ${formatStatusLabel(appStatusObj.status)}`}
+                                    className={`inline-flex items-center text-[9px] px-1.5 py-0.5 rounded border leading-none tracking-tight font-extrabold ${statusInfo.appTag.style}`}
                                   >
-                                    {appStatusObj.typeLabel}: {formatStatusLabel(appStatusObj.status)}
+                                    {statusInfo.appTag.text}
                                   </span>
                                 )}
                               </div>
@@ -1141,65 +1291,22 @@ export const AttendanceView: React.FC = () => {
                       <div className="flex items-start justify-between border-b border-slate-100 pb-2">
                         <span className="font-bold text-slate-900 text-xs mt-0.5">{dateAndDayFormatted}</span>
                         {(() => {
-                          const matchingOD = odRequests.find(
-                            (od) => od.userId === rec.userId && rec.date >= od.startDate && rec.date <= od.endDate
-                          );
-                          const matchingManual = manualAttendanceRequests.find(
-                            (m) => m.userId === rec.userId && m.date === rec.date
-                          );
-                          const matchingLeave = leaveRequests.find(
-                            (lv) =>
-                              lv.userId === rec.userId &&
-                              rec.date >= lv.startDate &&
-                              rec.date <= lv.endDate &&
-                              lv.status !== 'cancelled'
-                          );
-                          const isStationLeave =
-                            matchingLeave?.leaveType === 'station' ||
-                            matchingLeave?.leaveTypeName?.toLowerCase().includes('station');
-
-                          let primaryStatus = rec.status;
-                          let appStatusObj: { typeLabel: string; status: string } | null = null;
-
-                          if (matchingOD) {
-                            primaryStatus = 'OD';
-                            appStatusObj = { typeLabel: 'OD', status: matchingOD.status };
-                          } else if (matchingLeave) {
-                            primaryStatus = isStationLeave ? 'ST' : 'LW';
-                            appStatusObj = { typeLabel: isStationLeave ? 'Station Leave' : 'Leave', status: matchingLeave.status };
-                          } else if (matchingManual) {
-                            if (matchingManual.status === 'approved') {
-                              primaryStatus = 'PP';
-                            }
-                            appStatusObj = { typeLabel: 'Manual', status: matchingManual.status };
-                          }
-
-                          const formatStatusLabel = (status?: string) => {
-                            if (!status) return 'Pending';
-                            if (status.startsWith('pending')) return 'Pending';
-                            if (status === 'approved') return 'Approved';
-                            if (status === 'rejected') return 'Rejected';
-                            return status.charAt(0).toUpperCase() + status.slice(1);
-                          };
-
-                          const getAppStatusBadgeStyle = (status?: string) => {
-                            if (status === 'approved') return 'bg-emerald-50 text-emerald-800 border-emerald-300';
-                            if (status === 'rejected') return 'bg-rose-50 text-rose-800 border-rose-300';
-                            return 'bg-amber-50 text-amber-800 border-amber-300 font-extrabold';
-                          };
+                          const statusInfo = resolveRecordStatusDisplay(rec);
 
                           return (
-                            <div className="flex flex-col items-end space-y-0.5">
-                              {renderStatusBadge(primaryStatus)}
+                            <div className="flex flex-col items-end space-y-1">
+                              <span
+                                title={`${statusInfo.code} - ${statusInfo.label}`}
+                                className={`inline-flex items-center justify-center font-mono font-black px-2 py-0.5 rounded text-[11px] uppercase tracking-wider border shadow-2xs min-w-[38px] text-center ${statusInfo.badgeStyle}`}
+                              >
+                                {statusInfo.code}
+                              </span>
 
-                              {appStatusObj && (
+                              {statusInfo.appTag && (
                                 <span
-                                  className={`text-[9px] px-1.5 py-0.2 rounded border leading-none tracking-tight ${getAppStatusBadgeStyle(
-                                    appStatusObj.status
-                                  )}`}
-                                  title={`${appStatusObj.typeLabel}: ${formatStatusLabel(appStatusObj.status)}`}
+                                  className={`text-[9px] px-1.5 py-0.2 rounded border leading-none tracking-tight font-extrabold ${statusInfo.appTag.style}`}
                                 >
-                                  {formatStatusLabel(appStatusObj.status)}
+                                  {statusInfo.appTag.text}
                                 </span>
                               )}
                             </div>
@@ -1228,7 +1335,7 @@ export const AttendanceView: React.FC = () => {
                           </div>
                         )}
 
-                        {(() => {
+                        {showShiftColumn && (() => {
                           const userShift = shifts.find((s) => s.code === rec.shiftCode) || getUserShift(rec.userId);
                           const rawCode = rec.shiftCode || userShift.code || 'GEN-01';
                           const cleanCode = rawCode.split('(')[0].trim();
@@ -1292,7 +1399,7 @@ export const AttendanceView: React.FC = () => {
         )}
 
         {/* Stable Full-Width Footer & Pagination (Fixed at bottom of card, outside horizontal scroll) */}
-        <div className="w-full border-t border-slate-200/90 bg-white">
+        <div className="w-full border-t border-slate-200/90 bg-white rounded-b-2xl">
           <TablePagination
             currentPage={attPage}
             totalPages={Math.ceil(sortedRecords.length / attPageSize)}

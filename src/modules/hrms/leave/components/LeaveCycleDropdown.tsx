@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import { Calendar, ChevronDown, Check, X } from 'lucide-react';
 import { User } from '../../../../shared/types/auth.types';
 import {
-  LEAVE_CYCLE_OPTIONS,
   isCalendarYearCadre,
   getUserLeaveCycleType,
   CadreAccountingCycle
@@ -19,6 +18,26 @@ interface LeaveCycleDropdownProps {
   isAdminInstitutionalView?: boolean;
 }
 
+interface MinimalCycleOption {
+  value: string;
+  label: string;
+  isCurrent?: boolean;
+}
+
+const CY_OPTIONS: MinimalCycleOption[] = [
+  { value: 'CY-2026', label: '2026', isCurrent: true },
+  { value: 'CY-2025', label: '2025' },
+  { value: 'CY-2024', label: '2024' },
+  { value: 'CY-2027', label: '2027' }
+];
+
+const FY_OPTIONS: MinimalCycleOption[] = [
+  { value: 'FY-2026-27', label: '2026-27', isCurrent: true },
+  { value: 'FY-2025-26', label: '2025-26' },
+  { value: 'FY-2024-25', label: '2024-25' },
+  { value: 'FY-2027-28', label: '2027-28' }
+];
+
 export const LeaveCycleDropdown: React.FC<LeaveCycleDropdownProps> = ({
   selectedCycle,
   onChange,
@@ -29,7 +48,7 @@ export const LeaveCycleDropdown: React.FC<LeaveCycleDropdownProps> = ({
   isAdminInstitutionalView = false
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [coords, setCoords] = useState<{ top: number; left?: number; right?: number }>({ top: 0 });
+  const [coords, setCoords] = useState<{ top: number; left: number; width: number }>({ top: 0, left: 0, width: 144 });
   const triggerRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -47,25 +66,24 @@ export const LeaveCycleDropdown: React.FC<LeaveCycleDropdownProps> = ({
   const updatePopoverCoords = () => {
     if (!triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
-    const dropdownWidth = 320;
+    const dropdownWidth = Math.max(144, rect.width);
     const spaceBelow = window.innerHeight - rect.bottom;
 
-    let top = rect.bottom + 6;
-    if (spaceBelow < 340 && rect.top > 340) {
-      top = Math.max(8, rect.top - 340);
+    let top = rect.bottom + 4;
+    if (spaceBelow < 200 && rect.top > 200) {
+      top = Math.max(8, rect.top - 200);
     }
 
+    let left = rect.left;
     if (window.innerWidth - rect.left < dropdownWidth + 16) {
-      setCoords({
-        top,
-        right: Math.max(8, window.innerWidth - rect.right)
-      });
-    } else {
-      setCoords({
-        top,
-        left: Math.max(8, rect.left)
-      });
+      left = Math.max(8, window.innerWidth - dropdownWidth - 8);
     }
+
+    setCoords({
+      top,
+      left,
+      width: dropdownWidth
+    });
   };
 
   useEffect(() => {
@@ -101,23 +119,6 @@ export const LeaveCycleDropdown: React.FC<LeaveCycleDropdownProps> = ({
     };
   }, [isOpen]);
 
-  const cyOptions = LEAVE_CYCLE_OPTIONS.filter((opt) => opt.group === 'CY');
-  const fyOptions = LEAVE_CYCLE_OPTIONS.filter((opt) => opt.group === 'FY');
-
-  // Filter options strictly matching the user's cadre cycle
-  const availableOptions = isAdminInstitutionalView
-    ? LEAVE_CYCLE_OPTIONS.filter((opt) => opt.group !== 'all')
-    : effectiveCycle === 'CY'
-    ? cyOptions
-    : fyOptions;
-
-  const selectedOption = availableOptions.find(
-    (opt) =>
-      opt.value === selectedCycle ||
-      (selectedCycle && opt.value.replace(/^(CY-|FY-)/, '').startsWith(selectedCycle)) ||
-      (selectedCycle && selectedCycle.replace(/^(CY-|FY-)/, '').startsWith(opt.value.replace(/^(CY-|FY-)/, '')))
-  );
-
   const handleSelect = (val: string) => {
     onChange(val);
     setIsOpen(false);
@@ -128,51 +129,50 @@ export const LeaveCycleDropdown: React.FC<LeaveCycleDropdownProps> = ({
     onChange('');
   };
 
-  const cyclePrefixLabel = effectiveCycle === 'CY' ? 'Calendar Year:' : 'Financial Year:';
-  const selectPlaceholder = effectiveCycle === 'CY' ? 'Select Calendar Year' : 'Select Financial Year';
-  const clearButtonText =
-    effectiveCycle === 'CY'
-      ? 'Show All Calendar Years (Clear Filter)'
-      : 'Show All Financial Years (Clear Filter)';
+  const getDisplayLabel = () => {
+    if (!selectedCycle || selectedCycle === 'all') {
+      return 'All Years';
+    }
+
+    const allOpts = [...CY_OPTIONS, ...FY_OPTIONS];
+    const match = allOpts.find(
+      (o) =>
+        o.value === selectedCycle ||
+        o.value.replace(/^(CY-|FY-)/, '') === selectedCycle ||
+        selectedCycle.replace(/^(CY-|FY-)/, '') === o.value.replace(/^(CY-|FY-)/, '')
+    );
+    return match ? match.label : selectedCycle.replace(/^(CY-|FY-)/, '');
+  };
+
+  const isSelectedActive = Boolean(selectedCycle && selectedCycle !== 'all');
 
   return (
     <div className={`relative ${className}`} ref={triggerRef}>
-      {/* Trigger Button matching Theme */}
+      {/* Clean, Minimal Trigger Button matching Theme */}
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`h-9 px-3 bg-white border ${
-          selectedCycle
-            ? effectiveCycle === 'CY'
-              ? 'border-indigo-500 bg-indigo-50/40 text-indigo-950 font-bold ring-1 ring-indigo-500/20'
-              : 'border-teal-500 bg-teal-50/40 text-teal-950 font-bold ring-1 ring-teal-500/20'
-            : 'border-slate-200/90 text-slate-700 hover:border-slate-300 hover:bg-slate-50/80'
-        } rounded-xl text-xs font-semibold shadow-2xs hover:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 transition-all flex items-center justify-between gap-2 cursor-pointer`}
-        title={`Filter by ${effectiveCycle === 'CY' ? 'Calendar Year (01 Jan – 31 Dec)' : 'Financial Year (01 Apr – 31 Mar)'}`}
+        className={`h-9 px-3 w-36 bg-white hover:bg-slate-50 border ${
+          isOpen
+            ? 'border-blue-600 ring-2 ring-blue-600/20 bg-blue-50/10'
+            : isSelectedActive
+            ? 'border-blue-500 bg-blue-50/30 text-blue-950 font-bold'
+            : 'border-slate-200/90 text-slate-700 hover:border-slate-300'
+        } rounded-xl text-xs font-semibold shadow-2xs transition-all flex items-center justify-between gap-1.5 cursor-pointer select-none`}
+        title={`Filter by Year`}
       >
-        <div className="flex items-center space-x-2 min-w-0">
-          <Calendar
-            className={`w-4 h-4 shrink-0 ${
-              effectiveCycle === 'CY' ? 'text-indigo-600' : 'text-teal-600'
-            }`}
-          />
-          <span className="text-slate-500 font-medium text-xs whitespace-nowrap">
-            {isAdminInstitutionalView ? 'Year / Cycle:' : cyclePrefixLabel}
+        <div className="flex items-center space-x-1.5 min-w-0">
+          <Calendar className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+          <span className="truncate text-xs font-semibold text-slate-900">
+            {getDisplayLabel()}
           </span>
-          {selectedCycle ? (
-            <span className="font-bold text-slate-900 text-xs truncate max-w-[190px] sm:max-w-[240px]">
-              {selectedOption ? selectedOption.label.replace(' • Current Active', '') : selectedCycle}
-            </span>
-          ) : (
-            <span className="text-slate-400 font-medium text-xs italic">{selectPlaceholder}</span>
-          )}
         </div>
 
         <div className="flex items-center space-x-1 shrink-0 ml-1">
-          {selectedCycle && (
+          {isSelectedActive && (
             <span
               onClick={handleClear}
-              className="p-0.5 rounded-full hover:bg-slate-200/80 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+              className="p-0.5 rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
               title="Clear Year filter"
             >
               <X className="w-3 h-3" />
@@ -180,13 +180,13 @@ export const LeaveCycleDropdown: React.FC<LeaveCycleDropdownProps> = ({
           )}
           <ChevronDown
             className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
-              isOpen ? (effectiveCycle === 'CY' ? 'rotate-180 text-indigo-600' : 'rotate-180 text-teal-600') : ''
+              isOpen ? 'rotate-180 text-blue-600' : ''
             }`}
           />
         </div>
       </button>
 
-      {/* Popover Dropdown Portal styled to theme */}
+      {/* Popover Dropdown Portal: Exact Matching Width, Minimal, Generic */}
       {isOpen &&
         createPortal(
           <div
@@ -194,142 +194,104 @@ export const LeaveCycleDropdown: React.FC<LeaveCycleDropdownProps> = ({
             style={{
               position: 'fixed',
               top: `${coords.top}px`,
-              ...(coords.left !== undefined ? { left: `${coords.left}px` } : {}),
-              ...(coords.right !== undefined ? { right: `${coords.right}px` } : {})
+              left: `${coords.left}px`,
+              width: `${coords.width}px`
             }}
-            className="z-[9999] w-80 max-w-[calc(100vw-1.5rem)] bg-white border border-slate-200/90 rounded-2xl shadow-xl p-3 space-y-3 animate-in fade-in slide-in-from-top-1 duration-150 text-xs"
+            className="z-[9999] bg-white border border-slate-200/90 rounded-xl shadow-xl p-1 space-y-0.5 animate-in fade-in zoom-in-95 duration-100 text-xs"
           >
-            {/* Header */}
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <div className="flex items-center space-x-1.5">
-                <Calendar
-                  className={`w-4 h-4 ${effectiveCycle === 'CY' ? 'text-indigo-600' : 'text-teal-600'}`}
-                />
-                <span className="font-bold text-slate-900 text-xs">
-                  {isAdminInstitutionalView
-                    ? 'Select Leave Cycle'
-                    : effectiveCycle === 'CY'
-                    ? 'Select Calendar Year'
-                    : 'Select Financial Year'}
-                </span>
-              </div>
-              {selectedCycle && (
-                <button
-                  type="button"
-                  onClick={() => handleSelect('')}
-                  className="text-2xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-2 py-0.5 rounded-md transition-all cursor-pointer"
-                >
-                  Clear Selection
-                </button>
+            {/* 1. All Option */}
+            <button
+              type="button"
+              onClick={() => handleSelect('all')}
+              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left ${
+                !selectedCycle || selectedCycle === 'all'
+                  ? 'bg-blue-50 text-blue-900 font-bold'
+                  : 'text-slate-700 hover:bg-slate-100 font-medium'
+              }`}
+            >
+              <span>All Years</span>
+              {(!selectedCycle || selectedCycle === 'all') && (
+                <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-1.5" />
               )}
-            </div>
+            </button>
 
-            {/* Calendar Year (CY) Group - Rendered only if user is CY or in Admin Institutional view */}
+            <div className="border-t border-slate-100 my-0.5" />
+
+            {/* 2. Calendar Year Options (Shown for CY users or Admin Institutional Overview) */}
             {(isAdminInstitutionalView || effectiveCycle === 'CY') && (
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between px-2.5 py-1 bg-indigo-50/80 border border-indigo-100/90 rounded-lg">
-                  <div className="flex items-center space-x-1.5">
-                    <span className="w-2 h-2 rounded-full bg-indigo-600 shrink-0"></span>
-                    <span className="font-bold text-indigo-950 text-xs">Calendar Year (CY)</span>
+              <div className="space-y-0.5">
+                {isAdminInstitutionalView && (
+                  <div className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Regular
                   </div>
-                  <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider">
-                    01 Jan – 31 Dec
-                  </span>
-                </div>
-                <p className="text-[10px] text-slate-400 px-2.5 leading-tight">
-                  Permanent &amp; Cadre Staff (CCS Leave Rules 1972)
-                </p>
-
-                <div className="space-y-0.5 pt-0.5">
-                  {cyOptions.map((opt) => {
-                    const isSelected =
-                      selectedCycle === opt.value ||
-                      (selectedCycle && opt.value.replace('CY-', '') === selectedCycle);
-                    return (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => handleSelect(opt.value)}
-                        className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-left transition-all cursor-pointer ${
-                          isSelected
-                            ? 'bg-indigo-50 text-indigo-950 font-bold border border-indigo-200/90 shadow-2xs'
-                            : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
-                        }`}
-                      >
-                        <div className="min-w-0">
-                          <div className="text-xs font-semibold">{opt.label}</div>
-                          <div className="text-[10px] text-slate-400">{opt.dateRangeText}</div>
-                        </div>
-                        {isSelected && <Check className="w-4 h-4 text-indigo-600 shrink-0 ml-2" />}
-                      </button>
-                    );
-                  })}
-                </div>
+                )}
+                {CY_OPTIONS.map((opt) => {
+                  const isSelected =
+                    selectedCycle === opt.value ||
+                    (selectedCycle && opt.value.replace('CY-', '') === selectedCycle);
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => handleSelect(opt.value)}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left ${
+                        isSelected
+                          ? 'bg-blue-50 text-blue-900 font-bold'
+                          : 'text-slate-700 hover:bg-slate-100 font-medium'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-1.5">
+                        <span>{opt.label}</span>
+                        {opt.isCurrent && (
+                          <span className="text-[9.5px] font-semibold px-1 py-0.2 bg-emerald-100 text-emerald-800 rounded">
+                            Current
+                          </span>
+                        )}
+                      </div>
+                      {isSelected && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-1.5" />}
+                    </button>
+                  );
+                })}
               </div>
             )}
 
-            {/* Divider if both shown */}
-            {isAdminInstitutionalView && <div className="border-t border-slate-100" />}
-
-            {/* Financial Year (FY) Group - Rendered only if user is FY or in Admin Institutional view */}
+            {/* 3. Financial Year Options (Shown for FY users or Admin Institutional Overview) */}
             {(isAdminInstitutionalView || effectiveCycle === 'FY') && (
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between px-2.5 py-1 bg-teal-50/80 border border-teal-100/90 rounded-lg">
-                  <div className="flex items-center space-x-1.5">
-                    <span className="w-2 h-2 rounded-full bg-teal-600 shrink-0"></span>
-                    <span className="font-bold text-teal-950 text-xs">Financial Year (FY)</span>
+              <div className="space-y-0.5">
+                {isAdminInstitutionalView && (
+                  <div className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 pt-1 border-t border-slate-100 mt-1">
+                    Project
                   </div>
-                  <span className="text-[10px] font-bold text-teal-700 uppercase tracking-wider">
-                    01 Apr – 31 Mar
-                  </span>
-                </div>
-                <p className="text-[10px] text-slate-400 px-2.5 leading-tight">
-                  Contractual, Project Scientists &amp; Research Fellows (Grant Basis)
-                </p>
-
-                <div className="space-y-0.5 pt-0.5">
-                  {fyOptions.map((opt) => {
-                    const isSelected =
-                      selectedCycle === opt.value ||
-                      (selectedCycle && opt.value.replace('FY-', '') === selectedCycle);
-                    return (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => handleSelect(opt.value)}
-                        className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-left transition-all cursor-pointer ${
-                          isSelected
-                            ? 'bg-teal-50 text-teal-950 font-bold border border-teal-200/90 shadow-2xs'
-                            : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
-                        }`}
-                      >
-                        <div className="min-w-0">
-                          <div className="text-xs font-semibold">{opt.label}</div>
-                          <div className="text-[10px] text-slate-400">{opt.dateRangeText}</div>
-                        </div>
-                        {isSelected && <Check className="w-4 h-4 text-teal-600 shrink-0 ml-2" />}
-                      </button>
-                    );
-                  })}
-                </div>
+                )}
+                {FY_OPTIONS.map((opt) => {
+                  const isSelected =
+                    selectedCycle === opt.value ||
+                    (selectedCycle && opt.value.replace('FY-', '') === selectedCycle);
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => handleSelect(opt.value)}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left ${
+                        isSelected
+                          ? 'bg-blue-50 text-blue-900 font-bold'
+                          : 'text-slate-700 hover:bg-slate-100 font-medium'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-1.5">
+                        <span>{opt.label}</span>
+                        {opt.isCurrent && (
+                          <span className="text-[9.5px] font-semibold px-1 py-0.2 bg-emerald-100 text-emerald-800 rounded">
+                            Current
+                          </span>
+                        )}
+                      </div>
+                      {isSelected && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-1.5" />}
+                    </button>
+                  );
+                })}
               </div>
             )}
-
-            {/* Bottom Option: Unfiltered / Show All */}
-            <div className="pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => handleSelect('')}
-                className={`w-full py-2 px-3 rounded-xl border text-center font-bold text-xs transition-all cursor-pointer flex items-center justify-center space-x-1.5 ${
-                  !selectedCycle
-                    ? 'bg-slate-100 text-slate-800 border-slate-300 font-bold'
-                    : 'border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                }`}
-              >
-                <span>{isAdminInstitutionalView ? 'Show All Cycles (Institutional Overview)' : clearButtonText}</span>
-                {!selectedCycle && <Check className="w-3.5 h-3.5 text-slate-600" />}
-              </button>
-            </div>
           </div>,
           document.body
         )}

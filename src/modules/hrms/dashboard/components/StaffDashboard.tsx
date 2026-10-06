@@ -16,6 +16,7 @@ import {
   Layers,
   Sparkles,
   ArrowRight,
+  ChevronRight,
   Table as TableIcon,
   LayoutGrid
 } from 'lucide-react';
@@ -25,7 +26,7 @@ interface StaffDashboardProps {
 }
 
 export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onNavigate }) => {
-  const { currentUser, attendanceRecords, clockInToday, clockOutToday, odRequests, leaveRequests } = useApp();
+  const { currentUser, attendanceRecords, clockInToday, clockOutToday, odRequests, leaveRequests, manualAttendanceRequests } = useApp();
 
   const [selectedWorkMode, setSelectedWorkMode] = useState<WorkMode>('in_office');
   const [workLocation, setWorkLocation] = useState('Main Campus HQ');
@@ -34,6 +35,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onNavigate }) =>
   const todayStr = new Date().toISOString().split('T')[0];
   const todayRecord = attendanceRecords.find((a) => a.userId === currentUser.id && a.date === todayStr);
 
+  const myPendingManuals = (manualAttendanceRequests || []).filter((m) => m.userId === currentUser.id && m.status === 'pending');
   const myPendingODs = odRequests.filter((o) => o.userId === currentUser.id && o.status === 'pending');
   const myPendingLeaves = leaveRequests.filter((l) => l.userId === currentUser.id && l.status.startsWith('pending'));
 
@@ -102,118 +104,37 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onNavigate }) =>
         </div>
       </div>
 
-      {/* Quick Actions Shortcuts Grid */}
+      {/* Quick Actions Shortcuts Grid: 4 Essential Buttons */}
       <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-xs">
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5">
-          <button
-            onClick={() => onNavigate('leave')}
-            className="p-3 bg-blue-50/80 hover:bg-blue-100 text-blue-900 border border-blue-200/80 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 text-center"
-          >
-            <Calendar className="w-5 h-5 text-blue-600 shrink-0" />
-            <span>Apply Leave</span>
-          </button>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <button
             onClick={() => onNavigate('manual_attendance')}
-            className="p-3 bg-indigo-50/80 hover:bg-indigo-100 text-indigo-900 border border-indigo-200/80 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 text-center"
+            className="p-3.5 bg-indigo-50/80 hover:bg-indigo-100 text-indigo-900 border border-indigo-200/80 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 text-center"
           >
             <Clock className="w-5 h-5 text-indigo-600 shrink-0" />
-            <span>Regularize Punch</span>
+            <span>Manual</span>
           </button>
           <button
             onClick={() => onNavigate('od')}
-            className="p-3 bg-emerald-50/80 hover:bg-emerald-100 text-emerald-900 border border-emerald-200/80 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 text-center"
+            className="p-3.5 bg-emerald-50/80 hover:bg-emerald-100 text-emerald-900 border border-emerald-200/80 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 text-center"
           >
             <MapPin className="w-5 h-5 text-emerald-600 shrink-0" />
-            <span>Outdoor Duty (OD)</span>
+            <span>OD</span>
+          </button>
+          <button
+            onClick={() => onNavigate('leave')}
+            className="p-3.5 bg-blue-50/80 hover:bg-blue-100 text-blue-900 border border-blue-200/80 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 text-center"
+          >
+            <Calendar className="w-5 h-5 text-blue-600 shrink-0" />
+            <span>Leave</span>
           </button>
           <button
             onClick={() => onNavigate('holiday_calendar')}
-            className="p-3 bg-purple-50/80 hover:bg-purple-100 text-purple-900 border border-purple-200/80 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 text-center"
+            className="p-3.5 bg-purple-50/80 hover:bg-purple-100 text-purple-900 border border-purple-200/80 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 text-center"
           >
             <Calendar className="w-5 h-5 text-purple-600 shrink-0" />
-            <span>Holidays 2026</span>
+            <span>Calendar</span>
           </button>
-          <button
-            onClick={() => onNavigate('leave_balance')}
-            className="p-3 bg-amber-50/80 hover:bg-amber-100 text-amber-900 border border-amber-200/80 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 text-center"
-          >
-            <FileText className="w-5 h-5 text-amber-600 shrink-0" />
-            <span>My Leave Balance</span>
-          </button>
-          <button
-            onClick={() => onNavigate('profile')}
-            className="p-3 bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-200/90 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 text-center"
-          >
-            <Building className="w-5 h-5 text-slate-600 shrink-0" />
-            <span>My Profile</span>
-          </button>
-        </div>
-      </div>
-
-      {/* 4 Stat Cards Grid matching Attendance theme */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {/* 1. Present This Month */}
-        <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 truncate">Attendance (Month)</p>
-              <p className="text-xl sm:text-2xl font-black text-emerald-900 mt-0.5">{myPresentCount} Days</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-100 border border-emerald-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <CheckCircle2 className="w-4 h-4 text-emerald-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-emerald-200/60 text-[10px] sm:text-[11px] font-semibold text-emerald-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            Punches logged in {new Date().toLocaleString('default', { month: 'short', year: 'numeric' })}
-          </div>
-        </div>
-
-        {/* 2. Leave Balance */}
-        <div className="bg-blue-50/70 border border-blue-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-blue-800 truncate">Available Leaves</p>
-              <p className="text-xl sm:text-2xl font-black text-blue-900 mt-0.5">{totalLeaveBalance} Days</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-100 border border-blue-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <Calendar className="w-4 h-4 text-blue-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-blue-200/60 text-[10px] sm:text-[11px] font-semibold text-blue-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            Total remaining across quotas
-          </div>
-        </div>
-
-        {/* 3. Pending Approvals */}
-        <div className="bg-amber-50/70 border border-amber-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800 truncate">Pending Requests</p>
-              <p className="text-xl sm:text-2xl font-black text-amber-900 mt-0.5">{totalPendingRequests}</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-100 border border-amber-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <Clock className="w-4 h-4 text-amber-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-amber-200/60 text-[10px] sm:text-[11px] font-semibold text-amber-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            {totalPendingRequests > 0 ? 'Under supervisor review' : 'All applications processed'}
-          </div>
-        </div>
-
-        {/* 4. Outdoor Duty */}
-        <div className="bg-purple-50/70 border border-purple-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-purple-800 truncate">Outdoor Duty (OD)</p>
-              <p className="text-xl sm:text-2xl font-black text-purple-900 mt-0.5">{totalODDays} Days</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-purple-100 border border-purple-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <MapPin className="w-4 h-4 text-purple-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-purple-200/60 text-[10px] sm:text-[11px] font-semibold text-purple-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            Field tour &amp; site visit sanctioned
-          </div>
         </div>
       </div>
 
@@ -400,74 +321,132 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onNavigate }) =>
           </div>
         </div>
 
-      {/* Quick Action Workflows: Outdoor Duty & Pending Applications */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Pending Outdoor Duty Applications */}
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
-          <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
-            <h3 className="text-sm font-bold text-slate-900 flex items-center space-x-2">
-              <MapPin className="w-4 h-4 text-emerald-600" />
-              <span>My Outdoor Duty (OD) Log</span>
-            </h3>
-          </div>
+      {/* Quick Workflows Section: Manual Attendance, Outdoor Duty & Leave in 1 Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* Card 1: Manual Attendance */}
+        <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center space-x-2 min-w-0">
+                <Clock className="w-4.5 h-4.5 text-indigo-600 shrink-0" />
+                <span className="truncate">Manual Attendance</span>
+              </h3>
+              <button
+                onClick={() => onNavigate('manual_attendance')}
+                className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-3 py-1 rounded-lg text-xs transition-colors cursor-pointer flex items-center space-x-1 border border-indigo-200/80 shrink-0 ml-2 whitespace-nowrap"
+              >
+                <span>View All ({myPendingManuals.length})</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
 
-          {myPendingODs.length === 0 ? (
-            <div className="text-center py-6 bg-slate-50 rounded border border-dashed border-slate-200 text-xs text-slate-400">
-              No pending Outdoor Duty applications.
-            </div>
-          ) : (
-            <div className="space-y-2.5">
-              {myPendingODs.slice(0, 5).map((od) => (
-                <div key={od.id} className="p-3 bg-slate-50 rounded border border-slate-200 text-xs space-y-1">
-                  <div className="flex items-center justify-between font-bold text-slate-900">
-                    <span>{od.location}</span>
-                    <span className="text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 text-[10px]">
-                      Pending Review
-                    </span>
+            {myPendingManuals.length === 0 ? (
+              <div className="border border-dashed border-slate-200 bg-slate-50/50 rounded-xl py-8 text-center text-slate-400 text-xs font-medium mt-4">
+                No manual attendance records.
+              </div>
+            ) : (
+              <div className="space-y-3 text-xs mt-4">
+                {myPendingManuals.slice(0, 3).map((man) => (
+                  <div key={man.id} className="bg-slate-50/80 border border-slate-200/90 rounded-xl p-3.5 space-y-2">
+                    <div className="flex items-center justify-between gap-1.5 min-w-0">
+                      <span className="font-bold text-slate-900 text-xs truncate">{man.reasonCategory || 'Forgotten Punch'}</span>
+                      <span className="text-[10px] bg-amber-50 text-amber-800 font-extrabold px-2 py-0.5 rounded border border-amber-200 shrink-0">
+                        Pending
+                      </span>
+                    </div>
+                    <div className="bg-white p-2.5 rounded-lg border border-slate-200/80 text-slate-700 space-y-1">
+                      <p className="font-semibold text-slate-800">⏰ {man.date} ({man.requestedInTime} - {man.requestedOutTime})</p>
+                      <p className="italic text-slate-600 break-words">"{man.reason}"</p>
+                    </div>
                   </div>
-                  <p className="text-slate-500">
-                    {od.startDate} to {od.endDate} ({od.daysCount} days)
-                  </p>
-                  <p className="text-slate-600 italic">"{od.purpose}"</p>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Pending Leave Requests */}
-        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
-          <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
-            <h3 className="text-sm font-bold text-slate-900 flex items-center space-x-2">
-              <FileText className="w-4 h-4 text-blue-600" />
-              <span>My Leave Applications</span>
-            </h3>
-          </div>
+        {/* Card 2: Outdoor Duty (OD) */}
+        <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center space-x-2 min-w-0">
+                <MapPin className="w-4.5 h-4.5 text-emerald-600 shrink-0" />
+                <span className="truncate">Outdoor Duty (OD)</span>
+              </h3>
+              <button
+                onClick={() => onNavigate('od')}
+                className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold px-3 py-1 rounded-lg text-xs transition-colors cursor-pointer flex items-center space-x-1 border border-emerald-200/80 shrink-0 ml-2 whitespace-nowrap"
+              >
+                <span>View All ({myPendingODs.length})</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
 
-          {myPendingLeaves.length === 0 ? (
-            <div className="text-center py-6 bg-slate-50 rounded border border-dashed border-slate-200 text-xs text-slate-400">
-              No active leave applications pending review.
-            </div>
-          ) : (
-            <div className="space-y-2.5">
-              {myPendingLeaves.slice(0, 5).map((lv) => (
-                <div key={lv.id} className="p-3 bg-slate-50 rounded border border-slate-200 text-xs space-y-1">
-                  <div className="flex items-center justify-between font-bold text-slate-900">
-                    <span>{lv.leaveTypeName}</span>
-                    <span className="text-indigo-800 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200 font-semibold text-[10px]">
-                      {lv.status === 'pending_level_1'
-                        ? 'Pending Level-1 Review'
-                        : 'Level-1 Approved (Level-2 Pending)'}
-                    </span>
+            {myPendingODs.length === 0 ? (
+              <div className="border border-dashed border-slate-200 bg-slate-50/50 rounded-xl py-8 text-center text-slate-400 text-xs font-medium mt-4">
+                No Outdoor Duty records.
+              </div>
+            ) : (
+              <div className="space-y-3 text-xs mt-4">
+                {myPendingODs.slice(0, 3).map((od) => (
+                  <div key={od.id} className="bg-slate-50/80 border border-slate-200/90 rounded-xl p-3.5 space-y-2">
+                    <div className="flex items-center justify-between gap-1.5 min-w-0">
+                      <span className="font-bold text-slate-900 text-xs truncate">{od.location}</span>
+                      <span className="text-[10px] bg-amber-50 text-amber-800 font-extrabold px-2 py-0.5 rounded border border-amber-200 shrink-0">
+                        Pending
+                      </span>
+                    </div>
+                    <div className="bg-white p-2.5 rounded-lg border border-slate-200/80 text-slate-700 space-y-1">
+                      <p className="font-semibold text-slate-800">📍 {od.startDate} to {od.endDate} ({od.daysCount} days)</p>
+                      <p className="italic text-slate-600 break-words">"{od.purpose}"</p>
+                    </div>
                   </div>
-                  <p className="text-slate-500">
-                    {lv.startDate} to {lv.endDate} ({lv.daysCount} days)
-                  </p>
-                  <p className="text-slate-600 italic">"{lv.reason}"</p>
-                </div>
-              ))}
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Card 3: Leave */}
+        <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center space-x-2 min-w-0">
+                <FileText className="w-4.5 h-4.5 text-blue-600 shrink-0" />
+                <span className="truncate">Leave</span>
+              </h3>
+              <button
+                onClick={() => onNavigate('leave')}
+                className="bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold px-3 py-1 rounded-lg text-xs transition-colors cursor-pointer flex items-center space-x-1 border border-blue-200/80 shrink-0 ml-2 whitespace-nowrap"
+              >
+                <span>View All ({myPendingLeaves.length})</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
             </div>
-          )}
+
+            {myPendingLeaves.length === 0 ? (
+              <div className="border border-dashed border-slate-200 bg-slate-50/50 rounded-xl py-8 text-center text-slate-400 text-xs font-medium mt-4">
+                No active leave records.
+              </div>
+            ) : (
+              <div className="space-y-3 text-xs mt-4">
+                {myPendingLeaves.slice(0, 3).map((lv) => (
+                  <div key={lv.id} className="bg-slate-50/80 border border-slate-200/90 rounded-xl p-3.5 space-y-2">
+                    <div className="flex items-center justify-between gap-1.5 min-w-0">
+                      <span className="font-bold text-slate-900 text-xs truncate">{lv.leaveTypeName}</span>
+                      <span className="text-[10px] bg-indigo-50 text-indigo-800 font-extrabold px-2 py-0.5 rounded border border-indigo-200 shrink-0">
+                        {lv.status === 'pending_level_1' ? 'Level-1 Pending' : 'Level-2 Pending'}
+                      </span>
+                    </div>
+                    <div className="bg-white p-2.5 rounded-lg border border-slate-200/80 text-slate-700 space-y-1">
+                      <p className="font-semibold text-slate-800">🗓️ {lv.startDate} to {lv.endDate} ({lv.daysCount} days)</p>
+                      <p className="italic text-slate-600 break-words">"{lv.reason}"</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

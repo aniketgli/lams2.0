@@ -43,7 +43,10 @@ import {
   Paperclip,
   Upload,
   ExternalLink,
-  FileCheck
+  FileCheck,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown
 } from 'lucide-react';
 import { CCSLeaveRulesModal } from '../components/CCSLeaveRulesModal';
 import { LeaveQuotaImportModal } from '../components/LeaveQuotaImportModal';
@@ -56,7 +59,8 @@ import {
   getUserLeaveCycleType,
   getAccountingCycleLabel,
   getAccountingCycleMeta,
-  matchesCycleFilter
+  matchesCycleFilter,
+  LEAVE_CYCLE_OPTIONS
 } from '../utils/leaveCycleUtils';
 import { INITIAL_HOLIDAYS } from '../../holidays/data/holidayData';
 import { AppDatePicker } from '../../../../shared/components/AppDatePicker';
@@ -448,8 +452,8 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
   const initialYearStart = `${year}-01-01`;
   const initialYearEnd = `${year}-12-31`;
 
-  // Primary leave types requested: EL, CL, HPL, Station Leave, RH, Comp Off
-  const PRIMARY_LEAVE_TYPES: LeaveType[] = ['earned', 'casual', 'half_pay', 'station', 'restricted', 'compensatory_off'];
+  // Primary leave types requested: EL, CL, HPL, RH, Comp Off (Max 5 initial entries)
+  const PRIMARY_LEAVE_TYPES: LeaveType[] = ['earned', 'casual', 'half_pay', 'restricted', 'compensatory_off'];
 
   // Filter States (Multi-select supported)
   const [searchQuery, setSearchQuery] = useState('');
@@ -462,14 +466,30 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
   const [balanceViewMode, setBalanceViewMode] = useState<'table' | 'grid'>('table');
 
+  // Format date helper
+  const formatDateAndDay = (dateStr: string): string => {
+    try {
+      const parts = dateStr.split('-');
+      if (parts.length !== 3) return dateStr;
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      const d = new Date(year, month, day);
+      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      return `${String(day).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year} (${days[d.getDay()]})`;
+    } catch {
+      return dateStr;
+    }
+  };
+
   // Edit Leave Request Modal State
   const [editingLeave, setEditingLeave] = useState<LeaveRequest | null>(null);
   const [editStartDate, setEditStartDate] = useState('');
   const [editEndDate, setEditEndDate] = useState('');
   const [editReason, setEditReason] = useState('');
 
-  // Selected Active Leave Accounting Cycle or Year (CY / FY / empty for all)
-  const [selectedActiveYear, setSelectedActiveYear] = useState<string>('');
+  // Selected Active Leave Accounting Cycle or Year (User cadre dependent: CY / FY / empty for all)
+  const [selectedActiveYear, setSelectedActiveYear] = useState<string>('CY-2026');
 
   // Standalone Leave Quota CSV Import Modal
   const [showQuotaImportModal, setShowQuotaImportModal] = useState<boolean>(false);
@@ -575,16 +595,31 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
     return getUserLeaveCycleType(targetEmployeeUser);
   }, [targetEmployeeUser]);
 
+  const defaultActiveCycle = userCycle === 'CY' ? 'CY-2026' : 'FY-2026-27';
+
+  const isInstitutionalView = Boolean(
+    (isAdmin || isReviewingManager) &&
+    !isUserView &&
+    (filterEmployee.includes('all') || filterEmployee.length !== 1)
+  );
+
   // Synchronize active year selection if employee cadre changes
   useEffect(() => {
     if (selectedActiveYear && selectedActiveYear !== 'all') {
       if (userCycle === 'CY' && selectedActiveYear.startsWith('FY-')) {
-        setSelectedActiveYear('');
+        setSelectedActiveYear('CY-2026');
       } else if (userCycle === 'FY' && selectedActiveYear.startsWith('CY-')) {
-        setSelectedActiveYear('');
+        setSelectedActiveYear('FY-2026-27');
       }
     }
   }, [userCycle, targetEmployeeUser.id]);
+
+  const activeCycleLabel = useMemo(() => {
+    if (!selectedActiveYear || selectedActiveYear === 'all') {
+      return 'All Years';
+    }
+    return selectedActiveYear.replace(/^(CY-|FY-)/, '');
+  }, [selectedActiveYear]);
 
   // Accessible Users for filters and actions based on user role
   const accessibleUsers = useMemo(() => {
@@ -631,11 +666,13 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
     );
   }, [availablePolicies, leaveTypeSearchQuery]);
 
-  // Compute 5 Primary Policies (EL, CL, HPL, RH, Comp Off)
+  // Compute 5 Primary Policies (EL, CL, HPL, RH, Comp Off) - Initially Max 5 entries
   const primaryPolicies = useMemo(() => {
-    const filtered = availablePolicies.filter((p) => PRIMARY_LEAVE_TYPES.includes(p.type));
-    filtered.sort((a, b) => PRIMARY_LEAVE_TYPES.indexOf(a.type) - PRIMARY_LEAVE_TYPES.indexOf(b.type));
-    return filtered.length > 0 ? filtered : availablePolicies.slice(0, 5);
+    const primary = availablePolicies.filter((p) => PRIMARY_LEAVE_TYPES.includes(p.type));
+    primary.sort((a, b) => PRIMARY_LEAVE_TYPES.indexOf(a.type) - PRIMARY_LEAVE_TYPES.indexOf(b.type));
+    const others = availablePolicies.filter((p) => !PRIMARY_LEAVE_TYPES.includes(p.type));
+    const combined = [...primary, ...others];
+    return combined.slice(0, 5);
   }, [availablePolicies]);
 
   const displayedPolicies = showAllPolicies ? availablePolicies : primaryPolicies;
@@ -644,7 +681,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
   const selectedPolicy = availablePolicies.find((p) => p.type === selectedLeaveType) || availablePolicies[0];
 
   const handleResetFilters = () => {
-    setSelectedActiveYear('');
+    setSelectedActiveYear(defaultActiveCycle);
     setSearchQuery('');
     setFilterReason(['all']);
     setFilterStatus(['all']);
@@ -653,6 +690,17 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
     setFilterDepartment(['all']);
     setFilterReportingManager(['all']);
   };
+
+  const hasActiveFilters = Boolean(
+    searchQuery.trim() !== '' ||
+    selectedActiveYear !== defaultActiveCycle ||
+    (!filterReason.includes('all') && filterReason.length > 0) ||
+    (!filterStatus.includes('all') && filterStatus.length > 0) ||
+    (!filterEmployee.includes('all') && filterEmployee.length > 0) ||
+    (!filterDesignation.includes('all') && filterDesignation.length > 0) ||
+    (!filterDepartment.includes('all') && filterDepartment.length > 0) ||
+    (!filterReportingManager.includes('all') && filterReportingManager.length > 0)
+  );
 
   // Filtered Leave Applications per RBAC rules matrix
   const filteredLeaves = useMemo(() => {
@@ -732,11 +780,65 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
 
   const [tablePage, setTablePage] = useState(1);
   const [tablePageSize, setTablePageSize] = useState(25);
+  type LeaveSortField = 'employee' | 'leaveType' | 'dates' | 'appliedDate' | 'reason' | 'status';
+  const [sortField, setSortField] = useState<LeaveSortField>('appliedDate');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  const handleSort = (field: LeaveSortField) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+  };
+
+  const sortedLeaves = useMemo(() => {
+    const list = [...filteredLeaves];
+    list.sort((a, b) => {
+      let aVal = '';
+      let bVal = '';
+
+      switch (sortField) {
+        case 'employee':
+          aVal = (a.userName || '').toLowerCase();
+          bVal = (b.userName || '').toLowerCase();
+          break;
+        case 'leaveType':
+          aVal = (a.leaveTypeName || a.leaveType || '').toLowerCase();
+          bVal = (b.leaveTypeName || b.leaveType || '').toLowerCase();
+          break;
+        case 'dates':
+          aVal = a.startDate || '';
+          bVal = b.startDate || '';
+          break;
+        case 'appliedDate':
+          aVal = a.appliedDate || a.createdAt || '';
+          bVal = b.appliedDate || b.createdAt || '';
+          break;
+        case 'reason':
+          aVal = (a.reason || '').toLowerCase();
+          bVal = (b.reason || '').toLowerCase();
+          break;
+        case 'status':
+          aVal = (a.status || '').toLowerCase();
+          bVal = (b.status || '').toLowerCase();
+          break;
+        default:
+          return 0;
+      }
+
+      if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return list;
+  }, [filteredLeaves, sortField, sortOrder]);
 
   const paginatedLeaves = useMemo(() => {
     const start = (tablePage - 1) * tablePageSize;
-    return filteredLeaves.slice(start, start + tablePageSize);
-  }, [filteredLeaves, tablePage, tablePageSize]);
+    return sortedLeaves.slice(start, start + tablePageSize);
+  }, [sortedLeaves, tablePage, tablePageSize]);
 
   const isBeforeOrOnApplicableDate = (dateStr: string) => {
     if (!dateStr) return true;
@@ -1533,7 +1635,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                 className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center space-x-1.5 transition-all shadow-2xs cursor-pointer active:scale-95 ml-auto"
               >
                 <PlusCircle className="w-4 h-4" />
-                <span>Apply for Leave</span>
+                <span>Apply Leave</span>
               </button>
             )}
           </div>
@@ -1556,7 +1658,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
             </div>
           </div>
           <div className="mt-1.5 pt-1.5 border-t border-emerald-200/60 text-[10px] sm:text-[11px] font-semibold text-emerald-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            {leaveStats.approvedDays} Total Leave Days Approved
+            {activeCycleLabel} • {leaveStats.approvedDays} Days Approved
           </div>
         </div>
 
@@ -1574,7 +1676,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
             </div>
           </div>
           <div className="mt-1.5 pt-1.5 border-t border-amber-200/60 text-[10px] sm:text-[11px] font-semibold text-amber-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            {isUserView ? 'Under Manager Review' : 'Awaiting Manager Decision'}
+            {activeCycleLabel} • Awaiting Authorization
           </div>
         </div>
 
@@ -1592,7 +1694,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
             </div>
           </div>
           <div className="mt-1.5 pt-1.5 border-t border-blue-200/60 text-[10px] sm:text-[11px] font-semibold text-blue-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            Logged Leave Applications
+            {activeCycleLabel} • Logged Applications
           </div>
         </div>
 
@@ -1610,64 +1712,67 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
             </div>
           </div>
           <div className="mt-1.5 pt-1.5 border-t border-purple-200/60 text-[10px] sm:text-[11px] font-semibold text-purple-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            Accumulated Active Leave Period
+            {activeCycleLabel} • Accumulated Active Leave Period
           </div>
         </div>
       </div>
 
-      {/* Professional Date Range & Related Filters Control Bar (Identical to Holiday Calendar) */}
+      {/* Professional Date Range & Related Filters Control Bar */}
       <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3.5">
-        {/* Top Bar: Clean Themed Selectors, Presets & Export Action Buttons */}
-        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3.5 border-b border-slate-100 pb-3.5">
-          {/* Left: Themed Leave Accounting Cycle Dropdown (CY / FY) */}
-          <div className="flex flex-wrap items-center gap-3">
+        {/* Top Bar: Themed Leave Accounting Cycle Dropdown & Export Buttons */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3.5 border-b border-slate-100 pb-3">
+          {/* Row 1 on mobile (Left on tab/desktop): Leave Year Cycle Dropdown (User Cadre-dependent) */}
+          <div className="flex items-center gap-2 w-full sm:w-auto">
             <LeaveCycleDropdown
               selectedCycle={selectedActiveYear}
-              onChange={setSelectedActiveYear}
+              onChange={(yr) => setSelectedActiveYear(yr)}
               targetUser={targetEmployeeUser}
               userLeaveCycle={userCycle}
               userEmploymentType={targetEmployeeUser.employmentType}
-              isAdminInstitutionalView={isAdmin && !isUserView && filterEmployee.includes('all')}
+              isAdminInstitutionalView={isInstitutionalView}
             />
           </div>
 
-          {/* Right: Export Buttons (CSV & PDF) */}
-          <div className="flex items-center space-x-2 shrink-0 self-end lg:self-auto">
+          {/* Row 2 on mobile (Right on tab/desktop): Export Buttons (CSV & PDF) - Right aligned */}
+          <div className="flex items-center justify-end gap-2 shrink-0 w-full sm:w-auto ml-auto">
             <button
               onClick={handleExportCSV}
-              className="h-9 px-3.5 bg-white hover:bg-slate-50 text-slate-800 border border-slate-200/90 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer shadow-2xs"
+              className="h-9 px-3 bg-white hover:bg-slate-50 text-slate-800 border border-slate-200/90 rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer shadow-2xs shrink-0"
+              title="Export records to CSV"
             >
-              <Download className="w-3.5 h-3.5 text-emerald-600" />
+              <Download className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
               <span>Export CSV</span>
             </button>
 
             <button
               onClick={handleExportPDF}
-              className="h-9 px-3.5 bg-slate-900 hover:bg-slate-800 text-white border border-slate-900 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer shadow-2xs"
+              className="h-9 px-3 bg-slate-900 hover:bg-slate-800 text-white border border-slate-900 rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer shadow-2xs shrink-0"
+              title="Export records to PDF"
             >
-              <FileText className="w-3.5 h-3.5 text-rose-400" />
+              <FileText className="w-3.5 h-3.5 text-rose-400 shrink-0" />
               <span>Export PDF</span>
             </button>
           </div>
         </div>
 
-        {/* Second Row: Search Keyword, Reset & View Toggle Switch */}
+        {/* Bottom Bar: Search Keyword, Filters & View Toggle Switch */}
         <div className="flex flex-col gap-3">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          {/* Row: Search box + Reset Filters (Icon Only) + View Mode Toggle in ONE Single Row */}
+          <div className="flex items-center gap-2 w-full">
             {/* Search Box */}
-            <div className="relative flex-1 min-w-[240px]">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <div className="relative flex-1 min-w-0">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
-                placeholder={isUserView ? "Search leave type, reason, date..." : "Search employee, department, leave type, date..."}
+                placeholder={isUserView ? "Search leave type, reason, date..." : "Search employee, designation, date..."}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-9 w-full pl-10 pr-9 bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200/80 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 transition-all shadow-2xs"
+                className="h-9 w-full pl-9 pr-8 bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200/80 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 transition-all shadow-2xs"
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-200 transition-colors cursor-pointer"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-200 transition-colors cursor-pointer"
                   title="Clear search"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -1675,59 +1780,50 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
               )}
             </div>
 
-            <div className="flex items-center space-x-2 shrink-0 self-end sm:self-auto">
-              {(searchQuery !== '' ||
-                (selectedActiveYear !== '' && selectedActiveYear !== 'all') ||
-                !filterReason.includes('all') ||
-                !filterStatus.includes('all') ||
-                !filterEmployee.includes('all') ||
-                !filterDesignation.includes('all') ||
-                !filterDepartment.includes('all') ||
-                !filterReportingManager.includes('all')) && (
-                <button
-                  onClick={handleResetFilters}
-                  className="h-9 px-3.5 bg-blue-50/90 hover:bg-blue-100 text-blue-900 border border-blue-200/90 rounded-xl text-xs font-bold flex items-center space-x-1.5 shrink-0 transition-all cursor-pointer shadow-2xs"
-                  title="Reset all search and filter selections"
-                >
-                  <RotateCcw className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Reset All Filters</span>
-                </button>
-              )}
+            {/* Reset Filters (Only Icon - Appears ONLY when any filter or search query is active) */}
+            {hasActiveFilters && (
+              <button
+                onClick={handleResetFilters}
+                className="h-9 w-9 rounded-xl border bg-blue-50/90 hover:bg-blue-100 text-blue-700 border-blue-200/90 flex items-center justify-center shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95 animate-in fade-in zoom-in-95 duration-150"
+                title="Reset active filters and search"
+              >
+                <RotateCcw className="w-4 h-4 text-blue-600" />
+              </button>
+            )}
 
-              {/* View Mode Toggle: Row View (Table) vs Grid View */}
-              <div className="h-9 flex items-center p-1 bg-slate-100/90 border border-slate-200/90 rounded-xl gap-1 shrink-0">
-                <button
-                  onClick={() => setViewMode('table')}
-                  title="Table View"
-                  className={`h-7 px-2 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
-                    viewMode === 'table'
-                      ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
-                      : 'text-slate-400 hover:text-slate-700'
-                  }`}
-                >
-                  <TableIcon className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setViewMode('grid')}
-                  title="Grid View"
-                  className={`h-7 px-2 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
-                    viewMode === 'grid'
-                      ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
-                      : 'text-slate-400 hover:text-slate-700'
-                  }`}
-                >
-                  <LayoutGrid className="w-4 h-4" />
-                </button>
-              </div>
+            {/* View Mode Toggle (Table / Card) */}
+            <div className="h-9 flex items-center p-1 bg-slate-100/90 border border-slate-200/90 rounded-xl gap-1 shrink-0">
+              <button
+                onClick={() => setViewMode('table')}
+                title="Table View"
+                className={`h-7 px-2 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
+                  viewMode === 'table'
+                    ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
+                    : 'text-slate-400 hover:text-slate-700'
+                }`}
+              >
+                <TableIcon className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('grid')}
+                title="Card View"
+                className={`h-7 px-2 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
+                  viewMode === 'grid'
+                    ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
+                    : 'text-slate-400 hover:text-slate-700'
+                }`}
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
-          {/* Third Row: Role-Based Filter Dropdowns Uniform Flex Wrap */}
+          {/* Filter Dropdowns Uniform Flex Wrap */}
           <div className="pt-2 border-t border-slate-100">
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 flex-nowrap">
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 flex-nowrap responsive-filter-row">
               {/* Employee Filter (Reporting Manager, HoD, Admin) */}
               {(isReportingManager || isReviewingManager || isAdmin) && (
-                <div className="flex-1 min-w-[130px] max-w-[200px] shrink-0 sm:shrink">
+                <div className="flex-1 min-w-[125px] max-w-[200px] shrink-0 sm:shrink">
                   <MultiSelectFilter
                     label="Employee"
                     icon={<User className="w-3.5 h-3.5" />}
@@ -1740,7 +1836,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
 
               {/* Designation Filter (Reporting Manager, HoD, Admin) */}
               {(isReportingManager || isReviewingManager || isAdmin) && (
-                <div className="flex-1 min-w-[130px] max-w-[200px] shrink-0 sm:shrink">
+                <div className="flex-1 min-w-[125px] max-w-[200px] shrink-0 sm:shrink">
                   <MultiSelectFilter
                     label="Designation"
                     icon={<Filter className="w-3.5 h-3.5" />}
@@ -1753,7 +1849,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
 
               {/* Department Filter (Reporting Manager, HoD, Admin) */}
               {(isReportingManager || isReviewingManager || isAdmin) && (
-                <div className="flex-1 min-w-[130px] max-w-[200px] shrink-0 sm:shrink">
+                <div className="flex-1 min-w-[125px] max-w-[200px] shrink-0 sm:shrink">
                   <MultiSelectFilter
                     label="Department"
                     icon={<Building2 className="w-3.5 h-3.5" />}
@@ -1766,7 +1862,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
 
               {/* Reporting Manager Filter (HoD, Admin) */}
               {(isReviewingManager || isAdmin) && (
-                <div className="flex-1 min-w-[130px] max-w-[200px] shrink-0 sm:shrink">
+                <div className="flex-1 min-w-[125px] max-w-[200px] shrink-0 sm:shrink">
                   <MultiSelectFilter
                     label="Reporting Manager"
                     icon={<User className="w-3.5 h-3.5" />}
@@ -1777,8 +1873,8 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                 </div>
               )}
 
-              {/* Type / Reason Filter (All Roles) */}
-              <div className="flex-1 min-w-[130px] max-w-[200px] shrink-0 sm:shrink">
+              {/* Leave Type Filter (All Roles) */}
+              <div className="flex-1 min-w-[115px] max-w-[160px] shrink-0 sm:shrink">
                 <MultiSelectFilter
                   label="Leave Type"
                   icon={<Filter className="w-3.5 h-3.5" />}
@@ -1806,7 +1902,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
               </div>
 
               {/* Status Filter (All Roles) */}
-              <div className="flex-1 min-w-[115px] max-w-[170px] shrink-0 sm:shrink">
+              <div className="flex-1 min-w-[95px] max-w-[130px] shrink-0 sm:shrink">
                 <MultiSelectFilter
                   label="Status"
                   icon={<Clock className="w-3.5 h-3.5" />}
@@ -1853,109 +1949,70 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
         </div>
       )}
 
-      {/* Leave Policy Quotas & Balances Section (Visible for General Staff & Admin) */}
+      {/* Leave Policy Quotas & Balances Section (Matching Dashboard Leave Balance Theme & Mobile Cards) */}
       {showBalanceSection && (
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-4">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-slate-100 pb-3 gap-2">
+        <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-sm sm:text-base font-bold text-slate-900 flex items-center space-x-2 shrink-0">
+              <Layers className="w-5 h-5 text-blue-600 shrink-0" />
+              <span>Leave Balance</span>
+            </h2>
+
             <div className="flex items-center space-x-2">
-              <div className="p-1.5 bg-slate-100 rounded-lg">
-                <Layers className="w-4 h-4 text-slate-800" />
-              </div>
-              {(() => {
-                const displayUser = targetEmployeeUser;
-                const rawYr = selectedActiveYear && selectedActiveYear.includes('-')
-                  ? selectedActiveYear.split('-')[1].slice(0, 4)
-                  : (selectedActiveYear && selectedActiveYear !== 'all')
-                  ? selectedActiveYear
-                  : new Date().getFullYear().toString();
-                const cycleMeta = getAccountingCycleMeta(displayUser, rawYr);
-                return (
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                        {isAdmin && !isUserView
-                          ? `Leave Balances ${!filterEmployee.includes('all') && filterEmployee.length === 1 ? `(${displayUser.name})` : '(Institutional Ledger Overview)'}`
-                          : `My Leave Balances (${displayUser.employmentType.replace('_', ' ')})`}
-                      </h2>
-                      <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md border uppercase tracking-wider ${cycleMeta.badgeBg} ${cycleMeta.badgeText} ${cycleMeta.badgeBorder}`}>
-                        {cycleMeta.badgeLabel} ({cycleMeta.cycleType === 'CY' ? 'Calendar Year' : 'Financial Year'})
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-                      {cycleMeta.ruleSetText} • <strong className="text-slate-700">{cycleMeta.periodText}</strong>
-                    </p>
-                  </div>
-                );
-              })()}
-            </div>
-
-            <div className="flex items-center space-x-2.5">
-              {/* Import Leave Button (Directly opens Upload CSV Modal) */}
-              {isAdmin && (
-                <button
-                  type="button"
-                  onClick={() => setShowQuotaImportModal(true)}
-                  className="text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center space-x-1.5 shadow-2xs active:scale-95"
-                >
-                  <Upload className="w-3.5 h-3.5" />
-                  <span>Import Leave</span>
-                </button>
-              )}
-
-              {/* View all policies toggle */}
+              {/* Generic Single Expand / Collapse Toggle Button */}
               {availablePolicies.length > primaryPolicies.length && (
                 <button
+                  type="button"
                   onClick={() => setShowAllPolicies(!showAllPolicies)}
-                  className="text-xs font-bold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-xl transition-all cursor-pointer flex items-center space-x-1"
+                  className="h-7.5 px-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 hover:text-slate-900 border border-slate-200/90 rounded-lg text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer shadow-2xs whitespace-nowrap"
+                  title={showAllPolicies ? 'View Less' : 'View All'}
                 >
-                  <span>{showAllPolicies ? 'Show Top 5 Only' : `View All Policies (${availablePolicies.length})`}</span>
-                  <ChevronRight className={`w-3.5 h-3.5 transition-transform ${showAllPolicies ? 'rotate-90' : ''}`} />
+                  <span>{showAllPolicies ? 'View Less' : 'View All'}</span>
+                  <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${showAllPolicies ? 'rotate-180 text-blue-600' : ''}`} />
                 </button>
               )}
 
-              {/* Table / Grid View Switcher for Leave Balances */}
-              <div className="h-8 flex items-center p-0.5 bg-slate-100/90 border border-slate-200/90 rounded-xl gap-0.5 shrink-0">
+              {/* View Mode Toggle - Hidden on Mobile (Mobile always uses Cards view like Dashboard) */}
+              <div className="hidden sm:flex h-7.5 items-center p-0.5 bg-slate-100 border border-slate-200 rounded-lg gap-0.5">
                 <button
                   type="button"
                   onClick={() => setBalanceViewMode('table')}
-                  title="Table View (तालिका दृश्य)"
-                  className={`h-6.5 px-2.5 flex items-center justify-center rounded-lg transition-all cursor-pointer text-xs font-bold ${
+                  title="Table View"
+                  className={`h-6 w-7 flex items-center justify-center rounded-md transition-all cursor-pointer ${
                     balanceViewMode === 'table'
                       ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80'
-                      : 'text-slate-500 hover:text-slate-800'
+                      : 'text-slate-400 hover:text-slate-700'
                   }`}
                 >
-                  <TableIcon className="w-3.5 h-3.5 mr-1" />
-                  <span>Table</span>
+                  <TableIcon className="w-3.5 h-3.5" />
                 </button>
                 <button
                   type="button"
                   onClick={() => setBalanceViewMode('grid')}
-                  title="Card Grid View (कार्ड दृश्य)"
-                  className={`h-6.5 px-2.5 flex items-center justify-center rounded-lg transition-all cursor-pointer text-xs font-bold ${
+                  title="Card Grid View"
+                  className={`h-6 w-7 flex items-center justify-center rounded-md transition-all cursor-pointer ${
                     balanceViewMode === 'grid'
                       ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80'
-                      : 'text-slate-500 hover:text-slate-800'
+                      : 'text-slate-400 hover:text-slate-700'
                   }`}
                 >
-                  <LayoutGrid className="w-3.5 h-3.5 mr-1" />
-                  <span>Cards</span>
+                  <LayoutGrid className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Tabular View for Leave Balances */}
-          {balanceViewMode === 'table' ? (
-            <div className="w-full overflow-x-auto rounded-xl border border-slate-200/80 shadow-2xs">
-              <table className="w-full text-left text-xs border-collapse table-auto min-w-[800px]">
+          {/* Desktop Tabular View (Hidden on mobile, shown on desktop when balanceViewMode === 'table') */}
+          {balanceViewMode === 'table' && (
+            <div className="hidden sm:block w-full overflow-x-auto rounded-xl border border-slate-200/80 shadow-2xs bg-white no-scrollbar">
+              <table className="w-full text-left text-xs border-collapse table-auto min-w-[550px]">
                 <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 text-[11px]">
-                  <tr className="h-10">
-                    <th className="px-4 py-2.5 whitespace-nowrap align-middle w-[36%]">Leave Type &amp; Code</th>
-                    <th className="px-4 py-2.5 text-center whitespace-nowrap align-middle w-[16%]">Total Quota</th>
-                    <th className="px-4 py-2.5 text-center whitespace-nowrap align-middle w-[16%]">Days Used</th>
-                    <th className="px-4 py-2.5 text-center whitespace-nowrap align-middle w-[16%]">Pending</th>
-                    <th className="px-4 py-2.5 text-right whitespace-nowrap align-middle w-[16%]">Balance</th>
+                  <tr className="h-9">
+                    <th className="px-4 py-2 whitespace-nowrap align-middle min-w-[170px]">Leave Type</th>
+                    <th className="px-4 py-2 text-center whitespace-nowrap align-middle min-w-[85px]">Total Quota</th>
+                    <th className="px-4 py-2 text-center whitespace-nowrap align-middle min-w-[85px]">Days Used</th>
+                    <th className="px-4 py-2 text-center whitespace-nowrap align-middle min-w-[85px]">Pending</th>
+                    <th className="px-4 py-2 text-right whitespace-nowrap align-middle min-w-[100px]">Balance</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
@@ -1978,44 +2035,39 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                     const bal = balObj as { total: number; used: number; pending: number };
                     const available = Math.max(0, bal.total - bal.used);
 
-                    const meta: Record<string, { abbr: string; badgeBg: string }> = {
-                      earned: { abbr: 'EL', badgeBg: 'bg-blue-600' },
-                      casual: { abbr: 'CL', badgeBg: 'bg-emerald-600' },
-                      half_pay: { abbr: 'HPL', badgeBg: 'bg-amber-600' },
-                      station: { abbr: 'STN', badgeBg: 'bg-cyan-600' },
-                      restricted: { abbr: 'RH', badgeBg: 'bg-purple-600' },
-                      compensatory_off: { abbr: 'C-OFF', badgeBg: 'bg-indigo-600' },
-                      commuted: { abbr: 'COMM', badgeBg: 'bg-sky-600' },
-                      maternity: { abbr: 'ML', badgeBg: 'bg-rose-600' },
-                      paternity: { abbr: 'PL', badgeBg: 'bg-teal-600' },
-                      child_care: { abbr: 'CCL', badgeBg: 'bg-violet-600' },
-                      sick: { abbr: 'SL', badgeBg: 'bg-rose-600' },
-                    };
-
-                    const style = meta[typeKey] || {
-                      abbr: pol.name.substring(0, 3).toUpperCase(),
-                      badgeBg: 'bg-slate-800'
+                    const formatDisplayName = (name: string, type: string) => {
+                      const codeMap: Record<string, string> = {
+                        earned: 'EL',
+                        casual: 'CL',
+                        half_pay: 'HPL',
+                        station: 'STN',
+                        restricted: 'RH',
+                        compensatory_off: 'Comp-off',
+                        commuted: 'COMM',
+                        maternity: 'ML',
+                        paternity: 'PL',
+                        child_care: 'CCL',
+                        sick: 'SL',
+                        field_work: 'FWL',
+                        academic: 'AL'
+                      };
+                      const code = codeMap[type] || type.toUpperCase();
+                      const cleanName = name.replace(/\s*\([^)]*\)/, '');
+                      return `${cleanName} (${code})`;
                     };
 
                     return (
                       <tr key={typeKey} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="px-4 py-3 font-bold text-slate-900 align-middle">
-                          <div className="flex items-center space-x-2 min-w-0">
-                            <span className="truncate" title={pol.name}>
-                              {pol.name.replace(/ \([^)]*\)/, '')}
-                            </span>
-                            <span className={`${style.badgeBg} text-white text-[10px] font-black px-1.5 py-0.5 rounded tracking-wider shrink-0 shadow-2xs`}>
-                              {style.abbr}
-                            </span>
-                          </div>
+                        <td className="px-4 py-2.5 font-bold text-slate-900 align-middle">
+                          {formatDisplayName(pol.name, typeKey)}
                         </td>
-                        <td className="px-4 py-3 text-center font-semibold text-slate-700 align-middle whitespace-nowrap">
+                        <td className="px-4 py-2.5 text-center font-semibold text-slate-700 align-middle whitespace-nowrap">
                           {bal.total} days
                         </td>
-                        <td className="px-4 py-3 text-center font-semibold text-slate-700 align-middle whitespace-nowrap">
+                        <td className="px-4 py-2.5 text-center font-semibold text-slate-700 align-middle whitespace-nowrap">
                           {bal.used} days
                         </td>
-                        <td className="px-4 py-3 text-center font-semibold align-middle whitespace-nowrap">
+                        <td className="px-4 py-2.5 text-center font-semibold align-middle whitespace-nowrap">
                           {bal.pending > 0 ? (
                             <span className="text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200/90 text-[10px] font-bold inline-flex items-center space-x-1">
                               <Clock className="w-3 h-3 text-amber-600" />
@@ -2025,7 +2077,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                             <span className="text-slate-400 font-normal">0</span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-right align-middle whitespace-nowrap">
+                        <td className="px-4 py-2.5 text-right align-middle whitespace-nowrap">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-bold ${
                             available > 0 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-rose-100 text-rose-800 border border-rose-200'
                           }`}>
@@ -2038,98 +2090,85 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                 </tbody>
               </table>
             </div>
-          ) : (
-            /* Grid View for Leave Balances */
-            <div className={`grid grid-cols-1 sm:grid-cols-2 ${displayedPolicies.length <= 5 ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-3.5`}>
-              {displayedPolicies.map((pol) => {
-                const typeKey = pol.type;
-                const displayUser = targetEmployeeUser;
-                const rawYr = selectedActiveYear && selectedActiveYear.includes('-')
-                  ? selectedActiveYear.split('-')[1].slice(0, 4)
-                  : (selectedActiveYear && selectedActiveYear !== 'all')
-                  ? selectedActiveYear
-                  : new Date().getFullYear().toString();
-                const userYearly = displayUser.yearlyLeaveBalances || {};
-                const yearBalObj =
-                  userYearly[selectedActiveYear] ||
-                  userYearly[rawYr] ||
-                  userYearly[new Date().getFullYear().toString()] ||
-                  displayUser.leaveBalances ||
-                  {};
-                const balObj = yearBalObj[typeKey] || { total: pol.defaultQuota, used: 0, pending: 0 };
-                const bal = balObj as { total: number; used: number; pending: number };
-                const available = Math.max(0, bal.total - bal.used);
-                const remainingPercent =
-                  bal.total > 0
-                    ? Math.min(100, Math.max(0, Math.round((available / bal.total) * 100)))
-                    : 0;
+          )}
 
-                const meta: Record<string, { abbr: string; bg: string; text: string; badgeBg: string; border: string; bar: string }> = {
-                  earned: { abbr: 'EL', bg: 'bg-blue-50/70', text: 'text-blue-900', badgeBg: 'bg-blue-600', border: 'border-blue-200/90', bar: 'bg-blue-600' },
-                  casual: { abbr: 'CL', bg: 'bg-emerald-50/70', text: 'text-emerald-900', badgeBg: 'bg-emerald-600', border: 'border-emerald-200/90', bar: 'bg-emerald-600' },
-                  half_pay: { abbr: 'HPL', bg: 'bg-amber-50/70', text: 'text-amber-900', badgeBg: 'bg-amber-600', border: 'border-amber-200/90', bar: 'bg-amber-600' },
-                  restricted: { abbr: 'RH', bg: 'bg-purple-50/70', text: 'text-purple-900', badgeBg: 'bg-purple-600', border: 'border-purple-200/90', bar: 'bg-purple-600' },
-                  compensatory_off: { abbr: 'C-OFF', bg: 'bg-indigo-50/70', text: 'text-indigo-900', badgeBg: 'bg-indigo-600', border: 'border-indigo-200/90', bar: 'bg-indigo-600' },
-                  commuted: { abbr: 'COMM', bg: 'bg-cyan-50/70', text: 'text-cyan-900', badgeBg: 'bg-cyan-600', border: 'border-cyan-200/90', bar: 'bg-cyan-600' },
-                  sick: { abbr: 'SL', bg: 'bg-rose-50/70', text: 'text-rose-900', badgeBg: 'bg-rose-600', border: 'border-rose-200/90', bar: 'bg-rose-600' },
+          {/* Cards View - Always shown on Mobile (<sm), shown on Desktop (sm+) when balanceViewMode === 'grid' (Pic 2 Dashboard Theme) */}
+          <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 ${balanceViewMode === 'table' ? 'block sm:hidden' : 'block'}`}>
+            {displayedPolicies.map((pol) => {
+              const typeKey = pol.type;
+              const displayUser = targetEmployeeUser;
+              const rawYr = selectedActiveYear && selectedActiveYear.includes('-')
+                ? selectedActiveYear.split('-')[1].slice(0, 4)
+                : (selectedActiveYear && selectedActiveYear !== 'all')
+                ? selectedActiveYear
+                : new Date().getFullYear().toString();
+              const userYearly = displayUser.yearlyLeaveBalances || {};
+              const yearBalObj =
+                userYearly[selectedActiveYear] ||
+                userYearly[rawYr] ||
+                userYearly[new Date().getFullYear().toString()] ||
+                displayUser.leaveBalances ||
+                {};
+              const balObj = yearBalObj[typeKey] || { total: pol.defaultQuota, used: 0, pending: 0 };
+              const bal = balObj as { total: number; used: number; pending: number };
+              const available = Math.max(0, bal.total - bal.used);
+              const percentUsed = bal.total > 0 ? Math.min(100, Math.max(0, Math.round((bal.used / bal.total) * 100))) : 0;
+
+              const formatDisplayName = (name: string, type: string) => {
+                const codeMap: Record<string, string> = {
+                  earned: 'EL',
+                  casual: 'CL',
+                  half_pay: 'HPL',
+                  station: 'STN',
+                  restricted: 'RH',
+                  compensatory_off: 'Comp-off',
+                  commuted: 'COMM',
+                  maternity: 'ML',
+                  paternity: 'PL',
+                  child_care: 'CCL',
+                  sick: 'SL',
+                  field_work: 'FWL',
+                  academic: 'AL'
                 };
+                const code = codeMap[type] || type.toUpperCase();
+                const cleanName = name.replace(/\s*\([^)]*\)/, '');
+                return `${cleanName} (${code})`;
+              };
 
-                const style = meta[typeKey] || {
-                  abbr: pol.name.substring(0, 3).toUpperCase(),
-                  bg: 'bg-slate-50',
-                  text: 'text-slate-900',
-                  badgeBg: 'bg-slate-800',
-                  border: 'border-slate-200',
-                  bar: 'bg-slate-800'
-                };
-
-                return (
-                  <div
-                    key={typeKey}
-                    className={`p-3.5 rounded-xl border ${style.border} ${style.bg} transition-all shadow-2xs hover:shadow-xs flex flex-col justify-between space-y-2.5`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <span className="font-bold text-slate-900 text-xs line-clamp-1" title={pol.name}>
-                          {pol.name.replace(/ \([^)]*\)/, '')}
-                        </span>
-                        <span className={`${style.badgeBg} text-white font-black text-[10px] px-1.5 py-0.5 rounded-md shrink-0 tracking-wider shadow-2xs`}>
-                          {style.abbr}
-                        </span>
-                      </div>
+              return (
+                <div
+                  key={typeKey}
+                  className="bg-white border border-slate-200/90 rounded-xl p-3.5 shadow-2xs flex flex-col justify-between hover:shadow-xs transition-shadow space-y-3"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <span className="text-xs font-bold text-slate-800 truncate" title={pol.name}>
+                        {formatDisplayName(pol.name, typeKey)}
+                      </span>
+                      <span className="text-[11px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 shrink-0">
+                        {available} Days Left
+                      </span>
                     </div>
-
-                    <div>
-                      <div className="flex items-baseline space-x-1.5">
-                        <span className={`text-2xl font-black ${style.text}`}>
-                          {available}
-                        </span>
-                        <span className="text-[11px] font-bold text-slate-500">
-                          / {bal.total} Days Left
-                        </span>
-                      </div>
-                      <div className="w-full bg-slate-200/90 rounded-full h-1.5 mt-1.5 overflow-hidden">
-                        <div
-                          className={`h-full ${style.bar} transition-all duration-300 rounded-full`}
-                          style={{ width: `${remainingPercent}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between text-[11px] text-slate-500 border-t border-slate-200/60 pt-2">
-                      <span>Used: <strong>{bal.used}d</strong></span>
-                      {bal.pending > 0 && (
-                        <span className="text-amber-800 font-bold flex items-center space-x-0.5">
-                          <Clock className="w-3 h-3 text-amber-600 inline shrink-0 mr-0.5" />
-                          <span>{bal.pending}d pending</span>
-                        </span>
-                      )}
+                    <div className="text-2xl font-black text-slate-900 mt-1">
+                      {bal.used} <span className="text-xs font-normal text-slate-500">/ {bal.total} Used</span>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
+
+                  <div>
+                    <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                      <div className="bg-blue-600 h-full rounded-full transition-all duration-300" style={{ width: `${percentUsed}%` }} />
+                    </div>
+                    {bal.pending > 0 && (
+                      <p className="text-[10px] text-amber-600 font-semibold mt-1.5 flex items-center space-x-1">
+                        <AlertCircle className="w-3 h-3 shrink-0" />
+                        <span>{bal.pending} day(s) pending approval</span>
+                      </p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -2280,15 +2319,11 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
 
       {/* Leave Applications History / Requisitions Container */}
       <div className="w-full min-w-0 bg-white border border-slate-200 rounded-2xl shadow-2xs overflow-hidden">
-        {/* Header Bar with Count & Total Days */}
-        <div className="p-3.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+        {/* Table Title Bar matching Manual Attendance Records theme */}
+        <div className="p-3.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 min-h-[50px]">
           <div className="flex items-center space-x-3">
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center space-x-2">
-              <Calendar className="w-4 h-4 text-indigo-600" />
-              <span>{isUserView ? 'My Leave Applications' : 'Leave Applications'} ({filteredLeaves.length})</span>
-            </span>
-            <span className="text-[11px] text-slate-500 font-medium bg-slate-200/60 px-2.5 py-0.5 rounded-full border border-slate-200">
-              Total Days: <strong className="text-slate-900 font-mono">{leaveStats.totalDays} Days</strong>
+            <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+              {isUserView ? 'MY LEAVE APPLICATIONS' : 'LEAVE APPLICATIONS'} ({filteredLeaves.length})
             </span>
           </div>
         </div>
@@ -2302,24 +2337,137 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                 onClick={handleOpenApplyModal}
                 className="text-xs font-bold text-blue-600 hover:underline cursor-pointer"
               >
-                Click here to apply for leave
+                Click here to apply leave
               </button>
             )}
           </div>
         ) : viewMode === 'table' ? (
-          <div className="w-full overflow-x-auto rounded-xl border border-slate-200/80 shadow-2xs">
+          <div className="w-full min-w-0 overflow-x-auto custom-table-scrollbar pb-1">
             <table className="w-full text-left text-xs border-collapse table-auto min-w-[950px]">
-              <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 text-[11px]">
+              <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 text-[11px]">
                 <tr className="h-10">
-                  {!isUserView && (
-                    <th className="py-2.5 px-3 font-bold whitespace-nowrap align-middle w-[16%]">Applicant Staff</th>
-                  )}
-                  <th className={`py-2.5 px-2 font-bold whitespace-nowrap align-middle ${isUserView ? 'w-[16%]' : 'w-[12%]'}`}>Type</th>
-                  <th className={`py-2.5 px-2 font-bold whitespace-nowrap align-middle ${isUserView ? 'w-[18%]' : 'w-[15%]'}`}>Dates &amp; Days</th>
-                  <th className={`py-2.5 px-2 font-bold whitespace-nowrap align-middle ${isUserView ? 'w-[28%]' : 'w-[17%]'}`}>Reason / Purpose</th>
-                  <th className={`py-2.5 px-2 font-bold whitespace-nowrap align-middle ${isUserView ? 'w-[14%]' : 'w-[11%]'}`}>Station</th>
-                  <th className={`py-2.5 px-2 font-bold whitespace-nowrap align-middle ${isUserView ? 'w-[12%]' : 'w-[12%]'}`}>Status</th>
-                  <th className={`py-2.5 px-3 text-right font-bold whitespace-nowrap align-middle ${isUserView ? 'w-[12%]' : 'w-[17%]'}`}>Actions</th>
+                  {/* Employee Column */}
+                  <th
+                    onClick={() => handleSort('employee')}
+                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[18%]"
+                    title="Click to sort by Employee"
+                  >
+                    <div className="flex items-center space-x-1.5">
+                      <span>Employee</span>
+                      {sortField === 'employee' ? (
+                        sortOrder === 'asc' ? (
+                          <ArrowUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        ) : (
+                          <ArrowDown className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-40 shrink-0" />
+                      )}
+                    </div>
+                  </th>
+
+                  {/* Dates Column */}
+                  <th
+                    onClick={() => handleSort('dates')}
+                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[18%]"
+                    title="Click to sort by Dates"
+                  >
+                    <div className="flex items-center space-x-1.5">
+                      <span>Leave Dates</span>
+                      {sortField === 'dates' ? (
+                        sortOrder === 'asc' ? (
+                          <ArrowUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        ) : (
+                          <ArrowDown className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-40 shrink-0" />
+                      )}
+                    </div>
+                  </th>
+
+                  {/* Applied Date Column */}
+                  <th
+                    onClick={() => handleSort('appliedDate')}
+                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[11%]"
+                    title="Click to sort by Applied Date"
+                  >
+                    <div className="flex items-center space-x-1.5">
+                      <span>Applied Date</span>
+                      {sortField === 'appliedDate' ? (
+                        sortOrder === 'asc' ? (
+                          <ArrowUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        ) : (
+                          <ArrowDown className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-40 shrink-0" />
+                      )}
+                    </div>
+                  </th>
+
+                  {/* Category Column */}
+                  <th
+                    onClick={() => handleSort('leaveType')}
+                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[12%]"
+                    title="Click to sort by Category"
+                  >
+                    <div className="flex items-center space-x-1.5">
+                      <span>Category</span>
+                      {sortField === 'leaveType' ? (
+                        sortOrder === 'asc' ? (
+                          <ArrowUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        ) : (
+                          <ArrowDown className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-40 shrink-0" />
+                      )}
+                    </div>
+                  </th>
+
+                  {/* Reason / Details Column */}
+                  <th
+                    onClick={() => handleSort('reason')}
+                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[17%]"
+                    title="Click to sort by Reason / Details"
+                  >
+                    <div className="flex items-center space-x-1.5">
+                      <span>Reason / Details</span>
+                      {sortField === 'reason' ? (
+                        sortOrder === 'asc' ? (
+                          <ArrowUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        ) : (
+                          <ArrowDown className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-40 shrink-0" />
+                      )}
+                    </div>
+                  </th>
+
+                  {/* Status Column */}
+                  <th
+                    onClick={() => handleSort('status')}
+                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[12%]"
+                    title="Click to sort by Status"
+                  >
+                    <div className="flex items-center space-x-1.5">
+                      <span>Status</span>
+                      {sortField === 'status' ? (
+                        sortOrder === 'asc' ? (
+                          <ArrowUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        ) : (
+                          <ArrowDown className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-40 shrink-0" />
+                      )}
+                    </div>
+                  </th>
+
+                  {/* Actions Column */}
+                  <th className="py-2.5 px-3 text-right font-bold whitespace-nowrap align-middle w-[12%]">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -2327,257 +2475,269 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                   const staffUser = users.find((u) => u.id === lv.userId);
                   return (
                     <tr key={lv.id} className="hover:bg-slate-50 transition-colors">
-                      {!isUserView && (
-                        <td className="py-2.5 px-3">
-                          <div className="font-bold text-slate-900 text-xs truncate max-w-[170px]">{lv.userName}</div>
-                          <div className="text-[11px] text-slate-500 truncate max-w-[170px] mt-0.5">{staffUser?.designation || lv.designation || 'Staff'}</div>
-                          <div className="text-[10px] text-slate-400 font-mono tracking-tight mt-0.5">{staffUser?.biometricId ? `Bio ID: ${staffUser.biometricId}` : (lv.userId ? `Bio ID: ${lv.userId}` : 'Bio ID: N/A')}</div>
-                        </td>
-                      )}
+                      {/* Employee Column */}
+                      <td className="py-2.5 px-3 align-middle">
+                        <div className="flex items-center space-x-2.5 min-w-0">
+                          <img
+                            src={staffUser?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'}
+                            alt={lv.userName}
+                            className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0 shadow-2xs"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <span className="font-bold text-slate-900 block truncate max-w-[160px] text-xs">{lv.userName}</span>
+                            <span className="text-[11px] text-slate-500 font-medium block truncate max-w-[160px] mt-0.5">
+                              {staffUser?.designation || lv.designation || 'Staff'}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-mono tracking-tight block truncate max-w-[160px] mt-0.5">
+                              {staffUser?.biometricId ? `Bio ID: ${staffUser.biometricId}` : (lv.userId ? `Bio ID: ${lv.userId}` : 'Bio ID: N/A')}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
 
-                    <td className="py-2.5 px-2 whitespace-nowrap">
-                      <div className="font-bold text-slate-900 text-xs">{lv.leaveTypeName.replace(/ \([^)]*\)/, '')}</div>
-                      <div className="text-[10px] font-medium text-slate-500 mt-0.5">
-                        Applied: <span className="font-semibold text-slate-700">{lv.appliedDate}</span>
-                      </div>
-                    </td>
+                      {/* Dates Column */}
+                      <td className="py-2.5 px-3 whitespace-nowrap align-middle">
+                        <div className="font-bold text-slate-900 flex items-center space-x-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                          <span>{lv.startDate === lv.endDate ? lv.startDate : `${lv.startDate} to ${lv.endDate}`}</span>
+                        </div>
+                        <div className="text-[10px] font-mono text-slate-600 mt-0.5 flex items-center space-x-1">
+                          <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span>{lv.daysCount} Day{lv.daysCount > 1 ? 's' : ''}</span>
+                        </div>
+                      </td>
 
-                    <td className="py-2.5 px-2 whitespace-nowrap">
-                      <div className="font-bold text-slate-900 whitespace-nowrap">
-                        {lv.startDate} to {lv.endDate}
-                      </div>
-                      <div className="text-[10px] font-bold text-blue-600">
-                        {lv.daysCount} Day{lv.daysCount > 1 ? 's' : ''}
-                      </div>
-                    </td>
+                      {/* Applied Date Column */}
+                      <td className="py-2.5 px-3 whitespace-nowrap align-middle text-slate-700 text-xs">
+                        <div className="flex items-center space-x-1 text-slate-600">
+                          <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span className="font-medium">{lv.appliedDate}</span>
+                        </div>
+                      </td>
 
-                    <td className="py-2.5 px-2">
-                      <p className="text-slate-700 italic text-[11px] line-clamp-2 max-w-[180px]" title={lv.reason}>
-                        "{lv.reason}"
-                      </p>
-                    </td>
+                      {/* Category Column */}
+                      <td className="py-2.5 px-3 whitespace-nowrap align-middle">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold inline-block border bg-blue-50 text-blue-800 border-blue-200/80">
+                          {lv.leaveTypeName.replace(/\s*\([^)]*\)/, '')}
+                        </span>
+                      </td>
 
-                    <td className="py-2.5 px-2 whitespace-nowrap text-[11px]">
-                      <div className="font-semibold text-slate-800 flex items-center space-x-1">
-                        <Building2 className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                        <span>WII HQ (Dehradun)</span>
-                      </div>
-                      <div className="text-[10px] text-slate-500 font-medium">
-                        {lv.leaveType === 'station_leave' ? 'Station Leave Granted' : 'Headquarters'}
-                      </div>
-                    </td>
+                      {/* Reason / Details Column */}
+                      <td className="py-2.5 px-3 align-middle">
+                        <p className="text-slate-700 text-[11px] line-clamp-2 leading-snug max-w-[200px]" title={lv.reason}>
+                          {lv.reason}
+                        </p>
+                      </td>
 
-                    <td className="py-2.5 px-2 whitespace-nowrap">
-                      <div>
-                        {lv.status === 'approved' && (
-                          <span className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>Approved</span>
-                          </span>
-                        )}
-                        {(lv.status === 'pending_level_1' || lv.status === 'pending_level_2') && (
-                          <span className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200 shadow-2xs">
-                            <Clock className="w-3.5 h-3.5 text-amber-600 animate-spin" />
-                            <span>Pending ({lv.status === 'pending_level_1' ? 'L1' : 'L2'})</span>
-                          </span>
-                        )}
-                        {lv.status === 'rejected' && (
-                          <span className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-800 border border-rose-200 shadow-2xs">
-                            <XCircle className="w-3.5 h-3.5 text-rose-600" />
-                            <span>Rejected</span>
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Joining Report Indicator for approved leaves on/after last day requiring HoD approval */}
-                      {isJoiningReportEligible(lv) && (
-                        <div className="mt-1">
-                          {lv.joiningReport?.status === 'accepted' ? (
-                            <button
-                              onClick={() => setSelectedJoiningLeave(lv)}
-                              className="inline-flex items-center space-x-1 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 font-bold px-1.5 py-0.5 rounded text-[9px] border border-emerald-200 cursor-pointer transition-colors"
-                              title={`Joining Verified & Approved by HoD (${lv.joiningReport.verifiedByName || 'HoD'})`}
-                            >
-                              <FileCheck className="w-2.5 h-2.5 text-emerald-600" />
-                              <span>Joined ({lv.joiningReport.joiningDate})</span>
-                            </button>
-                          ) : lv.joiningReport?.status === 'forwarded' ? (
-                            <button
-                              onClick={() => setSelectedJoiningLeave(lv)}
-                              className="inline-flex items-center space-x-1 bg-purple-50 text-purple-800 hover:bg-purple-100 font-bold px-1.5 py-0.5 rounded text-[9px] border border-purple-200 cursor-pointer transition-colors"
-                              title="Forwarded by Reporting Manager - Awaiting HoD Approval"
-                            >
-                              <FileCheck className="w-2.5 h-2.5 text-purple-600" />
-                              <span>Forwarded to HoD</span>
-                            </button>
-                          ) : lv.joiningReport?.status === 'submitted' ? (
-                            <button
-                              onClick={() => setSelectedJoiningLeave(lv)}
-                              className="inline-flex items-center space-x-1 bg-blue-50 text-blue-800 hover:bg-blue-100 font-bold px-1.5 py-0.5 rounded text-[9px] border border-blue-200 cursor-pointer transition-colors"
-                              title="Submitted by Employee - Awaiting Reporting Manager Forwarding"
-                            >
-                              <FileCheck className="w-2.5 h-2.5 text-blue-600" />
-                              <span>Forwarding Pending</span>
-                            </button>
-                          ) : currentUser.id === lv.userId ? (
-                            <button
-                              onClick={() => setSelectedJoiningLeave(lv)}
-                              className="inline-flex items-center space-x-1 bg-amber-50 text-amber-800 hover:bg-amber-100 font-bold px-1.5 py-0.5 rounded text-[9px] border border-amber-200 cursor-pointer transition-colors animate-pulse"
-                              title="Post-leave Joining Report Required (Click to Apply)"
-                            >
-                              <Clock className="w-2.5 h-2.5 text-amber-600" />
-                              <span>Apply Joining</span>
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => setSelectedJoiningLeave(lv)}
-                              className="inline-flex items-center space-x-1 bg-slate-100 text-slate-700 hover:bg-slate-200 font-medium px-1.5 py-0.5 rounded text-[9px] border border-slate-200 cursor-pointer transition-colors"
-                              title={`Joining Report pending submission by employee (${lv.userName})`}
-                            >
-                              <Clock className="w-2.5 h-2.5 text-slate-500" />
-                              <span>Joining Pending</span>
-                            </button>
+                      {/* Status Column */}
+                      <td className="py-2.5 px-3 whitespace-nowrap align-middle">
+                        <div>
+                          {lv.status === 'approved' && (
+                            <span className="inline-flex items-center space-x-1 bg-emerald-100 text-emerald-800 font-bold px-2.5 py-0.5 rounded text-[10px] border border-emerald-200">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              <span>Approved</span>
+                            </span>
+                          )}
+                          {(lv.status === 'pending_level_1' || lv.status === 'pending_level_2') && (
+                            <span className="inline-flex items-center space-x-1 bg-amber-100 text-amber-800 font-bold px-2.5 py-0.5 rounded text-[10px] border border-amber-200">
+                              <Clock className="w-3 h-3 text-amber-600" />
+                              <span>Pending</span>
+                            </span>
+                          )}
+                          {lv.status === 'rejected' && (
+                            <span className="inline-flex items-center space-x-1 bg-rose-100 text-rose-800 font-bold px-2.5 py-0.5 rounded text-[10px] border border-rose-200">
+                              <XCircle className="w-3 h-3 text-rose-600" />
+                              <span>Rejected</span>
+                            </span>
                           )}
                         </div>
-                      )}
 
-                      <div className="text-[10px] text-slate-500 font-medium mt-1">
-                        Dealing: <span className="font-bold text-slate-700">{getDealingPerson(lv)}</span>
-                      </div>
-                    </td>
-
-                    <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end space-x-1">
-                        {/* View Details */}
-                        <button
-                          onClick={() => setDetailModalLeave(lv)}
-                          className="w-7 h-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 inline-flex items-center justify-center text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95"
-                          title="View Details"
-                        >
-                          <Eye className="w-3.5 h-3.5 text-slate-600 stroke-[2]" />
-                        </button>
-
-                        {/* Joining Report Action Button for approved leaves on/after last day */}
+                        {/* Joining Report Indicator for approved leaves on/after last day requiring HoD approval */}
                         {isJoiningReportEligible(lv) && (
-                          <button
-                            onClick={() => setSelectedJoiningLeave(lv)}
-                            className={`w-7 h-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 inline-flex items-center justify-center rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95 ${
-                              lv.joiningReport?.status === 'accepted'
-                                ? 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200'
-                                : lv.joiningReport?.status === 'forwarded'
-                                ? 'text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200'
-                                : lv.joiningReport?.status === 'submitted'
-                                ? 'text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200'
-                                : currentUser.id === lv.userId
-                                ? 'text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 animate-pulse'
-                                : 'text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200'
-                            }`}
-                            title={
-                              lv.joiningReport?.status === 'accepted'
-                                ? `Duty Resumed on ${lv.joiningReport.joiningDate} (HoD Approved)`
-                                : lv.joiningReport?.status === 'forwarded'
-                                ? 'Joining Report Forwarded to HoD for Approval'
-                                : lv.joiningReport?.status === 'submitted'
-                                ? 'Joining Report Submitted - Pending Reporting Manager Forwarding'
-                                : currentUser.id === lv.userId
-                                ? 'Submit Post-Leave Joining Report (कार्यग्रहण आख्या प्रस्तुत करें)'
-                                : `Joining Report Pending Submission from Employee (${lv.userName})`
-                            }
-                          >
-                            <FileCheck className="w-3.5 h-3.5 stroke-[2]" />
-                          </button>
-                        )}
-
-                        {/* Edit Button */}
-                        {canUserModify(lv) && (
-                          <button
-                            onClick={() => handleOpenEditModal(lv)}
-                            className="w-7 h-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 inline-flex items-center justify-center text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95"
-                            title="Edit Leave Request"
-                          >
-                            <Edit2 className="w-3.5 h-3.5 text-blue-600 stroke-[2]" />
-                          </button>
-                        )}
-
-                        {/* Delete Button */}
-                        {canUserModify(lv) && (
-                          <button
-                            onClick={() => {
-                              if (confirm('Are you sure you want to delete this leave request?')) {
-                                deleteLeave(lv.id);
-                              }
-                            }}
-                            className="w-7 h-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 inline-flex items-center justify-center text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95"
-                            title="Delete Leave Request"
-                          >
-                            <Trash2 className="w-3.5 h-3.5 text-rose-600 stroke-[2]" />
-                          </button>
-                        )}
-
-                        {/* Approve / Forward & Reject Action Buttons for Manager / Admin */}
-                        {canManagerAction(lv) && (
-                          <>
-                            {lv.status === 'pending_level_1' && lv.requiresLevel2 ? (
+                          <div className="mt-1">
+                            {lv.joiningReport?.status === 'accepted' ? (
                               <button
-                                onClick={() => {
-                                  const comm = prompt('Enter Level-1 remarks to forward:', level1Comments[lv.id] || '');
-                                  if (comm !== null) approveLeaveLevel1(lv.id, comm);
-                                }}
-                                className="w-7 h-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 inline-flex items-center justify-center text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95"
-                                title="Forward to Reviewing Manager (Level-2)"
+                                onClick={() => setSelectedJoiningLeave(lv)}
+                                className="inline-flex items-center space-x-1 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 font-bold px-1.5 py-0.5 rounded text-[9px] border border-emerald-200 cursor-pointer transition-colors"
+                                title={`Joining Verified & Approved by HoD (${lv.joiningReport.verifiedByName || 'HoD'})`}
                               >
-                                <Send className="w-3.5 h-3.5 text-indigo-600 stroke-[2]" />
+                                <FileCheck className="w-2.5 h-2.5 text-emerald-600" />
+                                <span>Joined ({lv.joiningReport.joiningDate})</span>
+                              </button>
+                            ) : lv.joiningReport?.status === 'forwarded' ? (
+                              <button
+                                onClick={() => setSelectedJoiningLeave(lv)}
+                                className="inline-flex items-center space-x-1 bg-purple-50 text-purple-800 hover:bg-purple-100 font-bold px-1.5 py-0.5 rounded text-[9px] border border-purple-200 cursor-pointer transition-colors"
+                                title="Forwarded by Reporting Manager - Awaiting HoD Approval"
+                              >
+                                <FileCheck className="w-2.5 h-2.5 text-purple-600" />
+                                <span>Forwarded to HoD</span>
+                              </button>
+                            ) : lv.joiningReport?.status === 'submitted' ? (
+                              <button
+                                onClick={() => setSelectedJoiningLeave(lv)}
+                                className="inline-flex items-center space-x-1 bg-blue-50 text-blue-800 hover:bg-blue-100 font-bold px-1.5 py-0.5 rounded text-[9px] border border-blue-200 cursor-pointer transition-colors"
+                                title="Submitted by Employee - Awaiting Reporting Manager Forwarding"
+                              >
+                                <FileCheck className="w-2.5 h-2.5 text-blue-600" />
+                                <span>Forwarding Pending</span>
+                              </button>
+                            ) : currentUser.id === lv.userId ? (
+                              <button
+                                onClick={() => setSelectedJoiningLeave(lv)}
+                                className="inline-flex items-center space-x-1 bg-amber-50 text-amber-800 hover:bg-amber-100 font-bold px-1.5 py-0.5 rounded text-[9px] border border-amber-200 cursor-pointer transition-colors animate-pulse"
+                                title="Post-leave Joining Report Required (Click to Apply)"
+                              >
+                                <Clock className="w-2.5 h-2.5 text-amber-600" />
+                                <span>Apply Joining</span>
                               </button>
                             ) : (
                               <button
-                                onClick={() => {
-                                  const comm = prompt('Enter approval comments:', (lv.status === 'pending_level_1' ? level1Comments[lv.id] : level2Comments[lv.id]) || '');
-                                  if (comm !== null) {
-                                    if (lv.status === 'pending_level_1') approveLeaveLevel1(lv.id, comm);
-                                    else approveLeaveLevel2(lv.id, comm);
-                                  }
-                                }}
-                                className="w-7 h-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 inline-flex items-center justify-center text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95"
-                                title="Approve Leave Request"
+                                onClick={() => setSelectedJoiningLeave(lv)}
+                                className="inline-flex items-center space-x-1 bg-slate-100 text-slate-700 hover:bg-slate-200 font-medium px-1.5 py-0.5 rounded text-[9px] border border-slate-200 cursor-pointer transition-colors"
+                                title={`Joining Report pending submission by employee (${lv.userName})`}
                               >
-                                <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[2]" />
+                                <Clock className="w-2.5 h-2.5 text-slate-500" />
+                                <span>Joining Pending</span>
                               </button>
                             )}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Actions Column */}
+                      <td className="py-2.5 px-3 text-right whitespace-nowrap align-middle">
+                        <div className="flex items-center justify-end space-x-1">
+                          {/* View Details */}
+                          <button
+                            onClick={() => setDetailModalLeave(lv)}
+                            className="w-7 h-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 inline-flex items-center justify-center text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95"
+                            title="View Details"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-slate-600 stroke-[2]" />
+                          </button>
+
+                          {/* Joining Report Action Button for approved leaves on/after last day */}
+                          {isJoiningReportEligible(lv) && (
+                            <button
+                              onClick={() => setSelectedJoiningLeave(lv)}
+                              className={`w-7 h-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 inline-flex items-center justify-center rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95 ${
+                                lv.joiningReport?.status === 'accepted'
+                                  ? 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200'
+                                  : lv.joiningReport?.status === 'forwarded'
+                                  ? 'text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200'
+                                  : lv.joiningReport?.status === 'submitted'
+                                  ? 'text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200'
+                                  : currentUser.id === lv.userId
+                                  ? 'text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 animate-pulse'
+                                  : 'text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200'
+                              }`}
+                              title={
+                                lv.joiningReport?.status === 'accepted'
+                                  ? `Duty Resumed on ${lv.joiningReport.joiningDate} (HoD Approved)`
+                                  : lv.joiningReport?.status === 'forwarded'
+                                  ? 'Joining Report Forwarded to HoD for Approval'
+                                  : lv.joiningReport?.status === 'submitted'
+                                  ? 'Joining Report Submitted - Pending Reporting Manager Forwarding'
+                                  : currentUser.id === lv.userId
+                                  ? 'Submit Post-Leave Joining Report (कार्यग्रहण आख्या प्रस्तुत करें)'
+                                  : `Joining Report Pending Submission from Employee (${lv.userName})`
+                              }
+                            >
+                              <FileCheck className="w-3.5 h-3.5 stroke-[2]" />
+                            </button>
+                          )}
+
+                          {/* Edit Button */}
+                          {canUserModify(lv) && (
+                            <button
+                              onClick={() => handleOpenEditModal(lv)}
+                              className="w-7 h-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 inline-flex items-center justify-center text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95"
+                              title="Edit Leave Request"
+                            >
+                              <Edit2 className="w-3.5 h-3.5 text-blue-600 stroke-[2]" />
+                            </button>
+                          )}
+
+                          {/* Delete Button */}
+                          {canUserModify(lv) && (
                             <button
                               onClick={() => {
-                                const comm = prompt('Enter rejection comments:', (lv.status === 'pending_level_1' ? level1Comments[lv.id] : level2Comments[lv.id]) || '');
-                                if (comm !== null) {
-                                  if (lv.status === 'pending_level_1') rejectLeaveLevel1(lv.id, comm);
-                                  else rejectLeaveLevel2(lv.id, comm);
+                                if (confirm('Are you sure you want to delete this leave request?')) {
+                                  deleteLeave(lv.id);
+                                }
+                              }}
+                              className="w-7 h-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 inline-flex items-center justify-center text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95"
+                              title="Delete Leave Request"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-rose-600 stroke-[2]" />
+                            </button>
+                          )}
+
+                          {/* Approve / Forward & Reject Action Buttons for Manager / Admin */}
+                          {canManagerAction(lv) && (
+                            <>
+                              {lv.status === 'pending_level_1' && lv.requiresLevel2 ? (
+                                <button
+                                  onClick={() => {
+                                    const comm = prompt('Enter Level-1 remarks to forward:', level1Comments[lv.id] || '');
+                                    if (comm !== null) approveLeaveLevel1(lv.id, comm);
+                                  }}
+                                  className="w-7 h-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 inline-flex items-center justify-center text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95"
+                                  title="Forward to Reviewing Manager (Level-2)"
+                                >
+                                  <Send className="w-3.5 h-3.5 text-indigo-600 stroke-[2]" />
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    const comm = prompt('Enter approval comments:', (lv.status === 'pending_level_1' ? level1Comments[lv.id] : level2Comments[lv.id]) || '');
+                                    if (comm !== null) {
+                                      if (lv.status === 'pending_level_1') approveLeaveLevel1(lv.id, comm);
+                                      else approveLeaveLevel2(lv.id, comm);
+                                    }
+                                  }}
+                                  className="w-7 h-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 inline-flex items-center justify-center text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95"
+                                  title="Approve Leave Request"
+                                >
+                                  <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[2]" />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => {
+                                  const comm = prompt('Enter rejection comments:', (lv.status === 'pending_level_1' ? level1Comments[lv.id] : level2Comments[lv.id]) || '');
+                                  if (comm !== null) {
+                                    if (lv.status === 'pending_level_1') rejectLeaveLevel1(lv.id, comm);
+                                    else rejectLeaveLevel2(lv.id, comm);
+                                  }
+                                }}
+                                className="w-7 h-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 inline-flex items-center justify-center text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95"
+                                title="Reject Leave Request"
+                              >
+                                <X className="w-3.5 h-3.5 text-rose-600 stroke-[2]" />
+                              </button>
+                            </>
+                          )}
+
+                          {/* Cancel Approved Record Button */}
+                          {canManagerCancelApproval(lv) && (
+                            <button
+                              onClick={() => {
+                                if (confirm('Are you sure you want to cancel this approved leave record?')) {
+                                  rejectLeaveLevel1(lv.id, 'Approved leave cancelled by Manager/Admin before applicable date.');
                                 }
                               }}
                               className="w-7 h-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 inline-flex items-center justify-center text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95"
-                              title="Reject Leave Request"
+                              title="Cancel Approved Leave"
                             >
-                              <X className="w-3.5 h-3.5 text-rose-600 stroke-[2]" />
+                              <RotateCcw className="w-3.5 h-3.5 text-rose-600 stroke-[2]" />
                             </button>
-                          </>
-                        )}
-
-                        {/* Cancel Approved Record Button */}
-                        {canManagerCancelApproval(lv) && (
-                          <button
-                            onClick={() => {
-                              if (confirm('Are you sure you want to cancel this approved leave record?')) {
-                                rejectLeaveLevel1(lv.id, 'Approved leave cancelled by Manager/Admin before applicable date.');
-                              }
-                            }}
-                            className="w-7 h-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 inline-flex items-center justify-center text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95"
-                            title="Cancel Approved Leave"
-                          >
-                            <RotateCcw className="w-3.5 h-3.5 text-rose-600 stroke-[2]" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -2694,631 +2854,246 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
 
       {/* Apply Leave Modal */}
       {showApplyModal && (
-        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden border border-slate-200 animate-in fade-in zoom-in duration-150">
-            <div className="shrink-0 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white px-5 py-4 flex items-center justify-between border-b border-slate-800 shadow-xs">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 my-auto sm:my-8 flex flex-col max-h-[90vh]">
+            {/* Modal Header matching Manual & OD Theme */}
+            <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 px-4 sm:px-6 py-3.5 sm:py-4 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
-                  <FileText className="w-5 h-5 text-blue-400" />
+                <div className="p-2 bg-white/10 rounded-xl backdrop-blur-md shrink-0">
+                  <Calendar className="w-5 h-5 text-blue-300" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-white tracking-tight">Apply for Leave</h3>
-                  <p className="text-xs text-slate-300 mt-0.5">Submit leave application under CCS Leave Rules</p>
+                  <h2 className="text-base font-bold tracking-wide">
+                    Apply Leave
+                  </h2>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setShowApplyModal(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleFormSubmit} className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3">
+            <form onSubmit={handleFormSubmit} className="p-4 sm:p-6 space-y-3.5 sm:space-y-4 overflow-y-auto flex-1 custom-table-scrollbar">
               {formError && (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-semibold flex items-center space-x-2">
-                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center space-x-2 text-xs text-rose-800">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
                   <span>{formError}</span>
                 </div>
               )}
 
               {formSuccess && (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-700 font-semibold flex items-center space-x-2">
-                  <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center space-x-2 text-xs text-emerald-800">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span>{formSuccess}</span>
                 </div>
               )}
 
+              {/* Admin Target Employee Selector */}
               {isAdmin && (
                 <div>
-                  <label className="block font-bold text-slate-700 text-xs mb-1">
-                    Apply Leave For Employee *
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Apply on Behalf of Employee *
                   </label>
-                  <select
+                  <AppSelect
                     value={applyTargetUserId}
-                    onChange={(e) => setApplyTargetUserId(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-semibold focus:outline-none focus:border-indigo-500 focus:bg-white transition-all shadow-2xs"
-                  >
-                    {users.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.name} ({u.department})
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) => setApplyTargetUserId(val)}
+                    options={users.map((u) => ({
+                      label: u.name,
+                      value: u.id,
+                      description: `${u.department} - ${u.designation || 'Staff'}`
+                    }))}
+                  />
                 </div>
               )}
 
-              {/* Custom Searchable Select Popover Dropdown for Leave Type (Matching RH Theme) */}
+              {/* Leave Type Selector with Available Quota Badge */}
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block font-bold text-slate-700 text-xs">
-                    Leave Type (Policy: {currentUser.employmentType.replace('_', ' ')}) *
-                  </label>
-                  {selectedPolicy && (
-                    <span className="text-[10px] text-indigo-700 font-extrabold bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
-                      Quota: {selectedPolicy.defaultQuota} Days
-                    </span>
-                  )}
-                </div>
-
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setIsLeaveTypeDropdownOpen(!isLeaveTypeDropdownOpen)}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-500 flex items-center justify-between cursor-pointer shadow-2xs text-left transition-all hover:border-slate-300"
-                  >
-                    {selectedPolicy ? (
-                      <div className="flex items-center space-x-2.5 truncate pr-2 min-w-0">
-                        <span className="bg-indigo-100 text-indigo-800 font-extrabold text-[11px] px-2 py-0.5 rounded-md shrink-0">
-                          {getLeaveTypeCode(selectedPolicy.type)}
-                        </span>
-                        <span className="truncate text-slate-900 font-bold">
-                          {selectedPolicy.name}
-                        </span>
-                      </div>
-                    ) : (
-                      <span className="text-slate-400 font-medium">Select Leave Type</span>
-                    )}
-                    <ChevronDown className={`w-4 h-4 text-slate-500 shrink-0 transition-transform ${isLeaveTypeDropdownOpen ? 'rotate-180' : ''}`} />
-                  </button>
-
-                  {/* Custom Popover Dropdown Menu */}
-                  {isLeaveTypeDropdownOpen && (
-                    <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 p-2 space-y-2">
-                      {/* Search Input */}
-                      <div className="relative">
-                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
-                        <input
-                          type="text"
-                          value={leaveTypeSearchQuery}
-                          onChange={(e) => setLeaveTypeSearchQuery(e.target.value)}
-                          placeholder="Search leave type (e.g. Casual, Earned, Station, RH)..."
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-7 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 font-medium"
-                          autoFocus
-                        />
-                        {leaveTypeSearchQuery && (
-                          <button
-                            type="button"
-                            onClick={() => setLeaveTypeSearchQuery('')}
-                            className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 cursor-pointer"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Scrollable Policy List */}
-                      <div className="max-h-56 overflow-y-auto space-y-1 pr-0.5 text-xs">
-                        {filteredPoliciesList.length === 0 ? (
-                          <div className="text-center py-4 text-slate-400 text-xs font-medium">
-                            No leave policy found matching "{leaveTypeSearchQuery}"
-                          </div>
-                        ) : (
-                          filteredPoliciesList.map((pol) => {
-                            const isSelected = pol.type === selectedLeaveType;
-                            const code = getLeaveTypeCode(pol.type);
-                            return (
-                              <div
-                                key={pol.type}
-                                onClick={() => {
-                                  setSelectedLeaveType(pol.type);
-                                  setIsLeaveTypeDropdownOpen(false);
-                                  setLeaveTypeSearchQuery('');
-                                }}
-                                className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
-                                  isSelected
-                                    ? 'bg-indigo-50/90 border-indigo-300 text-indigo-950 font-bold shadow-2xs'
-                                    : 'bg-white border-slate-100 hover:bg-slate-50 hover:border-slate-200 text-slate-700'
-                                }`}
-                              >
-                                <div className="flex items-center space-x-2.5 min-w-0 pr-2">
-                                  <span className="bg-indigo-100/90 text-indigo-800 text-[10px] font-extrabold px-2 py-0.5 rounded-md shrink-0">
-                                    {code}
-                                  </span>
-                                  <div className="min-w-0">
-                                    <div className="font-bold text-slate-900 text-xs truncate">
-                                      {pol.name}
-                                    </div>
-                                    <div className="text-[10px] text-slate-500 truncate font-medium">
-                                      {pol.description}
-                                    </div>
-                                  </div>
-                                </div>
-                                {isSelected && (
-                                  <Check className="w-4 h-4 text-indigo-600 shrink-0 ml-1.5" />
-                                )}
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Leave Type *</span>
+                  {(() => {
+                    const targetUserObj = users.find((u) => u.id === (isAdmin ? applyTargetUserId : currentUser.id)) || currentUser;
+                    const balObj = targetUserObj.leaveBalances?.[selectedLeaveType] || { total: selectedPolicy?.defaultQuota || 0, used: 0, pending: 0 };
+                    const availableQuota = Math.max(0, balObj.total - balObj.used);
+                    return (
+                      <span className="text-[10px] sm:text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                        Balance: {availableQuota} Days
+                      </span>
+                    );
+                  })()}
+                </label>
+                <AppSelect
+                  value={selectedLeaveType}
+                  onChange={(val) => {
+                    setSelectedLeaveType(val as LeaveType);
+                    if (val === 'restricted' && restrictedHolidaysList.length > 0) {
+                      handleRhChange(restrictedHolidaysList[0].id);
+                    } else if (val === 'compensatory_off' && compOffEligibleList.length > 0) {
+                      handleCoffChange(compOffEligibleList[0].id);
+                    }
+                  }}
+                  options={availablePolicies.map((pol) => ({
+                    label: `${pol.name.replace(/\s*\([^)]*\)/, '')} (${getLeaveTypeCode(pol.type)})`,
+                    value: pol.type,
+                    description: pol.description
+                  }))}
+                />
               </div>
 
-              {/* Restricted Holiday (RH) vs Compensatory Off (C-Off) vs Other Leaves (Date Range) */}
+              {/* Restricted Holiday (RH) Selector */}
               {selectedLeaveType === 'restricted' ? (
-                <div className="bg-indigo-50/60 border border-indigo-200/80 rounded-2xl p-3.5 space-y-3">
+                <div className="space-y-3">
                   <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="block font-bold text-slate-800 text-xs">
-                        Select Declared Restricted Holiday (RH) *
-                      </label>
-                      <span className="bg-indigo-600 text-white px-2 py-0.5 rounded-md text-[10px] font-extrabold shadow-2xs">
-                        1 Day (RH)
-                      </span>
-                    </div>
-
-                    {/* Custom Select Trigger Button */}
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setIsRhDropdownOpen(!isRhDropdownOpen)}
-                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-500 flex items-center justify-between cursor-pointer shadow-2xs text-left"
-                      >
-                        {(() => {
-                          const currentRh = restrictedHolidaysList.find((h) => h.id === selectedRhId) || restrictedHolidaysList[0];
-                          if (!currentRh) return <span className="text-slate-400">Select RH</span>;
-                          return (
-                            <div className="flex items-center space-x-2.5 truncate pr-2 min-w-0">
-                              <span className="bg-indigo-100 text-indigo-800 font-extrabold text-[11px] px-2 py-0.5 rounded-md shrink-0">
-                                {new Date(currentRh.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
-                              </span>
-                              <span className="truncate text-slate-900 font-bold">
-                                {currentRh.name} {currentRh.hindiName ? `(${currentRh.hindiName})` : ''}
-                              </span>
-                            </div>
-                          );
-                        })()}
-                        <ChevronDown className={`w-4 h-4 text-slate-500 shrink-0 transition-transform ${isRhDropdownOpen ? 'rotate-180' : ''}`} />
-                      </button>
-
-                      {/* Custom Popover Dropdown Menu */}
-                      {isRhDropdownOpen && (
-                        <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 p-2 space-y-2">
-                          {/* Search Input */}
-                          <div className="relative">
-                            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
-                            <input
-                              type="text"
-                              value={rhSearchQuery}
-                              onChange={(e) => setRhSearchQuery(e.target.value)}
-                              placeholder="Search holiday (e.g. Holi, Diwali, Jan)..."
-                              className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-7 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 font-medium"
-                              autoFocus
-                            />
-                            {rhSearchQuery && (
-                              <button
-                                type="button"
-                                onClick={() => setRhSearchQuery('')}
-                                className="absolute right-2 top-2 text-slate-400 hover:text-slate-600"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
-
-                          {/* Scrollable Holiday List */}
-                          <div className="max-h-52 overflow-y-auto space-y-1 pr-0.5 text-xs">
-                            {filteredRhList.length === 0 ? (
-                              <div className="text-center py-4 text-slate-400 text-xs font-medium">
-                                No restricted holiday found matching "{rhSearchQuery}"
-                              </div>
-                            ) : (
-                              filteredRhList.map((rh) => {
-                                const isSelected = rh.id === selectedRhId;
-                                return (
-                                  <div
-                                    key={rh.id}
-                                    onClick={() => {
-                                      handleRhChange(rh.id);
-                                      setIsRhDropdownOpen(false);
-                                      setRhSearchQuery('');
-                                    }}
-                                    className={`p-2 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
-                                      isSelected
-                                        ? 'bg-indigo-50/90 border-indigo-300 text-indigo-950 font-bold shadow-2xs'
-                                        : 'bg-white border-slate-100 hover:bg-slate-50 hover:border-slate-200 text-slate-700'
-                                    }`}
-                                  >
-                                    <div className="flex items-center space-x-2.5 min-w-0 pr-2">
-                                      <div className="bg-indigo-100/80 text-indigo-800 text-[10px] font-extrabold px-2 py-0.5 rounded-md shrink-0 text-center leading-tight">
-                                        <div>{new Date(rh.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</div>
-                                        <div className="text-[9px] text-indigo-600 font-bold">{rh.dayOfWeek.slice(0, 3)}</div>
-                                      </div>
-                                      <div className="min-w-0">
-                                        <div className="font-bold text-slate-900 text-xs truncate">
-                                          {rh.name}
-                                        </div>
-                                        {rh.hindiName && (
-                                          <div className="text-[11px] text-slate-500 truncate">
-                                            {rh.hindiName}
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                    {isSelected && (
-                                      <Check className="w-4 h-4 text-indigo-600 shrink-0 ml-1.5" />
-                                    )}
-                                  </div>
-                                );
-                              })
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Declared Restricted Holiday (RH) *
+                    </label>
+                    <AppSelect
+                      value={selectedRhId}
+                      onChange={(val) => handleRhChange(val)}
+                      options={restrictedHolidaysList.map((rh) => ({
+                        label: `${rh.name} (${new Date(rh.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })})`,
+                        value: rh.id,
+                        description: `${rh.date} (${rh.dayOfWeek}) • ${rh.category} RH`
+                      }))}
+                    />
                   </div>
 
-                  {/* Selected RH Details Badge */}
                   {(() => {
                     const rh = restrictedHolidaysList.find((h) => h.id === selectedRhId) || restrictedHolidaysList[0];
                     if (!rh) return null;
                     return (
-                      <div className="bg-white border border-indigo-100 rounded-xl p-3 space-y-1.5 text-xs">
+                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-xs">
                         <div className="flex items-center justify-between">
-                          <span className="font-extrabold text-indigo-950 text-xs">{rh.name} {rh.hindiName ? `(${rh.hindiName})` : ''}</span>
-                          <span className="bg-indigo-100 text-indigo-900 font-bold px-2 py-0.5 rounded text-[10px]">
-                            {rh.category} RH
+                          <span className="font-bold text-slate-900">{rh.name} {rh.hindiName ? `(${rh.hindiName})` : ''}</span>
+                          <span className="bg-blue-100 text-blue-900 font-bold px-2 py-0.5 rounded text-[10px]">
+                            1 Day (RH)
                           </span>
                         </div>
-                        <div className="text-slate-600 font-semibold text-[11px] flex items-center gap-1.5">
-                          <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                          <span>Date: <strong>{new Date(rh.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })} ({rh.dayOfWeek})</strong></span>
-                        </div>
-                        {rh.description && (
-                          <p className="text-[11px] text-slate-500 pt-1 border-t border-slate-100">
-                            {rh.description}
-                          </p>
-                        )}
+                        <p className="text-slate-600 font-medium text-[11px] flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                          <span>{new Date(rh.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })} ({rh.dayOfWeek})</span>
+                        </p>
                       </div>
                     );
                   })()}
                 </div>
               ) : selectedLeaveType === 'compensatory_off' ? (
-                <div className="bg-indigo-50/60 border border-indigo-200/80 rounded-2xl p-3.5 space-y-3">
+                /* Compensatory Off (C-Off) Selector */
+                <div className="space-y-3">
                   <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="block font-bold text-slate-800 text-xs">
-                        Select Earned Compensatory Off (Weekend/Holiday Work) *
-                      </label>
-                      <span className="bg-indigo-600 text-white px-2 py-0.5 rounded-md text-[10px] font-extrabold shadow-2xs">
-                        1 Day (C-Off)
-                      </span>
-                    </div>
-
-                    {/* Custom Select Trigger Button */}
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setIsCoffDropdownOpen(!isCoffDropdownOpen)}
-                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-indigo-500 flex items-center justify-between cursor-pointer shadow-2xs text-left"
-                      >
-                        {(() => {
-                          const currentCoff = compOffEligibleList.find((c) => c.id === selectedCoffId) || compOffEligibleList[0];
-                          if (!currentCoff) return <span className="text-slate-400">Select C-Off Work Date</span>;
-                          return (
-                            <div className="flex items-center space-x-2.5 truncate pr-2 min-w-0">
-                              <span className="bg-indigo-100 text-indigo-800 font-extrabold text-[11px] px-2 py-0.5 rounded-md shrink-0">
-                                {new Date(currentCoff.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
-                              </span>
-                              <span className="truncate text-slate-900 font-bold">
-                                {currentCoff.label} ({currentCoff.clockIn} - {currentCoff.clockOut})
-                              </span>
-                            </div>
-                          );
-                        })()}
-                        <ChevronDown className={`w-4 h-4 text-slate-500 shrink-0 transition-transform ${isCoffDropdownOpen ? 'rotate-180' : ''}`} />
-                      </button>
-
-                      {/* Custom Popover Dropdown Menu */}
-                      {isCoffDropdownOpen && (
-                        <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 p-2 space-y-2">
-                          {/* Search Input */}
-                          <div className="relative">
-                            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
-                            <input
-                              type="text"
-                              value={coffSearchQuery}
-                              onChange={(e) => setCoffSearchQuery(e.target.value)}
-                              placeholder="Search by date or duty name..."
-                              className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-7 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 font-medium"
-                              autoFocus
-                            />
-                            {coffSearchQuery && (
-                              <button
-                                type="button"
-                                onClick={() => setCoffSearchQuery('')}
-                                className="absolute right-2 top-2 text-slate-400 hover:text-slate-600"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
-
-                          {/* Scrollable C-Off List */}
-                          <div className="max-h-52 overflow-y-auto space-y-1 pr-0.5 text-xs">
-                            {filteredCoffList.length === 0 ? (
-                              <div className="text-center py-4 text-slate-400 text-xs font-medium">
-                                No worked holiday/weekend found matching "{coffSearchQuery}"
-                              </div>
-                            ) : (
-                              filteredCoffList.map((coff) => {
-                                const isSelected = coff.id === selectedCoffId;
-                                return (
-                                  <div
-                                    key={coff.id}
-                                    onClick={() => {
-                                      handleCoffChange(coff.id);
-                                      setIsCoffDropdownOpen(false);
-                                      setCoffSearchQuery('');
-                                    }}
-                                    className={`p-2 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
-                                      isSelected
-                                        ? 'bg-indigo-50/90 border-indigo-300 text-indigo-950 font-bold shadow-2xs'
-                                        : 'bg-white border-slate-100 hover:bg-slate-50 hover:border-slate-200 text-slate-700'
-                                    }`}
-                                  >
-                                    <div className="flex items-center space-x-2.5 min-w-0 pr-2">
-                                      <div className="bg-indigo-100/80 text-indigo-800 text-[10px] font-extrabold px-2 py-0.5 rounded-md shrink-0 text-center leading-tight">
-                                        <div>{new Date(coff.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</div>
-                                        <div className="text-[9px] text-indigo-600 font-bold">{coff.dayOfWeek.slice(0, 3)}</div>
-                                      </div>
-                                      <div className="min-w-0">
-                                        <div className="font-bold text-slate-900 text-xs truncate">
-                                          {coff.label}
-                                        </div>
-                                        <div className="text-[11px] text-slate-500 truncate flex items-center gap-1.5">
-                                          <span>IN: <strong className="text-slate-700">{coff.clockIn}</strong></span>
-                                          <span>•</span>
-                                          <span>OUT: <strong className="text-slate-700">{coff.clockOut}</strong></span>
-                                          <span className="text-indigo-700 font-bold">({coff.totalHours}h)</span>
-                                        </div>
-                                      </div>
-                                    </div>
-                                    {isSelected && (
-                                      <Check className="w-4 h-4 text-indigo-600 shrink-0 ml-1.5" />
-                                    )}
-                                  </div>
-                                );
-                              })
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Selected C-Off Details Badge */}
-                  {(() => {
-                    const coff = compOffEligibleList.find((c) => c.id === selectedCoffId) || compOffEligibleList[0];
-                    if (!coff) return null;
-                    return (
-                      <div className="bg-white border border-indigo-100 rounded-xl p-3 space-y-1.5 text-xs">
-                        <div className="flex items-center justify-between">
-                          <span className="font-extrabold text-indigo-950 text-xs">{coff.label}</span>
-                          <span className="bg-indigo-100 text-indigo-900 font-bold px-2 py-0.5 rounded text-[10px]">
-                            {coff.holidayCategory}
-                          </span>
-                        </div>
-                        <div className="text-slate-600 font-semibold text-[11px] flex items-center justify-between pt-0.5">
-                          <div className="flex items-center gap-1.5">
-                            <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                            <span>Work Date: <strong>{new Date(coff.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })} ({coff.dayOfWeek})</strong></span>
-                          </div>
-                          <span className="text-indigo-700 font-bold bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200 text-[10px]">
-                            Full Duration ({coff.totalHours} hrs)
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-slate-500 pt-1 border-t border-slate-100 flex items-center justify-between">
-                          <span>Biometric Punch Logs:</span>
-                          <span className="font-mono font-bold text-slate-800">
-                            IN: {coff.clockIn} | OUT: {coff.clockOut}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* Requested Leave Date Picker for C-Off */}
-                  <div className="bg-white border border-indigo-200/90 rounded-xl p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="block font-bold text-slate-900 text-xs">
-                        Avail Leave On Date (Kis Date ko Leave Chahiye) *
-                      </label>
-                      <span className="text-[10px] text-indigo-700 font-extrabold bg-indigo-100 px-2 py-0.5 rounded-md">
-                        Requested Leave Date
-                      </span>
-                    </div>
-                    <AppDatePicker
-                      value={startDate}
-                      minDate={todayStr}
-                      isOpen={activeStationPicker === 'cOff'}
-                      onToggle={() => setActiveStationPicker(activeStationPicker === 'cOff' ? null : 'cOff')}
-                      onChange={(dStr) => {
-                        setStartDate(dStr);
-                        setEndDate(dStr);
-                        setActiveStationPicker(null);
-                      }}
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Earned Compensatory Off Record (Weekend/Holiday Worked) *
+                    </label>
+                    <AppSelect
+                      value={selectedCoffId}
+                      onChange={(val) => handleCoffChange(val)}
+                      options={compOffEligibleList.map((c) => ({
+                        label: `${c.label} (${new Date(c.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })})`,
+                        value: c.id,
+                        description: `Worked ${c.date} • ${c.clockIn} - ${c.clockOut} (${c.totalHours}h)`
+                      }))}
                     />
                   </div>
+
+                  <AppDatePicker
+                    label="Avail Leave On Date *"
+                    value={startDate}
+                    minDate={todayStr}
+                    onChange={(dStr) => {
+                      setStartDate(dStr);
+                      setEndDate(dStr);
+                    }}
+                  />
                 </div>
-              ) : selectedLeaveType === 'station' ? (
+              ) : (
+                /* Standard Leave Dates (Start & End) */
                 <div className="space-y-3">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                    <StationLeaveDatePicker
-                      label="From Date *"
+                  <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+                    <AppDatePicker
+                      label="From Date (Start Date) *"
                       value={startDate}
                       minDate={todayStr}
-                      isOpen={activeStationPicker === 'from'}
-                      onToggle={() => setActiveStationPicker(activeStationPicker === 'from' ? null : 'from')}
                       onChange={(dStr) => {
                         setStartDate(dStr);
                         if (!endDate || dStr > endDate) setEndDate(dStr);
-                        setActiveStationPicker('to');
                       }}
                     />
-                    <StationLeaveDatePicker
-                      label="To Date *"
+                    <AppDatePicker
+                      label="To Date (End Date) *"
                       value={endDate}
                       minDate={startDate || todayStr}
-                      isOpen={activeStationPicker === 'to'}
-                      onToggle={() => setActiveStationPicker(activeStationPicker === 'to' ? null : 'to')}
-                      onChange={(dStr) => {
-                        setEndDate(dStr);
-                        setActiveStationPicker(null);
-                      }}
+                      onChange={(dStr) => setEndDate(dStr)}
                       isRightColumn={true}
                     />
                   </div>
 
-                  {startDate && endDate && (
-                    <div className="mt-2">
-                      {(() => {
-                        const stCheck = checkStationLeaveRange(startDate, endDate);
-                        if (stCheck.valid) {
-                          return (
-                            <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-900 text-[11px] font-semibold flex items-center space-x-2 shadow-2xs">
-                              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                              <span>Valid Station Leave Dates: All selected dates fall on Weekends or Gazetted Holidays (GH).</span>
-                            </div>
-                          );
-                        } else {
-                          return (
-                            <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-900 text-[11px] font-semibold flex items-start space-x-2 shadow-2xs">
-                              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                              <div>
-                                <span className="font-bold block text-rose-800">Station Leave Date Restriction:</span>
-                                Station Leave is only permitted on <strong>Weekends (Saturday/Sunday)</strong> and <strong>Gazetted Holidays (GH)</strong>. Working weekdays found in date range: <span className="font-mono font-bold underline text-rose-950">{stCheck.invalidDates.join(', ')}</span>.
-                              </div>
-                            </div>
-                          );
-                        }
-                      })()}
+                  {/* Casual Leave Sessions (Half Day) */}
+                  {selectedLeaveType === 'casual' && startDate && (
+                    <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Start Session
+                        </label>
+                        <AppSelect
+                          value={startSession}
+                          onChange={(val) => setStartSession(val as 'first_half' | 'second_half')}
+                          options={[
+                            { label: 'Full Day / 1st Half', value: 'first_half' },
+                            { label: '2nd Half (Post Lunch)', value: 'second_half' }
+                          ]}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          End Session
+                        </label>
+                        <AppSelect
+                          value={endSession}
+                          onChange={(val) => setEndSession(val as 'first_half' | 'second_half')}
+                          options={[
+                            { label: '1st Half (Pre Lunch)', value: 'first_half' },
+                            { label: 'Full Day / 2nd Half', value: 'second_half' }
+                          ]}
+                        />
+                      </div>
                     </div>
                   )}
-                </div>
-              ) : (
-                <div className="space-y-2.5">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                    {/* From Date Card */}
-                    <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 space-y-2">
-                      <AppDatePicker
-                        label="From Date (Start Date) *"
-                        value={startDate}
-                        minDate={todayStr}
-                        isOpen={activeStationPicker === 'from'}
-                        onToggle={() => setActiveStationPicker(activeStationPicker === 'from' ? null : 'from')}
-                        onChange={(dStr) => {
-                          setStartDate(dStr);
-                          if (!endDate || dStr > endDate) setEndDate(dStr);
-                          setActiveStationPicker('to');
-                        }}
-                      />
 
-                      {selectedLeaveType === 'casual' && startDate && (
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                            Start Session:
-                          </label>
-                          <select
-                            value={startSession}
-                            onChange={(e) => setStartSession(e.target.value as 'first_half' | 'second_half')}
-                            className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 font-semibold focus:outline-none focus:border-indigo-500 cursor-pointer shadow-2xs"
-                          >
-                            <option value="first_half">1st Half</option>
-                            <option value="second_half">2nd Half</option>
-                          </select>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* To Date Card */}
-                    <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <label className="font-bold text-slate-800 text-xs">To Date (End Date) *</label>
-                        {startDate && endDate && (
-                          calculatedDays > 0 ? (
-                            <span className="bg-indigo-600 text-white px-2 py-0.5 rounded-md text-[10px] font-extrabold shadow-2xs">
-                              {calculatedDays} {calculatedDays === 1 ? 'Day' : 'Days'}
-                              {((selectedLeaveType === 'half_pay' && isCommuted) || selectedLeaveType === 'commuted') && (
-                                ` (${rawCalculatedDays} Cal. × 2)`
-                              )}
-                            </span>
-                          ) : (
-                            <span className="text-rose-600 font-bold text-[10px]">Invalid Date</span>
-                          )
+                  {/* Total Duration Calculated Badge */}
+                  {startDate && endDate && (
+                    <div className="flex items-center justify-between p-2.5 bg-blue-50/70 border border-blue-200/80 rounded-xl text-xs">
+                      <span className="font-semibold text-blue-900">Total Duration:</span>
+                      <span className="font-bold text-blue-950 bg-white px-2.5 py-0.5 rounded-md border border-blue-200 shadow-2xs">
+                        {calculatedDays} {calculatedDays === 1 ? 'Day' : 'Days'}
+                        {((selectedLeaveType === 'half_pay' && isCommuted) || selectedLeaveType === 'commuted') && (
+                          ` (${rawCalculatedDays} Cal. × 2)`
                         )}
-                      </div>
-                      <AppDatePicker
-                        value={endDate}
-                        minDate={startDate || todayStr}
-                        isOpen={activeStationPicker === 'to'}
-                        onToggle={() => setActiveStationPicker(activeStationPicker === 'to' ? null : 'to')}
-                        onChange={(dStr) => {
-                          setEndDate(dStr);
-                          setActiveStationPicker(null);
-                        }}
-                        isRightColumn={true}
-                      />
-
-                      {selectedLeaveType === 'casual' && startDate && endDate && (
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                            End Session:
-                          </label>
-                          <select
-                            value={endSession}
-                            onChange={(e) => setEndSession(e.target.value as 'first_half' | 'second_half')}
-                            className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 font-semibold focus:outline-none focus:border-indigo-500 cursor-pointer shadow-2xs"
-                          >
-                            <option value="first_half">1st Half</option>
-                            <option value="second_half">2nd Half</option>
-                          </select>
-                        </div>
-                      )}
+                      </span>
                     </div>
-                  </div>
+                  )}
 
+                  {/* Station Leave Restriction Validation */}
                   {selectedLeaveType === 'station' && startDate && endDate && (
-                    <div className="mt-2">
+                    <div>
                       {(() => {
                         const stCheck = checkStationLeaveRange(startDate, endDate);
                         if (stCheck.valid) {
                           return (
-                            <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-900 text-[11px] font-semibold flex items-center space-x-2 shadow-2xs">
+                            <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-900 text-[11px] font-semibold flex items-center space-x-2">
                               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                              <span>Valid Station Leave Dates: All selected dates fall on Weekends or Gazetted Holidays (GH).</span>
+                              <span>Valid: Selected dates fall on Weekends or Gazetted Holidays (GH).</span>
                             </div>
                           );
                         } else {
                           return (
-                            <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-900 text-[11px] font-semibold flex items-start space-x-2 shadow-2xs">
+                            <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-900 text-[11px] font-semibold flex items-start space-x-2">
                               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                               <div>
                                 <span className="font-bold block text-rose-800">Station Leave Date Restriction:</span>
-                                Station Leave is only permitted on <strong>Weekends (Saturday/Sunday)</strong> and <strong>Gazetted Holidays (GH)</strong>. Working weekdays found in date range: <span className="font-mono font-bold underline text-rose-950">{stCheck.invalidDates.join(', ')}</span>.
+                                Only permitted on Weekends &amp; Gazetted Holidays. Weekdays found: <span className="font-mono font-bold text-rose-950">{stCheck.invalidDates.join(', ')}</span>.
                               </div>
                             </div>
                           );
@@ -3329,21 +3104,269 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                 </div>
               )}
 
-              {/* Doctor's Prescription / Medical Certificate Upload for Leave Not Due (LND) */}
-              {selectedLeaveType === 'leave_not_due' && (
-                <div className="bg-indigo-50/60 border border-indigo-200/80 rounded-xl p-3 space-y-2 text-xs">
-                  <div className="flex items-center justify-between text-indigo-950 font-bold text-xs">
-                    <span className="flex items-center gap-1.5">
-                      <Paperclip className="w-4 h-4 text-indigo-600" />
-                      Doctor's Prescription / Medical Certificate *
-                    </span>
-                    <span className="text-[10px] text-indigo-700 font-medium">PDF or Image (Max 10MB)</span>
+              {/* Headquarter (HQ) Leave / Station Leave Permission Toggle */}
+              {selectedLeaveType === 'station' ? (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Outstation Location / Contact Address during Leave *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Enter outstation city/address during leave..."
+                    value={stationAddress === 'Dehradun HQ' ? '' : stationAddress}
+                    onChange={(e) => setStationAddress(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                    required
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                    <span>Headquarter (HQ) / Station Permission *</span>
+                    <span className="text-[10px] text-slate-500 font-medium">HQ: Dehradun</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRequiresHqPermission(false);
+                        setStationAddress('Dehradun HQ');
+                      }}
+                      className={`py-2 px-3 rounded-xl font-bold flex items-center justify-center space-x-1.5 border transition-all cursor-pointer text-xs ${
+                        !requiresHqPermission
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <Building2 className="w-3.5 h-3.5" />
+                      <span className="truncate">Not Required (HQ)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRequiresHqPermission(true);
+                        if (stationAddress === 'Dehradun HQ') setStationAddress('');
+                      }}
+                      className={`py-2 px-3 rounded-xl font-bold flex items-center justify-center space-x-1.5 border transition-all cursor-pointer text-xs ${
+                        requiresHqPermission
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <MapPin className="w-3.5 h-3.5" />
+                      <span className="truncate">Station Leave</span>
+                    </button>
+                  </div>
+                  {requiresHqPermission && (
+                    <div className="mt-2.5">
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Outstation Location / Contact Address *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Enter outstation city/address during leave..."
+                        value={stationAddress === 'Dehradun HQ' ? '' : stationAddress}
+                        onChange={(e) => setStationAddress(e.target.value)}
+                        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                        required={requiresHqPermission}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Earned Leave Options (LTC / Ex-India) */}
+              {selectedLeaveType === 'earned' && (
+                <div className="space-y-2.5">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    LTC / Ex-India Option *
+                  </label>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLtcType('none');
+                        setEncashLtc(false);
+                      }}
+                      className={`py-2 px-2 rounded-xl font-bold flex items-center justify-center border transition-all cursor-pointer text-xs truncate ${
+                        ltcType === 'none'
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      Regular EL
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLtcType('ltc')}
+                      className={`py-2 px-2 rounded-xl font-bold flex items-center justify-center border transition-all cursor-pointer text-xs truncate ${
+                        ltcType === 'ltc'
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      Availing LTC
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLtcType('ex_india');
+                        setEncashLtc(false);
+                      }}
+                      className={`py-2 px-2 rounded-xl font-bold flex items-center justify-center border transition-all cursor-pointer text-xs truncate ${
+                        ltcType === 'ex_india'
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      Ex-India
+                    </button>
                   </div>
 
+                  {ltcType === 'ltc' && (
+                    <div className="p-3 bg-blue-50/70 border border-blue-200/80 rounded-xl space-y-2">
+                      <label className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={encashLtc}
+                          onChange={(e) => setEncashLtc(e.target.checked)}
+                          className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                        />
+                        <span className="text-xs font-bold text-blue-950">
+                          Avail Leave Encashment with LTC?
+                        </span>
+                      </label>
+                      {encashLtc && (
+                        <div className="flex items-center justify-between gap-3 pt-1">
+                          <span className="text-xs font-medium text-slate-700">Encash Days (Max 10):</span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={10}
+                            value={encashDays}
+                            onChange={(e) => {
+                              const val = Math.min(10, Math.max(1, parseInt(e.target.value) || 0));
+                              setEncashDays(val);
+                            }}
+                            className="w-20 bg-white border border-slate-300 rounded-lg px-2 py-1 text-center text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {!requiresHqPermission && (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Contact Address during EL *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Enter contact address / station location during EL..."
+                        value={stationAddress === 'Dehradun HQ' ? '' : stationAddress}
+                        onChange={(e) => setStationAddress(e.target.value)}
+                        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                        required={selectedLeaveType === 'earned' && !requiresHqPermission}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* HPL & Commuted Leave Options */}
+              {(selectedLeaveType === 'half_pay' || selectedLeaveType === 'commuted') && (
+                <div className="space-y-2.5">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Leave Conversion Option *
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsCommuted(false);
+                        setPrescriptionUrl('');
+                        setPrescriptionFileName('');
+                      }}
+                      className={`py-2 px-3 rounded-xl font-bold flex items-center justify-center border transition-all cursor-pointer text-xs ${
+                        !isCommuted
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      Normal HPL
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsCommuted(true)}
+                      className={`py-2 px-3 rounded-xl font-bold flex items-center justify-center border transition-all cursor-pointer text-xs ${
+                        isCommuted
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      Commuted Leave (Medical)
+                    </button>
+                  </div>
+
+                  {isCommuted && (
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                          <Paperclip className="w-3.5 h-3.5 text-blue-600" />
+                          Doctor's Prescription *
+                        </span>
+                        <span className="text-[10px] text-slate-500">PDF / Image (Max 10MB)</span>
+                      </div>
+                      {prescriptionUrl ? (
+                        <div className="flex items-center justify-between bg-white p-2 rounded-lg border border-slate-200">
+                          <div className="flex items-center space-x-2 truncate">
+                            <FileText className="w-4 h-4 text-blue-600 shrink-0" />
+                            <span className="font-semibold text-slate-800 text-xs truncate">
+                              {prescriptionFileName || 'Medical_Prescription.pdf'}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPrescriptionUrl('');
+                              setPrescriptionFileName('');
+                            }}
+                            className="text-rose-600 hover:text-rose-800 text-xs font-bold px-2 py-0.5 rounded cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="flex flex-col items-center justify-center p-3 border border-dashed border-slate-300 rounded-lg cursor-pointer bg-white hover:bg-slate-50 transition-all text-center">
+                          <Upload className="w-4 h-4 text-blue-600 mb-1" />
+                          <span className="font-semibold text-slate-800 text-xs">Upload Medical Certificate</span>
+                          <input
+                            type="file"
+                            accept=".pdf,image/*"
+                            onChange={handlePrescriptionChange}
+                            className="hidden"
+                          />
+                        </label>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Leave Not Due (LND) Prescription Upload */}
+              {selectedLeaveType === 'leave_not_due' && (
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                      <Paperclip className="w-3.5 h-3.5 text-blue-600" />
+                      Doctor's Prescription / Certificate *
+                    </span>
+                    <span className="text-[10px] text-slate-500">PDF / Image (Max 10MB)</span>
+                  </div>
                   {prescriptionUrl ? (
-                    <div className="flex items-center justify-between bg-white p-2.5 rounded-lg border border-indigo-200">
+                    <div className="flex items-center justify-between bg-white p-2 rounded-lg border border-slate-200">
                       <div className="flex items-center space-x-2 truncate">
-                        <FileText className="w-4 h-4 text-indigo-600 shrink-0" />
+                        <FileText className="w-4 h-4 text-blue-600 shrink-0" />
                         <span className="font-semibold text-slate-800 text-xs truncate">
                           {prescriptionFileName || 'Medical_Certificate.pdf'}
                         </span>
@@ -3354,16 +3377,15 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                           setPrescriptionUrl('');
                           setPrescriptionFileName('');
                         }}
-                        className="text-indigo-600 hover:text-indigo-800 text-xs font-bold px-2 py-0.5 rounded hover:bg-indigo-50 cursor-pointer"
+                        className="text-rose-600 hover:text-rose-800 text-xs font-bold px-2 py-0.5 rounded cursor-pointer"
                       >
                         Remove
                       </button>
                     </div>
                   ) : (
-                    <label className="flex flex-col items-center justify-center p-3 border-2 border-dashed border-indigo-300 rounded-lg cursor-pointer bg-white/90 hover:bg-white transition-all text-center">
-                      <Upload className="w-5 h-5 text-indigo-500 mb-1" />
-                      <span className="font-semibold text-indigo-900 text-xs">Click or Drag & Drop Medical Certificate / Prescription</span>
-                      <span className="text-[10px] text-slate-500">Required under CCS Rule 31 for Leave Not Due</span>
+                    <label className="flex flex-col items-center justify-center p-3 border border-dashed border-slate-300 rounded-lg cursor-pointer bg-white hover:bg-slate-50 transition-all text-center">
+                      <Upload className="w-4 h-4 text-blue-600 mb-1" />
+                      <span className="font-semibold text-slate-800 text-xs">Upload Medical Certificate</span>
                       <input
                         type="file"
                         accept=".pdf,image/*"
@@ -3375,354 +3397,33 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                 </div>
               )}
 
-              {/* HPL & Commuted Leave Specific Options */}
-              {(selectedLeaveType === 'half_pay' || selectedLeaveType === 'commuted') && (
-                <>
-                  <div>
-                    <label className="block font-bold text-slate-700 text-xs mb-2">
-                      Leave Conversion / Option *
-                    </label>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <label
-                        onClick={() => {
-                          setIsCommuted(false);
-                          setPrescriptionUrl('');
-                          setPrescriptionFileName('');
-                        }}
-                        className={`flex items-center justify-center space-x-2 px-3 py-2 rounded-xl border cursor-pointer transition-all text-center ${
-                          !isCommuted
-                            ? 'bg-indigo-50/90 border-indigo-400 text-indigo-950 font-bold shadow-2xs'
-                            : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100/80 font-medium'
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="hplOption"
-                          checked={!isCommuted}
-                          onChange={() => {
-                            setIsCommuted(false);
-                            setPrescriptionUrl('');
-                            setPrescriptionFileName('');
-                          }}
-                          className="w-3.5 h-3.5 text-indigo-600 focus:ring-indigo-500 cursor-pointer shrink-0"
-                        />
-                        <span className="text-[11px] whitespace-nowrap">Normal HPL</span>
-                      </label>
-
-                      <label
-                        onClick={() => setIsCommuted(true)}
-                        className={`flex items-center justify-center space-x-2 px-3 py-2 rounded-xl border cursor-pointer transition-all text-center ${
-                          isCommuted
-                            ? 'bg-indigo-50/90 border-indigo-400 text-indigo-950 font-bold shadow-2xs'
-                            : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100/80 font-medium'
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="hplOption"
-                          checked={isCommuted}
-                          onChange={() => setIsCommuted(true)}
-                          className="w-3.5 h-3.5 text-indigo-600 focus:ring-indigo-500 cursor-pointer shrink-0"
-                        />
-                        <span className="text-[11px] whitespace-nowrap">Commuted Leave</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* Doctor's Prescription Upload Field when Commuted */}
-                  {isCommuted && (
-                    <div className="bg-indigo-50/60 border border-indigo-200/80 rounded-xl p-3 space-y-2 text-xs">
-                      <div className="flex items-center justify-between text-indigo-950 font-bold text-xs">
-                        <span className="flex items-center gap-1.5">
-                          <Paperclip className="w-4 h-4 text-indigo-600" />
-                          Doctor's Prescription / Medical Certificate *
-                        </span>
-                        <span className="text-[10px] text-indigo-700 font-medium">PDF or Image (Max 10MB)</span>
-                      </div>
-
-                      {prescriptionUrl ? (
-                        <div className="flex items-center justify-between bg-white p-2.5 rounded-lg border border-indigo-200">
-                          <div className="flex items-center space-x-2 truncate">
-                            <FileText className="w-4 h-4 text-indigo-600 shrink-0" />
-                            <span className="font-semibold text-slate-800 text-xs truncate">
-                              {prescriptionFileName || 'Doctor_Prescription.pdf'}
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setPrescriptionUrl('');
-                              setPrescriptionFileName('');
-                            }}
-                            className="text-indigo-600 hover:text-indigo-800 text-xs font-bold px-2 py-0.5 rounded hover:bg-indigo-50 cursor-pointer"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      ) : (
-                        <label className="flex flex-col items-center justify-center p-3 border-2 border-dashed border-indigo-300 rounded-lg cursor-pointer bg-white/90 hover:bg-white transition-all text-center">
-                          <Upload className="w-5 h-5 text-indigo-500 mb-1" />
-                          <span className="font-semibold text-indigo-900 text-xs">Click or Drag & Drop Doctor's Prescription</span>
-                          <span className="text-[10px] text-slate-500">Supports PDF, JPG, PNG, WEBP</span>
-                          <input
-                            type="file"
-                            accept=".pdf,image/*"
-                            onChange={handlePrescriptionChange}
-                            className="hidden"
-                          />
-                        </label>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* Headquarter (HQ) Leave / Station Leave Permission */}
-              {selectedLeaveType === 'station' ? (
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Outstation Location / Contact Address during Leave *
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Enter outstation city/address during leave..."
-                    value={stationAddress === 'Dehradun HQ' ? '' : stationAddress}
-                    onChange={(e) => setStationAddress(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-semibold focus:outline-none focus:border-indigo-500 focus:bg-white transition-all shadow-2xs"
-                    required
-                  />
-                </div>
-              ) : (
-                <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-3 space-y-2">
-                  <label className="block font-bold text-slate-800 text-xs flex items-center justify-between">
-                    <span>Headquarter (HQ) / Station Leave Permission *</span>
-                    <span className="text-[10px] text-indigo-600 font-semibold">
-                      Default Station: Dehradun HQ
-                    </span>
-                  </label>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <label
-                      onClick={() => {
-                        setRequiresHqPermission(false);
-                        setStationAddress('Dehradun HQ');
-                      }}
-                      className={`flex items-center justify-center space-x-2 px-3 py-2 rounded-xl border cursor-pointer transition-all text-center ${
-                        !requiresHqPermission
-                          ? 'bg-indigo-50/90 border-indigo-400 text-indigo-950 font-bold shadow-2xs'
-                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100/80 font-medium'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="hqPermissionOpt"
-                        checked={!requiresHqPermission}
-                        onChange={() => {
-                          setRequiresHqPermission(false);
-                          setStationAddress('Dehradun HQ');
-                        }}
-                        className="w-3.5 h-3.5 text-indigo-600 focus:ring-indigo-500 cursor-pointer shrink-0"
-                      />
-                      <span className="text-[11px] whitespace-nowrap">Not Required (Dehradun HQ)</span>
-                    </label>
-
-                    <label
-                      onClick={() => {
-                        setRequiresHqPermission(true);
-                        if (stationAddress === 'Dehradun HQ') setStationAddress('');
-                      }}
-                      className={`flex items-center justify-center space-x-2 px-3 py-2 rounded-xl border cursor-pointer transition-all text-center ${
-                        requiresHqPermission
-                          ? 'bg-indigo-50/90 border-indigo-400 text-indigo-950 font-bold shadow-2xs'
-                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100/80 font-medium'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="hqPermissionOpt"
-                        checked={requiresHqPermission}
-                        onChange={() => {
-                          setRequiresHqPermission(true);
-                          if (stationAddress === 'Dehradun HQ') setStationAddress('');
-                        }}
-                        className="w-3.5 h-3.5 text-indigo-600 focus:ring-indigo-500 cursor-pointer shrink-0"
-                      />
-                      <span className="text-[11px] whitespace-nowrap">Station Leave Required</span>
-                    </label>
-                  </div>
-
-                  {requiresHqPermission && (
-                    <div className="pt-1">
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                        Outstation Location / Contact Address during Leave *
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Enter outstation city/address during leave..."
-                        value={stationAddress === 'Dehradun HQ' ? '' : stationAddress}
-                        onChange={(e) => setStationAddress(e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-medium focus:outline-none focus:border-indigo-500"
-                        required={requiresHqPermission}
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* EL Specific Fields */}
-              {selectedLeaveType === 'earned' && (
-                <>
-                  <div>
-                    <label className="block font-bold text-slate-700 text-xs mb-2">
-                      Convert / Avail for LTC or Ex-India Leave? *
-                    </label>
-                    <div className="grid grid-cols-3 gap-2 text-xs">
-                      <label
-                        onClick={() => setLtcType('none')}
-                        className={`flex items-center justify-center space-x-1.5 px-2.5 py-2 rounded-xl border cursor-pointer transition-all text-center ${
-                          ltcType === 'none'
-                            ? 'bg-indigo-50/90 border-indigo-400 text-indigo-950 font-bold shadow-2xs'
-                            : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100/80 font-medium'
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="ltcOption"
-                          value="none"
-                          checked={ltcType === 'none'}
-                          onChange={() => setLtcType('none')}
-                          className="w-3.5 h-3.5 text-indigo-600 focus:ring-indigo-500 cursor-pointer shrink-0"
-                        />
-                        <span className="text-[11px] whitespace-nowrap">Regular EL</span>
-                      </label>
-
-                      <label
-                        onClick={() => setLtcType('ltc')}
-                        className={`flex items-center justify-center space-x-1.5 px-2.5 py-2 rounded-xl border cursor-pointer transition-all text-center ${
-                          ltcType === 'ltc'
-                            ? 'bg-indigo-50/90 border-indigo-400 text-indigo-950 font-bold shadow-2xs'
-                            : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100/80 font-medium'
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="ltcOption"
-                          value="ltc"
-                          checked={ltcType === 'ltc'}
-                          onChange={() => setLtcType('ltc')}
-                          className="w-3.5 h-3.5 text-indigo-600 focus:ring-indigo-500 cursor-pointer shrink-0"
-                        />
-                        <span className="text-[11px] whitespace-nowrap">Availing LTC</span>
-                      </label>
-
-                      <label
-                        onClick={() => {
-                          setLtcType('ex_india');
-                          setEncashLtc(false);
-                        }}
-                        className={`flex items-center justify-center space-x-1.5 px-2.5 py-2 rounded-xl border cursor-pointer transition-all text-center ${
-                          ltcType === 'ex_india'
-                            ? 'bg-indigo-50/90 border-indigo-400 text-indigo-950 font-bold shadow-2xs'
-                            : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100/80 font-medium'
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="ltcOption"
-                          value="ex_india"
-                          checked={ltcType === 'ex_india'}
-                          onChange={() => {
-                            setLtcType('ex_india');
-                            setEncashLtc(false);
-                          }}
-                          className="w-3.5 h-3.5 text-indigo-600 focus:ring-indigo-500 cursor-pointer shrink-0"
-                        />
-                        <span className="text-[11px] whitespace-nowrap">Ex-India Leave</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* Leave Encashment option for LTC */}
-                  {ltcType === 'ltc' && (
-                    <div className="bg-indigo-50/60 border border-indigo-200/90 rounded-xl p-3 space-y-2.5">
-                      <label className="flex items-center space-x-2.5 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={encashLtc}
-                          onChange={(e) => setEncashLtc(e.target.checked)}
-                          className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
-                        />
-                        <span className="font-bold text-indigo-950 text-xs">
-                          Avail Leave Encashment along with LTC?
-                        </span>
-                      </label>
-
-                      {encashLtc && (
-                        <div className="pt-1 flex items-center justify-between gap-3 bg-white/80 p-2.5 rounded-lg border border-indigo-200">
-                          <div className="flex-1">
-                            <label className="block font-bold text-indigo-900 text-xs">
-                              Days to Encash (Max 10 EL):
-                            </label>
-                          </div>
-                          <div className="w-24 shrink-0">
-                            <input
-                              type="number"
-                              min={1}
-                              max={10}
-                              value={encashDays}
-                              onChange={(e) => {
-                                const val = Math.min(10, Math.max(1, parseInt(e.target.value) || 0));
-                                setEncashDays(val);
-                              }}
-                              className="w-full bg-white border border-indigo-300 rounded-lg px-2.5 py-1 text-center text-xs font-black text-indigo-950 focus:outline-none focus:border-indigo-600"
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {!requiresHqPermission && (
-                    <div>
-                      <label className="block font-bold text-slate-700 text-xs mb-1 flex items-center justify-between">
-                        <span>Address / Station Address during EL *</span>
-                        <span className="text-[10px] text-indigo-600 font-normal">Contact address during leave</span>
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Enter contact address / station location during EL..."
-                        value={stationAddress === 'Dehradun HQ' ? '' : stationAddress}
-                        onChange={(e) => setStationAddress(e.target.value)}
-                        className="w-full bg-slate-50/80 border border-slate-200/90 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-semibold focus:bg-white focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15 shadow-2xs transition-all placeholder:text-slate-400"
-                        required={selectedLeaveType === 'earned' && !requiresHqPermission}
-                      />
-                    </div>
-                  )}
-                </>
-              )}
-
+              {/* Reason for Leave */}
               <div>
-                <label className="block font-bold text-slate-800 text-xs mb-1.5 tracking-tight">Reason for Leave *</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Reason for Leave *
+                </label>
                 <textarea
                   rows={2}
                   placeholder="State the reason for your leave application..."
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
-                  className="w-full bg-slate-50/80 border border-slate-200/90 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-semibold focus:bg-white focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15 shadow-2xs transition-all placeholder:text-slate-400 resize-y min-h-[70px]"
                   required
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white resize-none"
                 />
               </div>
 
-              <div className="shrink-0 bg-white/95 backdrop-blur-md pt-3.5 pb-2.5 mt-3 border-t border-slate-200/80 flex items-center justify-end space-x-3 sticky bottom-0 z-20">
+              {/* Form Action Buttons */}
+              <div className="flex items-center justify-end space-x-2 pt-3 border-t border-slate-100 shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowApplyModal(false)}
-                  className="px-4.5 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-all cursor-pointer border border-slate-200/80"
+                  className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 active:scale-98 text-white transition-all shadow-md shadow-indigo-600/20 flex items-center space-x-2 cursor-pointer"
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer flex items-center space-x-1.5"
                 >
                   <Send className="w-4 h-4" />
                   <span>Submit</span>
@@ -4120,33 +3821,33 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
 
       {/* Edit Leave Request Modal */}
       {editingLeave && (
-        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden border border-slate-200 animate-in fade-in zoom-in duration-150">
-            <div className="shrink-0 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white px-5 py-4 flex items-center justify-between border-b border-slate-800 shadow-xs">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200 my-auto sm:my-8 flex flex-col max-h-[90vh]">
+            <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 px-4 sm:px-6 py-3.5 sm:py-4 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
-                  <Edit3 className="w-5 h-5 text-blue-400" />
+                <div className="p-2 bg-white/10 rounded-xl backdrop-blur-md shrink-0">
+                  <Edit3 className="w-5 h-5 text-blue-300" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-white tracking-tight">Edit Leave Application</h3>
-                  <p className="text-xs text-slate-300 mt-0.5">Modify pending application dates or reason</p>
+                  <h2 className="text-base font-bold tracking-wide">Edit Leave Application</h2>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setEditingLeave(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleEditSubmit} className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3">
+            <form onSubmit={handleEditSubmit} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3.5 sm:space-y-4">
               <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-1">
                 <p className="font-bold text-slate-900">{editingLeave.userName} ({editingLeave.department})</p>
                 <p className="text-slate-600">Type: <strong>{editingLeave.leaveTypeName}</strong></p>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="grid grid-cols-2 gap-2.5 sm:gap-3 text-xs">
                 <AppDatePicker
                   label="Start Date *"
                   value={editStartDate}
@@ -4171,25 +3872,25 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                   rows={3}
                   value={editReason}
                   onChange={(e) => setEditReason(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white resize-none"
                   required
                 />
               </div>
 
-              <div className="pt-2 flex items-center justify-end space-x-3 border-t border-slate-100">
+              <div className="flex items-center justify-end space-x-2 pt-3 border-t border-slate-100 shrink-0">
                 <button
                   type="button"
                   onClick={() => setEditingLeave(null)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                  className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition-all shadow-md flex items-center space-x-1.5"
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer flex items-center space-x-1.5"
                 >
-                  <Check className="w-3.5 h-3.5" />
-                  <span>Update Leave</span>
+                  <Check className="w-4 h-4" />
+                  <span>Update</span>
                 </button>
               </div>
             </form>

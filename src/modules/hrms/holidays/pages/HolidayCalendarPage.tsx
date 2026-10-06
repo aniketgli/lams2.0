@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../../../context/AppContext';
 import { AppDatePicker } from '../../../../shared/components/AppDatePicker';
+import { AppSelect } from '../../../../shared/components/AppSelect';
+import { LeaveCycleDropdown } from '../../leave/components/LeaveCycleDropdown';
 import { MultiSelectFilter, matchesMultiSelect } from '../../../../shared/components/MultiSelectFilter';
 import {
   HolidayItem,
@@ -52,8 +54,7 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
   const { currentUser, holidays, addHoliday, updateHoliday, deleteHoliday } = useApp();
   const isAdmin = currentUser.role === 'administrator';
 
-  const [filterStartDate, setFilterStartDate] = useState<string>('2026-01-01');
-  const [filterEndDate, setFilterEndDate] = useState<string>('2026-12-31');
+  const [selectedYear, setSelectedYear] = useState<string>('2026');
   const [selectedType, setSelectedType] = useState<string[]>(['all']); // all, gazetted, restricted, local
   const [selectedCategory, setSelectedCategory] = useState<string[]>(['all']);
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -92,9 +93,15 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
     setTimeout(() => setToastMessage(null), 3000);
   };
 
+  const currentYear = useMemo(() => {
+    const yrClean = selectedYear.replace(/^(CY-|FY-)/, '').trim();
+    const parsed = parseInt(yrClean, 10);
+    return !isNaN(parsed) && yrClean !== 'all' ? parsed : 2026;
+  }, [selectedYear]);
+
   // Open modal for new holiday
   const handleOpenAddModal = () => {
-    const defaultDate = filterStartDate ? filterStartDate : '2026-08-15';
+    const defaultDate = `${currentYear}-08-15`;
     const dateObj = new Date(defaultDate + 'T00:00:00');
     const dayOfWeek = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
     const isAutoLW = (dayOfWeek === 'Friday' || dayOfWeek === 'Monday' || dayOfWeek === 'Saturday' || dayOfWeek === 'Sunday');
@@ -209,9 +216,9 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
 
   // Filtered Holidays from AppContext state
   const filteredHolidays = useMemo(() => {
+    const yrClean = selectedYear.replace(/^(CY-|FY-)/, '').trim();
     return holidays.filter((h) => {
-      if (filterStartDate && h.date < filterStartDate) return false;
-      if (filterEndDate && h.date > filterEndDate) return false;
+      if (yrClean && yrClean !== 'all' && !h.date.startsWith(yrClean)) return false;
       if (!matchesMultiSelect(selectedType, h.type)) return false;
       if (!matchesMultiSelect(selectedCategory, h.category)) return false;
       if (searchTerm.trim()) {
@@ -227,7 +234,7 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
       }
       return true;
     }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  }, [holidays, filterStartDate, filterEndDate, selectedType, selectedCategory, searchTerm]);
+  }, [holidays, selectedYear, selectedType, selectedCategory, searchTerm]);
 
   // Table Column Sort State
   const [sortField, setSortField] = useState<'date' | 'name' | 'type' | 'category'>('date');
@@ -260,9 +267,9 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
 
   // Statistics
   const stats = useMemo(() => {
+    const yrClean = selectedYear.replace(/^(CY-|FY-)/, '').trim();
     const yearHolidays = holidays.filter((h) => {
-      if (filterStartDate && h.date < filterStartDate) return false;
-      if (filterEndDate && h.date > filterEndDate) return false;
+      if (yrClean && yrClean !== 'all' && !h.date.startsWith(yrClean)) return false;
       return true;
     });
     const gazettedCount = yearHolidays.filter((h) => h.type === 'gazetted').length;
@@ -271,8 +278,8 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
     const longWeekends = yearHolidays.filter((h) => h.isLongWeekend).length;
 
     // Next upcoming holiday from today
-    const todayStr = '2026-08-15'; // Local context date
-    const upcoming = holidays.filter(
+    const todayStr = `${currentYear}-01-01`;
+    const upcoming = yearHolidays.filter(
       (h) => h.date >= todayStr
     ).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
 
@@ -284,7 +291,7 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
       longWeekends,
       upcoming
     };
-  }, [holidays, filterStartDate, filterEndDate]);
+  }, [holidays, selectedYear, currentYear]);
 
   // Unique Categories List
   const categoryList = useMemo(() => {
@@ -295,17 +302,8 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
     return Array.from(cats).sort();
   }, [holidays]);
 
-  // Quick Preset Handlers
-  const currentYear = filterStartDate ? new Date(filterStartDate).getFullYear() : 2026;
-
-  const handlePresetCurrentYear = () => {
-    setFilterStartDate('2026-01-01');
-    setFilterEndDate('2026-12-31');
-  };
-
   const handleResetFilters = () => {
-    setFilterStartDate('2026-01-01');
-    setFilterEndDate('2026-12-31');
+    setSelectedYear('2026');
     setSelectedType(['all']);
     setSelectedCategory(['all']);
     setSearchTerm('');
@@ -359,7 +357,7 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
     doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
     const typeText = selectedType.includes('all') ? 'Gazetted & Restricted' : selectedType.join(', ').toUpperCase();
-    doc.text(`Range: ${filterStartDate} to ${filterEndDate} | Category: ${selectedCategory.includes('all') ? 'All Categories' : selectedCategory.join(', ')} | Type: ${typeText} | Total: ${filteredHolidays.length}`, 14, 32);
+    doc.text(`Year: ${selectedYear} | Category: ${selectedCategory.includes('all') ? 'All Categories' : selectedCategory.join(', ')} | Type: ${typeText} | Total: ${filteredHolidays.length}`, 14, 32);
 
     // Table
     const tableHead = [
@@ -369,7 +367,7 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
     const tableData = filteredHolidays.map((h, idx) => [
       idx + 1,
       `${new Date(h.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}\n(${h.dayOfWeek})`,
-      h.name + (h.isLongWeekend ? ' [Long Weekend]' : ''),
+      h.name,
       h.hindiName || '-',
       h.type === 'gazetted' ? 'Gazetted (GH)' : h.type === 'restricted' ? 'Restricted (RH)' : 'Local (LH)',
       h.category
@@ -571,18 +569,10 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
           isAdmin ? (
             <button
               onClick={handleOpenAddModal}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-xl flex items-center space-x-1.5 transition-all shadow-2xs cursor-pointer active:scale-95"
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-xl flex items-center space-x-1.5 transition-all shadow-2xs cursor-pointer active:scale-95 ml-auto"
             >
               <PlusCircle className="w-4 h-4" />
               <span>Add Holiday</span>
-            </button>
-          ) : onNavigate ? (
-            <button
-              onClick={() => onNavigate('leave')}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center space-x-1.5 transition-all shadow-2xs cursor-pointer active:scale-95"
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span>Apply for Leave / RH</span>
             </button>
           ) : undefined
         }
@@ -606,7 +596,7 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
           </div>
         </div>
 
-        {/* 2. Restricted Holidays */}
+        {/* 2. Restricted Holidays - AMBER */}
         <div className="bg-amber-50/70 border border-amber-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
           <div className="flex items-start justify-between gap-1.5">
             <div className="min-w-0">
@@ -622,7 +612,7 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
           </div>
         </div>
 
-        {/* 3. Long Weekends (LW) - RED */}
+        {/* 3. Long Weekends (LW) - RED / ROSE */}
         <div className="bg-rose-50/70 border border-rose-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
           <div className="flex items-start justify-between gap-1.5">
             <div className="min-w-0">
@@ -638,18 +628,18 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
           </div>
         </div>
 
-        {/* 4. RH Quota */}
-        <div className="bg-indigo-50/70 border border-indigo-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
+        {/* 4. RH Allowed Quota - PURPLE */}
+        <div className="bg-purple-50/70 border border-purple-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
           <div className="flex items-start justify-between gap-1.5">
             <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-800 truncate">RH Allowed Quota</p>
-              <p className="text-xl sm:text-2xl font-black text-indigo-900 mt-0.5">2 / Year</p>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-purple-800 truncate">RH Allowed Quota</p>
+              <p className="text-xl sm:text-2xl font-black text-purple-900 mt-0.5">2 / Year</p>
             </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-indigo-100 border border-indigo-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <CalendarDays className="w-4 h-4 text-indigo-700" />
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-purple-100 border border-purple-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
+              <CalendarDays className="w-4 h-4 text-purple-700" />
             </div>
           </div>
-          <div className="mt-1.5 pt-1.5 border-t border-indigo-200/60 text-[10px] sm:text-[11px] font-semibold text-indigo-700 whitespace-nowrap overflow-hidden text-ellipsis">
+          <div className="mt-1.5 pt-1.5 border-t border-purple-200/60 text-[10px] sm:text-[11px] font-semibold text-purple-700 whitespace-nowrap overflow-hidden text-ellipsis">
             Max 2 RH Availment / Employee
           </div>
         </div>
@@ -658,58 +648,33 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
       {/* Professional Date Range & Related Filters Control Bar */}
       <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3.5">
         {/* Top Bar: Clean Themed Selectors, Presets & Export Action Buttons */}
-        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3.5 border-b border-slate-100 pb-3.5">
-          {/* Left: Date Pickers & Quick Presets */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center space-x-2">
-              <AppDatePicker
-                size="sm"
-                placeholder="From Date"
-                value={filterStartDate}
-                onChange={(dStr) => setFilterStartDate(dStr)}
-              />
-
-              <span className="text-slate-300 font-bold">—</span>
-
-              <AppDatePicker
-                size="sm"
-                placeholder="To Date"
-                value={filterEndDate}
-                onChange={(dStr) => setFilterEndDate(dStr)}
-                isRightColumn={true}
-              />
-            </div>
-
-            {/* Quick Preset: Current Year (Only appears when dates are modified from default) */}
-            {(filterStartDate !== '2026-01-01' || filterEndDate !== '2026-12-31') && (
-              <div>
-                <button
-                  onClick={handlePresetCurrentYear}
-                  className="bg-slate-50/90 hover:bg-white border border-slate-200/90 rounded-xl px-3.5 py-1.5 text-xs font-bold text-slate-800 shadow-2xs flex items-center space-x-1.5 shrink-0 transition-all cursor-pointer"
-                  title="Reset dates to Current Year"
-                >
-                  <CalendarIcon className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Current Year</span>
-                </button>
-              </div>
-            )}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3.5 border-b border-slate-100 pb-3">
+          {/* Left: LeaveCycleDropdown (matching Leave Page Year Dropdown exactly) */}
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <LeaveCycleDropdown
+              selectedCycle={selectedYear}
+              onChange={(yr) => setSelectedYear(yr || 'all')}
+              userLeaveCycle="CY"
+            />
           </div>
 
           {/* Right: Export Buttons (CSV & PDF) */}
-          <div className="flex items-center space-x-2 shrink-0">
+          <div className="flex items-center justify-end gap-2 shrink-0 w-full sm:w-auto ml-auto">
             <button
               onClick={handleExportCSV}
-              className="px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-800 border border-slate-200/90 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer shadow-2xs"
+              className="h-9 px-3 bg-white hover:bg-slate-50 text-slate-800 border border-slate-200/90 rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer shadow-2xs shrink-0"
+              title="Export records to CSV"
             >
-              <Download className="w-3.5 h-3.5 text-emerald-600" />
+              <Download className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
               <span>Export CSV</span>
             </button>
 
             <button
               onClick={handleExportPDF}
-              className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white border border-slate-900 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer shadow-2xs"
+              className="h-9 px-3 bg-slate-900 hover:bg-slate-800 text-white border border-slate-900 rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer shadow-2xs shrink-0"
+              title="Export records to PDF"
             >
-              <FileText className="w-3.5 h-3.5 text-rose-400" />
+              <FileText className="w-3.5 h-3.5 text-rose-400 shrink-0" />
               <span>Export PDF</span>
             </button>
           </div>
@@ -717,74 +682,73 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
 
         {/* Second Row: Search Keyword, Reset & View Toggle Switch */}
         <div className="flex flex-col gap-3">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          {/* Row: Search box + Reset Filters (Icon Only) + View Mode Toggle in ONE Single Row */}
+          <div className="flex items-center gap-2 w-full">
             {/* Search Box */}
-            <div className="relative flex-1 min-w-[240px]">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <div className="relative flex-1 min-w-0">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Search holiday name, date, or category..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-9 py-2 bg-slate-50/70 border border-slate-200/80 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600/30 transition-all shadow-2xs"
+                className="h-9 w-full pl-9 pr-8 bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200/80 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 transition-all shadow-2xs"
               />
               {searchTerm && (
                 <button
                   onClick={() => setSearchTerm('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-200 transition-colors cursor-pointer"
+                  title="Clear search"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
 
-            <div className="flex items-center space-x-2 shrink-0 self-end sm:self-auto">
-              {(searchTerm !== '' ||
-                filterStartDate !== '2026-01-01' ||
-                filterEndDate !== '2026-12-31' ||
-                !selectedType.includes('all') ||
-                !selectedCategory.includes('all')) && (
-                <button
-                  onClick={handleResetFilters}
-                  className="px-3.5 py-1.5 bg-blue-50/90 hover:bg-blue-100 text-blue-900 border border-blue-200/90 rounded-2xl text-xs font-bold flex items-center space-x-2 shrink-0 transition-all cursor-pointer shadow-2xs"
-                  title="Reset all search and filter selections"
-                >
-                  <RotateCcw className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Reset All Filters</span>
-                </button>
-              )}
+            {/* Reset Filters Icon Button */}
+            {(searchTerm !== '' ||
+              (selectedYear !== '2026' && selectedYear !== 'CY-2026') ||
+              !selectedType.includes('all') ||
+              !selectedCategory.includes('all')) && (
+              <button
+                onClick={handleResetFilters}
+                className="h-9 w-9 rounded-xl border bg-blue-50/90 hover:bg-blue-100 text-blue-700 border-blue-200/90 flex items-center justify-center shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95 animate-in fade-in zoom-in-95 duration-150"
+                title="Reset all search and filter selections"
+              >
+                <RotateCcw className="w-4 h-4 text-blue-600" />
+              </button>
+            )}
 
-              {/* View Mode Toggle: Row View (Table) vs Grid View */}
-              <div className="flex items-center p-1 bg-slate-100/90 border border-slate-200/90 rounded-xl gap-1 shrink-0">
-                <button
-                  onClick={() => setViewMode('table')}
-                  title="Table View"
-                  className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-                    viewMode === 'table'
-                      ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
-                      : 'text-slate-400 hover:text-slate-700'
-                  }`}
-                >
-                  <TableIcon className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setViewMode('grid')}
-                  title="Grid View"
-                  className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-                    viewMode === 'grid'
-                      ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
-                      : 'text-slate-400 hover:text-slate-700'
-                  }`}
-                >
-                  <LayoutGrid className="w-4 h-4" />
-                </button>
-              </div>
+            {/* View Mode Toggle: Row View (Table) vs Grid View */}
+            <div className="h-9 flex items-center p-1 bg-slate-100/90 border border-slate-200/90 rounded-xl gap-1 shrink-0">
+              <button
+                onClick={() => setViewMode('table')}
+                title="Table View"
+                className={`h-7 px-2 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
+                  viewMode === 'table'
+                    ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
+                    : 'text-slate-400 hover:text-slate-700'
+                }`}
+              >
+                <TableIcon className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('grid')}
+                title="Grid View"
+                className={`h-7 px-2 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
+                  viewMode === 'grid'
+                    ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
+                    : 'text-slate-400 hover:text-slate-700'
+                }`}
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
           {/* Third Row: Filter Dropdowns */}
           <div className="pt-2 border-t border-slate-100">
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 flex-nowrap">
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 flex-nowrap sm:flex-wrap">
               {/* 1. Holiday Type Filter */}
               <div className="flex-1 min-w-[140px] max-w-[220px] shrink-0 sm:shrink">
                 <MultiSelectFilter
@@ -858,15 +822,10 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
       {viewMode === 'table' && (
         <div className="bg-white border border-slate-200 rounded-2xl shadow-2xs overflow-hidden">
           {/* Table Title Bar */}
-          <div className="p-3.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 min-h-[50px]">
-            <div className="flex items-center space-x-3">
-              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                Official Holiday Master Table ({sortedHolidays.length})
-              </span>
-              <span className="text-[11px] text-slate-500 font-medium bg-slate-200/60 px-2.5 py-0.5 rounded-full border border-slate-200">
-                Year {currentYear}
-              </span>
-            </div>
+          <div className="p-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between min-h-[50px]">
+            <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+              Holidays ({sortedHolidays.length})
+            </span>
           </div>
 
           <div className="w-full overflow-hidden">
@@ -955,9 +914,7 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
                   sortedHolidays.map((h, idx) => (
                     <tr
                       key={h.id}
-                      className={`hover:bg-slate-50/80 transition-colors ${
-                        h.isLongWeekend ? 'bg-rose-50/20' : ''
-                      }`}
+                      className="hover:bg-slate-50/80 transition-colors"
                     >
                       <td className="py-2.5 px-3 text-slate-400 font-bold text-center">{idx + 1}</td>
                       <td className="py-2.5 px-3 whitespace-nowrap">
@@ -978,11 +935,6 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
                         <div>
                           <div className="flex items-center space-x-2">
                             <span className="font-bold text-slate-900">{h.name}</span>
-                            {h.isLongWeekend && (
-                              <span className="text-[10px] bg-rose-100 text-rose-800 border border-rose-200 px-1.5 py-0.2 rounded font-bold">
-                                Long Weekend
-                              </span>
-                            )}
                           </div>
                           {h.hindiName && (
                             <span className="text-[11px] text-slate-500 font-normal block">
@@ -1045,23 +997,21 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
           <div className="bg-white border border-slate-200 rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-scale-up">
             {/* Header */}
-            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
-              <div className="flex items-center space-x-2.5">
-                <div className="p-2 bg-blue-600/30 rounded-xl border border-blue-400/40 text-blue-400">
-                  <CalendarDays className="w-5 h-5" />
+            <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 px-4 sm:px-6 py-3.5 sm:py-4 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-white/10 rounded-xl backdrop-blur-md shrink-0">
+                  <CalendarDays className="w-5 h-5 text-blue-300" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-sm text-white">
-                    {editingHoliday ? 'Edit Holiday (अवकाश संपादित करें)' : 'Create New Holiday (नया अवकाश जोड़ें)'}
-                  </h3>
-                  <p className="text-[11px] text-slate-400">
-                    Manage official calendar for current &amp; upcoming years
-                  </p>
+                  <h2 className="text-base font-bold tracking-wide">
+                    {editingHoliday ? 'Edit Holiday' : 'Create New Holiday'}
+                  </h2>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setIsFormModalOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>

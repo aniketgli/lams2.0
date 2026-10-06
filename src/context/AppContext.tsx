@@ -33,7 +33,8 @@ import {
   INITIAL_OD_REQUESTS,
   INITIAL_LEAVE_REQUESTS,
   INITIAL_MANUAL_ATTENDANCE_REQUESTS,
-  generateSeedAttendance
+  generateSeedAttendance,
+  generateTodayAttendanceRecords
 } from '../modules/hrms/data/hrmsSeedData';
 import { INITIAL_PROJECT_HISTORIES } from '../modules/hrms/profile/data/projectHistoryData';
 import { INITIAL_HOLIDAYS, HolidayItem } from '../modules/hrms/holidays/data/holidayData';
@@ -357,9 +358,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>(() => {
     const isLatestSeed = localStorage.getItem(SEED_VERSION_KEY);
-    if (!isLatestSeed) return generateSeedAttendance();
+    const todayStr = new Date().toISOString().split('T')[0];
+    const initialRecords = generateSeedAttendance();
+    if (!isLatestSeed) return initialRecords;
     const saved = localStorage.getItem('la_hub_attendance');
-    return saved && JSON.parse(saved).length >= 100 ? JSON.parse(saved) : generateSeedAttendance();
+    if (saved) {
+      try {
+        const parsed: AttendanceRecord[] = JSON.parse(saved);
+        if (parsed.length >= 100) {
+          if (!parsed.some((r) => r.date === todayStr)) {
+            const todayRecords = generateTodayAttendanceRecords(INITIAL_USERS, todayStr);
+            const merged = [...parsed, ...todayRecords];
+            localStorage.setItem('la_hub_attendance', JSON.stringify(merged));
+            return merged;
+          }
+          return parsed;
+        }
+      } catch {
+        // Fall back to initial records
+      }
+    }
+    return initialRecords;
   });
 
   const [manualAttendanceRequests, setManualAttendanceRequests] = useState<ManualAttendanceRegularizationRequest[]>(() => {
@@ -1878,13 +1897,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, message: 'Employees are not authorized to approve manual attendance.' };
     }
 
-    // Role check: Reporting Manager can only approve/reject their subordinates' requests
+    // Role check: Reporting Manager can approve/reject staff requests
     if (currentUser.role === 'reporting_manager') {
-      if (target.reportingManagerId !== currentUser.id && target.userId === currentUser.id) {
+      if (target.userId === currentUser.id) {
         return { success: false, message: 'You cannot approve your own manual attendance request.' };
-      }
-      if (target.reportingManagerId !== currentUser.id) {
-        return { success: false, message: 'You are only authorized to approve requests assigned to you.' };
       }
     }
 

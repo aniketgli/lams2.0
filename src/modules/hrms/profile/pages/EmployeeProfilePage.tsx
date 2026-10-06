@@ -1362,73 +1362,6 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
         }
       />
 
-      {/* Employee Profile Summary Stat Cards: Exactly 4 Uniform Cards matching Attendance theme */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {/* 1. Total Personnel */}
-        <div className="bg-blue-50/70 border border-blue-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-blue-800 truncate">Total Personnel</p>
-              <p className="text-xl sm:text-2xl font-black text-blue-900 mt-0.5">{profileStats.total}</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-100 border border-blue-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <Users className="w-4 h-4 text-blue-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-blue-200/60 text-[10px] sm:text-[11px] font-semibold text-blue-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            Active Employee Accounts
-          </div>
-        </div>
-
-        {/* 2. Permanent / Regular Staff */}
-        <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 truncate">Permanent Cadres</p>
-              <p className="text-xl sm:text-2xl font-black text-emerald-900 mt-0.5">{profileStats.regular}</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-100 border border-emerald-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <ShieldCheck className="w-4 h-4 text-emerald-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-emerald-200/60 text-[10px] sm:text-[11px] font-semibold text-emerald-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            Regular Service Staff
-          </div>
-        </div>
-
-        {/* 3. Contractual / Project Staff */}
-        <div className="bg-amber-50/70 border border-amber-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800 truncate">Contractual / Project</p>
-              <p className="text-xl sm:text-2xl font-black text-amber-900 mt-0.5">{profileStats.contractual}</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-100 border border-amber-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <Briefcase className="w-4 h-4 text-amber-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-amber-200/60 text-[10px] sm:text-[11px] font-semibold text-amber-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            Fellows &amp; Research Staff
-          </div>
-        </div>
-
-        {/* 4. Active Departments */}
-        <div className="bg-purple-50/70 border border-purple-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-purple-800 truncate">Departments &amp; Wings</p>
-              <p className="text-xl sm:text-2xl font-black text-purple-900 mt-0.5">{profileStats.depts}</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-purple-100 border border-purple-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <Building2 className="w-4 h-4 text-purple-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-purple-200/60 text-[10px] sm:text-[11px] font-semibold text-purple-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            Organizational Units
-          </div>
-        </div>
-      </div>
-
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-5 right-5 z-50 bg-slate-900 text-white px-4 py-3 rounded-lg shadow-xl text-xs font-semibold flex items-center space-x-2 animate-in fade-in slide-in-from-bottom-2 border border-slate-700">
@@ -1854,584 +1787,311 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
             </div>
           ) : (
             /* ================================================================ */
-            /* VIEW 2: DETAILED SELECTED PROFILE VIEW */
+            /* VIEW 2: DETAILED SELECTED PROFILE VIEW (REBUILT & STREAMLINED)   */
             /* ================================================================ */
-            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+            <div className="bg-white border border-slate-200/90 rounded-2xl overflow-hidden shadow-xs space-y-6">
               {/* Unified Dark Navy Cover Header */}
-              <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 p-6 relative text-white">
-                {/* Top Bar inside Cover */}
-                <div className="flex items-center justify-between mb-5">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-[10px] font-bold text-blue-200 bg-white/10 px-2.5 py-1 rounded-md border border-white/10 backdrop-blur-xs uppercase tracking-wider">
-                      Emp ID: {selectedUser.id}
-                    </span>
-                    {/* Category Badge Tag inside Navy Cover */}
-                    {(() => {
-                      const badge = getCategoryBadge(selectedUser);
-                      const IconComp = badge.icon;
-                      return (
-                        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-md border backdrop-blur-xs flex items-center space-x-1 ${badge.darkBadgeClass}`}>
-                          <IconComp className="w-3 h-3 shrink-0" />
-                          <span>{badge.label}</span>
-                        </span>
-                      );
-                    })()}
-
-                    {selectedUser.isPhDEnrolled && (
-                      <span className="text-[10px] font-bold px-2.5 py-1 rounded-md border backdrop-blur-xs bg-purple-500/30 text-purple-200 border-purple-400/40 flex items-center space-x-1">
-                        <Sparkles className="w-3 h-3 text-purple-300 shrink-0" />
-                        <span>Dual PhD Scholar</span>
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    {selectedUser.status === 'deactivated' && (
-                      <span className="text-[10px] px-2.5 py-1 rounded-md font-bold uppercase tracking-wider bg-rose-500/20 text-rose-200 border border-rose-400/30">
-                        Deactivated
-                      </span>
-                    )}
-                  </div>
-                </div>
-
+              <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 p-5 sm:p-6 relative text-white">
                 {/* Profile Details Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
-                  <div className="flex flex-col sm:flex-row sm:items-center space-y-3 sm:space-y-0 sm:space-x-5">
+                <div className="flex flex-col sm:flex-row sm:items-center space-y-3 sm:space-y-0 sm:space-x-4">
+                  <div className="relative shrink-0">
                     <img
                       src={selectedUser.avatar}
                       alt={selectedUser.name}
-                      className="w-22 h-22 sm:w-24 sm:h-24 rounded-2xl object-cover ring-4 ring-white/20 shadow-xl bg-slate-800 shrink-0"
+                      className="w-20 h-20 sm:w-22 sm:h-22 rounded-2xl object-cover ring-4 ring-white/20 shadow-xl bg-slate-800"
                     />
-                    <div>
-                      <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight drop-shadow-xs">{selectedUser.name}</h2>
-                      <p className="text-xs sm:text-sm font-bold text-blue-300 mt-1">{selectedUser.designation}</p>
-                      <p className="text-[11px] sm:text-xs font-medium text-slate-300 mt-0.5">{selectedUser.department}</p>
-                    </div>
+                    <span
+                      className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-slate-900 ${
+                        selectedUser.status === 'deactivated' ? 'bg-slate-400' : 'bg-emerald-500'
+                      }`}
+                    />
                   </div>
-
-                  {/* Profile Banner Action Buttons */}
-                  <div className="flex items-center space-x-2 shrink-0 self-start sm:self-center">
-                    <button
-                      onClick={() => setHistoryUser(selectedUser)}
-                      className="bg-purple-600/90 hover:bg-purple-500 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center space-x-1.5 cursor-pointer border border-purple-400/30 backdrop-blur-xs transition-colors shadow-xs"
-                    >
-                      <Briefcase className="w-3.5 h-3.5 text-purple-200" />
-                      <span>Project &amp; Career History</span>
-                    </button>
-
-                    {isAdmin && (
-                      <>
-                        <button
-                          onClick={() => handleOpenTransferModal(selectedUser)}
-                          className="bg-white/10 hover:bg-white/20 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center space-x-1.5 cursor-pointer border border-white/20 backdrop-blur-xs transition-colors"
-                        >
-                          <ArrowLeftRight className="w-3.5 h-3.5 text-blue-300" />
-                          <span>Transfer Employee</span>
-                        </button>
-                        <button
-                          onClick={() => {
-                            const targetShiftId = selectedUser.shiftId || shifts.find((s) => s.isDefault)?.id || shifts[0]?.id || 'shift-gen';
-                            const targetCycle = selectedUser.leaveCycle || getUserLeaveCycleType(selectedUser);
-                            setEditingUser({
-                              ...selectedUser,
-                              shiftId: targetShiftId,
-                              leaveCycle: targetCycle,
-                              leaveCycleBasis: targetCycle === 'CY' ? 'calendar_year' : 'financial_year',
-                              biometricId: selectedUser.biometricId || selectedUser.emergencyContactPhone || ''
-                            });
-                          }}
-                          className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center space-x-1.5 cursor-pointer shadow-md transition-colors"
-                        >
-                          <Edit3 className="w-3.5 h-3.5 text-blue-100" />
-                          <span>Edit Profile</span>
-                        </button>
-                      </>
-                    )}
+                  <div>
+                    <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight drop-shadow-xs">{selectedUser.name}</h2>
+                    <p className="text-xs sm:text-sm font-bold text-blue-300 mt-0.5">{selectedUser.designation}</p>
+                    <p className="text-[11px] sm:text-xs font-medium text-slate-300">{selectedUser.department}</p>
                   </div>
                 </div>
               </div>
 
-              {/* Profile Body Details */}
-              <div className="p-6 space-y-6">
-
-                {/* Personal Bio / Details Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
-                  <div className="flex items-center space-x-2.5 text-slate-700">
-                    <Mail className="w-4 h-4 text-slate-400 shrink-0" />
-                    <div>
-                      <span className="text-[10px] text-slate-400 block font-semibold">Email Address</span>
-                      <span className="font-semibold text-slate-900">{selectedUser.email}</span>
+              {/* Profile Body: Clean, Organized Information Cards */}
+              <div className="p-4 sm:p-6 space-y-5">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {/* Card 1: Official & Employment Details */}
+                  <div className="bg-white border border-slate-200/90 rounded-xl p-4 sm:p-5 shadow-2xs space-y-3.5">
+                    <div className="flex items-center space-x-2 text-slate-900 font-black text-xs uppercase tracking-wider border-b border-slate-100 pb-2.5">
+                      <Building className="w-4 h-4 text-blue-600 shrink-0" />
+                      <span>Official &amp; Employment Details</span>
                     </div>
-                  </div>
 
-                  <div className="flex items-center space-x-2.5 text-slate-700">
-                    <Phone className="w-4 h-4 text-slate-400 shrink-0" />
-                    <div>
-                      <span className="text-[10px] text-slate-400 block font-semibold">Contact Phone</span>
-                      <span className="font-semibold text-slate-900">
-                        {selectedUser.phone || '+91 98765 43210'}
-                      </span>
-                    </div>
-                  </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-semibold block">Department</span>
+                        <span className="font-bold text-slate-900">{selectedUser.department}</span>
+                      </div>
 
-                  <div className="flex items-center space-x-2.5 text-slate-700">
-                    <Fingerprint className="w-4 h-4 text-purple-600 shrink-0" />
-                    <div>
-                      <span className="text-[10px] text-slate-400 block font-semibold">Biometric ID (Mandatory)</span>
-                      <span className="font-mono text-xs font-extrabold text-purple-900 bg-purple-50 px-2 py-0.5 rounded border border-purple-200 inline-block">
-                        {selectedUser.biometricId || selectedUser.emergencyContactPhone || `BIO-${selectedUser.id.replace('usr-', '100')}`}
-                      </span>
-                    </div>
-                  </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-semibold block">Designation</span>
+                        <span className="font-bold text-slate-900">{selectedUser.designation}</span>
+                      </div>
 
-                  {/* Assigned Shift Display */}
-                  <div className="flex items-center space-x-2.5 text-slate-700">
-                    <Clock className="w-4 h-4 text-blue-600 shrink-0" />
-                    <div>
-                      <span className="text-[10px] text-slate-400 block font-semibold">Assigned Shift</span>
-                      <span className="font-semibold text-slate-900 text-xs">
-                        {(() => {
-                          const userShift = shifts.find(s => s.id === selectedUser.shiftId) || shifts.find(s => s.isDefault) || shifts[0];
-                          return userShift ? `${userShift.name} (${userShift.startTime} - ${userShift.endTime})` : 'General Shift';
-                        })()}
-                      </span>
-                    </div>
-                  </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-semibold block">Employment Cadre</span>
+                        <span className="font-bold text-slate-900">{getEmploymentTypeLabel(selectedUser.employmentType)}</span>
+                      </div>
 
-                  {/* Leave Year Type Display */}
-                  <div className="flex items-center space-x-2.5 text-slate-700">
-                    <Calendar className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <div>
-                      <span className="text-[10px] text-slate-400 block font-semibold">Leave Year Type</span>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                        {getUserLeaveCycleType(selectedUser) === 'CY' ? 'Calendar Year (Jan – Dec)' : 'Financial Year (Apr – Mar)'}
-                      </span>
-                    </div>
-                  </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-semibold block">Date of Joining</span>
+                        <span className="font-bold text-slate-900">{selectedUser.joiningDate || 'N/A'}</span>
+                        <span className="text-[10px] text-blue-600 block mt-0.5 font-medium">{calculateServiceTenure(selectedUser.joiningDate)}</span>
+                      </div>
 
-                  <div className="flex items-center space-x-2.5 text-slate-700">
-                    <MessageSquare className="w-4 h-4 text-slate-400 shrink-0" />
-                    <div>
-                      <span className="text-[10px] text-slate-400 block font-semibold">Slack Handle</span>
-                      <span className="font-mono text-blue-700 font-semibold">
-                        {selectedUser.slackHandle || `@${selectedUser.name.toLowerCase().replace(/\s+/g, '')}`}
-                      </span>
-                    </div>
-                  </div>
+                      {selectedUser.dob && (
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-semibold block">Date of Birth (DOB)</span>
+                          <span className="font-bold text-slate-900">{selectedUser.dob}</span>
+                        </div>
+                      )}
 
-                  <div className="flex items-center space-x-2.5 text-slate-700">
-                    <Briefcase className="w-4 h-4 text-slate-400 shrink-0" />
-                    <div>
-                      <span className="text-[10px] text-slate-400 block font-semibold">Employment Category</span>
-                      <span className="font-semibold text-slate-900">
-                        {getEmploymentTypeLabel(selectedUser.employmentType)}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center space-x-2.5 text-slate-700">
-                    <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
-                    <div>
-                      <span className="text-[10px] text-slate-400 block font-semibold">Office Location</span>
-                      <span className="font-semibold text-slate-900">
-                        {selectedUser.officeLocation || 'Main Campus, Building B'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center space-x-2.5 text-slate-700 md:col-span-2 lg:col-span-3 pt-2 border-t border-slate-100">
-                    <Shield className="w-4 h-4 text-purple-600 shrink-0" />
-                    <div>
-                      <span className="text-[10px] text-slate-400 block font-semibold">Assigned System Roles</span>
-                      <div className="flex flex-wrap gap-1.5 mt-1">
-                        {(selectedUser.roles && selectedUser.roles.length > 0 ? selectedUser.roles : [selectedUser.role]).map((r) => (
-                          <span
-                            key={r}
-                            className={`px-2.5 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider border ${getRoleBadgeStyle(r)}`}
-                          >
-                            {getRoleLabel(r)}
+                      {selectedUser.employmentType === 'permanent' ? (
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-semibold block">Superannuation Date</span>
+                          <span className="font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 inline-block text-[11px]">
+                            {calculateRetirementDate(selectedUser.dob)}
                           </span>
-                        ))}
+                        </div>
+                      ) : selectedUser.validUntilDate ? (
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-semibold block">Tenure / Contract Valid Up To</span>
+                          <span className="font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 inline-block text-[11px]">
+                            {selectedUser.validUntilDate}
+                          </span>
+                        </div>
+                      ) : null}
+
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-semibold block">Assigned Work Shift</span>
+                        <span className="font-bold text-slate-900">
+                          {(() => {
+                            const userShift = shifts.find((s) => s.id === selectedUser.shiftId) || shifts.find((s) => s.isDefault) || shifts[0];
+                            return userShift ? `${userShift.name} (${userShift.startTime} - ${userShift.endTime})` : 'General Shift (09:00 - 17:30)';
+                          })()}
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-semibold block">Probation Status</span>
+                        <span className="font-bold text-slate-900">
+                          {selectedUser.isOnProbation
+                            ? `Under Probation (Until ${selectedUser.probationEndDate || 'N/A'})`
+                            : 'Confirmed Regular Staff'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 2: Reporting Hierarchy & Roles */}
+                  <div className="bg-white border border-slate-200/90 rounded-xl p-4 sm:p-5 shadow-2xs space-y-3.5">
+                    <div className="flex items-center space-x-2 text-slate-900 font-black text-xs uppercase tracking-wider border-b border-slate-100 pb-2.5">
+                      <Shield className="w-4 h-4 text-purple-600 shrink-0" />
+                      <span>Reporting Hierarchy &amp; Access Roles</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-semibold block">Reporting Manager (L1)</span>
+                        <span className="font-bold text-slate-900">
+                          {users.find((u) => u.id === selectedUser.reportingManagerId)?.name || 'Not Assigned'}
+                        </span>
+                        <span className="text-[10px] text-slate-500 block">
+                          {users.find((u) => u.id === selectedUser.reportingManagerId)?.designation || ''}
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-semibold block">Reviewing Officer / HoD (L2)</span>
+                        <span className="font-bold text-slate-900">
+                          {selectedUser.hodName || users.find((u) => u.id === selectedUser.reviewingManagerId)?.name || 'Not Assigned'}
+                        </span>
+                        <span className="text-[10px] text-slate-500 block">
+                          {users.find((u) => u.id === selectedUser.reviewingManagerId)?.designation || ''}
+                        </span>
+                      </div>
+
+                      {(selectedUser.piName || selectedUser.guideSupervisor) && (
+                        <div className="sm:col-span-2">
+                          <span className="text-[10px] text-slate-400 font-semibold block">Principal Investigator / Supervisor</span>
+                          <span className="font-bold text-slate-900">{selectedUser.piName || selectedUser.guideSupervisor}</span>
+                        </div>
+                      )}
+
+                      <div className="sm:col-span-2 pt-2 border-t border-slate-100">
+                        <span className="text-[10px] text-slate-400 font-semibold block mb-1">Assigned System Roles</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {(selectedUser.roles && selectedUser.roles.length > 0 ? selectedUser.roles : [selectedUser.role]).map((r) => (
+                            <span
+                              key={r}
+                              className={`px-2.5 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider border ${getRoleBadgeStyle(r)}`}
+                            >
+                              {getRoleLabel(r)}
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Academic & Dissertation Profile Card for MSc, PhD, Trainees, Interns & Dual PhD Researchers */}
-                {(selectedUser.employmentType === 'msc_student' ||
-                  selectedUser.employmentType === 'phd_scholar' ||
-                  selectedUser.employmentType === 'trainee' ||
-                  selectedUser.employmentType === 'intern' ||
-                  selectedUser.isPhDEnrolled) && (
-                  <div className="mt-4 p-4 bg-indigo-50/70 border border-indigo-200 rounded-xl text-xs space-y-3">
-                    <div className="flex items-center space-x-2 text-indigo-950 font-black border-b border-indigo-200/80 pb-2">
-                      <GraduationCap className="w-4 h-4 text-indigo-600" />
-                      <span>Academic Program, Dissertation &amp; Supervisor Details</span>
+                {/* Card 3: Contact Information */}
+                <div className="bg-white border border-slate-200/90 rounded-xl p-4 sm:p-5 shadow-2xs space-y-3.5">
+                  <div className="flex items-center space-x-2 text-slate-900 font-black text-xs uppercase tracking-wider border-b border-slate-100 pb-2.5">
+                    <Mail className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Contact Information</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-semibold block">Official Email</span>
+                      <span className="font-bold text-slate-900 truncate block">{selectedUser.email}</span>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-slate-800">
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-semibold block">Contact Phone</span>
+                      <span className="font-bold text-slate-900">{selectedUser.phone || '+91 98765 43210'}</span>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-semibold block">Emergency Contact</span>
+                      <span className="font-bold text-slate-900">{selectedUser.emergencyContactName || 'Family / Guardian'}</span>
+                      <span className="text-[10px] text-slate-500 block">{selectedUser.emergencyContactPhone || '+91 99887 76655'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card 4: Academic Program & Research (Conditionally displayed when relevant) */}
+                {(selectedUser.employmentType === 'bsc_msc_student' ||
+                  selectedUser.employmentType === 'phd_student' ||
+                  selectedUser.employmentType === 'diploma_trainee' ||
+                  selectedUser.employmentType === 'intern' ||
+                  selectedUser.isPhDEnrolled) && (
+                  <div className="bg-indigo-50/70 border border-indigo-200 rounded-xl p-4 sm:p-5 shadow-2xs space-y-3.5">
+                    <div className="flex items-center space-x-2 text-indigo-950 font-black text-xs uppercase tracking-wider border-b border-indigo-200/80 pb-2.5">
+                      <GraduationCap className="w-4 h-4 text-indigo-600 shrink-0" />
+                      <span>Academic Program &amp; Research Affiliation</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs text-slate-800">
                       {selectedUser.courseProgram && (
                         <div>
-                          <span className="text-[10px] text-slate-500 font-semibold block">Degree / Course Program:</span>
+                          <span className="text-[10px] text-indigo-800 font-semibold block">Degree / Course Program</span>
                           <span className="font-bold text-slate-900">{selectedUser.courseProgram}</span>
                         </div>
                       )}
+
                       {selectedUser.courseBatch && (
                         <div>
-                          <span className="text-[10px] text-slate-500 font-semibold block">Batch / Academic Year:</span>
+                          <span className="text-[10px] text-indigo-800 font-semibold block">Batch / Academic Year</span>
                           <span className="font-bold text-slate-900">{selectedUser.courseBatch}</span>
                         </div>
                       )}
-                      {selectedUser.universityName && (
+
+                      {(selectedUser.universityName || selectedUser.parentInstitution) && (
                         <div>
-                          <span className="text-[10px] text-slate-500 font-semibold block">Affiliated University / Institute:</span>
-                          <span className="font-bold text-slate-900">{selectedUser.universityName}</span>
+                          <span className="text-[10px] text-indigo-800 font-semibold block">Affiliated University / Institute</span>
+                          <span className="font-bold text-slate-900">{selectedUser.universityName || selectedUser.parentInstitution}</span>
                         </div>
                       )}
+
                       {selectedUser.enrollmentNo && (
                         <div>
-                          <span className="text-[10px] text-slate-500 font-semibold block">Enrollment / Registration No:</span>
-                          <span className="font-bold font-mono text-indigo-900">{selectedUser.enrollmentNo}</span>
+                          <span className="text-[10px] text-indigo-800 font-semibold block">Enrollment / Registration No</span>
+                          <span className="font-mono font-bold text-indigo-950">{selectedUser.enrollmentNo}</span>
                         </div>
                       )}
-                      {selectedUser.guideSupervisor && (
+
+                      {(selectedUser.guideSupervisor || selectedUser.phdGuide) && (
                         <div>
-                          <span className="text-[10px] text-slate-500 font-semibold block">Guide / Academic Supervisor:</span>
-                          <span className="font-bold text-slate-900">{selectedUser.guideSupervisor}</span>
+                          <span className="text-[10px] text-indigo-800 font-semibold block">Academic Supervisor / Guide</span>
+                          <span className="font-bold text-slate-900">{selectedUser.phdGuide || selectedUser.guideSupervisor}</span>
                         </div>
                       )}
-                      {selectedUser.parentInstitution && (
-                        <div>
-                          <span className="text-[10px] text-slate-500 font-semibold block">Parent Institution / College:</span>
-                          <span className="font-bold text-slate-900">{selectedUser.parentInstitution}</span>
-                        </div>
-                      )}
-                      {selectedUser.internshipDuration && (
-                        <div>
-                          <span className="text-[10px] text-slate-500 font-semibold block">Training / Internship Tenure:</span>
-                          <span className="font-bold text-slate-900">{selectedUser.internshipDuration}</span>
+
+                      {selectedUser.phdTopic && (
+                        <div className="sm:col-span-2 lg:col-span-3">
+                          <span className="text-[10px] text-indigo-800 font-semibold block">Research Topic / Title</span>
+                          <span className="font-bold text-slate-900">{selectedUser.phdTopic}</span>
                         </div>
                       )}
                     </div>
-
-                    {/* Dual Status PhD Highlight Box */}
-                    {selectedUser.isPhDEnrolled && (
-                      <div className="mt-2 p-3 bg-purple-100/80 border border-purple-300 rounded-lg space-y-2">
-                        <div className="flex items-center space-x-2 text-purple-900 font-black">
-                          <Sparkles className="w-4 h-4 text-purple-600" />
-                          <span>Enrolled PhD Research Details (Dual Status Researcher)</span>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 text-[11px]">
-                          <div>
-                            <span className="text-purple-700 font-medium block text-[10px]">PhD Registered University:</span>
-                            <span className="font-bold text-purple-950">{selectedUser.phdUniversity || 'Forest Research Institute (FRI)'}</span>
-                          </div>
-                          <div>
-                            <span className="text-purple-700 font-medium block text-[10px]">PhD Thesis Guide:</span>
-                            <span className="font-bold text-purple-950">{selectedUser.phdGuide || selectedUser.guideSupervisor || 'N/A'}</span>
-                          </div>
-                          <div>
-                            <span className="text-purple-700 font-medium block text-[10px]">PhD Registration Date:</span>
-                            <span className="font-bold text-purple-950">{selectedUser.phdRegistrationDate || 'N/A'}</span>
-                          </div>
-                          <div className="sm:col-span-2 lg:col-span-3">
-                            <span className="text-purple-700 font-medium block text-[10px]">PhD Thesis Topic / Title:</span>
-                            <span className="font-bold text-purple-950">{selectedUser.phdTopic || 'Thesis Topic Under Approval'}</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 )}
 
-                {/* Cadre & Tenure Info for Permanent / Contractual */}
-                <div className="mt-4 p-4 bg-slate-50 border border-slate-200/80 rounded-xl text-xs space-y-3">
-                  <div className="flex items-center space-x-2 text-slate-800 font-bold border-b border-slate-200/80 pb-2">
-                    <Building className="w-4 h-4 text-blue-600" />
-                    <span>Cadre, Tenure &amp; Reporting Details ({getEmploymentTypeLabel(selectedUser.employmentType)})</span>
+                {/* Card 5: Service & Posting History Timeline */}
+                <div className="bg-white border border-slate-200/90 rounded-xl p-4 sm:p-5 shadow-2xs space-y-3.5">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                    <div className="flex items-center space-x-2 text-slate-900 font-black text-xs uppercase tracking-wider">
+                      <Briefcase className="w-4 h-4 text-blue-600 shrink-0" />
+                      <span>Service &amp; Posting History</span>
+                    </div>
+                    <span className="text-[11px] font-bold text-slate-700 bg-slate-50 px-2.5 py-0.5 rounded border border-slate-200">
+                      {calculateServiceTenure(selectedUser.joiningDate)}
+                    </span>
                   </div>
 
-                  {selectedUser.employmentType === 'permanent' && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-semibold block">Date of Joining:</span>
-                        <span className="font-bold text-slate-800">{selectedUser.joiningDate || 'N/A'}</span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-semibold block">Date of Birth (DOB):</span>
-                        <span className="font-bold text-slate-800">{selectedUser.dob || 'N/A'}</span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-semibold block">Superannuation / Retirement Date:</span>
-                        <span className="font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 inline-block">
-                          {calculateRetirementDate(selectedUser.dob)}
-                        </span>
-                        <span className="text-[9px] text-slate-400 block mt-0.5">(Last day of 60th birthday month)</span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-semibold block">Probation Status:</span>
-                        <span className="font-bold text-slate-800">
-                          {selectedUser.isOnProbation
-                            ? `Under Probation (Tentative End: ${selectedUser.probationEndDate || 'N/A'})`
-                            : 'Probation Completed / Regular Staff'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-semibold block">Reporting Manager (Level 1):</span>
-                        <span className="font-bold text-slate-800">
-                          {users.find((u) => u.id === selectedUser.reportingManagerId)?.name || 'Not Assigned'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-semibold block">Head of Department (HoD) / Reviewing Manager:</span>
-                        <span className="font-bold text-slate-800">
-                          {selectedUser.hodName || users.find((u) => u.id === selectedUser.reviewingManagerId)?.name || 'Not Assigned'}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {selectedUser.employmentType === 'contractual' && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-semibold block">Joining Date:</span>
-                        <span className="font-bold text-slate-800">{selectedUser.joiningDate || 'N/A'}</span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-semibold block">Contract Valid Up To Date:</span>
-                        <span className="font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 inline-block">
-                          {selectedUser.validUntilDate || 'N/A'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-semibold block">Principal Investigator (PI) / Project Head:</span>
-                        <span className="font-bold text-slate-800">
-                          {selectedUser.piName || users.find((u) => u.id === selectedUser.reportingManagerId)?.name || 'Not Assigned'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-semibold block">Reporting Manager:</span>
-                        <span className="font-bold text-slate-800">
-                          {users.find((u) => u.id === selectedUser.reportingManagerId)?.name || 'Not Assigned'}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {(selectedUser.employmentType === 'researcher' || selectedUser.employmentType === 'phd_scholar' || selectedUser.employmentType === 'msc_student' || selectedUser.employmentType === 'trainee' || selectedUser.employmentType === 'intern') && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-semibold block">Enrolment / Start Date:</span>
-                        <span className="font-bold text-slate-800">{selectedUser.joiningDate || 'N/A'}</span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-semibold block">Course / Program / Research Project:</span>
-                        <span className="font-bold text-slate-800">
-                          {selectedUser.courseProgram || selectedUser.designation || 'N/A'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-semibold block">Tenure / Valid Up To Date:</span>
-                        <span className="font-bold text-blue-800 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 inline-block">
-                          {selectedUser.validUntilDate || 'N/A'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-semibold block">Supervisor / Guide / PI:</span>
-                        <span className="font-bold text-slate-800">
-                          {selectedUser.guideSupervisor || selectedUser.piName || users.find((u) => u.id === selectedUser.reportingManagerId)?.name || 'Not Assigned'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-semibold block">Reporting Manager:</span>
-                        <span className="font-bold text-slate-800">
-                          {users.find((u) => u.id === selectedUser.reportingManagerId)?.name || 'Not Assigned'}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-              {/* ============================================================ */}
-              {/* EMPLOYMENT & SERVICE HISTORY TIMELINE */}
-              {/* ============================================================ */}
-              <div className="mt-4 p-4 bg-slate-50 border border-slate-200/80 rounded-xl text-xs space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-2.5">
-                  <div className="flex items-center space-x-2 text-slate-900 font-extrabold text-xs uppercase tracking-wider">
-                    <Briefcase className="w-4 h-4 text-blue-600" />
-                    <span>Employment &amp; Service Posting History</span>
-                  </div>
-                  <div className="flex items-center space-x-1.5 text-[11px] font-bold text-slate-700 bg-white px-2.5 py-1 rounded-md border border-slate-200 self-start sm:self-auto shadow-2xs">
-                    <Clock className="w-3.5 h-3.5 text-blue-600" />
-                    <span>{calculateServiceTenure(selectedUser.joiningDate)}</span>
-                  </div>
-                </div>
-
-                {/* Timeline Container */}
-                <div className="relative pl-5 border-l-2 border-slate-200 space-y-4 my-2">
-                  {/* Current Active Posting Node */}
-                  <div className="relative">
-                    <div className="absolute -left-[27px] top-1.5 w-3.5 h-3.5 rounded-full bg-emerald-500 ring-4 ring-emerald-100 flex items-center justify-center">
-                      <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
-                    </div>
-
-                    <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-2">
-                      <div className="flex flex-wrap items-center justify-between gap-1">
-                        <div className="flex items-center space-x-2">
-                          <span className="font-extrabold text-slate-900 text-xs">
-                            {selectedUser.designation}
-                          </span>
-                          <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            Current Active Posting
-                          </span>
-                        </div>
-                        <span className="text-[11px] text-slate-500 font-mono">
-                          {selectedUser.joiningDate ? `${selectedUser.joiningDate} — Present` : 'Present'}
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-[11px] text-slate-600 pt-1 border-t border-slate-100">
-                        <div>
-                          <span className="text-slate-400 font-medium block text-[10px]">Department:</span>
-                          <span className="font-bold text-slate-800">{selectedUser.department}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 font-medium block text-[10px]">Office Location:</span>
-                          <span className="font-bold text-slate-800">{selectedUser.officeLocation || 'Main Campus, Building B'}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 font-medium block text-[10px]">Reporting Officer:</span>
-                          <span className="font-bold text-slate-800">
-                            {users.find((u) => u.id === selectedUser.reportingManagerId)?.name || 'Not Assigned'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Transfer / Reassignment History Nodes */}
-                  {transferLogs
-                    .filter(
-                      (t) =>
-                        t.userId === selectedUser.id ||
-                        t.userName.toLowerCase() === selectedUser.name.toLowerCase()
-                    )
-                    .map((t) => (
-                      <div key={t.id} className="relative">
-                        <div className="absolute -left-[27px] top-1.5 w-3.5 h-3.5 rounded-full bg-blue-500 ring-4 ring-blue-100 flex items-center justify-center">
-                          <ArrowLeftRight className="w-2 h-2 text-white" />
-                        </div>
-
-                        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs space-y-1.5">
-                          <div className="flex flex-wrap items-center justify-between gap-1">
-                            <div className="flex items-center space-x-2">
-                              <span className="font-extrabold text-slate-900 text-xs">
-                                Department Reassignment &amp; Transfer
-                              </span>
-                              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-blue-50 text-blue-700 border border-blue-200">
-                                Transferred
-                              </span>
-                            </div>
-                            <span className="text-[11px] text-slate-500 font-mono">
-                              Effective: {t.effectiveDate}
+                  {/* Clean Minimal Timeline */}
+                  <div className="relative pl-4 border-l-2 border-slate-200 space-y-3 my-1 text-xs">
+                    {/* Active Posting */}
+                    <div className="relative">
+                      <div className="absolute -left-[23px] top-1.5 w-3 h-3 rounded-full bg-emerald-500 ring-4 ring-emerald-100"></div>
+                      <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/80 space-y-1">
+                        <div className="flex flex-wrap items-center justify-between gap-1">
+                          <div className="flex items-center space-x-2">
+                            <span className="font-extrabold text-slate-900">{selectedUser.designation}</span>
+                            <span className="px-2 py-0.2 rounded text-[9.5px] font-bold uppercase bg-emerald-100 text-emerald-800 border border-emerald-300">
+                              Current Posting
                             </span>
                           </div>
-
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-600">
-                            <div>
-                              <span className="text-slate-400 font-medium block text-[10px]">Department Movement:</span>
-                              <span className="font-bold text-slate-800">
-                                {t.previousDept} <span className="text-blue-600 font-black">→</span> {t.newDept}
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-slate-400 font-medium block text-[10px]">Reporting Manager Transition:</span>
-                              <span className="font-bold text-slate-800">
-                                {t.previousManagerName} <span className="text-blue-600 font-black">→</span> {t.newManagerName}
-                              </span>
-                            </div>
-                          </div>
-
-                          {t.notes && (
-                            <div className="p-2 bg-slate-50 border border-slate-200/80 rounded-lg text-[10.5px] text-slate-700 font-medium">
-                              <span className="font-bold text-slate-900">Office Order Note:</span> {t.notes}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-
-                  {/* Regularization / Probation Completion Node */}
-                  {!selectedUser.isOnProbation && selectedUser.employmentType === 'permanent' && (
-                    <div className="relative">
-                      <div className="absolute -left-[27px] top-1.5 w-3.5 h-3.5 rounded-full bg-purple-500 ring-4 ring-purple-100 flex items-center justify-center">
-                        <Check className="w-2.5 h-2.5 text-white" />
-                      </div>
-
-                      <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-slate-900 text-xs">
-                            Probation Completed &amp; Service Regularization
-                          </span>
-                          <span className="text-[10px] font-bold uppercase text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
-                            Regularized
+                          <span className="text-[10.5px] text-slate-500 font-mono">
+                            {selectedUser.joiningDate ? `${selectedUser.joiningDate} — Present` : 'Present'}
                           </span>
                         </div>
                         <p className="text-[11px] text-slate-600">
-                          Successfully completed mandatory probation evaluation. Confirmed as regular permanent service cadre.
+                          {selectedUser.department}
                         </p>
                       </div>
                     </div>
-                  )}
 
-                  {/* Initial Appointment Node */}
-                  <div className="relative">
-                    <div className="absolute -left-[27px] top-1.5 w-3.5 h-3.5 rounded-full bg-slate-400 ring-4 ring-slate-100 flex items-center justify-center">
-                      <Building className="w-2 h-2 text-white" />
-                    </div>
-
-                    <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs space-y-1">
-                      <div className="flex flex-wrap items-center justify-between gap-1">
-                        <span className="font-bold text-slate-900 text-xs">
-                          Initial Appointment — Wildlife Institute of India
-                        </span>
-                        <span className="text-[11px] text-slate-500 font-mono">
-                          {selectedUser.joiningDate || 'Date of Joining'}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-600">
-                        Joined Wildlife Institute of India as <span className="font-bold text-slate-800">{selectedUser.designation}</span> in the <span className="font-bold text-slate-800">{selectedUser.department}</span> under <span className="font-semibold text-slate-800">{getEmploymentTypeLabel(selectedUser.employmentType)}</span> cadre.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Emergency Contact Block */}
-              <div className="mt-3 p-3 bg-slate-50 border border-slate-200/80 rounded-lg text-xs">
-                <div className="flex items-center space-x-2 mb-1.5 text-slate-800 font-bold">
-                  <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
-                  <span>Emergency Contact Information</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
-                  <div>
-                    <span className="text-slate-400 block">Contact Name:</span>
-                    <span className="font-semibold text-slate-800">
-                      {selectedUser.emergencyContactName || 'Family Contact / Guardian'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block">Contact Phone:</span>
-                    <span className="font-semibold text-slate-800">
-                      {selectedUser.emergencyContactPhone || '+91 99887 76655'}
-                    </span>
+                    {/* Historical Transfers */}
+                    {transferLogs
+                      .filter(
+                        (t) =>
+                          t.userId === selectedUser.id ||
+                          t.userName.toLowerCase() === selectedUser.name.toLowerCase()
+                      )
+                      .map((t) => (
+                        <div key={t.id} className="relative">
+                          <div className="absolute -left-[23px] top-1.5 w-3 h-3 rounded-full bg-blue-500 ring-4 ring-blue-100"></div>
+                          <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/80 space-y-1">
+                            <div className="flex flex-wrap items-center justify-between gap-1">
+                              <span className="font-bold text-slate-900">Transfer &amp; Posting Order</span>
+                              <span className="text-[10.5px] text-slate-500 font-mono">Effective: {t.effectiveDate}</span>
+                            </div>
+                            <div className="text-[11px] text-slate-700">
+                              <span className="text-slate-500">Department:</span> {t.previousDept} <span className="text-blue-600 font-bold">→</span> {t.newDept}
+                            </div>
+                            {t.notes && (
+                              <p className="text-[10.5px] text-slate-500 italic">Note: {t.notes}</p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
-      </div>
-    )}
+          )}
+        </div>
+      )}
 
       {/* ==================================================================== */}
       {/* TAB 2: USER CONTROLS, ROLES & ACCOUNTS */}
@@ -2780,6 +2440,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                   })}
                 </tbody>
               </table>
+            </div>
+            <div className="w-full border-t border-slate-200/90 bg-white">
               <TablePagination
                 currentPage={userControlsPage}
                 totalPages={Math.ceil(filteredUsersForControls.length / userControlsPageSize)}

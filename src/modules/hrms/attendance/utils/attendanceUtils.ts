@@ -10,79 +10,79 @@ export const ATTENDANCE_STATUS_MAP: Record<string, StatusDefinition> = {
     code: 'PP',
     label: 'Present',
     description: 'Present for full day',
-    badgeStyle: 'bg-emerald-50 text-emerald-800 border-emerald-200/90'
+    badgeStyle: 'bg-emerald-50 text-emerald-700 border-emerald-300'
   },
   AA: {
     code: 'AA',
     label: 'Absent',
     description: 'Absent for full day',
-    badgeStyle: 'bg-rose-50 text-rose-800 border-rose-200/90'
+    badgeStyle: 'bg-rose-50 text-rose-700 border-rose-300'
   },
   PA: {
     code: 'PA',
-    label: '1st Half Present',
-    description: '1st Half Present',
-    badgeStyle: 'bg-amber-50 text-amber-800 border-amber-200/90'
+    label: '1st Half Present / 2nd Half Absent',
+    description: '1st Half Present / 2nd Half Absent',
+    badgeStyle: 'bg-rose-50 text-rose-700 border-rose-300'
   },
   AP: {
     code: 'AP',
-    label: '2nd Half Present',
-    description: '2nd Half Present',
-    badgeStyle: 'bg-orange-50 text-orange-800 border-orange-200/90'
+    label: '1st Half Absent / 2nd Half Present',
+    description: '1st Half Absent / 2nd Half Present',
+    badgeStyle: 'bg-rose-50 text-rose-700 border-rose-300'
   },
   WW: {
     code: 'WW',
     label: 'Weekend',
     description: 'Scheduled Weekend Off',
-    badgeStyle: 'bg-slate-100 text-slate-600 border-slate-200'
+    badgeStyle: 'bg-blue-50 text-blue-700 border-blue-300'
   },
   'WW#': {
     code: 'WW#',
     label: 'Working on Weekend',
     description: 'Working on Weekend',
-    badgeStyle: 'bg-indigo-50 text-indigo-800 border-indigo-200/90'
+    badgeStyle: 'bg-blue-50 text-blue-700 border-blue-300'
   },
   GH: {
     code: 'GH',
     label: 'Gazetted Holiday (GH)',
     description: 'Closed Gazetted Holiday',
-    badgeStyle: 'bg-emerald-50 text-emerald-800 border-emerald-300/90'
+    badgeStyle: 'bg-blue-50 text-blue-700 border-blue-300'
   },
   HH: {
     code: 'HH',
     label: 'Holiday (GH)',
     description: 'Scheduled Official Holiday',
-    badgeStyle: 'bg-emerald-50 text-emerald-800 border-emerald-300/90'
+    badgeStyle: 'bg-blue-50 text-blue-700 border-blue-300'
   },
   'HH#': {
     code: 'HH#',
     label: 'Working on Holiday',
     description: 'Working on Holiday',
-    badgeStyle: 'bg-teal-50 text-teal-800 border-teal-200/90'
+    badgeStyle: 'bg-blue-50 text-blue-700 border-blue-300'
   },
   RH: {
     code: 'RH',
     label: 'Restricted Holiday (RH)',
     description: 'Restricted Optional Holiday',
-    badgeStyle: 'bg-amber-50 text-amber-800 border-amber-200/90'
+    badgeStyle: 'bg-blue-50 text-blue-700 border-blue-300'
   },
   LW: {
     code: 'LW',
     label: 'Leave / LWP',
     description: 'Leave / Leave Without Pay / Loss of Pay',
-    badgeStyle: 'bg-rose-50 text-rose-800 border-rose-300/90'
+    badgeStyle: 'bg-rose-50 text-rose-700 border-rose-300'
   },
   ST: {
     code: 'ST',
     label: 'Station Leave',
     description: 'Station Leave / Official Leave',
-    badgeStyle: 'bg-purple-50 text-purple-800 border-purple-200/90'
+    badgeStyle: 'bg-purple-50 text-purple-700 border-purple-300'
   },
   OD: {
     code: 'OD',
     label: 'Out Door',
     description: 'Outdoor Duty / Field Visit',
-    badgeStyle: 'bg-blue-50 text-blue-800 border-blue-200/90'
+    badgeStyle: 'bg-emerald-50 text-emerald-700 border-emerald-300'
   }
 };
 
