@@ -174,6 +174,11 @@ interface AppContextType {
     isCommuted?: boolean;
     prescriptionUrl?: string;
     prescriptionFileName?: string;
+    customDaysCount?: number;
+    prefixFrom?: string;
+    prefixTo?: string;
+    suffixFrom?: string;
+    suffixTo?: string;
   }) => { success: boolean; message: string };
   editLeave: (id: string, data: { startDate: string; endDate: string; reason: string }) => { success: boolean; message: string };
   deleteLeave: (id: string) => { success: boolean; message: string };
@@ -2121,6 +2126,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     prescriptionUrl?: string;
     prescriptionFileName?: string;
     customDaysCount?: number;
+    prefixFrom?: string;
+    prefixTo?: string;
+    suffixFrom?: string;
+    suffixTo?: string;
   }) => {
     const applicantUser = (data.targetUserId ? users.find((u) => u.id === data.targetUserId) : null) || currentUser;
     const rawDays = getDaysBetween(data.startDate, data.endDate);
@@ -2195,7 +2204,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       encashDays: data.encashDays,
       isCommuted: data.isCommuted,
       prescriptionUrl: data.prescriptionUrl,
-      prescriptionFileName: data.prescriptionFileName
+      prescriptionFileName: data.prescriptionFileName,
+      prefixFrom: data.prefixFrom,
+      prefixTo: data.prefixTo,
+      suffixFrom: data.suffixFrom,
+      suffixTo: data.suffixTo
     };
 
     setLeaveRequests((prev) => [newLeave, ...prev]);

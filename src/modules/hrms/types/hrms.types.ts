@@ -223,6 +223,10 @@ export interface LeaveRequest {
   prescriptionUrl?: string;
   prescriptionFileName?: string;
   joiningReport?: JoiningReport;
+  prefixFrom?: string;
+  prefixTo?: string;
+  suffixFrom?: string;
+  suffixTo?: string;
 }
 
 // --- SHIFT & TIMING DESIGN TYPES ---

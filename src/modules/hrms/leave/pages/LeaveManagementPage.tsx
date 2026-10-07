@@ -124,6 +124,12 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
   const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
+  const [activeReasonModal, setActiveReasonModal] = useState<{
+    employeeName: string;
+    leaveType: string;
+    dates: string;
+    reason: string;
+  } | null>(null);
 
   // Casual Leave session states for From Date & To Date
   const [startSession, setStartSession] = useState<'first_half' | 'second_half'>('first_half');
@@ -141,6 +147,15 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
   // Custom Popover Leave Type Selection states
   const [isLeaveTypeDropdownOpen, setIsLeaveTypeDropdownOpen] = useState(false);
   const [leaveTypeSearchQuery, setLeaveTypeSearchQuery] = useState('');
+
+  // Prefix & Suffix Holiday States (for 2-stage leaves)
+  const [availPrefix, setAvailPrefix] = useState<boolean>(false);
+  const [prefixFrom, setPrefixFrom] = useState<string>('');
+  const [prefixTo, setPrefixTo] = useState<string>('');
+
+  const [availSuffix, setAvailSuffix] = useState<boolean>(false);
+  const [suffixFrom, setSuffixFrom] = useState<string>('');
+  const [suffixTo, setSuffixTo] = useState<string>('');
 
   // Station Leave Date Validator Helper (Only Gazetted Holidays & Weekends allowed)
   const isStationLeaveEligibleDate = (dateStr: string) => {
@@ -432,13 +447,15 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
 
   // Check if an approved leave is eligible for post-leave joining report:
   // Strictly ONLY for leaves requiring HoD approval per rules
+  // If suffix is availed, report is eligible starting the day after suffixTo
   const isJoiningReportEligible = (lv: LeaveRequest) => {
     if (lv.status !== 'approved') return false;
     const requiresHod = Boolean(lv.requiresLevel2 || lv.level2Approval || lv.reviewingManagerId);
     if (!requiresHod) return false;
     if (lv.joiningReport) return true;
     const today = new Date().toISOString().split('T')[0];
-    return Boolean(lv.endDate && today >= lv.endDate);
+    const effectiveEnd = lv.suffixTo || lv.endDate;
+    return Boolean(effectiveEnd && today >= effectiveEnd);
   };
 
   const now = new Date();
@@ -680,6 +697,159 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
   // Selected policy details
   const selectedPolicy = availablePolicies.find((p) => p.type === selectedLeaveType) || availablePolicies[0];
 
+  // 2-Stage Leave Eligibility Check:
+  // CCS Leave Rules & Workflow: Includes all statutory long leaves (EL, HPL, Commuted, ML, PL, CCL, Study, EOL)
+  // OR any leave whose duration exceeds the Level-2 approval threshold
+  const isTwoStageLeave = useMemo(() => {
+    const threshold = selectedPolicy?.requiresLevel2ForDaysMoreThan ?? 2;
+    const reqL2 = calculatedDays > threshold;
+    const isFormalLeave = [
+      'earned',
+      'half_pay',
+      'commuted',
+      'maternity',
+      'paternity',
+      'child_care',
+      'study',
+      'extraordinary',
+      'special_disability',
+      'hospital'
+    ].includes(selectedLeaveType);
+
+    return reqL2 || isFormalLeave;
+  }, [selectedPolicy, calculatedDays, selectedLeaveType]);
+
+  // Contiguous Eligible Prefix Dates (immediately preceding startDate)
+  // Must be Weekends or Gazetted Holidays ending on day before startDate
+  const eligiblePrefixDates = useMemo(() => {
+    if (!startDate) return [];
+    const list: Array<{ date: string; reason: string; dayName: string }> = [];
+    const start = new Date(`${startDate}T12:00:00`);
+    if (isNaN(start.getTime())) return [];
+
+    const curr = new Date(start);
+    curr.setDate(curr.getDate() - 1);
+
+    while (true) {
+      const yr = curr.getFullYear();
+      const mo = String(curr.getMonth() + 1).padStart(2, '0');
+      const dy = String(curr.getDate()).padStart(2, '0');
+      const dateStr = `${yr}-${mo}-${dy}`;
+
+      const check = isStationLeaveEligibleDate(dateStr);
+      if (!check.eligible) {
+        break; // Stop at first non-weekend non-GH working day
+      }
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      list.push({
+        date: dateStr,
+        reason: check.reason,
+        dayName: dayNames[curr.getDay()]
+      });
+      curr.setDate(curr.getDate() - 1);
+      if (list.length >= 14) break;
+    }
+    return list.reverse();
+  }, [startDate]);
+
+  // Contiguous Eligible Suffix Dates (immediately succeeding endDate)
+  // Must be Weekends or Gazetted Holidays starting on day after endDate
+  const eligibleSuffixDates = useMemo(() => {
+    if (!endDate) return [];
+    const list: Array<{ date: string; reason: string; dayName: string }> = [];
+    const end = new Date(`${endDate}T12:00:00`);
+    if (isNaN(end.getTime())) return [];
+
+    const curr = new Date(end);
+    curr.setDate(curr.getDate() + 1);
+
+    while (true) {
+      const yr = curr.getFullYear();
+      const mo = String(curr.getMonth() + 1).padStart(2, '0');
+      const dy = String(curr.getDate()).padStart(2, '0');
+      const dateStr = `${yr}-${mo}-${dy}`;
+
+      const check = isStationLeaveEligibleDate(dateStr);
+      if (!check.eligible) {
+        break; // Stop at first non-weekend non-GH working day
+      }
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      list.push({
+        date: dateStr,
+        reason: check.reason,
+        dayName: dayNames[curr.getDay()]
+      });
+      curr.setDate(curr.getDate() + 1);
+      if (list.length >= 14) break;
+    }
+    return list;
+  }, [endDate]);
+
+  // Sync prefix/suffix state if dates change
+  useEffect(() => {
+    if (eligiblePrefixDates.length === 0) {
+      if (availPrefix) {
+        setAvailPrefix(false);
+        setPrefixFrom('');
+        setPrefixTo('');
+      }
+    } else if (availPrefix) {
+      if (!prefixFrom || !prefixTo || !eligiblePrefixDates.some((p) => p.date === prefixFrom)) {
+        setPrefixFrom(eligiblePrefixDates[0].date);
+        setPrefixTo(eligiblePrefixDates[eligiblePrefixDates.length - 1].date);
+      }
+    }
+  }, [eligiblePrefixDates, availPrefix]);
+
+  useEffect(() => {
+    if (eligibleSuffixDates.length === 0) {
+      if (availSuffix) {
+        setAvailSuffix(false);
+        setSuffixFrom('');
+        setSuffixTo('');
+      }
+    } else if (availSuffix) {
+      if (!suffixFrom || !suffixTo || !eligibleSuffixDates.some((s) => s.date === suffixTo)) {
+        setSuffixFrom(eligibleSuffixDates[0].date);
+        setSuffixTo(eligibleSuffixDates[eligibleSuffixDates.length - 1].date);
+      }
+    }
+  }, [eligibleSuffixDates, availSuffix]);
+
+  // Helper to find the next official working day (skipping weekends & Gazetted Holidays)
+  const getNextWorkingDay = (afterDateStr: string) => {
+    if (!afterDateStr) return '';
+    const parts = afterDateStr.split('-').map(Number);
+    if (parts.length !== 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) {
+      return afterDateStr;
+    }
+    const curr = new Date(parts[0], parts[1] - 1, parts[2] + 1);
+
+    for (let i = 0; i < 30; i++) {
+      const yr = curr.getFullYear();
+      const mo = String(curr.getMonth() + 1).padStart(2, '0');
+      const dy = String(curr.getDate()).padStart(2, '0');
+      const dateStr = `${yr}-${mo}-${dy}`;
+
+      const check = isStationLeaveEligibleDate(dateStr);
+      // isStationLeaveEligibleDate returns eligible: true for weekends & GH, false for working days
+      if (!check.eligible) {
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        return `${dateStr} (${dayNames[curr.getDay()]})`;
+      }
+      curr.setDate(curr.getDate() + 1);
+    }
+    return '';
+  };
+
+  // Expected Duty Resumption (Joining) Date:
+  // Must always be on the next official working day (skips intervening weekends and Gazetted Holidays)
+  const expectedJoiningDate = useMemo(() => {
+    if (!endDate) return '';
+    const effectiveEnd = availSuffix && suffixTo ? suffixTo : endDate;
+    return getNextWorkingDay(effectiveEnd);
+  }, [endDate, availSuffix, suffixTo]);
+
   const handleResetFilters = () => {
     setSelectedActiveYear(defaultActiveCycle);
     setSearchQuery('');
@@ -706,21 +876,26 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
   const filteredLeaves = useMemo(() => {
     let baseList = leaveRequests;
     if (isGeneralStaff) {
+      // User role: ONLY self records
       baseList = leaveRequests.filter((l) => l.userId === currentUser.id);
     } else if (isReportingManager) {
+      // Reporting Manager role: exclude self records (user must switch to User role for self records)
       baseList = leaveRequests.filter(
         (l) =>
-          l.userId === currentUser.id ||
-          l.reportingManagerId === currentUser.id ||
-          users.some((u) => u.id === l.userId && u.reportingManagerId === currentUser.id)
+          l.userId !== currentUser.id &&
+          (l.reportingManagerId === currentUser.id ||
+            users.some((u) => u.id === l.userId && u.reportingManagerId === currentUser.id))
       );
     } else if (isReviewingManager) {
+      // HoD / Reviewing Manager role: exclude self records
       baseList = leaveRequests.filter(
         (l) =>
-          l.userId === currentUser.id ||
-          l.reviewingManagerId === currentUser.id ||
-          l.department === currentUser.department
+          l.userId !== currentUser.id &&
+          (l.reviewingManagerId === currentUser.id || l.department === currentUser.department)
       );
+    } else if (isAdmin) {
+      // Administrator role: exclude self records
+      baseList = leaveRequests.filter((l) => l.userId !== currentUser.id);
     }
 
     return baseList.filter((l) => {
@@ -845,13 +1020,53 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
     return dateStr >= todayStr;
   };
 
-  // 1. User Can Edit/Delete: Allowed for applicant before approval/forwarding & applicable date, or Admin anytime.
+  // Status action user helper
+  const getActionByName = (lv: LeaveRequest) => {
+    const rawLv = lv as any;
+    if (lv.status === 'approved') {
+      return lv.level2Approval?.approverName || lv.level1Approval?.approverName || rawLv.actionBy || 'HoD';
+    }
+    if (lv.status === 'rejected') {
+      return lv.level2Approval?.approverName || lv.level1Approval?.approverName || rawLv.actionBy || 'Reporting Officer';
+    }
+    if (lv.status === 'cancelled') {
+      return rawLv.cancelledByName || rawLv.actionBy || lv.userName;
+    }
+    return rawLv.actionBy || lv.userName;
+  };
+
+  // Button Style Helpers per Role & Status
+  const getSeeButtonStyle = (status: string) => {
+    if (status === 'approved') {
+      return 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-200';
+    }
+    if (status === 'rejected') {
+      return 'text-rose-700 bg-rose-50 hover:bg-rose-100 border-rose-200';
+    }
+    // Pending -> Gray
+    return 'text-slate-700 bg-slate-100 hover:bg-slate-200 border-slate-200';
+  };
+
+  const getJoiningButtonStyle = (reportStatus?: string) => {
+    if (reportStatus === 'accepted') {
+      return 'text-emerald-800 bg-emerald-100 hover:bg-emerald-200 border-emerald-300';
+    }
+    if (reportStatus === 'rejected') {
+      return 'text-rose-800 bg-rose-100 hover:bg-rose-200 border-rose-300';
+    }
+    if (reportStatus === 'submitted' || reportStatus === 'forwarded') {
+      return 'text-amber-800 bg-amber-100 hover:bg-amber-200 border-amber-300';
+    }
+    // Not applied -> Grey
+    return 'text-slate-600 bg-slate-100 hover:bg-slate-200 border-slate-200';
+  };
+
+  // 1. User Can Edit/Delete: Allowed for applicant before approval/forwarding & applicable date (future pending), or Admin anytime.
   const canUserModify = (lv: LeaveRequest) => {
-    if (isAdmin) return true;
-    if (isReviewingManager || isReportingManager) return false; // Non-admin managers acting in manager capacity
+    if (isAdmin) return true; // Administration role: any time
     if (lv.userId !== currentUser.id) return false;
-    if (lv.status !== 'pending_level_1' && lv.status !== 'pending_level_2') return false; // Before approval/forwarding
-    if (!isBeforeOrOnApplicableDate(lv.startDate)) return false; // Before applicable date
+    if (lv.status !== 'pending_level_1' && lv.status !== 'pending_level_2') return false; // Future pending only
+    if (!isBeforeOrOnApplicableDate(lv.startDate)) return false; // Before/on applicable date
     return true;
   };
 
@@ -870,7 +1085,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
         users.some((u) => u.id === lv.userId && u.reportingManagerId === currentUser.id)
       );
     }
-    // Level-2 (Reviewing Manager)
+    // Level-2 (Reviewing Manager / HoD)
     if (lv.status === 'pending_level_2') {
       if (lv.userId === currentUser.id) return false; // Cannot approve own request
       return (
@@ -882,11 +1097,10 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
     return false;
   };
 
-  // 3. Manager Can Cancel Approved Leave Record before applicable date
+  // 3. Manager/Admin Can Cancel Approved Leave Record
   const canManagerCancelApproval = (lv: LeaveRequest) => {
     if (lv.status !== 'approved') return false;
     if (isAdmin) return true;
-    if (!isBeforeOrOnApplicableDate(lv.startDate)) return false; // Before applicable date
     if (lv.userId === currentUser.id && !isAdmin) return false;
     if (isReportingManager || isReviewingManager || currentUser.role === 'reporting_manager' || currentUser.role === 'reviewing_manager') {
       return (
@@ -1095,6 +1309,12 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
     if (compOffEligibleList.length > 0) {
       setSelectedCoffId(compOffEligibleList[0].id);
     }
+    setAvailPrefix(false);
+    setPrefixFrom('');
+    setPrefixTo('');
+    setAvailSuffix(false);
+    setSuffixFrom('');
+    setSuffixTo('');
     setShowApplyModal(true);
   };
 
@@ -1515,11 +1735,16 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
       return;
     }
 
-    const finalStationAddress = requiresHqPermission
-      ? stationAddress.trim()
+    const finalStationAddress = (selectedLeaveType === 'earned' || requiresHqPermission)
+      ? (stationAddress === 'Dehradun HQ' ? '' : stationAddress.trim())
       : 'Dehradun HQ';
 
-    if (requiresHqPermission && !finalStationAddress) {
+    if (selectedLeaveType === 'earned' && !finalStationAddress) {
+      setFormError('Please enter contact address and mobile number during EL.');
+      return;
+    }
+
+    if (requiresHqPermission && selectedLeaveType !== 'earned' && !finalStationAddress) {
       setFormError('Please enter station location / outstation address for Headquarter Leave Permission.');
       return;
     }
@@ -1557,6 +1782,50 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
       }
     }
 
+    // Prefix validation (CCS Rule 22: must be contiguous Weekend or GH ending on day before startDate)
+    if (isTwoStageLeave && availPrefix) {
+      if (!prefixFrom || !prefixTo) {
+        setFormError('Please select both Prefix From and Prefix To dates, or uncheck Avail Prefix.');
+        return;
+      }
+      if (prefixFrom > prefixTo) {
+        setFormError('Prefix From date cannot be after Prefix To date.');
+        return;
+      }
+      const pCheck = checkStationLeaveRange(prefixFrom, prefixTo);
+      if (!pCheck.valid) {
+        setFormError(`Prefix dates must only be Weekends or Gazetted Holidays. Non-holidays found: ${pCheck.invalidDates.join(', ')}`);
+        return;
+      }
+      const lastEligiblePrefix = eligiblePrefixDates[eligiblePrefixDates.length - 1]?.date;
+      if (prefixTo !== lastEligiblePrefix) {
+        setFormError(`Prefix To date must be immediately contiguous with Leave From date (${lastEligiblePrefix}).`);
+        return;
+      }
+    }
+
+    // Suffix validation (CCS Rule 22: must be contiguous Weekend or GH starting on day after endDate)
+    if (isTwoStageLeave && availSuffix) {
+      if (!suffixFrom || !suffixTo) {
+        setFormError('Please select both Suffix From and Suffix To dates, or uncheck Avail Suffix.');
+        return;
+      }
+      if (suffixFrom > suffixTo) {
+        setFormError('Suffix From date cannot be after Suffix To date.');
+        return;
+      }
+      const sCheck = checkStationLeaveRange(suffixFrom, suffixTo);
+      if (!sCheck.valid) {
+        setFormError(`Suffix dates must only be Weekends or Gazetted Holidays. Non-holidays found: ${sCheck.invalidDates.join(', ')}`);
+        return;
+      }
+      const firstEligibleSuffix = eligibleSuffixDates[0]?.date;
+      if (suffixFrom !== firstEligibleSuffix) {
+        setFormError(`Suffix From date must be immediately contiguous with Leave To date (${firstEligibleSuffix}).`);
+        return;
+      }
+    }
+
     let finalReason = reason.trim();
     if (selectedLeaveType === 'casual') {
       const sessionNotes: string[] = [];
@@ -1585,7 +1854,11 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
       isCommuted: selectedLeaveType === 'half_pay' ? isCommuted : (selectedLeaveType === 'commuted' ? true : false),
       prescriptionUrl: ((selectedLeaveType === 'half_pay' && isCommuted) || selectedLeaveType === 'commuted' || selectedLeaveType === 'leave_not_due') ? prescriptionUrl : undefined,
       prescriptionFileName: ((selectedLeaveType === 'half_pay' && isCommuted) || selectedLeaveType === 'commuted' || selectedLeaveType === 'leave_not_due') ? prescriptionFileName : undefined,
-      customDaysCount: (selectedLeaveType === 'casual' || selectedLeaveType === 'compensatory_off' || selectedLeaveType === 'restricted') ? calculatedDays : undefined
+      customDaysCount: (selectedLeaveType === 'casual' || selectedLeaveType === 'compensatory_off' || selectedLeaveType === 'restricted') ? calculatedDays : undefined,
+      prefixFrom: isTwoStageLeave && availPrefix ? prefixFrom : undefined,
+      prefixTo: isTwoStageLeave && availPrefix ? prefixTo : undefined,
+      suffixFrom: isTwoStageLeave && availSuffix ? suffixFrom : undefined,
+      suffixTo: isTwoStageLeave && availSuffix ? suffixTo : undefined
     });
     if (!res.success) {
       setFormError(res.message);
@@ -2343,16 +2616,16 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
           </div>
         ) : viewMode === 'table' ? (
           <div className="w-full min-w-0 overflow-x-auto custom-table-scrollbar pb-1">
-            <table className="w-full text-left text-xs border-collapse table-auto min-w-[950px]">
-              <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 text-[11px]">
-                <tr className="h-10">
+            <table className="w-full text-left text-xs border-collapse table-auto">
+              <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 text-[10.5px]">
+                <tr className="h-9">
                   {/* Employee Column */}
                   <th
                     onClick={() => handleSort('employee')}
-                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[18%]"
+                    className="py-2 px-1.5 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle"
                     title="Click to sort by Employee"
                   >
-                    <div className="flex items-center space-x-1.5">
+                    <div className="flex items-center space-x-1">
                       <span>Employee</span>
                       {sortField === 'employee' ? (
                         sortOrder === 'asc' ? (
@@ -2369,10 +2642,10 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                   {/* Dates Column */}
                   <th
                     onClick={() => handleSort('dates')}
-                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[18%]"
+                    className="py-2 px-1.5 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle"
                     title="Click to sort by Dates"
                   >
-                    <div className="flex items-center space-x-1.5">
+                    <div className="flex items-center space-x-1">
                       <span>Leave Dates</span>
                       {sortField === 'dates' ? (
                         sortOrder === 'asc' ? (
@@ -2389,10 +2662,10 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                   {/* Applied Date Column */}
                   <th
                     onClick={() => handleSort('appliedDate')}
-                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[11%]"
+                    className="py-2 px-1.5 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle"
                     title="Click to sort by Applied Date"
                   >
-                    <div className="flex items-center space-x-1.5">
+                    <div className="flex items-center space-x-1">
                       <span>Applied Date</span>
                       {sortField === 'appliedDate' ? (
                         sortOrder === 'asc' ? (
@@ -2409,10 +2682,10 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                   {/* Category Column */}
                   <th
                     onClick={() => handleSort('leaveType')}
-                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[12%]"
+                    className="py-2 px-1.5 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle"
                     title="Click to sort by Category"
                   >
-                    <div className="flex items-center space-x-1.5">
+                    <div className="flex items-center space-x-1">
                       <span>Category</span>
                       {sortField === 'leaveType' ? (
                         sortOrder === 'asc' ? (
@@ -2429,11 +2702,11 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                   {/* Reason / Details Column */}
                   <th
                     onClick={() => handleSort('reason')}
-                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[17%]"
+                    className="py-2 px-1.5 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle"
                     title="Click to sort by Reason / Details"
                   >
-                    <div className="flex items-center space-x-1.5">
-                      <span>Reason / Details</span>
+                    <div className="flex items-center space-x-1">
+                      <span>Reason</span>
                       {sortField === 'reason' ? (
                         sortOrder === 'asc' ? (
                           <ArrowUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
@@ -2449,10 +2722,10 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                   {/* Status Column */}
                   <th
                     onClick={() => handleSort('status')}
-                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[12%]"
+                    className="py-2 px-1.5 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle"
                     title="Click to sort by Status"
                   >
-                    <div className="flex items-center space-x-1.5">
+                    <div className="flex items-center space-x-1">
                       <span>Status</span>
                       {sortField === 'status' ? (
                         sortOrder === 'asc' ? (
@@ -2467,7 +2740,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                   </th>
 
                   {/* Actions Column */}
-                  <th className="py-2.5 px-3 text-right font-bold whitespace-nowrap align-middle w-[12%]">Actions</th>
+                  <th className="py-2 px-2 text-right font-bold whitespace-nowrap align-middle">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -2476,131 +2749,151 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                   return (
                     <tr key={lv.id} className="hover:bg-slate-50 transition-colors">
                       {/* Employee Column */}
-                      <td className="py-2.5 px-3 align-middle">
-                        <div className="flex items-center space-x-2.5 min-w-0">
+                      <td className="py-2 px-1.5 align-middle">
+                        <div className="flex items-center space-x-1.5 min-w-0 max-w-[105px] sm:max-w-[125px]">
                           <img
                             src={staffUser?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'}
                             alt={lv.userName}
-                            className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0 shadow-2xs"
+                            className="w-6 h-6 rounded-full object-cover border border-slate-200 shrink-0 shadow-2xs"
                           />
                           <div className="min-w-0 flex-1">
-                            <span className="font-bold text-slate-900 block truncate max-w-[160px] text-xs">{lv.userName}</span>
-                            <span className="text-[11px] text-slate-500 font-medium block truncate max-w-[160px] mt-0.5">
+                            <span className="font-bold text-slate-900 block truncate text-xs">{lv.userName}</span>
+                            <span className="text-[9.5px] text-slate-500 font-medium block truncate">
                               {staffUser?.designation || lv.designation || 'Staff'}
                             </span>
-                            <span className="text-[10px] text-slate-400 font-mono tracking-tight block truncate max-w-[160px] mt-0.5">
-                              {staffUser?.biometricId ? `Bio ID: ${staffUser.biometricId}` : (lv.userId ? `Bio ID: ${lv.userId}` : 'Bio ID: N/A')}
+                            <span className="text-[9px] text-slate-400 font-mono tracking-tight block truncate">
+                              {staffUser?.biometricId ? `Bio: ${staffUser.biometricId}` : (lv.userId ? `ID: ${lv.userId}` : '')}
                             </span>
                           </div>
                         </div>
                       </td>
 
                       {/* Dates Column */}
-                      <td className="py-2.5 px-3 whitespace-nowrap align-middle">
-                        <div className="font-bold text-slate-900 flex items-center space-x-1.5">
-                          <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                      <td className="py-2 px-1.5 whitespace-nowrap align-middle">
+                        <div className="font-bold text-slate-900 flex items-center space-x-1 text-[11px]">
+                          <Calendar className="w-3 h-3 text-indigo-600 shrink-0" />
                           <span>{lv.startDate === lv.endDate ? lv.startDate : `${lv.startDate} to ${lv.endDate}`}</span>
                         </div>
-                        <div className="text-[10px] font-mono text-slate-600 mt-0.5 flex items-center space-x-1">
+                        <div className="text-[9.5px] font-mono text-slate-600 mt-0.5 flex items-center space-x-1">
                           <Clock className="w-3 h-3 text-slate-400 shrink-0" />
                           <span>{lv.daysCount} Day{lv.daysCount > 1 ? 's' : ''}</span>
+                          {(lv.prefixFrom || lv.suffixTo) && (
+                            <span className="text-[8.5px] font-sans font-bold text-indigo-700 bg-indigo-50 px-1 rounded border border-indigo-200/60 ml-0.5" title={`Prefix: ${lv.prefixFrom || 'None'}, Suffix: ${lv.suffixTo || 'None'}`}>
+                              {lv.prefixFrom && lv.suffixTo ? 'P+S' : lv.prefixFrom ? 'Pref' : 'Suff'}
+                            </span>
+                          )}
                         </div>
                       </td>
 
                       {/* Applied Date Column */}
-                      <td className="py-2.5 px-3 whitespace-nowrap align-middle text-slate-700 text-xs">
+                      <td className="py-2 px-1.5 whitespace-nowrap align-middle text-slate-700 text-xs">
                         <div className="flex items-center space-x-1 text-slate-600">
-                          <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span className="font-medium">{lv.appliedDate}</span>
+                          <Calendar className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span className="font-medium text-[11px]">{lv.appliedDate}</span>
                         </div>
                       </td>
 
                       {/* Category Column */}
-                      <td className="py-2.5 px-3 whitespace-nowrap align-middle">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold inline-block border bg-blue-50 text-blue-800 border-blue-200/80">
+                      <td className="py-2 px-1.5 whitespace-nowrap align-middle">
+                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold inline-block border bg-blue-50 text-blue-800 border-blue-200/80">
                           {lv.leaveTypeName.replace(/\s*\([^)]*\)/, '')}
                         </span>
                       </td>
 
-                      {/* Reason / Details Column */}
-                      <td className="py-2.5 px-3 align-middle">
-                        <p className="text-slate-700 text-[11px] line-clamp-2 leading-snug max-w-[200px]" title={lv.reason}>
-                          {lv.reason}
-                        </p>
+                      {/* Reason / Details Column with View More */}
+                      <td className="py-2 px-1.5 align-middle">
+                        <div className="flex items-center justify-between gap-1 max-w-[70px] sm:max-w-[85px]">
+                          <span className="text-slate-700 text-[11px] truncate flex-1 min-w-0 font-medium italic" title={lv.reason}>
+                            "{lv.reason}"
+                          </span>
+                          {(lv.reason || '').length > 12 && (
+                            <button
+                              onClick={() =>
+                                setActiveReasonModal({
+                                  employeeName: lv.userName,
+                                  leaveType: lv.leaveTypeName,
+                                  dates: lv.startDate === lv.endDate ? lv.startDate : `${lv.startDate} to ${lv.endDate}`,
+                                  reason: lv.reason
+                                })
+                              }
+                              className="text-blue-600 hover:text-blue-800 font-bold inline-flex items-center cursor-pointer shrink-0 text-[9.5px] hover:underline"
+                              title="View full reason"
+                            >
+                              <span>More</span>
+                            </button>
+                          )}
+                        </div>
                       </td>
 
                       {/* Status Column */}
-                      <td className="py-2.5 px-3 whitespace-nowrap align-middle">
+                      <td className="py-2 px-1.5 whitespace-nowrap align-middle">
                         <div>
                           {lv.status === 'approved' && (
-                            <span className="inline-flex items-center space-x-1 bg-emerald-100 text-emerald-800 font-bold px-2.5 py-0.5 rounded text-[10px] border border-emerald-200">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                            <span className="inline-flex items-center space-x-1 bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded text-[9.5px] border border-emerald-200">
+                              <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
                               <span>Approved</span>
                             </span>
                           )}
                           {(lv.status === 'pending_level_1' || lv.status === 'pending_level_2') && (
-                            <span className="inline-flex items-center space-x-1 bg-amber-100 text-amber-800 font-bold px-2.5 py-0.5 rounded text-[10px] border border-amber-200">
-                              <Clock className="w-3 h-3 text-amber-600" />
+                            <span className="inline-flex items-center space-x-1 bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded text-[9.5px] border border-amber-200">
+                              <Clock className="w-2.5 h-2.5 text-amber-600" />
                               <span>Pending</span>
                             </span>
                           )}
                           {lv.status === 'rejected' && (
-                            <span className="inline-flex items-center space-x-1 bg-rose-100 text-rose-800 font-bold px-2.5 py-0.5 rounded text-[10px] border border-rose-200">
-                              <XCircle className="w-3 h-3 text-rose-600" />
+                            <span className="inline-flex items-center space-x-1 bg-rose-100 text-rose-800 font-bold px-1.5 py-0.5 rounded text-[9.5px] border border-rose-200">
+                              <XCircle className="w-2.5 h-2.5 text-rose-600" />
                               <span>Rejected</span>
                             </span>
                           )}
+                          {lv.status === 'cancelled' && (
+                            <span className="inline-flex items-center space-x-1 bg-slate-100 text-slate-700 font-bold px-1.5 py-0.5 rounded text-[9.5px] border border-slate-200">
+                              <RotateCcw className="w-2.5 h-2.5 text-slate-500" />
+                              <span>Cancelled</span>
+                            </span>
+                          )}
                         </div>
+                        <span className="text-[9.5px] text-slate-500 font-medium block mt-0.5 whitespace-nowrap">
+                          by {getActionByName(lv)}
+                        </span>
 
                         {/* Joining Report Indicator for approved leaves on/after last day requiring HoD approval */}
                         {isJoiningReportEligible(lv) && (
                           <div className="mt-1">
-                            {lv.joiningReport?.status === 'accepted' ? (
-                              <button
-                                onClick={() => setSelectedJoiningLeave(lv)}
-                                className="inline-flex items-center space-x-1 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 font-bold px-1.5 py-0.5 rounded text-[9px] border border-emerald-200 cursor-pointer transition-colors"
-                                title={`Joining Verified & Approved by HoD (${lv.joiningReport.verifiedByName || 'HoD'})`}
-                              >
-                                <FileCheck className="w-2.5 h-2.5 text-emerald-600" />
-                                <span>Joined ({lv.joiningReport.joiningDate})</span>
-                              </button>
-                            ) : lv.joiningReport?.status === 'forwarded' ? (
-                              <button
-                                onClick={() => setSelectedJoiningLeave(lv)}
-                                className="inline-flex items-center space-x-1 bg-purple-50 text-purple-800 hover:bg-purple-100 font-bold px-1.5 py-0.5 rounded text-[9px] border border-purple-200 cursor-pointer transition-colors"
-                                title="Forwarded by Reporting Manager - Awaiting HoD Approval"
-                              >
-                                <FileCheck className="w-2.5 h-2.5 text-purple-600" />
-                                <span>Forwarded to HoD</span>
-                              </button>
-                            ) : lv.joiningReport?.status === 'submitted' ? (
-                              <button
-                                onClick={() => setSelectedJoiningLeave(lv)}
-                                className="inline-flex items-center space-x-1 bg-blue-50 text-blue-800 hover:bg-blue-100 font-bold px-1.5 py-0.5 rounded text-[9px] border border-blue-200 cursor-pointer transition-colors"
-                                title="Submitted by Employee - Awaiting Reporting Manager Forwarding"
-                              >
-                                <FileCheck className="w-2.5 h-2.5 text-blue-600" />
-                                <span>Forwarding Pending</span>
-                              </button>
-                            ) : currentUser.id === lv.userId ? (
-                              <button
-                                onClick={() => setSelectedJoiningLeave(lv)}
-                                className="inline-flex items-center space-x-1 bg-amber-50 text-amber-800 hover:bg-amber-100 font-bold px-1.5 py-0.5 rounded text-[9px] border border-amber-200 cursor-pointer transition-colors animate-pulse"
-                                title="Post-leave Joining Report Required (Click to Apply)"
-                              >
-                                <Clock className="w-2.5 h-2.5 text-amber-600" />
-                                <span>Apply Joining</span>
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => setSelectedJoiningLeave(lv)}
-                                className="inline-flex items-center space-x-1 bg-slate-100 text-slate-700 hover:bg-slate-200 font-medium px-1.5 py-0.5 rounded text-[9px] border border-slate-200 cursor-pointer transition-colors"
-                                title={`Joining Report pending submission by employee (${lv.userName})`}
-                              >
-                                <Clock className="w-2.5 h-2.5 text-slate-500" />
-                                <span>Joining Pending</span>
-                              </button>
-                            )}
+                            <button
+                              onClick={() => setSelectedJoiningLeave(lv)}
+                              className={`inline-flex items-center space-x-1 font-bold px-1.5 py-0.5 rounded text-[9px] border cursor-pointer transition-colors ${getJoiningButtonStyle(
+                                lv.joiningReport?.status
+                              )}`}
+                              title={
+                                lv.joiningReport?.status === 'accepted'
+                                  ? `Joining Verified & Approved by HoD (${lv.joiningReport.verifiedByName || 'HoD'})`
+                                  : lv.joiningReport?.status === 'forwarded'
+                                  ? 'Forwarded to HoD for Approval'
+                                  : lv.joiningReport?.status === 'submitted'
+                                  ? 'Forwarding Pending'
+                                  : lv.joiningReport?.status === 'rejected'
+                                  ? 'Joining Report Rejected'
+                                  : currentUser.id === lv.userId
+                                  ? 'Post-leave Joining Report Required (Click to Apply)'
+                                  : `Joining Report pending submission by employee (${lv.userName})`
+                              }
+                            >
+                              <FileCheck className="w-2.5 h-2.5 shrink-0" />
+                              <span>
+                                {lv.joiningReport?.status === 'accepted'
+                                  ? `Joined (${lv.joiningReport.joiningDate})`
+                                  : lv.joiningReport?.status === 'forwarded'
+                                  ? 'Forwarded to HoD'
+                                  : lv.joiningReport?.status === 'submitted'
+                                  ? 'Forwarding Pending'
+                                  : lv.joiningReport?.status === 'rejected'
+                                  ? 'Joining Rejected'
+                                  : currentUser.id === lv.userId
+                                  ? 'Apply Joining'
+                                  : 'Joining Pending'}
+                              </span>
+                            </button>
                           </div>
                         )}
                       </td>
@@ -2608,39 +2901,35 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                       {/* Actions Column */}
                       <td className="py-2.5 px-3 text-right whitespace-nowrap align-middle">
                         <div className="flex items-center justify-end space-x-1">
-                          {/* View Details */}
+                          {/* View Details / See button */}
                           <button
                             onClick={() => setDetailModalLeave(lv)}
-                            className="w-7 h-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 inline-flex items-center justify-center text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95"
+                            className={`w-7 h-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 inline-flex items-center justify-center rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95 ${getSeeButtonStyle(
+                              lv.status
+                            )}`}
                             title="View Details"
                           >
-                            <Eye className="w-3.5 h-3.5 text-slate-600 stroke-[2]" />
+                            <Eye className="w-3.5 h-3.5 stroke-[2]" />
                           </button>
 
-                          {/* Joining Report Action Button for approved leaves on/after last day */}
+                          {/* Joining Report Action Button for 2 stage leaves */}
                           {isJoiningReportEligible(lv) && (
                             <button
                               onClick={() => setSelectedJoiningLeave(lv)}
-                              className={`w-7 h-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 inline-flex items-center justify-center rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95 ${
-                                lv.joiningReport?.status === 'accepted'
-                                  ? 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200'
-                                  : lv.joiningReport?.status === 'forwarded'
-                                  ? 'text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200'
-                                  : lv.joiningReport?.status === 'submitted'
-                                  ? 'text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200'
-                                  : currentUser.id === lv.userId
-                                  ? 'text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 animate-pulse'
-                                  : 'text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200'
-                              }`}
+                              className={`w-7 h-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 inline-flex items-center justify-center rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95 ${getJoiningButtonStyle(
+                                lv.joiningReport?.status
+                              )}`}
                               title={
                                 lv.joiningReport?.status === 'accepted'
                                   ? `Duty Resumed on ${lv.joiningReport.joiningDate} (HoD Approved)`
                                   : lv.joiningReport?.status === 'forwarded'
                                   ? 'Joining Report Forwarded to HoD for Approval'
                                   : lv.joiningReport?.status === 'submitted'
-                                  ? 'Joining Report Submitted - Pending Reporting Manager Forwarding'
+                                  ? 'Joining Report Submitted - Pending Forwarding'
+                                  : lv.joiningReport?.status === 'rejected'
+                                  ? 'Joining Report Rejected'
                                   : currentUser.id === lv.userId
-                                  ? 'Submit Post-Leave Joining Report (कार्यग्रहण आख्या प्रस्तुत करें)'
+                                  ? 'Submit Post-Leave Joining Report'
                                   : `Joining Report Pending Submission from Employee (${lv.userName})`
                               }
                             >
@@ -2724,7 +3013,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                             <button
                               onClick={() => {
                                 if (confirm('Are you sure you want to cancel this approved leave record?')) {
-                                  rejectLeaveLevel1(lv.id, 'Approved leave cancelled by Manager/Admin before applicable date.');
+                                  rejectLeaveLevel1(lv.id, 'Approved leave cancelled by Manager/Admin.');
                                 }
                               }}
                               className="w-7 h-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 inline-flex items-center justify-center text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95"
@@ -2773,6 +3062,13 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                   <p>
                     🗓️ <strong>Dates:</strong> {lv.startDate} to {lv.endDate}
                   </p>
+                  {(lv.prefixFrom || lv.suffixTo) && (
+                    <div className="text-[10px] text-indigo-800 bg-indigo-50/70 p-1 rounded border border-indigo-200/60 flex flex-wrap gap-1 font-medium">
+                      {lv.prefixFrom && <span><strong>Prefix:</strong> {lv.prefixFrom} to {lv.prefixTo}</span>}
+                      {lv.prefixFrom && lv.suffixTo && <span>•</span>}
+                      {lv.suffixTo && <span><strong>Suffix:</strong> {lv.suffixFrom} to {lv.suffixTo}</span>}
+                    </div>
+                  )}
                   <p className="text-slate-500">
                     📅 <strong>Applied:</strong> {lv.appliedDate}
                   </p>
@@ -2790,20 +3086,12 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                   <div className="pt-2">
                     <button
                       onClick={() => setSelectedJoiningLeave(lv)}
-                      className={`w-full flex items-center justify-between p-2 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
-                        lv.joiningReport?.status === 'accepted'
-                          ? 'bg-emerald-50 text-emerald-900 border-emerald-200 hover:bg-emerald-100'
-                          : lv.joiningReport?.status === 'forwarded'
-                          ? 'bg-purple-50 text-purple-900 border-purple-200 hover:bg-purple-100'
-                          : lv.joiningReport?.status === 'submitted'
-                          ? 'bg-blue-50 text-blue-900 border-blue-200 hover:bg-blue-100'
-                          : currentUser.id === lv.userId
-                          ? 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100'
-                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
+                      className={`w-full flex items-center justify-between p-2 rounded-xl text-xs font-bold transition-all cursor-pointer border ${getJoiningButtonStyle(
+                        lv.joiningReport?.status
+                      )}`}
                     >
                       <div className="flex items-center space-x-1.5">
-                        <FileCheck className="w-3.5 h-3.5 shrink-0 text-indigo-600" />
+                        <FileCheck className="w-3.5 h-3.5 shrink-0" />
                         <span className="truncate">
                           Joining Report:{' '}
                           {lv.joiningReport?.status === 'accepted'
@@ -2812,27 +3100,129 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                             ? 'Forwarded to HoD'
                             : lv.joiningReport?.status === 'submitted'
                             ? 'Forwarding Pending'
+                            : lv.joiningReport?.status === 'rejected'
+                            ? 'Rejected'
                             : currentUser.id === lv.userId
                             ? 'Apply Joining Report'
                             : 'Pending (Employee)'}
                         </span>
                       </div>
-                      <span className="text-[10px] bg-white px-2 py-0.5 rounded-md border shadow-2xs shrink-0 font-semibold">
-                        {lv.joiningReport ? 'View' : currentUser.id === lv.userId ? 'Apply' : 'Pending'}
+                      <span className="text-[10px] bg-white/80 px-2 py-0.5 rounded-md border shadow-2xs shrink-0 font-semibold">
+                        {lv.joiningReport?.status === 'accepted'
+                          ? 'Approved'
+                          : lv.joiningReport?.status === 'rejected'
+                          ? 'Rejected'
+                          : lv.joiningReport
+                          ? 'Pending'
+                          : currentUser.id === lv.userId
+                          ? 'Apply'
+                          : 'Not Applied'}
                       </span>
                     </button>
                   </div>
                 )}
 
-                <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100">
+                <div className="flex items-center justify-between text-[11px] text-slate-500 pt-2 border-t border-slate-100">
                   <span>Applied: {lv.appliedDate}</span>
-                  <button
-                    onClick={() => setDetailModalLeave(lv)}
-                    className="p-1 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors cursor-pointer flex items-center space-x-1 font-semibold text-xs"
-                  >
-                    <Eye className="w-3.5 h-3.5" />
-                    <span>Details</span>
-                  </button>
+                  <div className="flex items-center space-x-1">
+                    {/* See Details Button */}
+                    <button
+                      onClick={() => setDetailModalLeave(lv)}
+                      className={`p-1.5 rounded transition-colors cursor-pointer flex items-center space-x-1 font-semibold text-xs border ${getSeeButtonStyle(
+                        lv.status
+                      )}`}
+                      title="View Details"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Details</span>
+                    </button>
+
+                    {/* Edit Button */}
+                    {canUserModify(lv) && (
+                      <button
+                        onClick={() => handleOpenEditModal(lv)}
+                        className="p-1.5 text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded transition-colors cursor-pointer flex items-center space-x-1 font-semibold text-xs"
+                        title="Edit Leave Request"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+
+                    {/* Delete Button */}
+                    {canUserModify(lv) && (
+                      <button
+                        onClick={() => {
+                          if (confirm('Are you sure you want to delete this leave request?')) {
+                            deleteLeave(lv.id);
+                          }
+                        }}
+                        className="p-1.5 text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded transition-colors cursor-pointer flex items-center space-x-1 font-semibold text-xs"
+                        title="Delete Leave Request"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+
+                    {/* Approve / Forward & Reject Buttons */}
+                    {canManagerAction(lv) && (
+                      <>
+                        {lv.status === 'pending_level_1' && lv.requiresLevel2 ? (
+                          <button
+                            onClick={() => {
+                              const comm = prompt('Enter Level-1 remarks to forward:', level1Comments[lv.id] || '');
+                              if (comm !== null) approveLeaveLevel1(lv.id, comm);
+                            }}
+                            className="p-1.5 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded transition-colors cursor-pointer flex items-center space-x-1 font-semibold text-xs"
+                            title="Forward to Reviewing Manager (Level-2)"
+                          >
+                            <Send className="w-3.5 h-3.5 text-indigo-600" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              const comm = prompt('Enter approval comments:', (lv.status === 'pending_level_1' ? level1Comments[lv.id] : level2Comments[lv.id]) || '');
+                              if (comm !== null) {
+                                if (lv.status === 'pending_level_1') approveLeaveLevel1(lv.id, comm);
+                                else approveLeaveLevel2(lv.id, comm);
+                              }
+                            }}
+                            className="p-1.5 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded transition-colors cursor-pointer flex items-center space-x-1 font-semibold text-xs"
+                            title="Approve Leave Request"
+                          >
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => {
+                            const comm = prompt('Enter rejection comments:', (lv.status === 'pending_level_1' ? level1Comments[lv.id] : level2Comments[lv.id]) || '');
+                            if (comm !== null) {
+                              if (lv.status === 'pending_level_1') rejectLeaveLevel1(lv.id, comm);
+                              else rejectLeaveLevel2(lv.id, comm);
+                            }
+                          }}
+                          className="p-1.5 text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded transition-colors cursor-pointer flex items-center space-x-1 font-semibold text-xs"
+                          title="Reject Leave Request"
+                        >
+                          <X className="w-3.5 h-3.5 text-rose-600" />
+                        </button>
+                      </>
+                    )}
+
+                    {/* Cancel Approved Record Button */}
+                    {canManagerCancelApproval(lv) && (
+                      <button
+                        onClick={() => {
+                          if (confirm('Are you sure you want to cancel this approved leave record?')) {
+                            rejectLeaveLevel1(lv.id, 'Approved leave cancelled by Manager/Admin.');
+                          }
+                        }}
+                        className="p-1.5 text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded transition-colors cursor-pointer flex items-center space-x-1 font-semibold text-xs"
+                        title="Cancel Approved Leave"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
@@ -2855,15 +3245,15 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
       {/* Apply Leave Modal */}
       {showApplyModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 my-auto sm:my-8 flex flex-col max-h-[90vh]">
-            {/* Modal Header matching Manual & OD Theme */}
-            <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 px-4 sm:px-6 py-3.5 sm:py-4 text-white flex items-center justify-between shrink-0">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-white/10 rounded-xl backdrop-blur-md shrink-0">
-                  <Calendar className="w-5 h-5 text-blue-300" />
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200 my-auto sm:my-6 flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 px-4 sm:px-5 py-3 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center space-x-2.5">
+                <div className="p-1.5 bg-white/10 rounded-lg backdrop-blur-md shrink-0">
+                  <Calendar className="w-4.5 h-4.5 text-blue-300" />
                 </div>
                 <div>
-                  <h2 className="text-base font-bold tracking-wide">
+                  <h2 className="text-sm sm:text-base font-bold tracking-wide">
                     Apply Leave
                   </h2>
                 </div>
@@ -2871,22 +3261,22 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
               <button
                 type="button"
                 onClick={() => setShowApplyModal(false)}
-                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                className="p-1 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4.5 h-4.5" />
               </button>
             </div>
 
-            <form onSubmit={handleFormSubmit} className="p-4 sm:p-6 space-y-3.5 sm:space-y-4 overflow-y-auto flex-1 custom-table-scrollbar">
+            <form onSubmit={handleFormSubmit} className="p-3.5 sm:p-4.5 space-y-2.5 sm:space-y-3 overflow-y-auto flex-1 custom-table-scrollbar">
               {formError && (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center space-x-2 text-xs text-rose-800">
+                <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg flex items-center space-x-2 text-xs text-rose-800">
                   <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
                   <span>{formError}</span>
                 </div>
               )}
 
               {formSuccess && (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center space-x-2 text-xs text-emerald-800">
+                <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center space-x-2 text-xs text-emerald-800">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span>{formSuccess}</span>
                 </div>
@@ -2945,7 +3335,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
 
               {/* Restricted Holiday (RH) Selector */}
               {selectedLeaveType === 'restricted' ? (
-                <div className="space-y-3">
+                <div className="space-y-2">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
                       Declared Restricted Holiday (RH) *
@@ -2965,10 +3355,10 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                     const rh = restrictedHolidaysList.find((h) => h.id === selectedRhId) || restrictedHolidaysList[0];
                     if (!rh) return null;
                     return (
-                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-xs">
+                      <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg space-y-1 text-xs">
                         <div className="flex items-center justify-between">
                           <span className="font-bold text-slate-900">{rh.name} {rh.hindiName ? `(${rh.hindiName})` : ''}</span>
-                          <span className="bg-blue-100 text-blue-900 font-bold px-2 py-0.5 rounded text-[10px]">
+                          <span className="bg-blue-100 text-blue-900 font-bold px-1.5 py-0.5 rounded text-[10px]">
                             1 Day (RH)
                           </span>
                         </div>
@@ -2982,7 +3372,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                 </div>
               ) : selectedLeaveType === 'compensatory_off' ? (
                 /* Compensatory Off (C-Off) Selector */
-                <div className="space-y-3">
+                <div className="space-y-2">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
                       Earned Compensatory Off Record (Weekend/Holiday Worked) *
@@ -3010,8 +3400,8 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                 </div>
               ) : (
                 /* Standard Leave Dates (Start & End) */
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
                     <AppDatePicker
                       label="From Date (Start Date) *"
                       value={startDate}
@@ -3032,7 +3422,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
 
                   {/* Casual Leave Sessions (Half Day) */}
                   {selectedLeaveType === 'casual' && startDate && (
-                    <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+                    <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
                       <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1">
                           Start Session
@@ -3064,14 +3454,209 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
 
                   {/* Total Duration Calculated Badge */}
                   {startDate && endDate && (
-                    <div className="flex items-center justify-between p-2.5 bg-blue-50/70 border border-blue-200/80 rounded-xl text-xs">
+                    <div className="flex items-center justify-between p-2 px-2.5 bg-blue-50/60 border border-blue-200/60 rounded-lg text-xs">
                       <span className="font-semibold text-blue-900">Total Duration:</span>
-                      <span className="font-bold text-blue-950 bg-white px-2.5 py-0.5 rounded-md border border-blue-200 shadow-2xs">
+                      <span className="font-bold text-blue-950 bg-white px-2 py-0.5 rounded border border-blue-200 shadow-2xs text-[11px]">
                         {calculatedDays} {calculatedDays === 1 ? 'Day' : 'Days'}
                         {((selectedLeaveType === 'half_pay' && isCommuted) || selectedLeaveType === 'commuted') && (
                           ` (${rawCalculatedDays} Cal. × 2)`
                         )}
                       </span>
+                    </div>
+                  )}
+
+                  {/* Prefix & Suffix (for 2-Stage Leaves) */}
+                  {isTwoStageLeave && startDate && endDate && (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                        <span>Prefix &amp; Suffix Holidays</span>
+                        {availSuffix && expectedJoiningDate && (
+                          <span className="text-[10px] text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                            Joining: {expectedJoiningDate}
+                          </span>
+                        )}
+                      </label>
+
+                      {eligiblePrefixDates.length === 0 && eligibleSuffixDates.length === 0 ? (
+                        <div className="py-1 px-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-400 font-medium flex items-center space-x-1.5">
+                          <AlertCircle className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span>Not eligible</span>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-2">
+                          {/* Prefix Card */}
+                          <div
+                            className={`p-2 rounded-lg border transition-all ${
+                              eligiblePrefixDates.length === 0
+                                ? 'bg-slate-50 border-slate-200/80 opacity-60'
+                                : availPrefix
+                                ? 'bg-blue-50/40 border-blue-500 shadow-2xs ring-1 ring-blue-500/20'
+                                : 'bg-slate-50 border-slate-200 hover:bg-slate-100/70'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <label
+                                className={`flex items-center space-x-1.5 select-none ${
+                                  eligiblePrefixDates.length === 0 ? 'cursor-not-allowed' : 'cursor-pointer'
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  disabled={eligiblePrefixDates.length === 0}
+                                  checked={availPrefix}
+                                  onChange={(e) => {
+                                    const checked = e.target.checked;
+                                    setAvailPrefix(checked);
+                                    if (checked) {
+                                      setPrefixFrom(eligiblePrefixDates[0].date);
+                                      setPrefixTo(eligiblePrefixDates[eligiblePrefixDates.length - 1].date);
+                                    } else {
+                                      setPrefixFrom('');
+                                      setPrefixTo('');
+                                    }
+                                  }}
+                                  className="w-3.5 h-3.5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                                />
+                                <span className="text-xs font-bold text-slate-800">Avail Prefix</span>
+                              </label>
+                              {eligiblePrefixDates.length > 0 ? (
+                                <span className="text-[10px] font-bold text-blue-700 bg-white px-1.5 py-0.2 rounded border border-blue-200 shadow-2xs">
+                                  {eligiblePrefixDates.length} {eligiblePrefixDates.length === 1 ? 'Day' : 'Days'}
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-slate-400 font-medium">Not eligible</span>
+                              )}
+                            </div>
+
+                            {availPrefix && eligiblePrefixDates.length > 1 && (
+                              <div className="grid grid-cols-2 gap-1.5 mt-1.5 pt-1.5 border-t border-blue-100">
+                                <div>
+                                  <label className="block text-[9px] font-bold text-slate-500 mb-0.5">From</label>
+                                  <select
+                                    value={prefixFrom}
+                                    onChange={(e) => setPrefixFrom(e.target.value)}
+                                    className="w-full bg-white border border-slate-200 rounded-md px-1 py-0.5 text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                  >
+                                    {eligiblePrefixDates.map((p) => (
+                                      <option key={p.date} value={p.date}>
+                                        {p.date} ({p.dayName})
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-[9px] font-bold text-slate-500 mb-0.5">To</label>
+                                  <select
+                                    value={prefixTo}
+                                    onChange={(e) => setPrefixTo(e.target.value)}
+                                    className="w-full bg-white border border-slate-200 rounded-md px-1 py-0.5 text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                  >
+                                    {eligiblePrefixDates
+                                      .filter((p) => p.date >= prefixFrom)
+                                      .map((p) => (
+                                        <option key={p.date} value={p.date}>
+                                          {p.date} ({p.dayName})
+                                        </option>
+                                      ))}
+                                  </select>
+                                </div>
+                              </div>
+                            )}
+
+                            {availPrefix && eligiblePrefixDates.length === 1 && (
+                              <p className="text-[10px] text-blue-900 font-mono mt-1 font-semibold">
+                                {eligiblePrefixDates[0].date} ({eligiblePrefixDates[0].dayName})
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Suffix Card */}
+                          <div
+                            className={`p-2 rounded-lg border transition-all ${
+                              eligibleSuffixDates.length === 0
+                                ? 'bg-slate-50 border-slate-200/80 opacity-60'
+                                : availSuffix
+                                ? 'bg-blue-50/40 border-blue-500 shadow-2xs ring-1 ring-blue-500/20'
+                                : 'bg-slate-50 border-slate-200 hover:bg-slate-100/70'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <label
+                                className={`flex items-center space-x-1.5 select-none ${
+                                  eligibleSuffixDates.length === 0 ? 'cursor-not-allowed' : 'cursor-pointer'
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  disabled={eligibleSuffixDates.length === 0}
+                                  checked={availSuffix}
+                                  onChange={(e) => {
+                                    const checked = e.target.checked;
+                                    setAvailSuffix(checked);
+                                    if (checked) {
+                                      setSuffixFrom(eligibleSuffixDates[0].date);
+                                      setSuffixTo(eligibleSuffixDates[eligibleSuffixDates.length - 1].date);
+                                    } else {
+                                      setSuffixFrom('');
+                                      setSuffixTo('');
+                                    }
+                                  }}
+                                  className="w-3.5 h-3.5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                                />
+                                <span className="text-xs font-bold text-slate-800">Avail Suffix</span>
+                              </label>
+                              {eligibleSuffixDates.length > 0 ? (
+                                <span className="text-[10px] font-bold text-blue-700 bg-white px-1.5 py-0.2 rounded border border-blue-200 shadow-2xs">
+                                  {eligibleSuffixDates.length} {eligibleSuffixDates.length === 1 ? 'Day' : 'Days'}
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-slate-400 font-medium">Not eligible</span>
+                              )}
+                            </div>
+
+                            {availSuffix && eligibleSuffixDates.length > 1 && (
+                              <div className="grid grid-cols-2 gap-1.5 mt-1.5 pt-1.5 border-t border-blue-100">
+                                <div>
+                                  <label className="block text-[9px] font-bold text-slate-500 mb-0.5">From</label>
+                                  <select
+                                    value={suffixFrom}
+                                    onChange={(e) => setSuffixFrom(e.target.value)}
+                                    className="w-full bg-white border border-slate-200 rounded-md px-1 py-0.5 text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                  >
+                                    {eligibleSuffixDates.map((s) => (
+                                      <option key={s.date} value={s.date}>
+                                        {s.date} ({s.dayName})
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-[9px] font-bold text-slate-500 mb-0.5">To</label>
+                                  <select
+                                    value={suffixTo}
+                                    onChange={(e) => setSuffixTo(e.target.value)}
+                                    className="w-full bg-white border border-slate-200 rounded-md px-1 py-0.5 text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                  >
+                                    {eligibleSuffixDates
+                                      .filter((s) => s.date >= suffixFrom)
+                                      .map((s) => (
+                                        <option key={s.date} value={s.date}>
+                                          {s.date} ({s.dayName})
+                                        </option>
+                                      ))}
+                                  </select>
+                                </div>
+                              </div>
+                            )}
+
+                            {availSuffix && eligibleSuffixDates.length === 1 && (
+                              <p className="text-[10px] text-blue-900 font-mono mt-1 font-semibold">
+                                {eligibleSuffixDates[0].date} ({eligibleSuffixDates[0].dayName})
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -3082,15 +3667,15 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                         const stCheck = checkStationLeaveRange(startDate, endDate);
                         if (stCheck.valid) {
                           return (
-                            <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-900 text-[11px] font-semibold flex items-center space-x-2">
-                              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                            <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-900 text-[11px] font-semibold flex items-center space-x-2">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                               <span>Valid: Selected dates fall on Weekends or Gazetted Holidays (GH).</span>
                             </div>
                           );
                         } else {
                           return (
-                            <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-900 text-[11px] font-semibold flex items-start space-x-2">
-                              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                            <div className="p-2 bg-rose-50 border border-rose-200 rounded-lg text-rose-900 text-[11px] font-semibold flex items-start space-x-2">
+                              <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0 mt-0.5" />
                               <div>
                                 <span className="font-bold block text-rose-800">Station Leave Date Restriction:</span>
                                 Only permitted on Weekends &amp; Gazetted Holidays. Weekdays found: <span className="font-mono font-bold text-rose-950">{stCheck.invalidDates.join(', ')}</span>.
@@ -3115,15 +3700,14 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                     placeholder="Enter outstation city/address during leave..."
                     value={stationAddress === 'Dehradun HQ' ? '' : stationAddress}
                     onChange={(e) => setStationAddress(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                    className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
                     required
                   />
                 </div>
               ) : (
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
-                    <span>Headquarter (HQ) / Station Permission *</span>
-                    <span className="text-[10px] text-slate-500 font-medium">HQ: Dehradun</span>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Headquarter (HQ) / Station Permission *
                   </label>
                   <div className="grid grid-cols-2 gap-2">
                     <button
@@ -3132,7 +3716,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                         setRequiresHqPermission(false);
                         setStationAddress('Dehradun HQ');
                       }}
-                      className={`py-2 px-3 rounded-xl font-bold flex items-center justify-center space-x-1.5 border transition-all cursor-pointer text-xs ${
+                      className={`py-1.5 px-2.5 rounded-lg font-bold flex items-center justify-center space-x-1.5 border transition-all cursor-pointer text-xs ${
                         !requiresHqPermission
                           ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
                           : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
@@ -3147,7 +3731,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                         setRequiresHqPermission(true);
                         if (stationAddress === 'Dehradun HQ') setStationAddress('');
                       }}
-                      className={`py-2 px-3 rounded-xl font-bold flex items-center justify-center space-x-1.5 border transition-all cursor-pointer text-xs ${
+                      className={`py-1.5 px-2.5 rounded-lg font-bold flex items-center justify-center space-x-1.5 border transition-all cursor-pointer text-xs ${
                         requiresHqPermission
                           ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
                           : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
@@ -3157,8 +3741,8 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                       <span className="truncate">Station Leave</span>
                     </button>
                   </div>
-                  {requiresHqPermission && (
-                    <div className="mt-2.5">
+                  {requiresHqPermission && selectedLeaveType !== 'earned' && (
+                    <div className="mt-2">
                       <label className="block text-xs font-bold text-slate-700 mb-1">
                         Outstation Location / Contact Address *
                       </label>
@@ -3167,8 +3751,8 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                         placeholder="Enter outstation city/address during leave..."
                         value={stationAddress === 'Dehradun HQ' ? '' : stationAddress}
                         onChange={(e) => setStationAddress(e.target.value)}
-                        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
-                        required={requiresHqPermission}
+                        className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                        required={requiresHqPermission && selectedLeaveType !== 'earned'}
                       />
                     </div>
                   )}
@@ -3177,8 +3761,8 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
 
               {/* Earned Leave Options (LTC / Ex-India) */}
               {selectedLeaveType === 'earned' && (
-                <div className="space-y-2.5">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-0.5">
                     LTC / Ex-India Option *
                   </label>
                   <div className="grid grid-cols-3 gap-2 text-xs">
@@ -3188,7 +3772,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                         setLtcType('none');
                         setEncashLtc(false);
                       }}
-                      className={`py-2 px-2 rounded-xl font-bold flex items-center justify-center border transition-all cursor-pointer text-xs truncate ${
+                      className={`py-1.5 px-2 rounded-lg font-bold flex items-center justify-center border transition-all cursor-pointer text-xs truncate ${
                         ltcType === 'none'
                           ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
                           : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
@@ -3199,7 +3783,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                     <button
                       type="button"
                       onClick={() => setLtcType('ltc')}
-                      className={`py-2 px-2 rounded-xl font-bold flex items-center justify-center border transition-all cursor-pointer text-xs truncate ${
+                      className={`py-1.5 px-2 rounded-lg font-bold flex items-center justify-center border transition-all cursor-pointer text-xs truncate ${
                         ltcType === 'ltc'
                           ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
                           : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
@@ -3213,7 +3797,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                         setLtcType('ex_india');
                         setEncashLtc(false);
                       }}
-                      className={`py-2 px-2 rounded-xl font-bold flex items-center justify-center border transition-all cursor-pointer text-xs truncate ${
+                      className={`py-1.5 px-2 rounded-lg font-bold flex items-center justify-center border transition-all cursor-pointer text-xs truncate ${
                         ltcType === 'ex_india'
                           ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
                           : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
@@ -3224,13 +3808,13 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                   </div>
 
                   {ltcType === 'ltc' && (
-                    <div className="p-3 bg-blue-50/70 border border-blue-200/80 rounded-xl space-y-2">
+                    <div className="p-2.5 bg-blue-50/70 border border-blue-200/80 rounded-lg space-y-1.5">
                       <label className="flex items-center space-x-2 cursor-pointer">
                         <input
                           type="checkbox"
                           checked={encashLtc}
                           onChange={(e) => setEncashLtc(e.target.checked)}
-                          className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                          className="w-3.5 h-3.5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
                         />
                         <span className="text-xs font-bold text-blue-950">
                           Avail Leave Encashment with LTC?
@@ -3248,35 +3832,33 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                               const val = Math.min(10, Math.max(1, parseInt(e.target.value) || 0));
                               setEncashDays(val);
                             }}
-                            className="w-20 bg-white border border-slate-300 rounded-lg px-2 py-1 text-center text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-16 bg-white border border-slate-300 rounded-md px-1.5 py-0.5 text-center text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                           />
                         </div>
                       )}
                     </div>
                   )}
 
-                  {!requiresHqPermission && (
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Contact Address during EL *
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Enter contact address / station location during EL..."
-                        value={stationAddress === 'Dehradun HQ' ? '' : stationAddress}
-                        onChange={(e) => setStationAddress(e.target.value)}
-                        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
-                        required={selectedLeaveType === 'earned' && !requiresHqPermission}
-                      />
-                    </div>
-                  )}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Contact Address during EL with mobile number *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Enter contact address & mobile number during EL..."
+                      value={stationAddress === 'Dehradun HQ' ? '' : stationAddress}
+                      onChange={(e) => setStationAddress(e.target.value)}
+                      className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                      required={selectedLeaveType === 'earned'}
+                    />
+                  </div>
                 </div>
               )}
 
               {/* HPL & Commuted Leave Options */}
               {(selectedLeaveType === 'half_pay' || selectedLeaveType === 'commuted') && (
-                <div className="space-y-2.5">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-0.5">
                     Leave Conversion Option *
                   </label>
                   <div className="grid grid-cols-2 gap-2 text-xs">
@@ -3287,7 +3869,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                         setPrescriptionUrl('');
                         setPrescriptionFileName('');
                       }}
-                      className={`py-2 px-3 rounded-xl font-bold flex items-center justify-center border transition-all cursor-pointer text-xs ${
+                      className={`py-1.5 px-2.5 rounded-lg font-bold flex items-center justify-center border transition-all cursor-pointer text-xs ${
                         !isCommuted
                           ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
                           : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
@@ -3298,7 +3880,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                     <button
                       type="button"
                       onClick={() => setIsCommuted(true)}
-                      className={`py-2 px-3 rounded-xl font-bold flex items-center justify-center border transition-all cursor-pointer text-xs ${
+                      className={`py-1.5 px-2.5 rounded-lg font-bold flex items-center justify-center border transition-all cursor-pointer text-xs ${
                         isCommuted
                           ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
                           : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
@@ -3309,7 +3891,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                   </div>
 
                   {isCommuted && (
-                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                    <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg space-y-1.5">
                       <div className="flex items-center justify-between text-xs">
                         <span className="font-bold text-slate-800 flex items-center gap-1.5">
                           <Paperclip className="w-3.5 h-3.5 text-blue-600" />
@@ -3318,9 +3900,9 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                         <span className="text-[10px] text-slate-500">PDF / Image (Max 10MB)</span>
                       </div>
                       {prescriptionUrl ? (
-                        <div className="flex items-center justify-between bg-white p-2 rounded-lg border border-slate-200">
+                        <div className="flex items-center justify-between bg-white p-2 rounded-md border border-slate-200">
                           <div className="flex items-center space-x-2 truncate">
-                            <FileText className="w-4 h-4 text-blue-600 shrink-0" />
+                            <FileText className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                             <span className="font-semibold text-slate-800 text-xs truncate">
                               {prescriptionFileName || 'Medical_Prescription.pdf'}
                             </span>
@@ -3337,8 +3919,8 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                           </button>
                         </div>
                       ) : (
-                        <label className="flex flex-col items-center justify-center p-3 border border-dashed border-slate-300 rounded-lg cursor-pointer bg-white hover:bg-slate-50 transition-all text-center">
-                          <Upload className="w-4 h-4 text-blue-600 mb-1" />
+                        <label className="flex flex-col items-center justify-center p-2.5 border border-dashed border-slate-300 rounded-md cursor-pointer bg-white hover:bg-slate-50 transition-all text-center">
+                          <Upload className="w-3.5 h-3.5 text-blue-600 mb-0.5" />
                           <span className="font-semibold text-slate-800 text-xs">Upload Medical Certificate</span>
                           <input
                             type="file"
@@ -3355,7 +3937,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
 
               {/* Leave Not Due (LND) Prescription Upload */}
               {selectedLeaveType === 'leave_not_due' && (
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg space-y-1.5">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-bold text-slate-800 flex items-center gap-1.5">
                       <Paperclip className="w-3.5 h-3.5 text-blue-600" />
@@ -3364,9 +3946,9 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                     <span className="text-[10px] text-slate-500">PDF / Image (Max 10MB)</span>
                   </div>
                   {prescriptionUrl ? (
-                    <div className="flex items-center justify-between bg-white p-2 rounded-lg border border-slate-200">
+                    <div className="flex items-center justify-between bg-white p-2 rounded-md border border-slate-200">
                       <div className="flex items-center space-x-2 truncate">
-                        <FileText className="w-4 h-4 text-blue-600 shrink-0" />
+                        <FileText className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                         <span className="font-semibold text-slate-800 text-xs truncate">
                           {prescriptionFileName || 'Medical_Certificate.pdf'}
                         </span>
@@ -3383,8 +3965,8 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                       </button>
                     </div>
                   ) : (
-                    <label className="flex flex-col items-center justify-center p-3 border border-dashed border-slate-300 rounded-lg cursor-pointer bg-white hover:bg-slate-50 transition-all text-center">
-                      <Upload className="w-4 h-4 text-blue-600 mb-1" />
+                    <label className="flex flex-col items-center justify-center p-2.5 border border-dashed border-slate-300 rounded-md cursor-pointer bg-white hover:bg-slate-50 transition-all text-center">
+                      <Upload className="w-3.5 h-3.5 text-blue-600 mb-0.5" />
                       <span className="font-semibold text-slate-800 text-xs">Upload Medical Certificate</span>
                       <input
                         type="file"
@@ -3408,24 +3990,24 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                   required
-                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white resize-none"
+                  className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white resize-none"
                 />
               </div>
 
               {/* Form Action Buttons */}
-              <div className="flex items-center justify-end space-x-2 pt-3 border-t border-slate-100 shrink-0">
+              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-100 shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowApplyModal(false)}
-                  className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                  className="px-3.5 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer flex items-center space-x-1.5"
+                  className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer flex items-center space-x-1.5"
                 >
-                  <Send className="w-4 h-4" />
+                  <Send className="w-3.5 h-3.5" />
                   <span>Submit</span>
                 </button>
               </div>
@@ -3501,6 +4083,28 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                     {detailModalLeave.startDate} to {detailModalLeave.endDate} ({detailModalLeave.daysCount} days)
                   </span>
                 </div>
+
+                {detailModalLeave.prefixFrom && (
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <span className="text-slate-500 font-semibold">Prefixed Holidays:</span>
+                    <span className="font-bold text-indigo-800 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200 text-[11px]">
+                      {detailModalLeave.prefixFrom === detailModalLeave.prefixTo
+                        ? detailModalLeave.prefixFrom
+                        : `${detailModalLeave.prefixFrom} to ${detailModalLeave.prefixTo}`} (GH/Weekend)
+                    </span>
+                  </div>
+                )}
+
+                {detailModalLeave.suffixTo && (
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <span className="text-slate-500 font-semibold">Suffixed Holidays:</span>
+                    <span className="font-bold text-indigo-800 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200 text-[11px]">
+                      {detailModalLeave.suffixFrom === detailModalLeave.suffixTo
+                        ? detailModalLeave.suffixTo
+                        : `${detailModalLeave.suffixFrom} to ${detailModalLeave.suffixTo}`} (GH/Weekend)
+                    </span>
+                  </div>
+                )}
 
                 <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                   <span className="text-slate-500 font-semibold">Application Date:</span>
@@ -4796,6 +5400,47 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
             setSelectedJoiningLeave(null);
           }}
         />
+      )}
+
+      {/* View Full Reason Modal */}
+      {activeReasonModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white w-full max-w-md rounded-2xl p-5 shadow-2xl border border-slate-200 space-y-3.5">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+                  <FileText className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-slate-900">{activeReasonModal.employeeName}</h4>
+                  <p className="text-[11px] text-slate-500">{activeReasonModal.leaveType} • {activeReasonModal.dates}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setActiveReasonModal(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider block mb-1">
+                Reason for Leave
+              </label>
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 text-xs text-slate-800 leading-relaxed max-h-60 overflow-y-auto font-medium">
+                "{activeReasonModal.reason}"
+              </div>
+            </div>
+            <div className="flex justify-end pt-1">
+              <button
+                onClick={() => setActiveReasonModal(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl transition-all cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

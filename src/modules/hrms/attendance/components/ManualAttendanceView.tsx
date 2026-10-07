@@ -255,7 +255,7 @@ export const ManualAttendanceView: React.FC = () => {
   const lastDayOfCurrentMonthObj = new Date(currentYear, todayObj.getMonth() + 1, 0);
   const lastDayOfCurrentMonthStr = `${currentYear}-${currentMonthStr}-${lastDayOfCurrentMonthObj.getDate().toString().padStart(2, '0')}`;
 
-  const DEFAULT_START_DATE = firstDayOfCurrentMonthStr;
+  const DEFAULT_START_DATE = '2026-08-01';
   const DEFAULT_END_DATE = lastDayOfCurrentMonthStr;
   const [filterStatus, setFilterStatus] = useState<string[]>(['all']);
   const [filterDept, setFilterDept] = useState<string[]>(['all']);
@@ -508,8 +508,9 @@ export const ManualAttendanceView: React.FC = () => {
   // Filtered Requests
   const filteredRequests = useMemo(() => {
     return manualAttendanceRequests.filter((req) => {
-      // Filter out self records for Reporting Manager, HoD, and Administrator roles
-      if ((isAdmin || isReportingManager || isReviewingManager || isReportingManagerOrPI) && req.userId === currentUser.id) {
+      // Filter out self records for Reporting Manager, HoD, and Administrator roles unless explicitly selected in user filter or 'my' tab
+      const isFilteringSelf = filterUser.includes(currentUser.id);
+      if ((isAdmin || isReportingManager || isReviewingManager || isReportingManagerOrPI) && req.userId === currentUser.id && !isFilteringSelf && tabFilter !== 'my') {
         return false;
       }
 

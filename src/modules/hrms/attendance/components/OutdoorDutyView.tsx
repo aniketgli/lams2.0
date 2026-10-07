@@ -59,7 +59,13 @@ export const OutdoorDutyView: React.FC = () => {
     cancelApprovedOutdoorDuty
   } = useApp();
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayObj = new Date();
+  const todayStr = todayObj.toISOString().split('T')[0];
+  const currentYear = todayObj.getFullYear();
+  const currentMonthStr = (todayObj.getMonth() + 1).toString().padStart(2, '0');
+  const firstDayOfCurrentMonthStr = `${currentYear}-${currentMonthStr}-01`;
+  const lastDayOfCurrentMonthObj = new Date(currentYear, todayObj.getMonth() + 1, 0);
+  const lastDayOfCurrentMonthStr = `${currentYear}-${currentMonthStr}-${lastDayOfCurrentMonthObj.getDate().toString().padStart(2, '0')}`;
 
   // Role Checks
   const isAdmin = currentUser.role === 'administrator';
@@ -72,7 +78,8 @@ export const OutdoorDutyView: React.FC = () => {
 
   const canSeeReportingManagerFilter = isAdmin || isReviewingManager;
   const canSeeTeamFilters = isAdmin || isReviewingManager || isReportingManagerOrPI;
-  const canApplyOd = true; // Uniform for all roles
+  // Apply permission: User can apply for self; Admin can apply on behalf of others; RM & HoD CANNOT apply.
+  const canApplyOd = isAdmin || (!isReportingManager && !isReviewingManager);
 
   // Success / Alert Toast
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
@@ -130,9 +137,8 @@ export const OutdoorDutyView: React.FC = () => {
   };
 
   // --- REQUISITION FILTERS (Multi-select supported) ---
-  const isManagerOrAdmin = isAdmin || isReportingManager || isReviewingManager;
-  const DEFAULT_START_DATE = isManagerOrAdmin ? todayStr : '2026-08-01';
-  const DEFAULT_END_DATE = isManagerOrAdmin ? todayStr : '2026-09-30';
+  const DEFAULT_START_DATE = '2026-08-01';
+  const DEFAULT_END_DATE = lastDayOfCurrentMonthStr;
   const [filterStatus, setFilterStatus] = useState<string[]>(['all']);
   const [filterOdType, setFilterOdType] = useState<string[]>(['all']);
   const [filterDept, setFilterDept] = useState<string[]>(['all']);
@@ -224,6 +230,14 @@ export const OutdoorDutyView: React.FC = () => {
   // Filtered OD Requisitions List
   const filteredReportODs = useMemo(() => {
     return odRequests.filter((o) => {
+      // Exclude self records for Manager, HoD, and Admin roles unless explicitly selected in user filter
+      const isFilteringSelf = filterUser.includes(currentUser.id);
+      if (isReportingManager || isReviewingManager || isAdmin) {
+        if (o.userId === currentUser.id && !isFilteringSelf) return false;
+      } else {
+        if (o.userId !== currentUser.id) return false;
+      }
+
       if (!isAdmin && currentUser.baseRole !== 'administrator' && !accessibleUserIds.includes(o.userId)) return false;
       if (!matchesMultiSelect(filterStatus, o.status)) return false;
       if (!matchesMultiSelect(filterOdType, o.odType)) return false;
@@ -236,8 +250,8 @@ export const OutdoorDutyView: React.FC = () => {
       const mgrId = o.reportingManagerId || reqUser?.reportingManagerId;
       if (!matchesMultiSelect(filterReportingManager, mgrId)) return false;
 
-      if (filterStartDate && o.startDate < filterStartDate) return false;
-      if (filterEndDate && o.endDate > filterEndDate) return false;
+      if (filterStartDate && o.endDate < filterStartDate) return false;
+      if (filterEndDate && o.startDate > filterEndDate) return false;
 
       if (searchTerm.trim()) {
         const term = searchTerm.toLowerCase();
@@ -396,9 +410,35 @@ export const OutdoorDutyView: React.FC = () => {
     });
   }, [odRequests, isReportingManager, isAdmin, currentUser.id, usersMap]);
 
+  const formatCompactDateRange = (startStr: string, endStr: string): string => {
+    if (!startStr || !endStr) return `${startStr} - ${endStr}`;
+    const sParts = startStr.split('-');
+    const eParts = endStr.split('-');
+    if (sParts.length !== 3 || eParts.length !== 3) return `${startStr} to ${endStr}`;
+    const sDay = sParts[2];
+    const sMonth = sParts[1];
+    const eDay = eParts[2];
+    const eMonth = eParts[1];
+    const sYr = sParts[0].slice(2);
+    if (sMonth === eMonth && sParts[0] === eParts[0]) {
+      return `${sDay}/${sMonth} - ${eDay}/${eMonth}/${sYr}`;
+    }
+    return `${sDay}/${sMonth}/${sYr} - ${eDay}/${eMonth}/${sYr}`;
+  };
+
   const isBeforeOrOnApplicableDate = (dateStr: string) => {
     if (!dateStr) return true;
     return dateStr >= todayStr;
+  };
+
+  const getSeeButtonStyle = (status: string) => {
+    if (status === 'approved') {
+      return 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-300';
+    }
+    if (status === 'rejected') {
+      return 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-300';
+    }
+    return 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300';
   };
 
   // Helper Rules Checkers:
@@ -478,7 +518,7 @@ export const OutdoorDutyView: React.FC = () => {
       setFormPurpose(odToEdit.purpose);
     } else {
       setEditingOd(null);
-      setFormUserId(currentUser.id);
+      setFormUserId(isAdmin ? '' : currentUser.id);
       setFormStartDate('');
       setFormEndDate('');
       setFormStartTime('09:00');
@@ -497,6 +537,11 @@ export const OutdoorDutyView: React.FC = () => {
     e.preventDefault();
     setFormError('');
 
+    if (isAdmin && !formUserId) {
+      setFormError('Please select an employee.');
+      return;
+    }
+
     if (!formStartDate || !formEndDate || !formLocation.trim() || !formPurpose.trim()) {
       setFormError('Please fill in all mandatory fields marked with *');
       return;
@@ -509,6 +554,18 @@ export const OutdoorDutyView: React.FC = () => {
 
     if (formStartDate === formEndDate && formStartTime >= formEndTime) {
       setFormError('End time must be later than start time for single-day OD.');
+      return;
+    }
+
+    const targetUid = isAdmin ? formUserId : currentUser.id;
+    const overlappingOd = odRequests.find((od) => {
+      if (od.userId !== targetUid) return false;
+      if (editingOd && od.id === editingOd.id) return false;
+      if (od.status !== 'pending' && od.status !== 'approved') return false;
+      return formStartDate <= od.endDate && formEndDate >= od.startDate;
+    });
+    if (overlappingOd) {
+      setFormError('Outdoor Duty request already pending or approved for these dates. Only unapplied or rejected dates can be applied.');
       return;
     }
 
@@ -846,20 +903,6 @@ export const OutdoorDutyView: React.FC = () => {
                 isRightColumn={true}
               />
             </div>
-
-            {/* Quick Preset: Current Month (Only appears when dates are modified from default) */}
-            {(filterStartDate !== DEFAULT_START_DATE || filterEndDate !== DEFAULT_END_DATE) && (
-              <div>
-                <button
-                  onClick={handlePresetCurrentMonth}
-                  className="h-9 bg-slate-50/90 hover:bg-white border border-slate-200/90 rounded-xl px-3 text-xs font-bold text-slate-800 shadow-2xs flex items-center space-x-1.5 shrink-0 transition-all cursor-pointer"
-                  title="Reset dates to Current Month"
-                >
-                  <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Current Month</span>
-                </button>
-              </div>
-            )}
           </div>
 
           {/* Row 2 on mobile (Right on tab/desktop): Export Buttons (CSV & PDF) */}
@@ -1101,7 +1144,7 @@ export const OutdoorDutyView: React.FC = () => {
                       <span className="text-[10px] text-slate-500 font-medium">{od.department}</span>
                     </div>
 
-                    <div className="shrink-0">
+                    <div className="shrink-0 text-right">
                       {od.status === 'approved' && (
                         <span className="inline-flex items-center space-x-1 bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded text-[10px] border border-emerald-200">
                           <CheckCircle2 className="w-3 h-3 text-emerald-600" />
@@ -1120,6 +1163,9 @@ export const OutdoorDutyView: React.FC = () => {
                           <span>Rejected</span>
                         </span>
                       )}
+                      <span className="text-[10px] text-slate-500 font-medium block mt-0.5">
+                        by {od.actionBy || od.userName}
+                      </span>
                     </div>
                   </div>
 
@@ -1180,16 +1226,16 @@ export const OutdoorDutyView: React.FC = () => {
                   <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
                     <span>Applied: {od.appliedDate || od.startDate}</span>
                     <div className="flex items-center space-x-1.5">
-                      {/* View Details Button */}
+                      {/* View Details / See Button */}
                       <button
                         onClick={() => setDetailModalOd(od)}
-                        className="w-8 h-8 flex items-center justify-center text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
+                        className={`w-8 h-8 flex items-center justify-center border rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95 ${getSeeButtonStyle(od.status)}`}
                         title="View Full Details"
                       >
-                        <Eye className="w-4 h-4 text-slate-600 stroke-[2]" />
+                        <Eye className="w-4 h-4 stroke-[2]" />
                       </button>
 
-                      {/* Edit Button */}
+                      {/* Edit Button (Applicant User or Admin) */}
                       {editable && (
                         <button
                           onClick={() => handleOpenApplyModal(od)}
@@ -1200,7 +1246,7 @@ export const OutdoorDutyView: React.FC = () => {
                         </button>
                       )}
 
-                      {/* Delete Button */}
+                      {/* Delete Button (Applicant User or Admin) */}
                       {editable && (
                         <button
                           onClick={() => setDeleteConfirmId(od.id)}
@@ -1211,8 +1257,8 @@ export const OutdoorDutyView: React.FC = () => {
                         </button>
                       )}
 
-                      {/* Approve / Reject Action Buttons for Pending */}
-                      {canAct && (
+                      {/* Approve / Reject Action Buttons for Pending (RM & Admin) */}
+                      {(isReportingManager || isAdmin) && canAct && (
                         <>
                           <button
                             onClick={() => {
@@ -1237,17 +1283,17 @@ export const OutdoorDutyView: React.FC = () => {
                         </>
                       )}
 
-                      {/* Cancel Approved OD Button */}
-                      {canCancel && (
+                      {/* Cancel Approved OD Button (RM & Admin) */}
+                      {(isReportingManager || isAdmin) && canCancel && (
                         <button
                           onClick={() => {
                             setCancelModalOd(od);
                             setCancelReason('');
                           }}
-                          className="w-7 h-7 flex items-center justify-center text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-all cursor-pointer shadow-2xs"
+                          className="w-8 h-8 flex items-center justify-center text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-all cursor-pointer shadow-2xs"
                           title="Cancel / Revoke Approved OD"
                         >
-                          <RotateCcw className="w-3.5 h-3.5" />
+                          <RotateCcw className="w-4 h-4" />
                         </button>
                       )}
                     </div>
@@ -1259,17 +1305,17 @@ export const OutdoorDutyView: React.FC = () => {
         ) : (
           /* Table View - Uniform Theme Width & Proportional Grid */
           <div className="w-full min-w-0 overflow-x-auto custom-table-scrollbar pb-1">
-            <table className={`w-full text-left text-xs border-collapse table-auto ${canSeeTeamFilters ? 'min-w-[950px]' : 'min-w-[780px]'}`}>
+            <table className="w-full text-left text-xs border-collapse table-auto">
               <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 text-[11px]">
                 <tr className="h-10">
                   {/* Employee Column - Visible for Team/Manager/Admin */}
                   {canSeeTeamFilters && (
                     <th
                       onClick={() => handleSort('employee')}
-                      className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[19%]"
+                      className="py-2 px-2.5 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle"
                       title="Click to sort by Employee"
                     >
-                      <div className="flex items-center space-x-1.5">
+                      <div className="flex items-center space-x-1">
                         <span>Employee</span>
                         {sortField === 'employee' ? (
                           sortOrder === 'asc' ? (
@@ -1287,10 +1333,10 @@ export const OutdoorDutyView: React.FC = () => {
                   {/* Duration Column */}
                   <th
                     onClick={() => handleSort('dates')}
-                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[16%]"
+                    className="py-2 px-2 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle"
                     title="Click to sort by Duration"
                   >
-                    <div className="flex items-center space-x-1.5">
+                    <div className="flex items-center space-x-1">
                       <span>Duration</span>
                       {sortField === 'dates' ? (
                         sortOrder === 'asc' ? (
@@ -1307,10 +1353,10 @@ export const OutdoorDutyView: React.FC = () => {
                   {/* Applied Date Column */}
                   <th
                     onClick={() => handleSort('appliedDate')}
-                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[10%]"
+                    className="py-2 px-2 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle"
                     title="Click to sort by Applied Date"
                   >
-                    <div className="flex items-center space-x-1.5">
+                    <div className="flex items-center space-x-1">
                       <span>Applied</span>
                       {sortField === 'appliedDate' ? (
                         sortOrder === 'asc' ? (
@@ -1327,10 +1373,10 @@ export const OutdoorDutyView: React.FC = () => {
                   {/* Location Column */}
                   <th
                     onClick={() => handleSort('location')}
-                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[14%]"
+                    className="py-2 px-2 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle"
                     title="Click to sort by Location"
                   >
-                    <div className="flex items-center space-x-1.5">
+                    <div className="flex items-center space-x-1">
                       <span>Location</span>
                       {sortField === 'location' || sortField === 'type' ? (
                         sortOrder === 'asc' ? (
@@ -1347,10 +1393,10 @@ export const OutdoorDutyView: React.FC = () => {
                   {/* Purpose Column */}
                   <th
                     onClick={() => handleSort('purpose')}
-                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[19%]"
+                    className="py-2 px-2 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle"
                     title="Click to sort by Purpose"
                   >
-                    <div className="flex items-center space-x-1.5">
+                    <div className="flex items-center space-x-1">
                       <span>Purpose</span>
                       {sortField === 'purpose' ? (
                         sortOrder === 'asc' ? (
@@ -1367,10 +1413,10 @@ export const OutdoorDutyView: React.FC = () => {
                   {/* Status Column */}
                   <th
                     onClick={() => handleSort('status')}
-                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[11%]"
+                    className="py-2 px-2 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle"
                     title="Click to sort by Status"
                   >
-                    <div className="flex items-center space-x-1.5">
+                    <div className="flex items-center space-x-1">
                       <span>Status</span>
                       {sortField === 'status' ? (
                         sortOrder === 'asc' ? (
@@ -1385,7 +1431,7 @@ export const OutdoorDutyView: React.FC = () => {
                   </th>
 
                   {/* Actions Column */}
-                  <th className="py-2.5 px-3 text-right font-bold whitespace-nowrap align-middle w-[11%]">Actions</th>
+                  <th className="py-2 px-2 text-right font-bold whitespace-nowrap align-middle">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1405,20 +1451,17 @@ export const OutdoorDutyView: React.FC = () => {
                     <tr key={od.id} className="hover:bg-slate-50 transition-colors">
                       {/* Employee Column - Visible for Team/Manager/Admin */}
                       {canSeeTeamFilters && (
-                        <td className="py-2.5 px-2.5 align-middle">
-                          <div className="flex items-center space-x-2.5 min-w-0">
+                        <td className="py-2 px-2 align-middle">
+                          <div className="flex items-center space-x-2 min-w-0 max-w-[110px] sm:max-w-[130px]">
                             <img
                               src={reqUser?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'}
                               alt={od.userName}
-                              className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0 shadow-2xs"
+                              className="w-7 h-7 rounded-full object-cover border border-slate-200 shrink-0 shadow-2xs"
                             />
                             <div className="min-w-0 flex-1">
                               <span className="font-bold text-slate-900 block truncate text-xs">{od.userName}</span>
-                              <span className="text-[11px] text-slate-500 font-medium block truncate mt-0.5">
+                              <span className="text-[10px] text-slate-500 font-medium block truncate">
                                 {reqUser?.designation || 'Staff'}
-                              </span>
-                              <span className="text-[10px] text-slate-400 font-mono tracking-tight block truncate mt-0.5">
-                                {reqUser?.biometricId ? `Bio ID: ${reqUser.biometricId}` : (od.userId ? `Bio ID: ${od.userId}` : 'Bio ID: N/A')}
                               </span>
                             </div>
                           </div>
@@ -1426,43 +1469,38 @@ export const OutdoorDutyView: React.FC = () => {
                       )}
 
                       {/* Duration */}
-                      <td className="py-2.5 px-2 whitespace-nowrap align-middle">
-                        <div className="font-bold text-slate-900 flex items-center space-x-1">
-                          <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                          <span className="text-xs">
-                            {od.startDate} to {od.endDate}
+                      <td className="py-2 px-2 whitespace-nowrap align-middle">
+                        <div className="font-bold text-slate-900 flex items-center space-x-1 text-[11px]">
+                          <Calendar className="w-3 h-3 text-indigo-600 shrink-0" />
+                          <span>
+                            {formatCompactDateRange(od.startDate, od.endDate)}
                           </span>
                         </div>
-                        <div className="text-[10px] font-mono text-slate-500 mt-0.5 flex items-center space-x-1.5">
-                          <div className="flex items-center space-x-1">
-                            <Clock className="w-3 h-3 text-slate-400 shrink-0" />
-                            <span>{od.startTime || '09:00'} - {od.endTime || '17:30'}</span>
-                          </div>
-                          <span className="text-[9.5px] font-bold text-indigo-700 bg-indigo-50 px-1 py-0.2 rounded border border-indigo-100 font-sans">
-                            {od.daysCount}d
-                          </span>
+                        <div className="text-[10px] font-mono text-slate-500 flex items-center space-x-1">
+                          <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span>{od.startTime || '09:00'}-{od.endTime || '17:30'} ({od.daysCount}d)</span>
                         </div>
                       </td>
 
                       {/* Applied Date */}
-                      <td className="py-2.5 px-2 whitespace-nowrap align-middle text-slate-700 text-xs">
-                        <div className="flex items-center space-x-1 text-slate-600 text-xs">
-                          <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <td className="py-2 px-2 whitespace-nowrap align-middle text-slate-700 text-[11px]">
+                        <div className="flex items-center space-x-1 text-slate-600">
+                          <Calendar className="w-3 h-3 text-slate-400 shrink-0" />
                           <span className="font-medium">{od.appliedDate || od.startDate}</span>
                         </div>
                       </td>
 
                       {/* Location */}
-                      <td className="py-2.5 px-2 align-middle">
-                        <div className="flex items-center space-x-1 min-w-0 max-w-[130px] lg:max-w-[150px]">
-                          <MapPin className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                      <td className="py-2 px-2 align-middle">
+                        <div className="flex items-center space-x-1 min-w-0 max-w-[85px] sm:max-w-[105px]">
+                          <MapPin className="w-3 h-3 text-blue-600 shrink-0" />
                           <span className="font-semibold text-slate-800 text-xs truncate" title={od.location}>
                             {od.location}
                           </span>
                         </div>
-                        <div className="mt-0.5">
+                        <div>
                           <span
-                            className={`px-1.5 py-0.2 rounded text-[9.5px] font-bold inline-block border ${
+                            className={`px-1 py-0.1 rounded text-[9px] font-bold inline-block border ${
                               od.odType === 'International'
                                 ? 'bg-purple-50 text-purple-800 border-purple-200'
                                 : 'bg-blue-50 text-blue-800 border-blue-200'
@@ -1474,8 +1512,8 @@ export const OutdoorDutyView: React.FC = () => {
                       </td>
 
                       {/* Purpose with View More */}
-                      <td className="py-2.5 px-2 align-middle">
-                        <div className="flex items-center justify-between gap-1.5 max-w-[190px]">
+                      <td className="py-2 px-2 align-middle">
+                        <div className="flex items-center justify-between gap-0.5 max-w-[85px] sm:max-w-[105px]">
                           <span className="text-slate-700 text-xs truncate flex-1 min-w-0 font-medium italic" title={od.purpose}>
                             "{od.purpose}"
                           </span>
@@ -1489,11 +1527,10 @@ export const OutdoorDutyView: React.FC = () => {
                                   purpose: od.purpose
                                 })
                               }
-                              className="text-blue-600 hover:text-blue-800 font-bold inline-flex items-center space-x-0.5 cursor-pointer shrink-0 ml-0.5 text-[10px] hover:underline"
+                              className="text-blue-600 hover:text-blue-800 font-bold inline-flex items-center cursor-pointer shrink-0 text-[9.5px] hover:underline"
                               title="View full purpose"
                             >
                               <span>More</span>
-                              <Eye className="w-2.5 h-2.5 shrink-0" />
                             </button>
                           )}
                         </div>
@@ -1519,21 +1556,24 @@ export const OutdoorDutyView: React.FC = () => {
                             <span>Rejected</span>
                           </span>
                         )}
+                        <span className="text-[10px] text-slate-500 font-medium block mt-0.5">
+                          by {od.actionBy || od.userName}
+                        </span>
                       </td>
 
                       {/* Actions: Uniform 28x28px */}
                       <td className="py-2.5 px-2.5 text-right whitespace-nowrap align-middle">
                         <div className="flex items-center justify-end space-x-1">
-                          {/* View details */}
+                          {/* See Button */}
                           <button
                             onClick={() => setDetailModalOd(od)}
-                            className="w-7 h-7 flex items-center justify-center text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition-all cursor-pointer shadow-2xs"
+                            className={`w-7 h-7 flex items-center justify-center border rounded-lg transition-all cursor-pointer shadow-2xs ${getSeeButtonStyle(od.status)}`}
                             title="View Full Details"
                           >
                             <Eye className="w-3.5 h-3.5" />
                           </button>
 
-                          {/* Edit button */}
+                          {/* Edit button (Applicant User or Admin) */}
                           {editable && (
                             <button
                               onClick={() => handleOpenApplyModal(od)}
@@ -1544,7 +1584,7 @@ export const OutdoorDutyView: React.FC = () => {
                             </button>
                           )}
 
-                          {/* Delete button */}
+                          {/* Delete button (Applicant User or Admin) */}
                           {editable && (
                             <button
                               onClick={() => setDeleteConfirmId(od.id)}
@@ -1555,8 +1595,8 @@ export const OutdoorDutyView: React.FC = () => {
                             </button>
                           )}
 
-                          {/* Approve / Reject Action Buttons for Pending */}
-                          {canAct && (
+                          {/* Approve / Reject Action Buttons for Pending (RM & Admin) */}
+                          {(isReportingManager || isAdmin) && canAct && (
                             <>
                               <button
                                 onClick={() => {
@@ -1581,8 +1621,8 @@ export const OutdoorDutyView: React.FC = () => {
                             </>
                           )}
 
-                          {/* Cancel Approval Button for Approved Record */}
-                          {canCancel && (
+                          {/* Cancel Approval Button for Approved Record (RM & Admin) */}
+                          {(isReportingManager || isAdmin) && canCancel && (
                             <button
                               onClick={() => {
                                 setCancelModalOd(od);
@@ -1653,16 +1693,22 @@ export const OutdoorDutyView: React.FC = () => {
               {isAdmin && !editingOd && (
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Apply on Behalf of Employee *
+                    Employee *
                   </label>
                   <AppSelect
                     value={formUserId}
                     onChange={(val) => setFormUserId(val)}
-                    options={users.map((u) => ({
-                      label: u.name,
-                      value: u.id,
-                      description: `${u.designation || u.department || u.role} (${u.email})`
-                    }))}
+                    placeholder="-- Select Employee --"
+                    options={[
+                      { label: '-- Select Employee --', value: '' },
+                      ...users
+                        .filter((u) => u.id !== currentUser.id)
+                        .map((u) => ({
+                          label: u.name,
+                          value: u.id,
+                          description: `${u.designation || u.department || u.role} (${u.email})`
+                        }))
+                    ]}
                   />
                 </div>
               )}
