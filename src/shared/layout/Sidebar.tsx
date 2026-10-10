@@ -95,14 +95,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {/* If in LAMS: show LAMS 2.0 navigation items */}
             {activeModule === 'lams' && (
               <>
-                <div className="pt-1 pb-1.5 px-1 flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    LAMS 2.0 Modules
-                  </span>
-                  <span className="text-[9px] font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded">
-                    Active
-                  </span>
-                </div>
+              
 
                 {/* 1. Dashboard */}
                 <button
@@ -112,11 +105,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   }}
                   className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-medium transition-all text-left cursor-pointer ${
                     activeTab === 'dashboard'
-                      ? 'bg-blue-50/90 text-blue-900 font-bold border-l-3 border-blue-600 shadow-2xs'
+                      ? 'bg-[#204088]/10 text-[#204088] font-bold border-l-3 border-[#204088] shadow-2xs'
                       : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                   }`}
                 >
-                  <LayoutDashboard className={`w-4 h-4 shrink-0 ${activeTab === 'dashboard' ? 'text-blue-600' : 'text-slate-400'}`} />
+                  <LayoutDashboard className={`w-4 h-4 shrink-0 ${activeTab === 'dashboard' ? 'text-[#204088]' : 'text-slate-400'}`} />
                   <span>Dashboard</span>
                 </button>
 
@@ -128,12 +121,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     }}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all text-left cursor-pointer ${
                       isAttendanceActive
-                        ? 'bg-blue-50/90 text-blue-900 font-bold border-l-3 border-blue-600 shadow-2xs'
+                        ? 'bg-[#204088]/10 text-[#204088] font-bold border-l-3 border-[#204088] shadow-2xs'
                         : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                     }`}
                   >
-                    <div className="flex items-center space-x-3 min-w-0">
-                      <Clock className={`w-4 h-4 shrink-0 ${isAttendanceActive ? 'text-blue-600' : 'text-slate-400'}`} />
+                  <div className="flex items-center space-x-3 min-w-0">
+                      <Clock className={`w-4 h-4 shrink-0 ${isAttendanceActive ? 'text-[#204088]' : 'text-slate-400'}`} />
                       <span className="block truncate">Attendance Management</span>
                     </div>
                     {expandedGroup === 'attendance' ? (
@@ -149,11 +142,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         onClick={() => handleNavClick('attendance')}
                         className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-medium transition-all text-left cursor-pointer ${
                           activeTab === 'attendance'
-                            ? 'bg-blue-50/90 text-blue-900 font-bold border-l-3 border-blue-600 shadow-2xs'
+                            ? 'bg-[#204088]/10 text-[#204088] font-bold border-l-3 border-[#204088] shadow-2xs'
                             : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                         }`}
                       >
-                        <Clock className={`w-4 h-4 shrink-0 ${activeTab === 'attendance' ? 'text-blue-600' : 'text-slate-400'}`} />
+                        <Clock className={`w-4 h-4 shrink-0 ${activeTab === 'attendance' ? 'text-[#204088]' : 'text-slate-400'}`} />
                         <span>Attendance</span>
                       </button>
 
@@ -161,11 +154,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         onClick={() => handleNavClick('manual_attendance')}
                         className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-medium transition-all text-left cursor-pointer ${
                           activeTab === 'manual_attendance'
-                            ? 'bg-blue-50/90 text-blue-900 font-bold border-l-3 border-blue-600 shadow-2xs'
+                            ? 'bg-[#204088]/10 text-[#204088] font-bold border-l-3 border-[#204088] shadow-2xs'
                             : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                         }`}
                       >
-                        <CheckCircle2 className={`w-4 h-4 shrink-0 ${activeTab === 'manual_attendance' ? 'text-blue-600' : 'text-slate-400'}`} />
+                        <CheckCircle2 className={`w-4 h-4 shrink-0 ${activeTab === 'manual_attendance' ? 'text-[#204088]' : 'text-slate-400'}`} />
                         <span>Manual Attendance</span>
                       </button>
 
@@ -173,11 +166,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         onClick={() => handleNavClick('od')}
                         className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-medium transition-all text-left cursor-pointer ${
                           activeTab === 'od'
-                            ? 'bg-blue-50/90 text-blue-900 font-bold border-l-3 border-blue-600 shadow-2xs'
+                            ? 'bg-[#204088]/10 text-[#204088] font-bold border-l-3 border-[#204088] shadow-2xs'
                             : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                         }`}
                       >
-                        <MapPin className={`w-4 h-4 shrink-0 ${activeTab === 'od' ? 'text-blue-600' : 'text-slate-400'}`} />
+                        <MapPin className={`w-4 h-4 shrink-0 ${activeTab === 'od' ? 'text-[#204088]' : 'text-slate-400'}`} />
                         <span>Outdoor Duty</span>
                       </button>
                     </div>
@@ -192,12 +185,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     }}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all text-left cursor-pointer ${
                       isLeaveActive
-                        ? 'bg-blue-50/90 text-blue-900 font-bold border-l-3 border-blue-600 shadow-2xs'
+                        ? 'bg-[#204088]/10 text-[#204088] font-bold border-l-3 border-[#204088] shadow-2xs'
                         : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                     }`}
                   >
                     <div className="flex items-center space-x-3 min-w-0">
-                      <FileText className={`w-4 h-4 shrink-0 ${isLeaveActive ? 'text-blue-600' : 'text-slate-400'}`} />
+                      <FileText className={`w-4 h-4 shrink-0 ${isLeaveActive ? 'text-[#204088]' : 'text-slate-400'}`} />
                       <span className="block truncate">Leave &amp; Holidays</span>
                     </div>
                     {expandedGroup === 'leave' ? (
@@ -213,11 +206,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         onClick={() => handleNavClick('leave')}
                         className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-medium transition-all text-left cursor-pointer ${
                           activeTab === 'leave'
-                            ? 'bg-blue-50/90 text-blue-900 font-bold border-l-3 border-blue-600 shadow-2xs'
+                            ? 'bg-[#204088]/10 text-[#204088] font-bold border-l-3 border-[#204088] shadow-2xs'
                             : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                         }`}
                       >
-                        <FileText className={`w-4 h-4 shrink-0 ${activeTab === 'leave' ? 'text-blue-600' : 'text-slate-400'}`} />
+                        <FileText className={`w-4 h-4 shrink-0 ${activeTab === 'leave' ? 'text-[#204088]' : 'text-slate-400'}`} />
                         <span>Leaves</span>
                       </button>
 
@@ -226,11 +219,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           onClick={() => handleNavClick('leave_balance')}
                           className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-medium transition-all text-left cursor-pointer ${
                             activeTab === 'leave_balance' || activeTab === 'leave_matrix'
-                              ? 'bg-blue-50/90 text-blue-900 font-bold border-l-3 border-blue-600 shadow-2xs'
+                              ? 'bg-[#204088]/10 text-[#204088] font-bold border-l-3 border-[#204088] shadow-2xs'
                               : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                           }`}
                         >
-                          <FileSpreadsheet className={`w-4 h-4 shrink-0 ${activeTab === 'leave_balance' || activeTab === 'leave_matrix' ? 'text-blue-600' : 'text-slate-400'}`} />
+                          <FileSpreadsheet className={`w-4 h-4 shrink-0 ${activeTab === 'leave_balance' || activeTab === 'leave_matrix' ? 'text-[#204088]' : 'text-slate-400'}`} />
                           <span>Leave Balance</span>
                         </button>
                       )}
@@ -239,11 +232,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         onClick={() => handleNavClick('holiday_calendar')}
                         className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-medium transition-all text-left cursor-pointer ${
                           activeTab === 'holiday_calendar'
-                            ? 'bg-blue-50/90 text-blue-900 font-bold border-l-3 border-blue-600 shadow-2xs'
+                            ? 'bg-[#204088]/10 text-[#204088] font-bold border-l-3 border-[#204088] shadow-2xs'
                             : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                         }`}
                       >
-                        <Calendar className={`w-4 h-4 shrink-0 ${activeTab === 'holiday_calendar' ? 'text-blue-600' : 'text-slate-400'}`} />
+                        <Calendar className={`w-4 h-4 shrink-0 ${activeTab === 'holiday_calendar' ? 'text-[#204088]' : 'text-slate-400'}`} />
                         <span>Holiday Calendar</span>
                       </button>
                     </div>
@@ -258,12 +251,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     }}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all text-left cursor-pointer ${
                       isEmployeeActive
-                        ? 'bg-blue-50/90 text-blue-900 font-bold border-l-3 border-blue-600 shadow-2xs'
+                        ? 'bg-[#204088]/10 text-[#204088] font-bold border-l-3 border-[#204088] shadow-2xs'
                         : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                     }`}
                   >
                     <div className="flex items-center space-x-3 min-w-0">
-                      <Users className={`w-4 h-4 shrink-0 ${isEmployeeActive ? 'text-blue-600' : 'text-slate-400'}`} />
+                      <Users className={`w-4 h-4 shrink-0 ${isEmployeeActive ? 'text-[#204088]' : 'text-slate-400'}`} />
                       <span className="block truncate">Employee Management</span>
                     </div>
                     {expandedGroup === 'employee' ? (
@@ -279,11 +272,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         onClick={() => handleNavClick('profile')}
                         className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-medium transition-all text-left cursor-pointer ${
                           activeTab === 'profile'
-                            ? 'bg-blue-50/90 text-blue-900 font-bold border-l-3 border-blue-600 shadow-2xs'
+                            ? 'bg-[#204088]/10 text-[#204088] font-bold border-l-3 border-[#204088] shadow-2xs'
                             : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                         }`}
                       >
-                        <User className={`w-4 h-4 shrink-0 ${activeTab === 'profile' ? 'text-blue-600' : 'text-slate-400'}`} />
+                        <User className={`w-4 h-4 shrink-0 ${activeTab === 'profile' ? 'text-[#204088]' : 'text-slate-400'}`} />
                         <span>Profiles</span>
                       </button>
 
@@ -293,11 +286,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             onClick={() => handleNavClick('user_controls')}
                             className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-medium transition-all text-left cursor-pointer ${
                               activeTab === 'user_controls' || activeTab === 'roles'
-                                ? 'bg-blue-50/90 text-blue-900 font-bold border-l-3 border-blue-600 shadow-2xs'
+                                ? 'bg-[#204088]/10 text-[#204088] font-bold border-l-3 border-[#204088] shadow-2xs'
                                 : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                             }`}
                           >
-                            <ShieldCheck className={`w-4 h-4 shrink-0 ${activeTab === 'user_controls' || activeTab === 'roles' ? 'text-blue-600' : 'text-slate-400'}`} />
+                            <ShieldCheck className={`w-4 h-4 shrink-0 ${activeTab === 'user_controls' || activeTab === 'roles' ? 'text-[#204088]' : 'text-slate-400'}`} />
                             <span>User Controls &amp; Roles</span>
                           </button>
 
@@ -305,11 +298,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             onClick={() => handleNavClick('transfers')}
                             className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-medium transition-all text-left cursor-pointer ${
                               activeTab === 'transfers'
-                                ? 'bg-blue-50/90 text-blue-900 font-bold border-l-3 border-blue-600 shadow-2xs'
+                                ? 'bg-[#204088]/10 text-[#204088] font-bold border-l-3 border-[#204088] shadow-2xs'
                                 : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                             }`}
                           >
-                            <ArrowLeftRight className={`w-4 h-4 shrink-0 ${activeTab === 'transfers' ? 'text-blue-600' : 'text-slate-400'}`} />
+                            <ArrowLeftRight className={`w-4 h-4 shrink-0 ${activeTab === 'transfers' ? 'text-[#204088]' : 'text-slate-400'}`} />
                             <span>Employees Mapping</span>
                           </button>
                         </>
@@ -327,11 +320,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     }}
                     className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-medium transition-all text-left cursor-pointer ${
                       activeTab === 'master'
-                        ? 'bg-blue-50/90 text-blue-900 font-bold border-l-3 border-blue-600 shadow-2xs'
+                        ? 'bg-[#204088]/10 text-[#204088] font-bold border-l-3 border-[#204088] shadow-2xs'
                         : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                     }`}
                   >
-                    <Sliders className={`w-4 h-4 shrink-0 ${activeTab === 'master' ? 'text-blue-600' : 'text-slate-400'}`} />
+                    <Sliders className={`w-4 h-4 shrink-0 ${activeTab === 'master' ? 'text-[#204088]' : 'text-slate-400'}`} />
                     <span>Master Settings</span>
                   </button>
                 )}

@@ -1,17 +1,35 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
+  PageHeader,
+  Button,
+  Badge,
+  MetricCard,
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+  TableEmpty,
+  TablePagination,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  FormField,
+  Input,
+  Select
+} from '../../shared/components';
+import {
   Building2,
   Car,
   Hotel,
   Plus,
   Search,
-  CheckCircle2,
-  Clock,
   Calendar,
   Wrench,
-  ChevronRight,
-  ShieldCheck
+  Download
 } from 'lucide-react';
 
 interface FMSViewProps {
@@ -73,14 +91,24 @@ export const FMSView: React.FC<FMSViewProps> = ({ onReturnToLobby }) => {
   const [selectedType, setSelectedType] = useState<string>('ALL');
   const [showModal, setShowModal] = useState(false);
 
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
   // New booking form state
   const [facilityType, setFacilityType] = useState<'Guest House' | 'Fleet Vehicle' | 'Auditorium / Lab'>('Guest House');
   const [facilityName, setFacilityName] = useState('VIP Suite 104');
   const [fromDate, setFromDate] = useState('2026-09-15');
   const [toDate, setToDate] = useState('2026-09-18');
+  const [formError, setFormError] = useState('');
 
   const handleCreateBooking = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!facilityName.trim()) {
+      setFormError('Please enter facility name or select vehicle.');
+      return;
+    }
+
     const newBooking: FacilityBooking = {
       id: `BKG-${String(bookings.length + 1).padStart(2, '0')}`,
       bookingRef: `${facilityType === 'Guest House' ? 'GH' : facilityType === 'Fleet Vehicle' ? 'VEH' : 'AUD'}-2026-${Math.floor(100 + Math.random() * 900)}`,
@@ -94,6 +122,29 @@ export const FMSView: React.FC<FMSViewProps> = ({ onReturnToLobby }) => {
     };
     setBookings([newBooking, ...bookings]);
     setShowModal(false);
+    setFormError('');
+  };
+
+  const handleExportCSV = () => {
+    const headers = ['Booking Ref', 'Facility Type', 'Facility Name', 'Booked By', 'Department', 'Start Date', 'End Date', 'Status'];
+    const rows = filteredBookings.map((b) => [
+      `"${b.bookingRef}"`,
+      `"${b.facilityType}"`,
+      `"${b.facilityName.replace(/"/g, '""')}"`,
+      `"${b.bookedBy}"`,
+      `"${b.department}"`,
+      b.startDate,
+      b.endDate,
+      `"${b.status}"`
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `WII_Facility_Bookings_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const filteredBookings = bookings.filter((b) => {
@@ -105,270 +156,263 @@ export const FMSView: React.FC<FMSViewProps> = ({ onReturnToLobby }) => {
     return matchesType && matchesSearch;
   });
 
+  const paginatedBookings = filteredBookings.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
+
   return (
     <div className="space-y-6 pb-12 animate-in fade-in duration-300">
-      {/* Module Header Bar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white border border-slate-200/90 rounded-2xl p-5 shadow-2xs">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-purple-600 text-white rounded-xl shadow-xs">
-            <Building2 className="w-6 h-6" />
+      {/* Standardized Module PageHeader */}
+      <PageHeader
+        icon={Building2}
+        title="Facility & Campus Management (FMS)"
+        subtitle="Guest house suites, field expedition fleet vehicles, conference halls & campus infrastructure."
+        breadcrumbs={[
+          { label: 'Portal Hub', onClick: onReturnToLobby },
+          { label: 'Facility Management' }
+        ]}
+        actions={
+          <div className="flex items-center space-x-2">
+            <Button
+              variant="outline"
+              size="sm"
+              leftIcon={<Download className="w-4 h-4" />}
+              onClick={handleExportCSV}
+            >
+              Export CSV
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Plus className="w-4 h-4" />}
+              onClick={() => {
+                setFormError('');
+                setShowModal(true);
+              }}
+            >
+              Book Facility
+            </Button>
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">
-                WII-FMS • Facility &amp; Campus Management
-              </h2>
-              <span className="text-[10px] font-mono font-bold bg-purple-50 text-purple-900 border border-purple-200 px-2 py-0.5 rounded-full">
-                MOD-FMS-04
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5 font-medium">
-              Guest House Suites, Field Tour Vehicles, Conference Halls &amp; Estate Infrastructure
-            </p>
-          </div>
-        </div>
+        }
+      />
 
-        <div className="flex items-center gap-2 self-end sm:self-auto">
-          <button
-            type="button"
-            onClick={() => setShowModal(true)}
-            className="px-4 py-2 rounded-xl text-xs font-bold bg-purple-700 hover:bg-purple-800 text-white shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Book Facility / Vehicle</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Overview Cards matching Attendance theme */}
+      {/* Metrics Row using Standardized MetricCard */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {/* 1. Guest House */}
-        <div className="bg-purple-50/70 border border-purple-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-purple-800 truncate">Guest House</p>
-              <p className="text-xl sm:text-2xl font-black text-purple-900 mt-0.5">28 Suites</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-purple-100 border border-purple-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <Hotel className="w-4 h-4 text-purple-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-purple-200/60 text-[10px] sm:text-[11px] font-semibold text-purple-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            19 Available for Booking
-          </div>
-        </div>
-
-        {/* 2. Fleet Vehicles */}
-        <div className="bg-blue-50/70 border border-blue-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-blue-800 truncate">Fleet Vehicles</p>
-              <p className="text-xl sm:text-2xl font-black text-blue-900 mt-0.5">14 Vehicles</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-100 border border-blue-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <Car className="w-4 h-4 text-blue-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-blue-200/60 text-[10px] sm:text-[11px] font-semibold text-blue-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            8 on Field Expedition
-          </div>
-        </div>
-
-        {/* 3. Auditoriums */}
-        <div className="bg-amber-50/70 border border-amber-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800 truncate">Auditoriums</p>
-              <p className="text-xl sm:text-2xl font-black text-amber-900 mt-0.5">3 Venues</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-100 border border-amber-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <Calendar className="w-4 h-4 text-amber-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-amber-200/60 text-[10px] sm:text-[11px] font-semibold text-amber-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            Seminar &amp; Board Rooms
-          </div>
-        </div>
-
-        {/* 4. Estate Tickets */}
-        <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 truncate">Estate Tickets</p>
-              <p className="text-xl sm:text-2xl font-black text-emerald-900 mt-0.5">98% Resolved</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-100 border border-emerald-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <Wrench className="w-4 h-4 text-emerald-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-emerald-200/60 text-[10px] sm:text-[11px] font-semibold text-emerald-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            Civil &amp; Electrical Maintenance
-          </div>
-        </div>
+        <MetricCard
+          title="Guest House"
+          value="28 Suites"
+          subtitle="19 Available for Booking"
+          icon={Hotel}
+          variant="primary"
+        />
+        <MetricCard
+          title="Fleet Vehicles"
+          value="14 Vehicles"
+          subtitle="8 on Field Expeditions"
+          icon={Car}
+          variant="info"
+        />
+        <MetricCard
+          title="Auditoriums & Halls"
+          value="3 Venues"
+          subtitle="Seminar & Board Rooms"
+          icon={Calendar}
+          variant="warning"
+        />
+        <MetricCard
+          title="Estate Tickets"
+          value="98% Resolved"
+          subtitle="Civil & Electrical Works"
+          icon={Wrench}
+          variant="success"
+        />
       </div>
 
       {/* Search & Filter Bar */}
-      <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="relative w-full sm:w-80">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
+      <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="w-full sm:w-80">
+          <Input
             placeholder="Search booking ref, facility name, user..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-3 py-1.5 text-xs font-medium focus:bg-white focus:ring-2 focus:ring-purple-700 focus:outline-none"
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setCurrentPage(1);
+            }}
+            leftIcon={Search}
+            size="sm"
           />
         </div>
 
-        <div className="flex items-center space-x-1.5 w-full sm:w-auto justify-end">
-          <span className="text-xs font-semibold text-slate-500 mr-1">Type:</span>
+        <div className="flex items-center space-x-1.5 w-full sm:w-auto justify-end overflow-x-auto">
+          <span className="text-xs font-semibold text-slate-500 mr-1 shrink-0">Type:</span>
           {['ALL', 'Guest House', 'Fleet Vehicle', 'Auditorium / Lab'].map((t) => (
-            <button
+            <Button
               key={t}
-              onClick={() => setSelectedType(t)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
-                selectedType === t
-                  ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
-                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-              }`}
+              size="xs"
+              variant={selectedType === t ? 'primary' : 'outline'}
+              onClick={() => {
+                setSelectedType(t);
+                setCurrentPage(1);
+              }}
             >
               {t}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
 
-      {/* Bookings Table */}
-      <div className="bg-white border border-slate-200/90 rounded-2xl overflow-hidden shadow-2xs">
-        <div className="w-full min-w-0 overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse table-fixed">
-            <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 text-[11px]">
-              <tr className="h-10">
-                <th className="px-4 py-2.5 whitespace-nowrap align-middle w-[18%]">Booking Ref</th>
-                <th className="px-4 py-2.5 whitespace-nowrap align-middle w-[32%]">Facility / Vehicle</th>
-                <th className="px-4 py-2.5 whitespace-nowrap align-middle w-[24%]">Booked By</th>
-                <th className="px-4 py-2.5 whitespace-nowrap align-middle w-[14%]">Duration</th>
-                <th className="px-4 py-2.5 text-center whitespace-nowrap align-middle w-[12%]">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredBookings.map((b) => (
-                <tr key={b.id} className="hover:bg-slate-50/80 transition-colors">
-                  <td className="px-4 py-3 font-mono font-bold text-slate-800 align-middle">
+      {/* Standardized Bookings Table */}
+      <div className="bg-white border border-slate-200/90 rounded-xl overflow-hidden shadow-2xs">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[18%]">Booking Ref</TableHead>
+              <TableHead className="w-[32%]">Facility / Vehicle Details</TableHead>
+              <TableHead className="w-[24%]">Booked By &amp; Department</TableHead>
+              <TableHead className="w-[14%]">Schedule</TableHead>
+              <TableHead align="center" className="w-[12%]">Status</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {paginatedBookings.length === 0 ? (
+              <TableEmpty colSpan={5} message="No facility bookings found matching search criteria." />
+            ) : (
+              paginatedBookings.map((b) => (
+                <TableRow key={b.id}>
+                  <TableCell className="align-middle font-mono font-bold text-slate-800 text-xs">
                     {b.bookingRef}
-                  </td>
-                  <td className="px-4 py-3 align-middle">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 text-purple-800 border border-purple-200 inline-block mb-0.5">
+                  </TableCell>
+                  <TableCell className="align-middle">
+                    <Badge variant="neutral" size="sm" className="mb-1">
                       {b.facilityType}
-                    </span>
-                    <div className="font-bold text-slate-900 leading-snug truncate">{b.facilityName}</div>
-                  </td>
-                  <td className="px-4 py-3 align-middle">
-                    <div className="font-bold text-slate-800 truncate">{b.bookedBy}</div>
-                    <div className="text-[11px] text-slate-500 truncate">{b.department}</div>
-                  </td>
-                  <td className="px-4 py-3 font-mono text-slate-700 align-middle whitespace-nowrap">
-                    <div>{b.startDate} to {b.endDate}</div>
-                  </td>
-                  <td className="px-4 py-3 text-center align-middle whitespace-nowrap">
-                    <span
-                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                        b.status === 'Confirmed'
-                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                          : 'bg-amber-50 text-amber-900 border border-amber-200'
-                      }`}
-                    >
-                      {b.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                    </Badge>
+                    <div className="font-bold text-slate-900 leading-snug">{b.facilityName}</div>
+                  </TableCell>
+                  <TableCell className="align-middle">
+                    <div className="font-bold text-slate-800">{b.bookedBy}</div>
+                    <div className="text-[11px] text-slate-500">{b.department}</div>
+                  </TableCell>
+                  <TableCell className="align-middle font-mono text-slate-700 text-xs whitespace-nowrap">
+                    <div>{b.startDate}</div>
+                    <div className="text-[10px] text-slate-400">to {b.endDate}</div>
+                  </TableCell>
+                  <TableCell align="center" className="align-middle whitespace-nowrap">
+                    {b.status === 'Confirmed' ? (
+                      <Badge variant="success">Confirmed</Badge>
+                    ) : b.status === 'Completed' ? (
+                      <Badge variant="neutral">Completed</Badge>
+                    ) : (
+                      <Badge variant="warning">Pending Sanction</Badge>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+
+        {filteredBookings.length > pageSize && (
+          <div className="border-t border-slate-100">
+            <TablePagination
+              currentPage={currentPage}
+              totalPages={Math.ceil(filteredBookings.length / pageSize)}
+              totalItems={filteredBookings.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(newSize) => {
+                setPageSize(newSize);
+                setCurrentPage(1);
+              }}
+            />
+          </div>
+        )}
       </div>
 
-      {/* Reservation Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-xl overflow-hidden">
-            <div className="p-4 bg-purple-900 text-white flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Building2 className="w-5 h-5 text-purple-300" />
-                <h3 className="font-bold text-sm">New Campus Facility Requisition</h3>
+      {/* Standardized Book Facility Modal */}
+      <Modal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        size="md"
+      >
+        <ModalHeader
+          title="Book Campus Facility or Vehicle"
+          subtitle="Submit requisition for official guest house suites, fleet vehicles, or seminar venues."
+          icon={Building2}
+          onClose={() => setShowModal(false)}
+        />
+        <form onSubmit={handleCreateBooking}>
+          <ModalBody className="space-y-4">
+            {formError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs font-semibold text-red-800">
+                {formError}
               </div>
-              <button onClick={() => setShowModal(false)} className="text-white/80 hover:text-white cursor-pointer">
-                ✕
-              </button>
-            </div>
+            )}
 
-            <form onSubmit={handleCreateBooking} className="p-5 space-y-4 text-xs">
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Facility Category</label>
-                <select
-                  value={facilityType}
-                  onChange={(e) => setFacilityType(e.target.value as any)}
-                  className="w-full border border-slate-200 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-600 focus:outline-none"
-                >
-                  <option value="Guest House">Guest House Suites &amp; Hostels</option>
-                  <option value="Fleet Vehicle">Official Fleet 4WD Vehicles</option>
-                  <option value="Auditorium / Lab">Auditorium &amp; Seminar Hall</option>
-                </select>
-              </div>
+            <FormField label="Facility Type" required>
+              <Select
+                value={facilityType}
+                onChange={(val) => {
+                  const t = String(val) as 'Guest House' | 'Fleet Vehicle' | 'Auditorium / Lab';
+                  setFacilityType(t);
+                  if (t === 'Guest House') setFacilityName('VIP Suite 104 (Main Campus)');
+                  else if (t === 'Fleet Vehicle') setFacilityName('Mahindra Bolero 4WD (UK-07-TA-1842)');
+                  else setFacilityName('Main Seminar Auditorium (Capacity 250)');
+                }}
+                options={[
+                  { value: 'Guest House', label: 'Guest House Suite' },
+                  { value: 'Fleet Vehicle', label: 'Fleet Vehicle (4WD / Innova)' },
+                  { value: 'Auditorium / Lab', label: 'Auditorium / Conference Hall' }
+                ]}
+              />
+            </FormField>
 
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Select Resource</label>
-                <input
-                  type="text"
+            <FormField label="Facility / Vehicle Details" required>
+              <Input
+                value={facilityName}
+                onChange={(e) => setFacilityName(e.target.value)}
+                placeholder="e.g. VIP Suite 104 or Vehicle Reg No."
+                required
+              />
+            </FormField>
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField label="From Date" required>
+                <Input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => setFromDate(e.target.value)}
                   required
-                  value={facilityName}
-                  onChange={(e) => setFacilityName(e.target.value)}
-                  className="w-full border border-slate-200 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-600 focus:outline-none"
                 />
-              </div>
+              </FormField>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">From Date</label>
-                  <input
-                    type="date"
-                    required
-                    value={fromDate}
-                    onChange={(e) => setFromDate(e.target.value)}
-                    className="w-full border border-slate-200 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-600 focus:outline-none font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">To Date</label>
-                  <input
-                    type="date"
-                    required
-                    value={toDate}
-                    onChange={(e) => setToDate(e.target.value)}
-                    className="w-full border border-slate-200 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-600 focus:outline-none font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-4 py-2 border border-slate-200 rounded-lg text-slate-700 font-bold hover:bg-slate-50 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-lg font-bold shadow-xs cursor-pointer"
-                >
-                  Submit Requisition
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+              <FormField label="To Date" required>
+                <Input
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => setToDate(e.target.value)}
+                  required
+                />
+              </FormField>
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+            >
+              Submit Booking
+            </Button>
+          </ModalFooter>
+        </form>
+      </Modal>
     </div>
   );
 };

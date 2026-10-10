@@ -28,7 +28,8 @@ async function bootstrap() {
 
     httpServer.on('request', app);
 
-    httpServer.listen(envConfig.port, envConfig.host, () => {
+    const listenHost = envConfig.isProduction ? '0.0.0.0' : envConfig.host;
+    httpServer.listen(envConfig.port, listenHost, () => {
       const port = envConfig.port;
       const lanAddresses = getLanIPv4Addresses();
 

@@ -68,6 +68,7 @@ export interface UserProjectHistory {
   department: string;
   fundingAgency?: string; // e.g. "MoEFCC", "DST-SERB", "CAMPA", "National Biodiversity Authority"
   grantAmount?: string;
+  pay?: string; // Fellowship / Monthly Pay / Pay Scale e.g. "₹ 42,000 + HRA", "Level 11 (₹ 67,700)"
   responsibilities?: string;
   remarks?: string;
   addedBy?: string;

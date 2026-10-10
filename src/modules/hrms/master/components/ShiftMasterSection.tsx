@@ -193,9 +193,7 @@ export const ShiftMasterSection: React.FC = () => {
               <Clock className="w-4 h-4 text-indigo-700" />
               <span>Shift Master &amp; Timing Rules</span>
             </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Design institutional work shifts, start/end hours, grace periods, and half-day thresholds.
-            </p>
+            
           </div>
 
           <div className="flex items-center space-x-2 shrink-0">
@@ -344,27 +342,34 @@ export const ShiftMasterSection: React.FC = () => {
 
       {/* SHIFT CREATE / EDIT MODAL */}
       {showShiftModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 space-y-5 animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center space-x-2">
-                <Clock className="w-5 h-5 text-indigo-600" />
-                <h3 className="text-base font-bold text-slate-900">
-                  {editingShiftId ? `Edit Shift: ${formCode}` : 'Design New Work Shift'}
-                </h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/55 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-xl w-full shadow-xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh] my-auto">
+            {/* Dedicated Modal Header */}
+            <div className="relative overflow-hidden px-5 py-4 bg-gradient-to-r from-[#091224] via-[#0f214a] to-[#1a3675] text-white flex items-center justify-between shrink-0 border-b border-blue-900/60 rounded-t-2xl">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
+              <div className="relative z-10 flex items-center space-x-3">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#183063] to-[#0c1938] border border-blue-700/60 flex items-center justify-center text-blue-200 shrink-0 shadow-sm">
+                  <Clock className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-blue-200" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base leading-tight text-white tracking-tight">
+                    {editingShiftId ? `Edit Shift: ${formCode}` : 'Design New Work Shift'}
+                  </h3>
+                </div>
               </div>
               <button
                 onClick={() => setShowShiftModal(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+                className="relative z-10 p-1.5 rounded-lg text-blue-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                aria-label="Close dialog"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveShift} className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <form onSubmit={handleSaveShift} className="p-5 space-y-4 text-xs overflow-y-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div className="space-y-1.5">
-                  <label className="block font-bold text-slate-700">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
                     Shift Code <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -373,13 +378,13 @@ export const ShiftMasterSection: React.FC = () => {
                     placeholder="e.g. GEN-01, MS-01, NS-01"
                     value={formCode}
                     onChange={(e) => setFormCode(e.target.value.toUpperCase())}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                    className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 font-mono font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 shadow-2xs transition-all text-xs"
                   />
                   <span className="text-[10px] text-slate-400 block">Short alphanumeric identifier</span>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block font-bold text-slate-700">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
                     Shift Name <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -388,7 +393,7 @@ export const ShiftMasterSection: React.FC = () => {
                     placeholder="e.g. General Office Shift, Lab Night Shift"
                     value={formName}
                     onChange={(e) => setFormName(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                    className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 shadow-2xs transition-all text-xs"
                   />
                   <span className="text-[10px] text-slate-400 block">Descriptive shift title</span>
                 </div>
@@ -416,14 +421,14 @@ export const ShiftMasterSection: React.FC = () => {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block font-bold text-slate-700">Late Grace Period (Minutes)</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Late Grace Period (Minutes)</label>
                   <input
                     type="number"
                     min="0"
                     max="120"
                     value={formGracePeriod}
                     onChange={(e) => setFormGracePeriod(Number(e.target.value))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 font-bold focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                    className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 shadow-2xs transition-all text-xs"
                   />
                   <span className="text-[10px] text-slate-400 block">Punches within this window marked on-time</span>
                 </div>
@@ -439,7 +444,7 @@ export const ShiftMasterSection: React.FC = () => {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block font-bold text-slate-700">Min Hours for Full-Day</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Min Hours for Full-Day</label>
                   <input
                     type="number"
                     step="0.25"
@@ -447,13 +452,13 @@ export const ShiftMasterSection: React.FC = () => {
                     max="16"
                     value={formMinFullDayHours}
                     onChange={(e) => setFormMinFullDayHours(Number(e.target.value))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 font-bold focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                    className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 shadow-2xs transition-all text-xs"
                   />
                   <span className="text-[10px] text-slate-400 block">Normally 7.5 to 8.0 hours</span>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block font-bold text-slate-700">Min Hours for Half-Day</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Min Hours for Half-Day</label>
                   <input
                     type="number"
                     step="0.25"
@@ -461,20 +466,20 @@ export const ShiftMasterSection: React.FC = () => {
                     max="8"
                     value={formMinHalfDayHours}
                     onChange={(e) => setFormMinHalfDayHours(Number(e.target.value))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 font-bold focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                    className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 shadow-2xs transition-all text-xs"
                   />
                   <span className="text-[10px] text-slate-400 block">Normally 3.5 to 4.0 hours</span>
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <label className="block font-bold text-slate-700">Description &amp; Operational Purpose</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Description &amp; Operational Purpose</label>
                 <textarea
                   rows={2}
                   placeholder="e.g. Standard office shift for administrative, IT, finance and research staff."
                   value={formDescription}
                   onChange={(e) => setFormDescription(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                  className="w-full bg-slate-50 border border-slate-200/90 rounded-xl p-2.5 text-xs font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 shadow-2xs transition-all"
                 />
               </div>
 
@@ -485,7 +490,7 @@ export const ShiftMasterSection: React.FC = () => {
                     id="shiftIsActive"
                     checked={formIsActive}
                     onChange={(e) => setFormIsActive(e.target.checked)}
-                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    className="rounded-xs border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                   />
                   <label htmlFor="shiftIsActive" className="text-xs font-bold text-slate-800 cursor-pointer">
                     Shift Active (Available for staff assignment &amp; attendance evaluation)
@@ -498,7 +503,7 @@ export const ShiftMasterSection: React.FC = () => {
                     id="makeDefaultShift"
                     checked={formIsDefault}
                     onChange={(e) => setFormIsDefault(e.target.checked)}
-                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    className="rounded-xs border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                   />
                   <label htmlFor="makeDefaultShift" className="text-xs font-bold text-slate-800 cursor-pointer">
                     Designate as Institutional Default Shift (assigned to new staff)
@@ -507,17 +512,17 @@ export const ShiftMasterSection: React.FC = () => {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center justify-end space-x-2.5 pt-4 border-t border-slate-100">
+              <div className="flex items-center justify-between pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setShowShiftModal(false)}
-                  className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-bold hover:bg-slate-50 cursor-pointer"
+                  className="h-9 px-4 bg-white hover:bg-slate-100 text-slate-700 font-bold rounded-xl text-xs border border-slate-200/90 cursor-pointer transition-colors shadow-2xs"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg cursor-pointer shadow-xs"
+                  className="h-9 px-5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-xl text-xs transition-all shadow-2xs cursor-pointer flex items-center space-x-1.5 active:scale-95"
                 >
                   {editingShiftId ? 'Save Changes' : 'Create Shift'}
                 </button>
@@ -530,40 +535,53 @@ export const ShiftMasterSection: React.FC = () => {
       {/* DELETE CONFIRMATION MODAL */}
       {deleteTargetShift && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in zoom-in-95 duration-150">
-            <div className="flex items-center space-x-3 text-rose-600">
-              <div className="p-2.5 rounded-full bg-rose-100 border border-rose-200">
-                <Trash2 className="w-5 h-5" />
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="relative overflow-hidden px-5 py-4 border-b border-blue-900/60 bg-gradient-to-r from-[#091224] via-[#0f214a] to-[#1a3675] text-white flex items-center justify-between shrink-0">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
+              <div className="relative z-10 flex items-center space-x-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#183063] to-[#0c1938] border border-blue-700/60 flex items-center justify-center text-rose-300 shrink-0 shadow-sm">
+                  <Trash2 className="w-4.5 h-4.5 text-rose-300" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white tracking-tight">Delete Work Shift</h3>
+                  <p className="text-xs text-blue-200/80 mt-0.5">Shift Configuration Master</p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Delete Work Shift?</h3>
-                <p className="text-xs text-slate-500 font-mono font-bold">{deleteTargetShift.code}</p>
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Are you sure you want to delete shift <strong className="text-slate-900 font-bold">{deleteTargetShift.name} ({deleteTargetShift.code})</strong>?
-            </p>
-
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-[11px] text-amber-900 leading-relaxed font-medium">
-              ⚠️ All staff members assigned to this shift will be automatically transferred to the default shift.
-            </div>
-
-            <div className="flex items-center justify-end space-x-2.5 pt-3 border-t border-slate-100 text-xs">
               <button
                 type="button"
                 onClick={() => setDeleteTargetShift(null)}
-                className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-bold hover:bg-slate-50 cursor-pointer"
+                className="relative z-10 p-1.5 rounded-lg text-blue-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                aria-label="Close dialog"
               >
-                Cancel
+                <X className="w-5 h-5" />
               </button>
-              <button
-                type="button"
-                onClick={handleConfirmDelete}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg cursor-pointer shadow-xs"
-              >
-                Yes, Delete Shift
-              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Are you sure you want to delete shift <strong className="text-slate-900 font-bold">{deleteTargetShift.name} ({deleteTargetShift.code})</strong>?
+              </p>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-[11px] text-amber-900 leading-relaxed font-medium">
+                ⚠️ All staff members assigned to this shift will be automatically transferred to the default shift.
+              </div>
+
+              <div className="flex items-center justify-end space-x-2.5 pt-3 border-t border-slate-100 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setDeleteTargetShift(null)}
+                  className="px-4 py-2 border border-slate-200 rounded-xl text-slate-600 font-bold hover:bg-slate-50 cursor-pointer transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDelete}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl cursor-pointer shadow-xs transition-colors"
+                >
+                  Yes, Delete Shift
+                </button>
+              </div>
             </div>
           </div>
         </div>

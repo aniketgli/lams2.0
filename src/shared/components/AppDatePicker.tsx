@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Calendar, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
+import { Calendar, ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react';
 
 export interface AppDatePickerHoliday {
   date: string;
@@ -47,8 +48,16 @@ export const AppDatePicker: React.FC<AppDatePickerProps> = ({
   const openState = isOpen !== undefined ? isOpen : internalIsOpen;
   const toggleOpen = onToggle || (() => setInternalIsOpen(!internalIsOpen));
 
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [pickerMode, setPickerMode] = useState<'days' | 'months'>('days');
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const [pickerMode, setPickerMode] = useState<'days' | 'months' | 'years'>('days');
+
+  const [coords, setCoords] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+    width: number;
+  }>({ left: 0, width: 240 });
 
   const [viewDate, setViewDate] = useState(() => {
     if (value) return new Date(`${value}T12:00:00`);
@@ -59,10 +68,67 @@ export const AppDatePicker: React.FC<AppDatePickerProps> = ({
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
 
+  const updatePopoverCoords = useCallback(() => {
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    let top: number | undefined;
+    let bottom: number | undefined;
+    const popoverHeight = 275;
+
+    if (spaceBelow < popoverHeight && spaceAbove > spaceBelow) {
+      bottom = window.innerHeight - rect.top + 4;
+      top = undefined;
+    } else {
+      top = rect.bottom + 4;
+      bottom = undefined;
+    }
+
+    const popoverWidth = Math.min(250, window.innerWidth - 16);
+    let left: number;
+    if (isRightColumn) {
+      left = Math.max(8, rect.right - popoverWidth);
+    } else {
+      left = Math.max(8, Math.min(rect.left, window.innerWidth - popoverWidth - 8));
+    }
+
+    setCoords({
+      top,
+      bottom,
+      left,
+      width: popoverWidth,
+    });
+  }, [isRightColumn]);
+
+  useEffect(() => {
+    if (openState) {
+      updatePopoverCoords();
+      const handleScrollOrResize = () => {
+        updatePopoverCoords();
+      };
+      window.addEventListener('resize', handleScrollOrResize);
+      window.addEventListener('scroll', handleScrollOrResize, true);
+      return () => {
+        window.removeEventListener('resize', handleScrollOrResize);
+        window.removeEventListener('scroll', handleScrollOrResize, true);
+      };
+    } else {
+      setPickerMode('days');
+    }
+  }, [openState, updatePopoverCoords]);
+
   // Handle click outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        buttonRef.current &&
+        !buttonRef.current.contains(target) &&
+        popoverRef.current &&
+        !popoverRef.current.contains(target)
+      ) {
         if (openState) {
           if (onToggle) {
             onToggle();
@@ -79,13 +145,6 @@ export const AppDatePicker: React.FC<AppDatePickerProps> = ({
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [openState, onToggle]);
-
-  // Reset picker mode when closed
-  useEffect(() => {
-    if (!openState) {
-      setPickerMode('days');
-    }
-  }, [openState]);
 
   // Keep viewDate synced if value changes externally
   useEffect(() => {
@@ -125,7 +184,6 @@ export const AppDatePicker: React.FC<AppDatePickerProps> = ({
     const isBeforeMin = minDate ? dateStr < minDate : false;
     const isAfterMax = maxDate ? dateStr > maxDate : false;
 
-    // Is date eligible / selectable?
     let isEligible = !isBeforeMin && !isAfterMax;
     if (restrictToStationLeave) {
       isEligible = isEligible && (isWeekend || !!ghMatch);
@@ -142,24 +200,26 @@ export const AppDatePicker: React.FC<AppDatePickerProps> = ({
     });
   }
 
-  const selectedGh = value ? holidays.find((h) => h.date === value && h.type === 'gazetted') : null;
   const selectedDateObj = value ? new Date(`${value}T12:00:00`) : null;
-  const isSelectedWeekend = selectedDateObj ? (selectedDateObj.getDay() === 0 || selectedDateObj.getDay() === 6) : false;
-
   const isSmall = size === 'sm';
 
+  // Year range calculation for year selection grid
+  const startYear = Math.floor(year / 12) * 12;
+  const yearsList = Array.from({ length: 12 }, (_, i) => startYear + i);
+
   return (
-    <div ref={containerRef} className={`relative ${className}`}>
+    <div className={`relative ${className}`}>
       {label && (
         <label className="block font-bold text-slate-800 text-xs tracking-tight mb-1">{label}</label>
       )}
 
       <div className="relative">
         <button
+          ref={buttonRef}
           type="button"
           onClick={toggleOpen}
           className={`w-full bg-slate-50 hover:bg-slate-100/80 border border-slate-200/90 rounded-xl ${
-            isSmall ? 'px-2.5 py-1.5 text-xs' : 'px-3.5 py-2.5 text-xs'
+            isSmall ? 'px-2.5 py-1.5 text-xs' : 'px-3.5 py-2 text-xs'
           } text-slate-900 font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 flex items-center justify-between cursor-pointer shadow-2xs transition-all text-left`}
         >
           {value ? (
@@ -167,7 +227,7 @@ export const AppDatePicker: React.FC<AppDatePickerProps> = ({
               <Calendar className={`${isSmall ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-indigo-600 shrink-0`} />
               <span className="truncate text-xs font-bold text-slate-900">
                 {selectedDateObj && !isNaN(selectedDateObj.getTime())
-                  ? selectedDateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', weekday: 'short' })
+                  ? selectedDateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
                   : value}
               </span>
             </div>
@@ -180,10 +240,19 @@ export const AppDatePicker: React.FC<AppDatePickerProps> = ({
           <ChevronDown className={`${isSmall ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-slate-400 shrink-0 transition-transform duration-200 ${openState ? 'rotate-180 text-indigo-600' : ''}`} />
         </button>
 
-        {openState && (
-          <div className={`absolute top-full mt-1 bg-white/98 backdrop-blur-md border border-slate-200/90 rounded-2xl shadow-xl z-50 p-2.5 space-y-2 w-[220px] sm:w-[230px] ring-1 ring-slate-900/5 animate-in fade-in zoom-in-95 duration-150 ${
-            isRightColumn ? 'right-0' : 'left-0'
-          }`}>
+        {openState && typeof document !== 'undefined' && createPortal(
+          <div
+            ref={popoverRef}
+            style={{
+              position: 'fixed',
+              top: coords.top !== undefined ? `${coords.top}px` : undefined,
+              bottom: coords.bottom !== undefined ? `${coords.bottom}px` : undefined,
+              left: `${coords.left}px`,
+              width: `${coords.width}px`,
+              zIndex: 99999,
+            }}
+            className="bg-white/98 backdrop-blur-md border border-slate-200/90 rounded-2xl shadow-2xl p-2.5 space-y-2 ring-1 ring-slate-900/10 animate-in fade-in zoom-in-95 duration-150"
+          >
             {/* Header Controls */}
             {pickerMode === 'days' && (
               <div className="flex items-center justify-between bg-slate-100/80 p-1 rounded-xl border border-slate-200/60">
@@ -196,15 +265,24 @@ export const AppDatePicker: React.FC<AppDatePickerProps> = ({
                   <ChevronLeft className="w-3.5 h-3.5" />
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => setPickerMode('months')}
-                  className="px-2 py-0.5 rounded-lg bg-white border border-slate-200/80 hover:border-indigo-300 hover:bg-indigo-50/50 font-black text-xs text-slate-800 hover:text-indigo-600 transition-all cursor-pointer flex items-center space-x-1 shadow-2xs"
-                  title="Click to select month"
-                >
-                  <span>{monthsList[month]} {year}</span>
-                  <ChevronDown className="w-3 h-3 text-indigo-500 shrink-0" />
-                </button>
+                <div className="flex items-center space-x-1">
+                  <button
+                    type="button"
+                    onClick={() => setPickerMode('months')}
+                    className="px-2 py-0.5 rounded-lg bg-white border border-slate-200/80 hover:border-indigo-300 hover:bg-indigo-50/50 font-black text-xs text-slate-800 hover:text-indigo-600 transition-all cursor-pointer shadow-2xs"
+                    title="Click to select month"
+                  >
+                    <span>{monthsList[month]}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPickerMode('years')}
+                    className="px-2 py-0.5 rounded-lg bg-white border border-slate-200/80 hover:border-indigo-300 hover:bg-indigo-50/50 font-black text-xs text-slate-800 hover:text-indigo-600 transition-all cursor-pointer shadow-2xs"
+                    title="Click to select year"
+                  >
+                    <span>{year}</span>
+                  </button>
+                </div>
 
                 <button
                   type="button"
@@ -218,32 +296,113 @@ export const AppDatePicker: React.FC<AppDatePickerProps> = ({
             )}
 
             {pickerMode === 'months' && (
-              <div className="flex items-center justify-between bg-slate-100/80 p-1 rounded-xl border border-slate-200/60">
-                <button
-                  type="button"
-                  onClick={() => changeYearBy(-1)}
-                  className="p-1 rounded-md hover:bg-white text-slate-600 hover:text-indigo-600 cursor-pointer transition-all shadow-2xs"
-                  title="Previous Year (-1 Year)"
-                >
-                  <ChevronLeft className="w-3.5 h-3.5" />
-                </button>
+              <div className="space-y-2 py-0.5">
+                <div className="flex items-center justify-between bg-slate-100/80 p-1 rounded-xl border border-slate-200/60">
+                  <button
+                    type="button"
+                    onClick={() => changeYearBy(-1)}
+                    className="p-1 rounded-md hover:bg-white text-slate-600 hover:text-indigo-600 cursor-pointer transition-all shadow-2xs"
+                    title="Previous Year (-1 Year)"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
 
-                <span className="font-black text-xs text-indigo-950 tracking-tight px-3 py-0.5 bg-white rounded-lg border border-slate-200/80 shadow-2xs">
-                  {year}
-                </span>
+                  <button
+                    type="button"
+                    onClick={() => setPickerMode('years')}
+                    className="font-black text-xs text-indigo-950 tracking-tight px-3 py-0.5 bg-white rounded-lg border border-slate-200/80 shadow-2xs hover:text-indigo-600 cursor-pointer"
+                    title="Select Year"
+                  >
+                    {year}
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => changeYearBy(1)}
-                  className="p-1 rounded-md hover:bg-white text-slate-600 hover:text-indigo-600 cursor-pointer transition-all shadow-2xs"
-                  title="Next Year (+1 Year)"
-                >
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => changeYearBy(1)}
+                    className="p-1 rounded-md hover:bg-white text-slate-600 hover:text-indigo-600 cursor-pointer transition-all shadow-2xs"
+                    title="Next Year (+1 Year)"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-3 gap-1.5">
+                  {monthsList.map((m, idx) => {
+                    const isCurrent = idx === month;
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => {
+                          setViewDate(new Date(year, idx, 1));
+                          setPickerMode('days');
+                        }}
+                        className={`py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          isCurrent
+                            ? 'bg-indigo-600 text-white font-black shadow-xs border-indigo-600'
+                            : 'bg-slate-50 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 border border-slate-200/70 shadow-2xs'
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
-            {/* View Modes */}
+            {pickerMode === 'years' && (
+              <div className="space-y-2 py-0.5">
+                <div className="flex items-center justify-between bg-slate-100/80 p-1 rounded-xl border border-slate-200/60">
+                  <button
+                    type="button"
+                    onClick={() => changeYearBy(-12)}
+                    className="p-1 rounded-md hover:bg-white text-slate-600 hover:text-indigo-600 cursor-pointer transition-all shadow-2xs"
+                    title="Previous 12 Years"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+
+                  <span className="font-black text-xs text-indigo-950 tracking-tight px-2 py-0.5 bg-white rounded-lg border border-slate-200/80 shadow-2xs">
+                    {startYear} – {startYear + 11}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => changeYearBy(12)}
+                    className="p-1 rounded-md hover:bg-white text-slate-600 hover:text-indigo-600 cursor-pointer transition-all shadow-2xs"
+                    title="Next 12 Years"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-3 gap-1.5">
+                  {yearsList.map((yr) => {
+                    const isCurrent = yr === year;
+                    return (
+                      <button
+                        key={yr}
+                        type="button"
+                        onClick={() => {
+                          setViewDate(new Date(yr, month, 1));
+                          setPickerMode('months');
+                        }}
+                        className={`py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          isCurrent
+                            ? 'bg-indigo-600 text-white font-black shadow-xs border-indigo-600'
+                            : 'bg-slate-50 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 border border-slate-200/70 shadow-2xs'
+                        }`}
+                      >
+                        {yr}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Days Grid View */}
             {pickerMode === 'days' && (
               <>
                 {/* Weekday Grid Labels */}
@@ -302,35 +461,40 @@ export const AppDatePicker: React.FC<AppDatePickerProps> = ({
               </>
             )}
 
-            {pickerMode === 'months' && (
-              <div className="space-y-2 py-1">
-                <div className="grid grid-cols-3 gap-1.5">
-                  {monthsList.map((m, idx) => {
-                    const isCurrent = idx === month;
-                    return (
-                      <button
-                        key={m}
-                        type="button"
-                        onClick={() => {
-                          setViewDate(new Date(year, idx, 1));
-                          setPickerMode('days');
-                        }}
-                        className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                          isCurrent
-                            ? 'bg-indigo-600 text-white font-black shadow-xs scale-102 border-indigo-600'
-                            : 'bg-slate-50 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 border border-slate-200/70 shadow-2xs'
-                        }`}
-                      >
-                        {m}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
+            {/* Quick Actions Footer */}
+            <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[10px]">
+              <button
+                type="button"
+                onClick={() => {
+                  const todayStr = new Date().toISOString().split('T')[0];
+                  onChange(todayStr);
+                  if (onToggle) onToggle();
+                  else setInternalIsOpen(false);
+                }}
+                className="text-indigo-600 font-bold hover:underline cursor-pointer px-1"
+              >
+                Today
+              </button>
+              {value && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange('');
+                    if (onToggle) onToggle();
+                    else setInternalIsOpen(false);
+                  }}
+                  className="text-slate-400 hover:text-rose-500 font-semibold cursor-pointer px-1 flex items-center space-x-0.5"
+                >
+                  <X className="w-2.5 h-2.5" />
+                  <span>Clear</span>
+                </button>
+              )}
+            </div>
+          </div>,
+          document.body
         )}
       </div>
     </div>
   );
 };
+

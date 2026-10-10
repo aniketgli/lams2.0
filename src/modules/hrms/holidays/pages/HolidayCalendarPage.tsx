@@ -9,6 +9,7 @@ import {
   MONTH_NAMES
 } from '../data/holidayData';
 import { PageHeader } from '../../../../shared/components/PageHeader';
+import { Button } from '../../../../shared/components/Button';
 import {
   Calendar as CalendarIcon,
   CalendarDays,
@@ -526,7 +527,7 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
             {MONTH_NAMES[monthIndex - 1]} {year}
           </h3>
           {monthHolidays.length > 0 && (
-            <span className="bg-blue-50 text-blue-700 text-xs font-bold px-2.5 py-0.5 rounded-full border border-blue-200">
+            <span className="bg-blue-50 text-blue-700 text-xs font-bold px-2.5 py-0.5 rounded-md border border-blue-200">
               {monthHolidays.length} {monthHolidays.length === 1 ? 'Holiday' : 'Holidays'}
             </span>
           )}
@@ -567,13 +568,14 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
         subtitle="Official schedule of Closed Gazetted Holidays (GH), Restricted Holidays (RH), and Local Institute Holidays."
         rightAction={
           isAdmin ? (
-            <button
+            <Button
+              variant="primary"
+              size="md"
               onClick={handleOpenAddModal}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-xl flex items-center space-x-1.5 transition-all shadow-2xs cursor-pointer active:scale-95 ml-auto"
+              leftIcon={<PlusCircle className="w-4 h-4" />}
             >
-              <PlusCircle className="w-4 h-4" />
-              <span>Add Holiday</span>
-            </button>
+              Add Holiday
+            </Button>
           ) : undefined
         }
       />
@@ -945,7 +947,7 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
                       </td>
                       <td className="py-2.5 px-3 whitespace-nowrap">
                         <span
-                          className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold uppercase tracking-tight ${
+                          className={`text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase tracking-tight ${
                             h.type === 'gazetted'
                               ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                               : h.type === 'restricted'
@@ -994,16 +996,17 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
 
       {/* ================= ADMIN MODAL: CREATE / EDIT HOLIDAY ================= */}
       {isFormModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white border border-slate-200 rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-scale-up">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/55 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-150">
             {/* Header */}
-            <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 px-4 sm:px-6 py-3.5 sm:py-4 text-white flex items-center justify-between shrink-0">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-white/10 rounded-xl backdrop-blur-md shrink-0">
-                  <CalendarDays className="w-5 h-5 text-blue-300" />
+            <div className="relative overflow-hidden px-5 py-4 border-b border-blue-900/60 bg-gradient-to-r from-[#091224] via-[#0f214a] to-[#1a3675] text-white flex items-center justify-between shrink-0 rounded-t-2xl">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
+              <div className="relative z-10 flex items-center space-x-3">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#183063] to-[#0c1938] border border-blue-700/60 flex items-center justify-center text-blue-200 shrink-0 shadow-sm">
+                  <CalendarDays className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-blue-200" />
                 </div>
                 <div>
-                  <h2 className="text-base font-bold tracking-wide">
+                  <h2 className="text-base font-bold text-white tracking-tight">
                     {editingHoliday ? 'Edit Holiday' : 'Create New Holiday'}
                   </h2>
                 </div>
@@ -1011,7 +1014,8 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
               <button
                 type="button"
                 onClick={() => setIsFormModalOpen(false)}
-                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                className="relative z-10 p-1.5 rounded-lg text-blue-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                aria-label="Close dialog"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1131,20 +1135,6 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
                 />
               </div>
 
-              {/* Long Weekend Checkbox */}
-              <label className="flex items-center space-x-2.5 p-3 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-100/70 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={formData.isLongWeekend}
-                  onChange={(e) => setFormData({ ...formData, isLongWeekend: e.target.checked })}
-                  className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
-                />
-                <div>
-                  <span className="font-bold text-slate-900 block">Long Weekend (LW) Flag</span>
-                  <span className="text-[11px] text-slate-500">Marks 3–4 days continuous break adjoining Saturday / Sunday.</span>
-                </div>
-              </label>
-
               {/* Action Buttons */}
               <div className="pt-2 flex items-center justify-end space-x-2.5 border-t border-slate-100">
                 <button
@@ -1171,14 +1161,25 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
       {deletingHoliday && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
           <div className="bg-white border border-slate-200 rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-scale-up">
-            <div className="p-4 bg-rose-600 text-white flex items-center space-x-2.5">
-              <div className="p-2 bg-white/20 rounded-xl">
-                <AlertTriangle className="w-5 h-5" />
+            <div className="relative overflow-hidden px-5 py-4 border-b border-blue-900/60 bg-gradient-to-r from-[#091224] via-[#0f214a] to-[#1a3675] text-white flex items-center justify-between shrink-0 rounded-t-2xl">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
+              <div className="relative z-10 flex items-center space-x-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#183063] to-[#0c1938] border border-blue-700/60 flex items-center justify-center text-rose-300 shrink-0 shadow-sm">
+                  <AlertTriangle className="w-4.5 h-4.5 text-rose-300" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-white tracking-tight">Delete Holiday Confirmation</h3>
+                  <p className="text-xs text-blue-200/80 mt-0.5">Permanent removal from institute holiday calendar</p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-bold text-sm">Delete Holiday Confirmation</h3>
-                <p className="text-[11px] text-rose-100">Permanent removal from institute holiday calendar</p>
-              </div>
+              <button
+                type="button"
+                onClick={() => setDeletingHoliday(null)}
+                className="relative z-10 p-1.5 rounded-lg text-blue-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                aria-label="Close dialog"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
             <div className="p-5 space-y-3.5 text-xs text-slate-700">

@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '../../../../context/AppContext';
 import { OutdoorDutyRequest } from '../../../../types';
 import { PageHeader } from '../../../../shared/components/PageHeader';
+import { Button } from '../../../../shared/components/Button';
 import { AppDatePicker } from '../../../../shared/components/AppDatePicker';
 import { MultiSelectFilter, matchesMultiSelect } from '../../../../shared/components/MultiSelectFilter';
 import { TablePagination } from '../../../../shared/components/TablePagination';
@@ -800,13 +801,14 @@ export const OutdoorDutyView: React.FC = () => {
         action={
           canApplyOd ? (
             <div className="flex items-center justify-end space-x-2 ml-auto">
-              <button
+              <Button
+                variant="primary"
+                size="md"
                 onClick={() => handleOpenApplyModal()}
-                className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer ml-auto"
+                leftIcon={<PlusCircle className="w-4 h-4" />}
               >
-                <PlusCircle className="w-4 h-4" />
-                <span>Apply OD</span>
-              </button>
+                Apply OD
+              </Button>
             </div>
           ) : undefined
         }
@@ -1093,7 +1095,7 @@ export const OutdoorDutyView: React.FC = () => {
             onClick={() => {
               setFilterStatus('pending');
             }}
-            className="bg-[#ea580c] hover:bg-[#c2410c] active:bg-[#9a3412] text-white font-bold text-xs px-5 py-2 rounded-full shadow-2xs transition-all cursor-pointer shrink-0 flex items-center space-x-1.5"
+            className="bg-[#2563eb] hover:bg-[#1d4ed8] active:bg-[#400c0e] text-white font-bold text-xs px-4 py-2 rounded-xl shadow-xs transition-all cursor-pointer shrink-0 flex items-center space-x-1.5"
           >
             <span>Review Queue ({pendingManagerQueue.length})</span>
           </button>
@@ -1645,7 +1647,7 @@ export const OutdoorDutyView: React.FC = () => {
         )}
 
         {/* Stable Full-Width Footer & Pagination (Fixed at bottom of card, outside horizontal scroll) */}
-        <div className="w-full border-t border-slate-200/90 bg-white">
+        <div className="w-full border-t border-slate-200/90 bg-white rounded-b-2xl">
           <TablePagination
             currentPage={odPage}
             totalPages={Math.ceil(sortedODs.length / odPageSize)}
@@ -1659,23 +1661,25 @@ export const OutdoorDutyView: React.FC = () => {
 
       {/* APPLY / EDIT OD MODAL */}
       {showApplyModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 my-8">
+        <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-150 my-8">
             {/* Modal Header */}
-            <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 px-4 sm:px-6 py-3.5 sm:py-4 text-white flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-white/10 rounded-xl backdrop-blur-md shrink-0">
-                  <Globe className="w-5 h-5 text-blue-300" />
+            <div className="relative overflow-hidden px-5 py-4 border-b border-blue-900/60 bg-gradient-to-r from-[#091224] via-[#0f214a] to-[#1a3675] text-white flex items-center justify-between shrink-0 rounded-t-2xl">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
+              <div className="relative z-10 flex items-center space-x-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#183063] to-[#0c1938] border border-blue-700/60 flex items-center justify-center text-blue-200 shrink-0 shadow-sm">
+                  <MapPin className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-blue-200" />
                 </div>
-                <div>
-                  <h2 className="text-base font-bold tracking-wide">
-                    Outdoor Duty (OD)
+                <div className="min-w-0">
+                  <h2 className="text-base font-bold text-white tracking-tight truncate">
+                    {editingOd ? 'Edit Outdoor Duty Requisition' : 'Apply for Outdoor Duty (OD)'}
                   </h2>
                 </div>
               </div>
               <button
                 onClick={() => setShowApplyModal(false)}
-                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                className="relative z-10 p-1.5 rounded-lg text-blue-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
+                aria-label="Close dialog"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1862,25 +1866,28 @@ export const OutdoorDutyView: React.FC = () => {
       {/* REVIEW & ACTION MODAL (APPROVE / REJECT) */}
       {actionModalOd && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
-                  <ShieldCheck className="w-4 h-4" />
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="relative overflow-hidden px-5 py-4 border-b border-blue-900/60 bg-gradient-to-r from-[#091224] via-[#0f214a] to-[#1a3675] text-white flex items-center justify-between shrink-0">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
+              <div className="relative z-10 flex items-center space-x-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#183063] to-[#0c1938] border border-blue-700/60 flex items-center justify-center text-blue-200 shrink-0 shadow-sm">
+                  <ShieldCheck className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-blue-200" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">Review Outdoor Duty Requisition</h3>
-                  <p className="text-[11px] text-slate-500">Approve or Reject as Reporting Officer</p>
+                  <h3 className="text-base font-bold text-white tracking-tight">Review Outdoor Duty Requisition</h3>
+                  <p className="text-xs text-blue-200/80 mt-0.5">Approve or Reject as Reporting Officer</p>
                 </div>
               </div>
               <button
                 onClick={() => setActionModalOd(null)}
-                className="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 transition-colors"
+                className="relative z-10 p-1.5 rounded-lg text-blue-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                aria-label="Close dialog"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
+            <div className="p-6 space-y-4">
             {/* Quick Context Card */}
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2 text-xs">
               <div className="flex items-center justify-between">
@@ -1967,6 +1974,7 @@ export const OutdoorDutyView: React.FC = () => {
                 <span>Approve</span>
               </button>
             </div>
+            </div>
           </div>
         </div>
       )}
@@ -1974,25 +1982,28 @@ export const OutdoorDutyView: React.FC = () => {
       {/* CANCEL APPROVED OD MODAL POPUP */}
       {cancelModalOd && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center font-bold">
-                  <RotateCcw className="w-4 h-4" />
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="relative overflow-hidden px-5 py-4 border-b border-blue-900/60 bg-gradient-to-r from-[#091224] via-[#0f214a] to-[#1a3675] text-white flex items-center justify-between shrink-0">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
+              <div className="relative z-10 flex items-center space-x-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#183063] to-[#0c1938] border border-blue-700/60 flex items-center justify-center text-blue-200 shrink-0 shadow-sm">
+                  <RotateCcw className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-rose-300" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">Cancel Approved Outdoor Duty</h3>
-                  <p className="text-[11px] text-slate-500">Revoke duty approval &amp; revert attendance</p>
+                  <h3 className="text-base font-bold text-white tracking-tight">Cancel Approved Outdoor Duty</h3>
+                  <p className="text-xs text-blue-200/80 mt-0.5">Revoke duty approval &amp; revert attendance</p>
                 </div>
               </div>
               <button
                 onClick={() => setCancelModalOd(null)}
-                className="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 transition-colors"
+                className="relative z-10 p-1.5 rounded-lg text-blue-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                aria-label="Close dialog"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
+            <div className="p-6 space-y-4">
             <div className="bg-rose-50 border border-rose-200 text-rose-800 p-3 rounded-xl text-xs space-y-1">
               <div className="flex items-center space-x-2 font-bold">
                 <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
@@ -2051,6 +2062,7 @@ export const OutdoorDutyView: React.FC = () => {
                 <span>Confirm Cancellation</span>
               </button>
             </div>
+            </div>
           </div>
         </div>
       )}
@@ -2058,34 +2070,46 @@ export const OutdoorDutyView: React.FC = () => {
       {/* DELETE CONFIRMATION MODAL */}
       {deleteConfirmId && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-slate-200 space-y-4">
-            <div className="flex items-center space-x-3">
-              <div className="w-9 h-9 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
-                <Trash2 className="w-5 h-5" />
+          <div className="bg-white rounded-2xl max-w-sm w-full shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="relative overflow-hidden px-5 py-4 border-b border-blue-900/60 bg-gradient-to-r from-[#091224] via-[#0f214a] to-[#1a3675] text-white flex items-center justify-between shrink-0">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
+              <div className="relative z-10 flex items-center space-x-3 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#183063] to-[#0c1938] border border-blue-700/60 flex items-center justify-center text-rose-300 shrink-0 shadow-sm">
+                  <Trash2 className="w-4.5 h-4.5 text-rose-300" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white tracking-tight">Delete Requisition</h3>
+                  <p className="text-xs text-blue-200/80 mt-0.5">This action cannot be undone</p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">Delete Requisition</h3>
-                <p className="text-[11px] text-slate-500">This action cannot be undone.</p>
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Are you sure you want to permanently delete this pending Outdoor Duty requisition?
-            </p>
-
-            <div className="flex items-center justify-end space-x-2 pt-2">
               <button
                 onClick={() => setDeleteConfirmId(null)}
-                className="px-3.5 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                className="relative z-10 p-1.5 rounded-lg text-blue-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                aria-label="Close dialog"
               >
-                Cancel
+                <X className="w-5 h-5" />
               </button>
-              <button
-                onClick={confirmDeleteOD}
-                className="px-4 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-2xs transition-colors cursor-pointer"
-              >
-                Delete
-              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Are you sure you want to permanently delete this pending Outdoor Duty requisition?
+              </p>
+
+              <div className="flex items-center justify-end space-x-2 pt-2">
+                <button
+                  onClick={() => setDeleteConfirmId(null)}
+                  className="px-3.5 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteOD}
+                  className="px-4 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-2xs transition-colors cursor-pointer"
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -2094,21 +2118,28 @@ export const OutdoorDutyView: React.FC = () => {
       {/* DETAIL VIEW MODAL */}
       {detailModalOd && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-200 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">Outdoor Duty Overview</h3>
-                <span className="text-[10px] font-mono text-slate-400">ID: {detailModalOd.id}</span>
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="relative overflow-hidden px-5 py-4 border-b border-blue-900/60 bg-gradient-to-r from-[#091224] via-[#0f214a] to-[#1a3675] text-white flex items-center justify-between shrink-0">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
+              <div className="relative z-10 flex items-center space-x-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#183063] to-[#0c1938] border border-blue-700/60 flex items-center justify-center text-blue-200 shrink-0 shadow-sm">
+                  <MapPin className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-blue-200" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white tracking-tight">Outdoor Duty Overview</h3>
+                  <span className="text-[10px] font-mono text-blue-300/80">ID: {detailModalOd.id}</span>
+                </div>
               </div>
               <button
                 onClick={() => setDetailModalOd(null)}
-                className="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 transition-colors"
+                className="relative z-10 text-blue-300 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer shrink-0"
+                aria-label="Close dialog"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
+            <div className="p-5 space-y-4">
               <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200">
                 <div>
                   <span className="font-bold text-slate-900 block text-sm">{detailModalOd.userName}</span>
@@ -2218,23 +2249,27 @@ export const OutdoorDutyView: React.FC = () => {
       {/* Purpose Modal for Reading Full OD Purpose */}
       {activePurposeModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl max-w-lg w-full border border-slate-200 shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">Outdoor Duty Purpose &amp; Agenda</h3>
-                <p className="text-xs text-slate-500">
-                  {activePurposeModal.employeeName} • {activePurposeModal.location} • {activePurposeModal.duration}
-                </p>
+          <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="relative overflow-hidden px-5 py-4 border-b border-blue-900/60 bg-gradient-to-r from-[#091224] via-[#0f214a] to-[#1a3675] text-white flex items-center justify-between shrink-0">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
+              <div className="relative z-10 flex items-center space-x-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#183063] to-[#0c1938] border border-blue-700/60 flex items-center justify-center text-blue-200 shrink-0 shadow-sm">
+                  <FileText className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-blue-200" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white tracking-tight">Outdoor Duty Purpose &amp; Agenda</h3>
+                </div>
               </div>
               <button
                 onClick={() => setActivePurposeModal(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                className="relative z-10 p-1.5 rounded-lg text-blue-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
+                aria-label="Close dialog"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-xs text-slate-800 leading-relaxed font-sans whitespace-pre-wrap">
+            <div className="p-5 space-y-4">
               "{activePurposeModal.purpose}"
             </div>
 

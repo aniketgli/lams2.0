@@ -19,7 +19,7 @@ export const RoleSwitcherBar: React.FC<RoleSwitcherBarProps> = ({ onRoleChangedG
     { role: 'administrator', label: 'Administrator', desc: 'Full System & Role Master' },
     { role: 'reporting_manager', label: 'Reporting Manager', desc: 'Team OD & Level-1 Leave Approval' },
     { role: 'reviewing_manager', label: 'HoD', desc: 'Department & Level-2 Leave Approval' },
-    { role: 'general_staff', label: 'General Staff', desc: 'View Attendance, Apply OD & Leaves' }
+    { role: 'general_staff', label: 'Staff User', desc: 'View Attendance, Apply OD & Leaves' }
   ];
 
   return (
@@ -27,10 +27,10 @@ export const RoleSwitcherBar: React.FC<RoleSwitcherBarProps> = ({ onRoleChangedG
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2.5 text-xs">
         {/* Active Context Banner */}
         <div className="flex items-center space-x-2 text-slate-600">
-          <ShieldAlert className="w-4 h-4 text-blue-600 shrink-0" />
+          <ShieldAlert className="w-4 h-4 text-[#2563eb] shrink-0" />
           <span>
             <strong className="text-slate-900 font-semibold">Active Persona:</strong> Testing permissions for{' '}
-            <strong className="text-blue-700 font-semibold">{currentUser.name}</strong>
+            <strong className="text-[#2563eb] font-semibold">{currentUser.name}</strong>
           </span>
         </div>
 
@@ -42,14 +42,14 @@ export const RoleSwitcherBar: React.FC<RoleSwitcherBarProps> = ({ onRoleChangedG
               <button
                 key={rb.role}
                 onClick={() => handleRoleChange(rb.role)}
-                className={`px-2.5 py-1 rounded-md font-medium text-xs transition-all flex items-center space-x-1 border ${
+                className={`px-2.5 py-1 rounded-md font-medium text-xs transition-all flex items-center space-x-1 border cursor-pointer ${
                   isActive
-                    ? 'bg-blue-600 text-white border-blue-600 font-semibold shadow-xs'
+                    ? 'bg-[#2563eb] text-white border-[#2563eb] font-semibold shadow-xs'
                     : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900'
                 }`}
                 title={rb.desc}
               >
-                {isActive && <Check className="w-3 h-3 text-emerald-300" />}
+                {isActive && <Check className="w-3 h-3 text-white" />}
                 <span>{rb.label}</span>
               </button>
             );

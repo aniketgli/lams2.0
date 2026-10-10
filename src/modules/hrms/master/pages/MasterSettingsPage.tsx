@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../../../context/AppContext';
 import { PageHeader } from '../../../../shared/components/PageHeader';
+import { Button, Badge, Input } from '../../../../shared/components';
 import { WIILogo } from '../../../../shared/components/WIILogo';
 import { ShiftMasterSection } from '../components/ShiftMasterSection';
 import { LeavePolicyMaster } from '../components/LeavePolicyMaster';
+import { ProfileMasterSection } from '../components/ProfileMasterSection';
 import { formatOrgAddress } from '../../../../types';
+import { AppSelect } from '../../../../shared/components/AppSelect';
 import {
   Sliders,
   Clock,
@@ -354,73 +357,6 @@ export const MasterSettingsPage: React.FC = () => {
         subtitle="Manage sub-masters for Attendance Timings, Leave Policies, Departments & Organization Master"
       />
 
-      {/* Master Configuration Summary Stat Cards: Placed immediately below PageHeader */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {/* 1. Sub-Master Modules */}
-        <div className="bg-blue-50/70 border border-blue-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-blue-800 truncate">Sub-Master Modules</p>
-              <p className="text-xl sm:text-2xl font-black text-blue-900 mt-0.5">4 Active</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-100 border border-blue-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <Sliders className="w-4 h-4 text-blue-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-blue-200/60 text-[10px] sm:text-[11px] font-semibold text-blue-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            Attendance, Machine, Leave &amp; Org
-          </div>
-        </div>
-
-        {/* 2. Biometric Machine Devices */}
-        <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 truncate">Biometric Devices</p>
-              <p className="text-xl sm:text-2xl font-black text-emerald-900 mt-0.5">{biometricMachines.length}</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-100 border border-emerald-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <Cpu className="w-4 h-4 text-emerald-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-emerald-200/60 text-[10px] sm:text-[11px] font-semibold text-emerald-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            {biometricMachines.filter((m) => m.status === 'ACTIVE').length} Devices Operational
-          </div>
-        </div>
-
-        {/* 3. Shift Timings & Rules */}
-        <div className="bg-purple-50/70 border border-purple-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-purple-800 truncate">Shifts &amp; Rules</p>
-              <p className="text-xl sm:text-2xl font-black text-purple-900 mt-0.5">{shifts.length}</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-purple-100 border border-purple-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <Clock className="w-4 h-4 text-purple-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-purple-200/60 text-[10px] sm:text-[11px] font-semibold text-purple-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            Configured Work Schedules
-          </div>
-        </div>
-
-        {/* 4. Active Departments */}
-        <div className="bg-amber-50/70 border border-amber-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800 truncate">Departments &amp; Wings</p>
-              <p className="text-xl sm:text-2xl font-black text-amber-900 mt-0.5">{departments.length}</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-100 border border-amber-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <Building2 className="w-4 h-4 text-amber-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-amber-200/60 text-[10px] sm:text-[11px] font-semibold text-amber-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            Organizational Units
-          </div>
-        </div>
-      </div>
-
       {toastMessage && (
         <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold text-xs rounded-xl flex items-center space-x-2 shadow-xs">
           <CheckCircle className="w-4 h-4 text-emerald-600" />
@@ -434,7 +370,7 @@ export const MasterSettingsPage: React.FC = () => {
           onClick={() => setActiveSubMaster('attendance')}
           className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeSubMaster === 'attendance'
-              ? 'bg-slate-900 text-white shadow-xs'
+              ? 'bg-[#2563eb] text-white shadow-xs'
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
@@ -446,7 +382,7 @@ export const MasterSettingsPage: React.FC = () => {
           onClick={() => setActiveSubMaster('biometric')}
           className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeSubMaster === 'biometric'
-              ? 'bg-blue-600 text-white shadow-xs'
+              ? 'bg-[#2563eb] text-white shadow-xs'
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
@@ -458,7 +394,7 @@ export const MasterSettingsPage: React.FC = () => {
           onClick={() => setActiveSubMaster('leave')}
           className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeSubMaster === 'leave'
-              ? 'bg-slate-900 text-white shadow-xs'
+              ? 'bg-[#2563eb] text-white shadow-xs'
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
@@ -470,19 +406,19 @@ export const MasterSettingsPage: React.FC = () => {
           onClick={() => setActiveSubMaster('departments')}
           className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeSubMaster === 'departments'
-              ? 'bg-slate-900 text-white shadow-xs'
+              ? 'bg-[#2563eb] text-white shadow-xs'
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
           <Building2 className="w-3.5 h-3.5" />
-          <span>Department &amp; Location Master</span>
+          <span>Profile Master</span>
         </button>
 
         <button
           onClick={() => setActiveSubMaster('organization')}
           className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeSubMaster === 'organization'
-              ? 'bg-[#701618] text-white shadow-xs'
+              ? 'bg-[#2563eb] text-white shadow-xs'
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
@@ -505,12 +441,13 @@ export const MasterSettingsPage: React.FC = () => {
                   <Cpu className="w-4 h-4 text-emerald-700" />
                   <span>Biometric Machines &amp; Punch Devices Master</span>
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Configure biometric hardware devices, Device SR, Device ID, locations, and specify which machines' punches count for official daily attendance.
-                </p>
+                
               </div>
 
-              <button
+              <Button
+                variant="primary"
+                size="sm"
+                leftIcon={<Plus className="w-4 h-4" />}
                 onClick={() => {
                   setEditingMachine(null);
                   setNewMachineId(`BIO-0${biometricMachines.length + 1}`);
@@ -525,11 +462,9 @@ export const MasterSettingsPage: React.FC = () => {
                   setNewMachineGateType('General Entry Gate');
                   setShowAddMachineModal(true);
                 }}
-                className="bg-emerald-800 hover:bg-emerald-900 text-white font-bold px-3.5 py-2 rounded-lg text-xs flex items-center space-x-1.5 cursor-pointer shadow-xs shrink-0"
               >
-                <Plus className="w-4 h-4" />
-                <span>Add Biometric Machine</span>
-              </button>
+                Add Biometric Machine
+              </Button>
             </div>
 
             {/* Summary KPI Bar */}
@@ -566,49 +501,39 @@ export const MasterSettingsPage: React.FC = () => {
 
             {/* Search & Uniform Filter Bar */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-              <div className="relative w-full sm:w-80">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
+              <div className="w-full sm:w-80">
+                <Input
                   placeholder="Search Device Name, Device SR, Device ID, IP, location..."
                   value={machineSearchQuery}
                   onChange={(e) => setMachineSearchQuery(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-3 py-1.5 text-xs font-medium focus:bg-white focus:ring-2 focus:ring-emerald-700 focus:outline-none"
+                  leftIcon={Search}
+                  size="sm"
                 />
               </div>
 
               <div className="flex items-center space-x-1.5 w-full sm:w-auto justify-end">
                 <span className="text-xs font-semibold text-slate-500 mr-1">Filter:</span>
-                <button
+                <Button
+                  size="xs"
+                  variant={machineFilterCount === 'ALL' ? 'primary' : 'outline'}
                   onClick={() => setMachineFilterCount('ALL')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
-                    machineFilterCount === 'ALL'
-                      ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
-                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                  }`}
                 >
                   All ({biometricMachines.length})
-                </button>
-                <button
+                </Button>
+                <Button
+                  size="xs"
+                  variant={machineFilterCount === 'COUNTED' ? 'primary' : 'outline'}
                   onClick={() => setMachineFilterCount('COUNTED')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
-                    machineFilterCount === 'COUNTED'
-                      ? 'bg-emerald-800 text-white border-emerald-800 shadow-xs'
-                      : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
-                  }`}
                 >
-                  Counted Only ({biometricMachines.filter((m) => m.countForAttendance).length})
-                </button>
-                <button
+                  Counted ({biometricMachines.filter((m) => m.countForAttendance).length})
+                </Button>
+                <Button
+                  size="xs"
+                  variant={machineFilterCount === 'EXCLUDED' ? 'primary' : 'outline'}
                   onClick={() => setMachineFilterCount('EXCLUDED')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
-                    machineFilterCount === 'EXCLUDED'
-                      ? 'bg-amber-700 text-white border-amber-700 shadow-xs'
-                      : 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100'
-                  }`}
                 >
-                  Excluded Only ({biometricMachines.filter((m) => !m.countForAttendance).length})
-                </button>
+                  Excluded ({biometricMachines.filter((m) => !m.countForAttendance).length})
+                </Button>
               </div>
             </div>
           </div>
@@ -718,30 +643,36 @@ export const MasterSettingsPage: React.FC = () => {
 
           {/* Register / Edit Biometric Machine Modal */}
           {showAddMachineModal && (
-            <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-              <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-xl overflow-hidden space-y-0">
-                <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Cpu className="w-5 h-5 text-emerald-400" />
-                    <h3 className="font-bold text-sm">
-                      {editingMachine ? `Edit Machine (${editingMachine.id})` : 'Register New Biometric Machine'}
-                    </h3>
+            <div className="fixed inset-0 z-50 bg-slate-900/55 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
+              <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-xl overflow-hidden flex flex-col max-h-[90vh] my-auto">
+                <div className="relative overflow-hidden px-5 py-4 bg-gradient-to-r from-[#091224] via-[#0f214a] to-[#1a3675] text-white flex items-center justify-between shrink-0 border-b border-blue-900/60 rounded-t-2xl">
+                  <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
+                  <div className="relative z-10 flex items-center space-x-3">
+                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#183063] to-[#0c1938] border border-blue-700/60 flex items-center justify-center text-blue-200 shrink-0 shadow-sm">
+                      <Cpu className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-blue-200" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-base leading-tight text-white tracking-tight">
+                        {editingMachine ? `Edit Machine (${editingMachine.id})` : 'Register New Biometric Machine'}
+                      </h3>
+                    </div>
                   </div>
                   <button
                     onClick={() => {
                       setShowAddMachineModal(false);
                       setEditingMachine(null);
                     }}
-                    className="p-1 text-slate-400 hover:text-white rounded-lg cursor-pointer"
+                    className="relative z-10 p-1.5 text-blue-300 hover:text-white rounded-lg cursor-pointer hover:bg-white/10 transition-colors"
+                    aria-label="Close dialog"
                   >
                     <X className="w-5 h-5" />
                   </button>
                 </div>
 
-                <form onSubmit={handleCreateOrUpdateMachine} className="p-5 space-y-4 text-xs">
+                <form onSubmit={handleCreateOrUpdateMachine} className="p-5 space-y-3.5 text-xs overflow-y-auto">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block font-bold text-slate-800 mb-1">
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
                         Device ID (Machine ID) <span className="text-rose-500">*</span>
                       </label>
                       <input
@@ -751,14 +682,14 @@ export const MasterSettingsPage: React.FC = () => {
                         value={newMachineId}
                         onChange={(e) => setNewMachineId(e.target.value)}
                         disabled={!!editingMachine}
-                        className={`w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono font-bold focus:bg-white focus:ring-2 focus:ring-emerald-700 focus:outline-none ${
+                        className={`h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 text-xs font-mono font-bold focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 focus:outline-none shadow-2xs transition-all ${
                           editingMachine ? 'opacity-70 cursor-not-allowed bg-slate-100' : ''
                         }`}
                       />
                     </div>
 
                     <div>
-                      <label className="block font-bold text-slate-800 mb-1">
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
                         Device Serial No. (DeviceSR) <span className="text-rose-500">*</span>
                       </label>
                       <input
@@ -767,13 +698,13 @@ export const MasterSettingsPage: React.FC = () => {
                         placeholder="e.g. SRN-88492012"
                         value={newMachineSR}
                         onChange={(e) => setNewMachineSR(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono focus:bg-white focus:ring-2 focus:ring-emerald-700 focus:outline-none"
+                        className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 text-xs font-mono focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 focus:outline-none shadow-2xs transition-all"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block font-bold text-slate-800 mb-1">
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
                       Device Name (DeviceName) <span className="text-rose-500">*</span>
                     </label>
                     <input
@@ -782,79 +713,77 @@ export const MasterSettingsPage: React.FC = () => {
                       placeholder="e.g. HQ Main Gate Turnstile A"
                       value={newMachineName}
                       onChange={(e) => setNewMachineName(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium focus:bg-white focus:ring-2 focus:ring-emerald-700 focus:outline-none"
+                      className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 focus:outline-none shadow-2xs transition-all"
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block font-bold text-slate-800 mb-1">Device Model / Brand</label>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">Device Model / Brand</label>
                       <input
                         type="text"
                         placeholder="e.g. eSSL SilkBio-101TC"
                         value={newMachineModel}
                         onChange={(e) => setNewMachineModel(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:bg-white focus:ring-2 focus:ring-emerald-700 focus:outline-none"
+                        className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 focus:outline-none shadow-2xs transition-all"
                       />
                     </div>
 
                     <div>
-                      <label className="block font-bold text-slate-800 mb-1">IP Address / Serial</label>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">IP Address / Serial</label>
                       <input
                         type="text"
                         placeholder="e.g. 192.168.1.120"
                         value={newMachineIp}
                         onChange={(e) => setNewMachineIp(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono focus:bg-white focus:ring-2 focus:ring-emerald-700 focus:outline-none"
+                        className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 text-xs font-mono focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 focus:outline-none shadow-2xs transition-all"
                       />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block font-bold text-slate-800 mb-1">Campus Location</label>
-                      <select
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">Campus Location</label>
+                      <AppSelect
                         value={newMachineLocation}
-                        onChange={(e) => setNewMachineLocation(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:bg-white focus:ring-2 focus:ring-emerald-700 focus:outline-none"
-                      >
-                        {locations.map((loc, idx) => (
-                          <option key={idx} value={loc}>{loc}</option>
-                        ))}
-                      </select>
+                        onChange={(val) => setNewMachineLocation(val)}
+                        options={locations.map((loc) => ({ label: loc, value: loc }))}
+                        className="w-full"
+                      />
                     </div>
 
                     <div>
-                      <label className="block font-bold text-slate-800 mb-1">Direction Mode</label>
-                      <select
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">Direction Mode</label>
+                      <AppSelect
                         value={newMachinePunchMode}
-                        onChange={(e) => setNewMachinePunchMode(e.target.value as any)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:bg-white focus:ring-2 focus:ring-emerald-700 focus:outline-none"
-                      >
-                        <option value="BOTH">IN &amp; OUT (Both Directions)</option>
-                        <option value="IN_ONLY">IN Only (Entry Gate)</option>
-                        <option value="OUT_ONLY">OUT Only (Exit Gate)</option>
-                      </select>
+                        onChange={(val) => setNewMachinePunchMode(val as any)}
+                        options={[
+                          { label: 'IN & OUT (Both Directions)', value: 'BOTH' },
+                          { label: 'IN Only (Entry Gate)', value: 'IN_ONLY' },
+                          { label: 'OUT Only (Exit Gate)', value: 'OUT_ONLY' }
+                        ]}
+                        className="w-full"
+                      />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block font-bold text-slate-800 mb-1">Gate / Location Description</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Gate / Location Description</label>
                     <input
                       type="text"
                       placeholder="e.g. Administration Wing Entry Turnstile"
                       value={newMachineGateType}
                       onChange={(e) => setNewMachineGateType(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:bg-white focus:ring-2 focus:ring-emerald-700 focus:outline-none"
+                      className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 focus:outline-none shadow-2xs transition-all"
                     />
                   </div>
 
                   {/* CRITICAL ATTENDANCE COUNT TOGGLE */}
-                  <div className="p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-xl space-y-2">
+                  <div className="p-3 bg-blue-50/70 border border-blue-200/80 rounded-xl space-y-1.5">
                     <div className="flex items-center justify-between">
                       <div>
-                        <label className="font-extrabold text-emerald-950 block">Count Punches for Official Attendance?</label>
-                        <span className="text-[11px] text-emerald-800 block mt-0.5">
+                        <label className="font-extrabold text-blue-950 text-xs block">Count Punches for Official Attendance?</label>
+                        <span className="text-[10.5px] text-blue-800 block mt-0.5">
                           Uncheck for cafeteria readers, test devices, or non-attendance access gates.
                         </span>
                       </div>
@@ -862,27 +791,27 @@ export const MasterSettingsPage: React.FC = () => {
                         type="checkbox"
                         checked={newMachineCountForAttendance}
                         onChange={(e) => setNewMachineCountForAttendance(e.target.checked)}
-                        className="w-5 h-5 text-emerald-700 rounded focus:ring-emerald-600 cursor-pointer"
+                        className="w-4.5 h-4.5 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
                       />
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-100">
+                  <div className="flex items-center justify-between pt-3 border-t border-slate-100">
                     <button
                       type="button"
                       onClick={() => {
                         setShowAddMachineModal(false);
                         setEditingMachine(null);
                       }}
-                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold cursor-pointer"
+                      className="h-9 px-4 bg-white hover:bg-slate-100 text-slate-700 font-bold rounded-xl text-xs border border-slate-200/90 cursor-pointer transition-colors shadow-2xs"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="px-5 py-2 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl font-bold flex items-center space-x-1.5 shadow-xs cursor-pointer"
+                      className="h-9 px-5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-xl text-xs transition-all shadow-2xs cursor-pointer flex items-center space-x-1.5 active:scale-95"
                     >
-                      <Save className="w-4 h-4" />
+                      <Save className="w-3.5 h-3.5" />
                       <span>{editingMachine ? 'Save Changes' : 'Register Machine'}</span>
                     </button>
                   </div>
@@ -896,86 +825,8 @@ export const MasterSettingsPage: React.FC = () => {
       {/* SUB-MASTER 3: LEAVE POLICY & ENTITLEMENT MASTER */}
       {activeSubMaster === 'leave' && <LeavePolicyMaster />}
 
-      {/* SUB-MASTER 4: DEPARTMENT & LOCATION MASTER */}
-      {activeSubMaster === 'departments' && (
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-6">
-          {/* Departments */}
-          <div className="space-y-3">
-            <h3 className="text-sm font-bold text-slate-900">Departments Master</h3>
-            <form onSubmit={handleAddDepartment} className="flex space-x-2 max-w-md">
-              <input
-                type="text"
-                placeholder="New Department Name..."
-                value={newDepartment}
-                onChange={(e) => setNewDepartment(e.target.value)}
-                className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-600"
-              />
-              <button
-                type="submit"
-                className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center space-x-1 cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add Department</span>
-              </button>
-            </form>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-              {departments.map((dept, idx) => (
-                <div key={idx} className="p-2.5 bg-slate-50 border border-slate-200/80 rounded-lg flex items-center justify-between">
-                  <span className="font-semibold text-slate-800">{dept}</span>
-                  <button
-                    onClick={() => {
-                      setDepartments(departments.filter((_, i) => i !== idx));
-                      showToast('Department removed');
-                    }}
-                    className="text-slate-400 hover:text-red-600 p-1 rounded"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Locations */}
-          <div className="pt-4 border-t border-slate-100 space-y-3">
-            <h3 className="text-sm font-bold text-slate-900">Office &amp; Field Camp Locations Master</h3>
-            <form onSubmit={handleAddLocation} className="flex space-x-2 max-w-md">
-              <input
-                type="text"
-                placeholder="New Office / Camp Location..."
-                value={newLocation}
-                onChange={(e) => setNewLocation(e.target.value)}
-                className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-600"
-              />
-              <button
-                type="submit"
-                className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center space-x-1 cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add Location</span>
-              </button>
-            </form>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-              {locations.map((loc, idx) => (
-                <div key={idx} className="p-2.5 bg-slate-50 border border-slate-200/80 rounded-lg flex items-center justify-between">
-                  <span className="font-semibold text-slate-800">{loc}</span>
-                  <button
-                    onClick={() => {
-                      setLocations(locations.filter((_, i) => i !== idx));
-                      showToast('Location removed');
-                    }}
-                    className="text-slate-400 hover:text-red-600 p-1 rounded"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* SUB-MASTER 4: PROFILE MASTER (DEPARTMENTS, DESIGNATIONS, PROJECTS, COURSES, BATCHES, CATEGORIES, LOCATIONS) */}
+      {activeSubMaster === 'departments' && <ProfileMasterSection />}
 
       {/* SUB-MASTER 5: ORGANIZATION MASTER */}
       {activeSubMaster === 'organization' && (
@@ -984,12 +835,10 @@ export const MasterSettingsPage: React.FC = () => {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
               <div>
                 <h2 className="text-base font-extrabold text-slate-900 flex items-center space-x-2">
-                  <Building2 className="w-5 h-5 text-[#701618]" />
+                  <Building2 className="w-5 h-5 text-[#2563eb]" />
                   <span>Organization Master</span>
                 </h2>
-                <p className="text-xs text-slate-500 font-medium mt-0.5">
-                  Update official emblem/logo, institutional address, contact details, and footer copyright notice across the portal.
-                </p>
+                
               </div>
 
               <div className="flex items-center space-x-2">
@@ -1023,7 +872,7 @@ export const MasterSettingsPage: React.FC = () => {
                 {/* 1. Organization Name */}
                 <div className="border border-slate-200 rounded-xl p-4.5 bg-slate-50/50 space-y-3">
                   <span className="text-xs font-extrabold text-slate-900 flex items-center space-x-1.5 uppercase tracking-wider">
-                    <Building2 className="w-4 h-4 text-[#701618]" />
+                    <Building2 className="w-4 h-4 text-[#2563eb]" />
                     <span>Organization Name</span>
                   </span>
                   <div>
@@ -1045,7 +894,7 @@ export const MasterSettingsPage: React.FC = () => {
                 <div className="border border-slate-200 rounded-xl p-4.5 bg-slate-50/50 space-y-4">
                   <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
                     <span className="text-xs font-extrabold text-slate-900 flex items-center space-x-1.5 uppercase tracking-wider">
-                      <ImageIcon className="w-4 h-4 text-[#701618]" />
+                      <ImageIcon className="w-4 h-4 text-[#2563eb]" />
                       <span>Upload Logo</span>
                     </span>
                     <span className="text-[10px] font-bold text-blue-800 bg-blue-100 px-2 py-0.5 rounded-full">
@@ -1055,7 +904,7 @@ export const MasterSettingsPage: React.FC = () => {
 
                   <div className="space-y-3">
                     <div className="flex flex-wrap items-center gap-3">
-                      <label className="px-4 py-2 bg-[#701618] hover:bg-[#561012] text-white rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center space-x-2 shadow-2xs">
+                      <label className="px-4 py-2 bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center space-x-2 shadow-2xs">
                         <Upload className="w-4 h-4 text-amber-300" />
                         <span>Upload Logo File</span>
                         <input
@@ -1131,7 +980,7 @@ export const MasterSettingsPage: React.FC = () => {
                 <div className="border border-slate-200 rounded-xl p-4.5 bg-slate-50/50 space-y-3">
                   <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
                     <span className="text-xs font-extrabold text-slate-900 flex items-center space-x-1.5 uppercase tracking-wider">
-                      <MapPin className="w-4 h-4 text-[#701618]" />
+                      <MapPin className="w-4 h-4 text-[#2563eb]" />
                       <span>Organization Address</span>
                     </span>
                     <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
@@ -1158,7 +1007,7 @@ export const MasterSettingsPage: React.FC = () => {
                 <div className="border border-slate-200 rounded-xl p-4.5 bg-slate-50/50 space-y-3">
                   <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
                     <span className="text-xs font-extrabold text-slate-900 flex items-center space-x-1.5 uppercase tracking-wider">
-                      <FileText className="w-4 h-4 text-[#701618]" />
+                      <FileText className="w-4 h-4 text-[#2563eb]" />
                       <span>Footer Copyright Notice</span>
                     </span>
                     <span className="text-[10px] font-bold text-purple-800 bg-purple-100 px-2 py-0.5 rounded-full">
@@ -1195,7 +1044,7 @@ export const MasterSettingsPage: React.FC = () => {
                       });
                       showToast('Organization settings saved successfully!');
                     }}
-                    className="px-6 py-2.5 bg-[#701618] hover:bg-[#561012] text-white rounded-xl font-extrabold text-xs transition-all flex items-center justify-center space-x-2 shadow-sm cursor-pointer"
+                    className="px-6 py-2.5 bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-xl font-extrabold text-xs transition-all flex items-center justify-center space-x-2 shadow-sm cursor-pointer"
                   >
                     <Save className="w-4 h-4 text-amber-300" />
                     <span>Save Organization Settings</span>
@@ -1243,7 +1092,7 @@ export const MasterSettingsPage: React.FC = () => {
                       <div className="font-semibold text-slate-700 text-[10.5px]">
                         {orgCopyrightText || `© 2026 ${brandingOrgName || 'Organization'}`}
                       </div>
-                      <div className="flex items-center space-x-1 text-[#701618] font-semibold text-[10.5px]">
+                      <div className="flex items-center space-x-1 text-[#2563eb] font-semibold text-[10.5px]">
                         <MapPin className="w-3 h-3 shrink-0" />
                         <span>{orgAddress || 'Address not specified'}</span>
                       </div>

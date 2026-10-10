@@ -3,7 +3,6 @@ import {
   Upload,
   X,
   FileDown,
-  ClipboardPaste,
   ArrowRight,
   ArrowLeft,
   AlertTriangle,
@@ -11,7 +10,6 @@ import {
   Trash2,
   Check,
   Layers,
-  Info,
   FileSpreadsheet,
   RefreshCw,
   Plus,
@@ -61,10 +59,9 @@ export const LeaveQuotaImportModal: React.FC<LeaveQuotaImportModalProps> = ({
   const { users, leavePolicies, batchUpdateLeaveBalances } = useApp();
 
   const [step, setStep] = useState<'upload' | 'verify'>('upload');
-  const [inputMode, setInputMode] = useState<'file' | 'paste'>('file');
   const [csvImportStrategy, setCsvImportStrategy] = useState<'set' | 'add' | 'less'>('set');
 
-  // CSV File / Paste States
+  // CSV File States
   const [csvRawText, setCsvRawText] = useState<string>('');
   const [csvFileName, setCsvFileName] = useState<string>('');
   const [csvFileSize, setCsvFileSize] = useState<string>('');
@@ -76,7 +73,6 @@ export const LeaveQuotaImportModal: React.FC<LeaveQuotaImportModalProps> = ({
 
   const handleReset = () => {
     setStep('upload');
-    setInputMode('file');
     setCsvImportStrategy('set');
     setCsvRawText('');
     setCsvFileName('');
@@ -416,319 +412,182 @@ export const LeaveQuotaImportModal: React.FC<LeaveQuotaImportModalProps> = ({
   const errorCount = affectedRecords.filter((r) => r.status === 'error').length;
 
   return (
-    <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
-      <div className="bg-white rounded-2xl sm:rounded-3xl max-w-2xl w-full max-h-[94vh] flex flex-col shadow-2xl overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-150">
+      <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-150 my-auto sm:my-6 flex flex-col max-h-[90vh]">
         
-        {/* Application Theme Dark Header */}
-        <div className="shrink-0 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 border-b border-slate-800 px-5 py-4 text-white flex items-center justify-between shadow-xs">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
-              <Upload className="w-5 h-5" />
+        {/* Standard Modal Header */}
+        <div className="relative overflow-hidden px-5 py-4 border-b border-blue-900/60 flex items-center justify-between shrink-0 bg-gradient-to-r from-[#091224] via-[#0f214a] to-[#1a3675] text-white rounded-t-2xl">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
+          <div className="relative z-10 flex items-center space-x-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#183063] to-[#0c1938] border border-blue-700/60 flex items-center justify-center text-blue-200 shrink-0 shadow-sm">
+              <Upload className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-blue-200" />
             </div>
             <div>
-              <div className="flex items-center space-x-2.5">
-                <h3 className="font-bold text-base text-white tracking-tight">
-                  {step === 'upload' ? 'Import Leave' : 'Verify & Confirm Import'}
-                </h3>
-                <span className="text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider border bg-blue-500/20 text-blue-300 border-blue-400/30">
-                  Session {selectedYear}
-                </span>
-              </div>
-              <p className="text-xs text-slate-300 mt-0.5">
-                {step === 'upload'
-                  ? 'Bulk update staff leave balances via CSV file or copy-paste'
-                  : 'Review staged leave quota adjustments before committing updates'}
-              </p>
+              <h2 className="text-base font-bold text-white tracking-tight">
+                {step === 'upload' ? 'Import Leave Quotas' : 'Verify & Confirm Import'}
+              </h2>
             </div>
           </div>
           <button
             type="button"
             onClick={handleModalClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+            className="relative z-10 p-1.5 rounded-lg text-blue-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
             title="Close"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Step 1: Upload Form View (Themed & Clean without scrollbar clutter) */}
+        {/* Step 1: Upload Form View */}
         {step === 'upload' ? (
-          <div className="p-4 sm:p-5 space-y-4 text-xs overflow-y-auto flex-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+          <div className="p-3.5 sm:p-4.5 space-y-3 text-xs overflow-y-auto flex-1 custom-table-scrollbar">
             
             {/* Section 1: Pre-Formatted CSV Templates */}
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-[11px]">
-                    1
-                  </div>
-                  <span className="font-bold text-slate-800 text-xs">
-                    Download Pre-Formatted Templates
-                  </span>
-                </div>
-                <span className="text-[11px] text-slate-400 font-medium hidden sm:inline">
-                  Optional starter files
-                </span>
-              </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Download Pre-Formatted Templates
+              </label>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <button
                   type="button"
                   onClick={handleDownloadSampleCSV}
-                  className="p-2.5 bg-white border border-slate-200 hover:border-blue-400 hover:bg-blue-50/20 rounded-xl text-left transition-all cursor-pointer shadow-2xs group"
+                  className="py-2 px-2 bg-white border border-slate-200 hover:border-blue-400 hover:bg-blue-50/30 rounded-xl text-center transition-all cursor-pointer shadow-2xs flex items-center justify-center space-x-1.5 text-slate-700 font-bold text-xs"
                 >
-                  <div className="flex items-center space-x-1.5 text-slate-700 font-bold text-xs group-hover:text-blue-600">
-                    <FileDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-500 shrink-0" />
-                    <span className="truncate">Sample CSV</span>
-                  </div>
-                  <p className="text-[10px] text-slate-400 mt-1 line-clamp-1">Blank schema template</p>
+                  <FileDown className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                  <span className="truncate">Sample CSV</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleExportRosterCSV('CY')}
-                  className="p-2.5 bg-white border border-blue-200 hover:border-blue-400 hover:bg-blue-50/40 rounded-xl text-left transition-all cursor-pointer shadow-2xs group"
+                  className="py-2 px-2 bg-white border border-blue-200 hover:border-blue-400 hover:bg-blue-50/40 rounded-xl text-center transition-all cursor-pointer shadow-2xs flex items-center justify-center space-x-1.5 text-blue-800 font-bold text-xs"
                 >
-                  <div className="flex items-center space-x-1.5 text-blue-800 font-bold text-xs">
-                    <FileSpreadsheet className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                    <span className="truncate">Regular (CY)</span>
-                  </div>
-                  <p className="text-[10px] text-slate-500 mt-1 line-clamp-1">Permanent staff (Jan-Dec)</p>
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                  <span className="truncate">Regular (CY)</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleExportRosterCSV('FY')}
-                  className="p-2.5 bg-white border border-teal-200 hover:border-teal-400 hover:bg-teal-50/40 rounded-xl text-left transition-all cursor-pointer shadow-2xs group"
+                  className="py-2 px-2 bg-white border border-teal-200 hover:border-teal-400 hover:bg-teal-50/40 rounded-xl text-center transition-all cursor-pointer shadow-2xs flex items-center justify-center space-x-1.5 text-teal-800 font-bold text-xs"
                 >
-                  <div className="flex items-center space-x-1.5 text-teal-800 font-bold text-xs">
-                    <FileSpreadsheet className="w-3.5 h-3.5 text-teal-600 shrink-0" />
-                    <span className="truncate">Project (FY)</span>
-                  </div>
-                  <p className="text-[10px] text-slate-500 mt-1 line-clamp-1">Project staff (Apr-Mar)</p>
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                  <span className="truncate">Project (FY)</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleExportRosterCSV('all')}
-                  className="p-2.5 bg-white border border-slate-300 hover:border-slate-400 hover:bg-slate-50 rounded-xl text-left transition-all cursor-pointer shadow-2xs group"
+                  className="py-2 px-2 bg-white border border-slate-300 hover:border-slate-400 hover:bg-slate-50 rounded-xl text-center transition-all cursor-pointer shadow-2xs flex items-center justify-center space-x-1.5 text-slate-900 font-bold text-xs"
                 >
-                  <div className="flex items-center space-x-1.5 text-slate-900 font-bold text-xs">
-                    <Layers className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                    <span className="truncate">All Staff</span>
-                  </div>
-                  <p className="text-[10px] text-slate-500 mt-1 line-clamp-1">Complete employee list</p>
+                  <Layers className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                  <span className="truncate">All Staff</span>
                 </button>
               </div>
             </div>
 
             {/* Section 2: Import Strategy Selector */}
-            <div className="space-y-2">
-              <div className="flex items-center space-x-2">
-                <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-[11px]">
-                  2
-                </div>
-                <label className="font-bold text-slate-800 text-xs">
-                  Choose Import Strategy
-                </label>
-              </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Choose Import Strategy
+              </label>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => setCsvImportStrategy('set')}
-                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                  className={`py-2 px-2.5 rounded-xl font-bold flex items-center justify-center space-x-1.5 border transition-all cursor-pointer text-xs truncate ${
                     csvImportStrategy === 'set'
-                      ? 'border-blue-600 bg-blue-50/70 shadow-2xs ring-1 ring-blue-500/20'
-                      : 'border-slate-200 bg-white hover:bg-slate-50/80 text-slate-700'
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2 font-bold text-xs text-slate-900">
-                      <RefreshCw className={`w-3.5 h-3.5 ${csvImportStrategy === 'set' ? 'text-blue-600' : 'text-slate-400'}`} />
-                      <span>Set Quota</span>
-                    </div>
-                    {csvImportStrategy === 'set' && (
-                      <Check className="w-4 h-4 text-blue-600" />
-                    )}
-                  </div>
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    Overwrite total with CSV values directly
-                  </p>
+                  <RefreshCw className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">Set Quota</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setCsvImportStrategy('add')}
-                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                  className={`py-2 px-2.5 rounded-xl font-bold flex items-center justify-center space-x-1.5 border transition-all cursor-pointer text-xs truncate ${
                     csvImportStrategy === 'add'
-                      ? 'border-emerald-600 bg-emerald-50/70 shadow-2xs ring-1 ring-emerald-500/20'
-                      : 'border-slate-200 bg-white hover:bg-slate-50/80 text-slate-700'
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2 font-bold text-xs text-slate-900">
-                      <Plus className={`w-3.5 h-3.5 ${csvImportStrategy === 'add' ? 'text-emerald-600' : 'text-slate-400'}`} />
-                      <span>Add (+)</span>
-                    </div>
-                    {csvImportStrategy === 'add' && (
-                      <Check className="w-4 h-4 text-emerald-600" />
-                    )}
-                  </div>
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    Add CSV values to current balances (Credit)
-                  </p>
+                  <Plus className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">Add (+)</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setCsvImportStrategy('less')}
-                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                  className={`py-2 px-2.5 rounded-xl font-bold flex items-center justify-center space-x-1.5 border transition-all cursor-pointer text-xs truncate ${
                     csvImportStrategy === 'less'
-                      ? 'border-rose-600 bg-rose-50/70 shadow-2xs ring-1 ring-rose-500/20'
-                      : 'border-slate-200 bg-white hover:bg-slate-50/80 text-slate-700'
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2 font-bold text-xs text-slate-900">
-                      <Minus className={`w-3.5 h-3.5 ${csvImportStrategy === 'less' ? 'text-rose-600' : 'text-slate-400'}`} />
-                      <span>Deduct (-)</span>
-                    </div>
-                    {csvImportStrategy === 'less' && (
-                      <Check className="w-4 h-4 text-rose-600" />
-                    )}
-                  </div>
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    Subtract CSV values from quota (Debit)
-                  </p>
+                  <Minus className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">Deduct (-)</span>
                 </button>
               </div>
             </div>
 
-            {/* Section 3: Data Upload / Paste Input */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-[11px]">
-                    3
-                  </div>
-                  <label className="font-bold text-slate-800 text-xs">
-                    Provide CSV Data
-                  </label>
-                </div>
+            {/* Section 3: Data Upload */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Provide CSV Data
+              </label>
 
-                {/* Sub-mode switcher */}
-                <div className="inline-flex p-0.5 bg-slate-100 rounded-lg border border-slate-200">
-                  <button
-                    type="button"
-                    onClick={() => setInputMode('file')}
-                    className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer flex items-center space-x-1 ${
-                      inputMode === 'file'
-                        ? 'bg-white text-blue-700 shadow-2xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    <Upload className="w-3 h-3" />
-                    <span>Upload File</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setInputMode('paste')}
-                    className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer flex items-center space-x-1 ${
-                      inputMode === 'paste'
-                        ? 'bg-white text-blue-700 shadow-2xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    <ClipboardPaste className="w-3 h-3" />
-                    <span>Paste Text</span>
-                  </button>
+              {/* File Dropzone */}
+              <label className="block border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-xl p-4 sm:p-5 text-center bg-slate-50/50 hover:bg-blue-50/20 transition-all relative cursor-pointer group">
+                <input
+                  type="file"
+                  accept=".csv,.tsv,.txt"
+                  onChange={handleCSVUploadChange}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                />
+                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-1.5 group-hover:scale-105 transition-transform shadow-2xs border border-blue-200/60">
+                  <Upload className="w-4 h-4" />
                 </div>
-              </div>
-
-              {inputMode === 'file' ? (
-                /* File Dropzone */
-                <label className="block border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-xl p-4 sm:p-5 text-center bg-slate-50/50 hover:bg-blue-50/20 transition-all relative cursor-pointer group">
-                  <input
-                    type="file"
-                    accept=".csv,.tsv,.txt"
-                    onChange={handleCSVUploadChange}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  />
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-2 group-hover:scale-105 transition-transform shadow-2xs border border-blue-200/60">
-                    <Upload className="w-4 h-4" />
-                  </div>
-                  <div className="font-bold text-slate-800 text-xs sm:text-sm">
-                    {csvFileName ? (
-                      <span className="text-emerald-700 flex items-center justify-center space-x-1.5">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                        <span>{csvFileName} ({csvFileSize})</span>
-                      </span>
-                    ) : (
-                      'Click to upload or drag & drop CSV file'
-                    )}
-                  </div>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    Accepts standard CSV or Tab-delimited files (.csv, .tsv, .txt)
-                  </p>
-                  <div className="mt-2">
-                    <span className="inline-block text-[10px] font-medium text-slate-500 bg-white border border-slate-200 rounded-md px-2.5 py-0.5 shadow-2xs">
-                      Required Headers: Biometric_ID, Leave_Code, Total_Quota
+                <div className="font-bold text-slate-800 text-xs sm:text-sm">
+                  {csvFileName ? (
+                    <span className="text-emerald-700 flex items-center justify-center space-x-1.5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <span>{csvFileName} ({csvFileSize})</span>
                     </span>
-                  </div>
-                </label>
-              ) : (
-                /* Paste Text Area */
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-slate-500">Paste comma or tab-separated text:</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const sample = `Biometric_ID,Employee_Name,Leave_Code,Total_Quota\n1001,Aniket Verma,CL,12\n1002,Priya Sharma,EL,30\n1003,Rahul Mehta,HPL,20`;
-                        setCsvRawText(sample);
-                      }}
-                      className="font-bold text-blue-600 hover:text-blue-800 cursor-pointer"
-                    >
-                      + Insert Sample Data
-                    </button>
-                  </div>
-                  <textarea
-                    rows={5}
-                    placeholder={`Biometric_ID,Leave_Code,Total_Quota\n1001,CL,12\n1002,EL,30`}
-                    value={csvRawText}
-                    onChange={(e) => setCsvRawText(e.target.value)}
-                    className="w-full p-2.5 font-mono text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-2xs"
-                  />
+                  ) : (
+                    'Click to upload or drag & drop CSV file'
+                  )}
                 </div>
-              )}
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Accepts standard CSV or Tab-delimited files (.csv, .tsv, .txt)
+                </p>
+                <div className="mt-1.5">
+                  <span className="inline-block text-[10px] font-medium text-slate-500 bg-white border border-slate-200 rounded-md px-2 py-0.5 shadow-2xs">
+                    Required Headers: Biometric_ID, Leave_Code, Total_Quota
+                  </span>
+                </div>
+              </label>
 
               {/* Error Message */}
               {csvParseError && (
-                <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-900 flex items-center space-x-2 animate-in fade-in">
+                <div className="p-2.5 mt-2 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-900 flex items-center space-x-2 animate-in fade-in">
                   <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
                   <span>{csvParseError}</span>
                 </div>
               )}
             </div>
 
-            {/* Informational Guidance Box */}
-            <div className="bg-blue-50/50 border border-blue-200/80 rounded-xl p-2.5 flex items-start space-x-2 text-[11px] text-slate-700">
-              <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-              <div>
-                <span className="font-bold text-slate-900">Accounting Cycle Guidelines: </span>
-                Regular staff follow Calendar Year (Jan - Dec), while Project staff follow Financial Year (Apr - Mar).
-                Supported leave codes: <strong className="text-blue-900">CL, EL, HPL, RH, C-OFF, COMM, ML, PL, CCL</strong>.
-              </div>
-            </div>
-
           </div>
         ) : (
-          /* Step 2: Verification View (Table without Department & with No Scrollbar Clutter) */
-          <div className="p-4 sm:p-5 space-y-3.5 text-xs overflow-y-auto flex-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+          /* Step 2: Verification View */
+          <div className="p-3.5 sm:p-4.5 space-y-3 text-xs overflow-y-auto flex-1 custom-table-scrollbar">
             
             {/* Status Summary Banner */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
               <div className="flex items-center space-x-2">
                 <span className="font-bold text-slate-800">
                   Rows Detected: {affectedRecords.length}
@@ -750,7 +609,7 @@ export const LeaveQuotaImportModal: React.FC<LeaveQuotaImportModalProps> = ({
               </div>
             </div>
 
-            {/* Review Table (Department column omitted as per user instruction) */}
+            {/* Review Table */}
             <div className="border border-slate-200 rounded-xl overflow-hidden max-h-72 overflow-y-auto shadow-2xs">
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider text-[10px] sticky top-0 border-b border-slate-200">
@@ -839,7 +698,7 @@ export const LeaveQuotaImportModal: React.FC<LeaveQuotaImportModalProps> = ({
         )}
 
         {/* Modal Footer Actions */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0">
+        <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0">
           <div>
             {step === 'upload' && csvRawText && (
               <button
@@ -857,13 +716,13 @@ export const LeaveQuotaImportModal: React.FC<LeaveQuotaImportModalProps> = ({
             )}
           </div>
 
-          <div className="flex items-center space-x-2.5">
+          <div className="flex items-center space-x-2">
             {step === 'upload' ? (
               <>
                 <button
                   type="button"
                   onClick={handleModalClose}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 rounded-xl transition-all cursor-pointer"
+                  className="px-3.5 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -871,7 +730,7 @@ export const LeaveQuotaImportModal: React.FC<LeaveQuotaImportModalProps> = ({
                   type="button"
                   onClick={handleProcessCsvForVerification}
                   disabled={!csvRawText.trim()}
-                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center space-x-2 cursor-pointer active:scale-95 disabled:cursor-not-allowed"
+                  className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 text-white rounded-lg text-xs font-bold shadow-sm transition-all flex items-center space-x-1.5 cursor-pointer active:scale-95 disabled:cursor-not-allowed"
                 >
                   <span>Review &amp; Verify</span>
                   <ArrowRight className="w-3.5 h-3.5" />
@@ -882,7 +741,7 @@ export const LeaveQuotaImportModal: React.FC<LeaveQuotaImportModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setStep('upload')}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 rounded-xl flex items-center space-x-1.5 cursor-pointer transition-all"
+                  className="px-3.5 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 flex items-center space-x-1.5 cursor-pointer transition-colors"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
                   <span>Back to Edit</span>
@@ -891,14 +750,14 @@ export const LeaveQuotaImportModal: React.FC<LeaveQuotaImportModalProps> = ({
                   type="button"
                   onClick={handleCommitVerification}
                   disabled={isSubmitting || validCount === 0}
-                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center space-x-1.5 cursor-pointer active:scale-95 disabled:cursor-not-allowed"
+                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-50 text-white rounded-lg text-xs font-bold shadow-sm transition-all flex items-center space-x-1.5 cursor-pointer active:scale-95 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? (
                     <span>Applying...</span>
                   ) : (
                     <>
                       <Check className="w-3.5 h-3.5" />
-                      <span>Commit Quota Updates</span>
+                      <span>Commit Updates</span>
                     </>
                   )}
                 </button>

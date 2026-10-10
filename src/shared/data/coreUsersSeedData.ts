@@ -26,11 +26,7 @@ export const INITIAL_USERS: User[] = [
     slackHandle: '@rajesh.sharma',
     shiftId: 'shift-gen',
     moduleRoles: {
-      lams: ['hrms_admin', 'hrms_reviewing'],
-      pms: ['pms_admin', 'pms_pi'],
-      sims: ['sims_admin', 'sims_approver'],
-      fms: ['fms_admin', 'fms_officer'],
-      finance: ['fin_admin', 'fin_officer']
+      lams: ['hrms_admin', 'hrms_reviewing']
     },
     leaveBalances: {
       casual: { total: 12, used: 2, pending: 0 },
@@ -66,10 +62,7 @@ export const INITIAL_USERS: User[] = [
     shiftId: 'shift-ms',
     moduleRoles: {
       lams: ['hrms_reporting', 'hrms_staff'],
-      pms: ['pms_pi', 'pms_co_pi'],
-      sims: ['sims_approver', 'sims_indenter'],
-      fms: ['fms_requester'],
-      finance: ['fin_claimant']
+      pms: ['pms_pi']
     },
     leaveBalances: {
       casual: { total: 12, used: 3, pending: 1 },
@@ -105,9 +98,7 @@ export const INITIAL_USERS: User[] = [
     moduleRoles: {
       lams: ['hrms_reviewing', 'hrms_reporting'],
       pms: ['pms_admin', 'pms_pi'],
-      sims: ['sims_approver', 'sims_indenter'],
-      fms: ['fms_officer', 'fms_requester'],
-      finance: ['fin_officer', 'fin_claimant']
+      sims: ['sims_approver']
     },
     leaveBalances: {
       casual: { total: 12, used: 1, pending: 0 },
@@ -143,10 +134,7 @@ export const INITIAL_USERS: User[] = [
     shiftId: 'shift-fld',
     moduleRoles: {
       lams: ['hrms_staff'],
-      pms: ['pms_researcher'],
-      sims: ['sims_indenter'],
-      fms: ['fms_requester'],
-      finance: ['fin_claimant']
+      pms: ['pms_researcher']
     },
     leaveBalances: {
       casual: { total: 12, used: 4, pending: 1 },
@@ -179,10 +167,7 @@ export const INITIAL_USERS: User[] = [
     shiftId: 'shift-es',
     moduleRoles: {
       lams: ['hrms_staff'],
-      pms: ['pms_researcher'],
-      sims: ['sims_store_keeper', 'sims_indenter'],
-      fms: ['fms_requester'],
-      finance: ['fin_claimant']
+      sims: ['sims_store_keeper']
     },
     leaveBalances: {
       casual: { total: 8, used: 2, pending: 0 },
@@ -219,10 +204,7 @@ export const INITIAL_USERS: User[] = [
     shiftId: 'shift-fld',
     moduleRoles: {
       lams: ['hrms_staff'],
-      pms: ['pms_researcher'],
-      sims: ['sims_indenter'],
-      fms: ['fms_requester'],
-      finance: ['fin_claimant']
+      pms: ['pms_researcher']
     },
     leaveBalances: {
       casual: { total: 10, used: 2, pending: 0 },
@@ -258,11 +240,7 @@ export const INITIAL_USERS: User[] = [
     slackHandle: '@maya.patel',
     shiftId: 'shift-ms',
     moduleRoles: {
-      lams: ['hrms_staff'],
-      pms: ['pms_researcher'],
-      sims: ['sims_indenter'],
-      fms: ['fms_requester'],
-      finance: ['fin_claimant']
+      lams: ['hrms_staff']
     },
     leaveBalances: {
       stipend_off: { total: 6, used: 1, pending: 0 },
@@ -294,11 +272,8 @@ export const INITIAL_USERS: User[] = [
     slackHandle: '@sunita.rao',
     shiftId: 'shift-gen',
     moduleRoles: {
-      lams: ['hrms_reporting', 'hrms_reviewing', 'hrms_staff'],
-      pms: ['pms_pi', 'pms_reviewer'],
-      sims: ['sims_approver', 'sims_indenter'],
-      fms: ['fms_requester'],
-      finance: ['fin_claimant']
+      lams: ['hrms_reporting', 'hrms_reviewing'],
+      pms: ['pms_pi']
     },
     leaveBalances: {
       casual: { total: 12, used: 2, pending: 0 },
@@ -332,10 +307,7 @@ export const INITIAL_USERS: User[] = [
     shiftId: 'shift-ns',
     moduleRoles: {
       lams: ['hrms_reviewing', 'hrms_reporting'],
-      pms: ['pms_pi', 'pms_reviewer'],
-      sims: ['sims_approver', 'sims_indenter'],
-      fms: ['fms_officer', 'fms_requester'],
-      finance: ['fin_claimant']
+      pms: ['pms_pi']
     },
     leaveBalances: {
       casual: { total: 12, used: 1, pending: 0 },
@@ -368,10 +340,7 @@ export const INITIAL_USERS: User[] = [
     shiftId: 'shift-fld',
     moduleRoles: {
       lams: ['hrms_staff'],
-      pms: ['pms_researcher', 'pms_co_pi'],
-      sims: ['sims_indenter'],
-      fms: ['fms_requester'],
-      finance: ['fin_claimant']
+      pms: ['pms_researcher']
     },
     leaveBalances: {
       casual: { total: 10, used: 3, pending: 1 },
@@ -404,10 +373,7 @@ export const INITIAL_USERS: User[] = [
     slackHandle: '@anand.mishra',
     shiftId: 'shift-gen',
     moduleRoles: {
-      lams: ['hrms_reporting', 'hrms_staff'],
-      pms: ['pms_reviewer'],
-      sims: ['sims_indenter'],
-      fms: ['fms_requester'],
+      lams: ['hrms_staff'],
       finance: ['fin_officer', 'fin_accountant']
     },
     leaveBalances: {
@@ -441,10 +407,7 @@ export const INITIAL_USERS: User[] = [
     shiftId: 'shift-es',
     moduleRoles: {
       lams: ['hrms_staff'],
-      pms: ['pms_researcher'],
-      sims: ['sims_indenter'],
-      fms: ['fms_requester'],
-      finance: ['fin_claimant']
+      pms: ['pms_researcher']
     },
     leaveBalances: {
       casual: { total: 8, used: 2, pending: 0 },
@@ -482,10 +445,7 @@ export const INITIAL_USERS: User[] = [
     shiftId: 'shift-fld',
     moduleRoles: {
       lams: ['hrms_staff'],
-      pms: ['pms_researcher'],
-      sims: ['sims_indenter'],
-      fms: ['fms_requester'],
-      finance: ['fin_claimant']
+      pms: ['pms_researcher']
     },
     leaveBalances: {
       stipend_off: { total: 6, used: 1, pending: 0 },
@@ -518,11 +478,7 @@ export const INITIAL_USERS: User[] = [
     slackHandle: '@rohan.mehta',
     shiftId: 'shift-ms',
     moduleRoles: {
-      lams: ['hrms_staff'],
-      pms: ['pms_researcher'],
-      sims: ['sims_indenter'],
-      fms: ['fms_requester'],
-      finance: ['fin_claimant']
+      lams: ['hrms_staff']
     },
     leaveBalances: {
       stipend_off: { total: 6, used: 0, pending: 0 },
@@ -555,15 +511,40 @@ export const INITIAL_USERS: User[] = [
     slackHandle: '@neha.gupta',
     shiftId: 'shift-gen',
     moduleRoles: {
-      lams: ['hrms_staff'],
-      pms: ['pms_researcher'],
-      sims: ['sims_indenter'],
-      fms: ['fms_requester'],
-      finance: ['fin_claimant']
+      lams: ['hrms_staff']
     },
     leaveBalances: {
       stipend_off: { total: 6, used: 0, pending: 0 },
       contingency: { total: 5, used: 0, pending: 0 }
+    }
+  },
+  {
+    id: 'usr-16',
+    name: 'Dummy Administrator',
+    email: 'dummy.admin@inst.org',
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
+    role: 'administrator',
+    roles: ['administrator'],
+    baseRole: 'administrator',
+    employmentType: 'permanent',
+    department: 'Computer & IT Cell',
+    designation: 'System Administrator (Dummy)',
+    joiningDate: '2026-10-01',
+    dob: '1990-01-01',
+    isOnProbation: false,
+    phone: '+91 98765 00000',
+    officeLocation: 'IT Cell, Room 000',
+    bio: 'Dummy administrator for testing purposes.',
+    slackHandle: '@dummy.admin',
+    shiftId: 'shift-gen',
+    moduleRoles: {
+      lams: ['hrms_admin']
+    },
+    leaveBalances: {
+      casual: { total: 12, used: 0, pending: 0 },
+      earned: { total: 30, used: 0, pending: 0 },
+      half_pay: { total: 20, used: 0, pending: 0 },
+      restricted: { total: 2, used: 0, pending: 0 }
     }
   }
 ];

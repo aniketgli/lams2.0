@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useApp } from '../../../../context/AppContext';
 import { LeaveType, LeaveRequest } from '../../../../types';
 import { PageHeader } from '../../../../shared/components/PageHeader';
+import { Button } from '../../../../shared/components/Button';
 import { MultiSelectFilter, matchesMultiSelect } from '../../../../shared/components/MultiSelectFilter';
 import { TablePagination } from '../../../../shared/components/TablePagination';
 import { AppSelect } from '../../../../shared/components/AppSelect';
@@ -1903,13 +1904,14 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
         rightAction={
           <div className="flex items-center justify-end space-x-2 ml-auto">
             {canApplyLeave && (
-              <button
+              <Button
+                variant="primary"
+                size="md"
                 onClick={handleOpenApplyModal}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center space-x-1.5 transition-all shadow-2xs cursor-pointer active:scale-95 ml-auto"
+                leftIcon={<PlusCircle className="w-4 h-4" />}
               >
-                <PlusCircle className="w-4 h-4" />
-                <span>Apply Leave</span>
-              </button>
+                Apply Leave
+              </Button>
             )}
           </div>
         }
@@ -3230,7 +3232,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
         )}
 
         {/* Stable Full-Width Footer & Pagination (Fixed at bottom of card, outside horizontal scroll) */}
-        <div className="w-full border-t border-slate-200/90 bg-white">
+        <div className="w-full border-t border-slate-200/90 bg-white rounded-b-2xl">
           <TablePagination
             currentPage={tablePage}
             totalPages={Math.ceil(filteredLeaves.length / tablePageSize)}
@@ -3244,26 +3246,28 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
 
       {/* Apply Leave Modal */}
       {showApplyModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200 my-auto sm:my-6 flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-150 my-auto sm:my-6 flex flex-col max-h-[90vh]">
             {/* Modal Header */}
-            <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 px-4 sm:px-5 py-3 text-white flex items-center justify-between shrink-0">
-              <div className="flex items-center space-x-2.5">
-                <div className="p-1.5 bg-white/10 rounded-lg backdrop-blur-md shrink-0">
-                  <Calendar className="w-4.5 h-4.5 text-blue-300" />
+            <div className="relative overflow-hidden px-5 py-4 border-b border-blue-900/60 bg-gradient-to-r from-[#091224] via-[#0f214a] to-[#1a3675] text-white flex items-center justify-between shrink-0 rounded-t-2xl">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
+              <div className="relative z-10 flex items-center space-x-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#183063] to-[#0c1938] border border-blue-700/60 flex items-center justify-center text-blue-200 shrink-0 shadow-sm">
+                  <Calendar className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-blue-200" />
                 </div>
                 <div>
-                  <h2 className="text-sm sm:text-base font-bold tracking-wide">
-                    Apply Leave
+                  <h2 className="text-base font-bold text-white tracking-tight">
+                    Apply for Leave
                   </h2>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowApplyModal(false)}
-                className="p-1 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                className="relative z-10 p-1.5 rounded-lg text-blue-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
+                aria-label="Close dialog"
               >
-                <X className="w-4.5 h-4.5" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -4018,21 +4022,22 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
 
       {/* Detail Popup Modal for Leave Application */}
       {detailModalLeave && (
-        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden border border-slate-200 animate-in fade-in zoom-in duration-150">
-            <div className="shrink-0 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white px-5 py-4 flex items-center justify-between border-b border-slate-800 shadow-xs">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
-                  <FileText className="w-5 h-5 text-blue-400" />
+        <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] flex flex-col shadow-xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-150 text-xs">
+            <div className="relative overflow-hidden shrink-0 bg-gradient-to-r from-[#091224] via-[#0f214a] to-[#1a3675] text-white px-5 py-4 flex items-center justify-between border-b border-blue-900/60 rounded-t-2xl">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
+              <div className="relative z-10 flex items-center space-x-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#183063] to-[#0c1938] border border-blue-700/60 flex items-center justify-center text-blue-200 shrink-0 shadow-sm">
+                  <FileText className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-blue-200" />
                 </div>
                 <div>
                   <h3 className="font-bold text-base text-white tracking-tight">Leave Application Details</h3>
-                  <p className="text-xs text-slate-300 mt-0.5">View application information and approval history</p>
                 </div>
               </div>
               <button
                 onClick={() => setDetailModalLeave(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                className="relative z-10 p-1.5 rounded-lg text-blue-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
+                aria-label="Close dialog"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -4425,21 +4430,23 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
 
       {/* Edit Leave Request Modal */}
       {editingLeave && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200 my-auto sm:my-8 flex flex-col max-h-[90vh]">
-            <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 px-4 sm:px-6 py-3.5 sm:py-4 text-white flex items-center justify-between shrink-0">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-white/10 rounded-xl backdrop-blur-md shrink-0">
-                  <Edit3 className="w-5 h-5 text-blue-300" />
+        <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-150 my-auto sm:my-8 flex flex-col max-h-[90vh]">
+            <div className="relative overflow-hidden px-5 py-4 border-b border-blue-900/60 bg-gradient-to-r from-[#091224] via-[#0f214a] to-[#1a3675] text-white flex items-center justify-between shrink-0 rounded-t-2xl">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
+              <div className="relative z-10 flex items-center space-x-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#183063] to-[#0c1938] border border-blue-700/60 flex items-center justify-center text-blue-200 shrink-0 shadow-sm">
+                  <Edit3 className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-blue-200" />
                 </div>
                 <div>
-                  <h2 className="text-base font-bold tracking-wide">Edit Leave Application</h2>
+                  <h2 className="text-base font-bold text-white tracking-tight">Edit Leave Application</h2>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setEditingLeave(null)}
-                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                className="relative z-10 p-1.5 rounded-lg text-blue-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
+                aria-label="Close dialog"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -4523,22 +4530,23 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
 
       {/* Admin Import / Edit Balance Modal */}
       {showBalanceModal && (
-        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden border border-slate-200 animate-in fade-in zoom-in duration-150">
+        <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-150">
             {/* Modal Header */}
-            <div className="shrink-0 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-5 py-4 flex items-center justify-between border-b border-indigo-950/40 shadow-sm">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-indigo-500/20 rounded-xl border border-indigo-400/30">
-                  <Layers className="w-5 h-5 text-indigo-400" />
+            <div className="relative overflow-hidden shrink-0 bg-gradient-to-r from-[#091224] via-[#0f214a] to-[#1a3675] text-white px-5 py-4 flex items-center justify-between border-b border-blue-900/60 rounded-t-2xl">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
+              <div className="relative z-10 flex items-center space-x-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#183063] to-[#0c1938] border border-blue-700/60 flex items-center justify-center text-blue-200 shrink-0 shadow-sm">
+                  <Layers className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-blue-200" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-white tracking-wide">Leave Balance Edit, Import & Year-End Roll</h3>
-                  <p className="text-xs text-indigo-200/80">Manage employment-wise leave quotas, year-wise historical balances & carry forwards</p>
+                  <h3 className="font-bold text-base text-white tracking-tight">Leave Balance Management &amp; Roll-Over</h3>
                 </div>
               </div>
               <button
                 onClick={() => setShowBalanceModal(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                className="relative z-10 p-1.5 rounded-lg text-blue-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
+                aria-label="Close dialog"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -5405,24 +5413,27 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
       {/* View Full Reason Modal */}
       {activeReasonModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white w-full max-w-md rounded-2xl p-5 shadow-2xl border border-slate-200 space-y-3.5">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
-                  <FileText className="w-4 h-4" />
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="relative overflow-hidden px-5 py-4 border-b border-blue-900/60 bg-gradient-to-r from-[#091224] via-[#0f214a] to-[#1a3675] text-white flex items-center justify-between shrink-0">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
+              <div className="relative z-10 flex items-center space-x-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#183063] to-[#0c1938] border border-blue-700/60 flex items-center justify-center text-blue-200 shrink-0 shadow-sm">
+                  <FileText className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-blue-200" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-sm text-slate-900">{activeReasonModal.employeeName}</h4>
-                  <p className="text-[11px] text-slate-500">{activeReasonModal.leaveType} • {activeReasonModal.dates}</p>
+                  <h4 className="font-bold text-base text-white">{activeReasonModal.employeeName}</h4>
+                  <p className="text-[11px] text-blue-200/80">{activeReasonModal.leaveType} • {activeReasonModal.dates}</p>
                 </div>
               </div>
               <button
                 onClick={() => setActiveReasonModal(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                className="relative z-10 p-1.5 rounded-lg text-blue-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
+                aria-label="Close dialog"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
+            <div className="p-5 space-y-3.5">
             <div>
               <label className="text-[10px] font-bold uppercase text-slate-400 tracking-wider block mb-1">
                 Reason for Leave
@@ -5441,7 +5452,8 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
             </div>
           </div>
         </div>
-      )}
+      </div>
+    )}
     </div>
   );
 };

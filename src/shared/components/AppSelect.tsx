@@ -20,7 +20,24 @@ export interface AppSelectProps {
   size?: 'sm' | 'md' | 'lg';
   searchable?: boolean;
   align?: 'left' | 'right' | 'auto';
+  minSearchChars?: number;
 }
+
+const renderSelectIcon = (iconItem: any, className = 'w-3.5 h-3.5') => {
+  if (!iconItem) return null;
+  if (React.isValidElement(iconItem)) return iconItem;
+  if (
+    typeof iconItem === 'function' ||
+    (typeof iconItem === 'object' && iconItem !== null && ('$$typeof' in iconItem || 'render' in iconItem))
+  ) {
+    const Component = iconItem;
+    return <Component className={className} />;
+  }
+  if (typeof iconItem === 'string' || typeof iconItem === 'number') {
+    return iconItem;
+  }
+  return null;
+};
 
 export const AppSelect: React.FC<AppSelectProps> = ({
   value,
@@ -31,7 +48,8 @@ export const AppSelect: React.FC<AppSelectProps> = ({
   disabled = false,
   size = 'md',
   searchable,
-  align = 'auto'
+  align = 'auto',
+  minSearchChars
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -153,10 +171,17 @@ export const AppSelect: React.FC<AppSelectProps> = ({
       ? 'h-11 px-4 py-2 text-sm'
       : 'h-9 px-3 py-1.5 text-xs';
 
-  const filteredOptions = normalizedOptions.filter((opt) =>
-    opt.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (opt.description && opt.description.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const isMinCharConditionMet =
+    !minSearchChars || searchTerm.trim().length === 0 || searchTerm.trim().length >= minSearchChars;
+
+  const filteredOptions = normalizedOptions.filter((opt) => {
+    if (!searchTerm.trim()) return true;
+    if (minSearchChars && searchTerm.trim().length < minSearchChars) return false;
+    return (
+      opt.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (opt.description && opt.description.toLowerCase().includes(searchTerm.toLowerCase()))
+    );
+  });
 
   return (
     <div className={`relative inline-block w-full select-none ${className}`}>
@@ -174,7 +199,7 @@ export const AppSelect: React.FC<AppSelectProps> = ({
         }`}
       >
         <div className="flex items-center space-x-2 truncate pr-2 min-w-0">
-          {selectedOpt?.icon && <span className="shrink-0 text-slate-500">{selectedOpt.icon}</span>}
+          {selectedOpt?.icon && <span className="shrink-0 text-slate-500">{renderSelectIcon(selectedOpt.icon)}</span>}
           <span className={`truncate text-xs font-semibold ${!selectedOpt ? 'text-slate-400' : 'text-slate-900'}`}>
             {selectedOpt ? selectedOpt.label : placeholder}
           </span>
@@ -227,7 +252,11 @@ export const AppSelect: React.FC<AppSelectProps> = ({
               style={{ maxHeight: `${coords.maxHeight - (showSearch ? 45 : 12)}px` }}
               className="overflow-y-auto space-y-0.5 no-scrollbar py-0.5 flex-1"
             >
-              {filteredOptions.length === 0 ? (
+              {searchTerm.trim().length > 0 && minSearchChars && searchTerm.trim().length < minSearchChars ? (
+                <div className="py-4 px-3 text-center text-xs text-blue-700 bg-blue-50/60 rounded-lg m-1 font-medium">
+                  Type at least {minSearchChars} characters to search...
+                </div>
+              ) : filteredOptions.length === 0 ? (
                 <div className="py-4 text-center text-xs text-slate-400 font-medium">
                   No matching options
                 </div>
@@ -251,7 +280,7 @@ export const AppSelect: React.FC<AppSelectProps> = ({
                       <div className="flex items-center space-x-2 truncate pr-2 min-w-0">
                         {opt.icon && (
                           <span className={`shrink-0 ${isSelected ? 'text-white' : 'text-slate-400'}`}>
-                            {opt.icon}
+                            {renderSelectIcon(opt.icon)}
                           </span>
                         )}
                         <div className="truncate">

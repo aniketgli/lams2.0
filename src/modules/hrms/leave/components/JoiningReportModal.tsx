@@ -244,19 +244,40 @@ export const JoiningReportModal: React.FC<JoiningReportModalProps> = ({
 
   if (!currentLeave) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
-        <div className="bg-white w-full max-w-md rounded-2xl p-6 shadow-2xl text-center space-y-4 border border-slate-200">
-          <AlertCircle className="w-12 h-12 text-amber-500 mx-auto" />
-          <h3 className="text-base font-bold text-slate-800">No Approved Leave Found</h3>
-          <p className="text-xs text-slate-600">
-            A Post-Leave Joining Report can only be submitted for approved leaves. Please select an approved leave.
-          </p>
-          <button
-            onClick={onClose}
-            className="px-5 py-2.5 bg-indigo-600 text-white text-xs font-bold rounded-xl cursor-pointer hover:bg-indigo-700"
-          >
-            Close
-          </button>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/55 backdrop-blur-xs animate-in fade-in duration-150">
+        <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden border border-slate-200">
+          <div className="relative overflow-hidden px-5 py-4 border-b border-blue-900/60 bg-gradient-to-r from-[#091224] via-[#0f214a] to-[#1a3675] text-white flex items-center justify-between shrink-0">
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
+            <div className="relative z-10 flex items-center space-x-3 min-w-0">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#183063] to-[#0c1938] border border-blue-700/60 flex items-center justify-center text-amber-300 shrink-0 shadow-sm">
+                <AlertCircle className="w-4.5 h-4.5 text-amber-300" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white tracking-tight">No Approved Leave Found</h3>
+                <p className="text-xs text-blue-200/80 mt-0.5">Post-Leave Joining Report</p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="relative z-10 p-1.5 rounded-lg text-blue-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              aria-label="Close dialog"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="p-5 space-y-4">
+            <p className="text-xs text-slate-600 leading-relaxed">
+              A Post-Leave Joining Report can only be submitted for approved leaves. Please select an approved leave.
+            </p>
+            <div className="flex justify-end pt-1">
+              <button
+                onClick={onClose}
+                className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl cursor-pointer transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -265,26 +286,45 @@ export const JoiningReportModal: React.FC<JoiningReportModalProps> = ({
   // Check if leave requires HoD approval
   if (!requiresHod) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
-        <div className="bg-white w-full max-w-md rounded-2xl p-6 shadow-2xl text-center space-y-4 border border-slate-200">
-          <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mx-auto">
-            <AlertCircle className="w-6 h-6" />
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/55 backdrop-blur-xs animate-in fade-in duration-150">
+        <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden border border-slate-200">
+          <div className="relative overflow-hidden px-5 py-4 border-b border-blue-900/60 bg-gradient-to-r from-[#091224] via-[#0f214a] to-[#1a3675] text-white flex items-center justify-between shrink-0">
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
+            <div className="relative z-10 flex items-center space-x-3 min-w-0">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#183063] to-[#0c1938] border border-blue-700/60 flex items-center justify-center text-blue-200 shrink-0 shadow-sm">
+                <AlertCircle className="w-4.5 h-4.5 text-blue-200" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white tracking-tight">Joining Report Not Required</h3>
+                <p className="text-xs text-blue-200/80 mt-0.5">Post-Leave Verification Notice</p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="relative z-10 p-1.5 rounded-lg text-blue-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              aria-label="Close dialog"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
-          <h3 className="text-base font-bold text-slate-900">Joining Report Not Required</h3>
-          <p className="text-xs text-slate-600 leading-relaxed">
-            Joining Report (कार्यग्रहण आख्या) केवल <strong>HoD approval</strong> वाली छुट्टियों के लिए आवश्यक होता है। यह अवकाश एकल-स्तरीय (Direct Single-Level) अनुमोदन के अंतर्गत स्वीकृत हुआ था, इसलिए इसमें कार्यग्रहण प्रपत्र आवश्यक नहीं है।
-          </p>
-          <div className="p-3 bg-slate-50 rounded-xl text-left text-[11px] text-slate-600 border border-slate-200">
-            <p><strong>Leave Type:</strong> {currentLeave.leaveTypeName}</p>
-            <p><strong>Sanctioned:</strong> {currentLeave.startDate} to {currentLeave.endDate} ({currentLeave.daysCount} days)</p>
-            <p><strong>Approval Level:</strong> Direct Reporting Officer Approval</p>
+          <div className="p-5 space-y-4">
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Joining Report (कार्यग्रहण आख्या) केवल <strong>HoD approval</strong> वाली छुट्टियों के लिए आवश्यक होता है। यह अवकाश एकल-स्तरीय (Direct Single-Level) अनुमोदन के अंतर्गत स्वीकृत हुआ था, इसलिए इसमें कार्यग्रहण प्रपत्र आवश्यक नहीं है।
+            </p>
+            <div className="p-3 bg-slate-50 rounded-xl text-left text-[11px] text-slate-600 border border-slate-200 space-y-1">
+              <p><strong>Leave Type:</strong> {currentLeave.leaveTypeName}</p>
+              <p><strong>Sanctioned:</strong> {currentLeave.startDate} to {currentLeave.endDate} ({currentLeave.daysCount} days)</p>
+              <p><strong>Approval Level:</strong> Direct Reporting Officer Approval</p>
+            </div>
+            <div className="flex justify-end pt-1">
+              <button
+                onClick={onClose}
+                className="w-full px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl cursor-pointer transition-colors"
+              >
+                Close
+              </button>
+            </div>
           </div>
-          <button
-            onClick={onClose}
-            className="w-full px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl cursor-pointer transition-colors"
-          >
-            Close
-          </button>
         </div>
       </div>
     );
@@ -398,27 +438,28 @@ export const JoiningReportModal: React.FC<JoiningReportModalProps> = ({
   const canEditEmployeeFields = isApplicant && !isVerified && (!isForwarded || isRejected);
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-fadeIn">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200 my-auto sm:my-6 flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-150">
+      <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-150 my-auto sm:my-6 flex flex-col max-h-[90vh]">
         {/* Modal Header */}
-        <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 px-4 sm:px-5 py-3 text-white flex items-center justify-between shrink-0">
-          <div className="flex items-center space-x-2.5">
-            <div className="p-1.5 bg-white/10 rounded-lg backdrop-blur-md shrink-0">
-              <Calendar className="w-4.5 h-4.5 text-blue-300" />
+        <div className="relative overflow-hidden px-5 py-4 border-b border-blue-900/60 flex items-center justify-between shrink-0 bg-gradient-to-r from-[#091224] via-[#0f214a] to-[#1a3675] text-white rounded-t-2xl">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
+          <div className="relative z-10 flex items-center space-x-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#183063] to-[#0c1938] border border-blue-700/60 flex items-center justify-center text-blue-200 shrink-0 shadow-sm">
+              <Calendar className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-blue-200" />
             </div>
             <div>
-              <h2 className="text-sm sm:text-base font-bold tracking-wide">
-                Joining Form
+              <h2 className="text-base font-bold text-white tracking-tight">
+                Post-Leave Joining Form
               </h2>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+            className="relative z-10 p-1.5 rounded-lg text-blue-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
             title="Close"
           >
-            <X className="w-4.5 h-4.5" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 

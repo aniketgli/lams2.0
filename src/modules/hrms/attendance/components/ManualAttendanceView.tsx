@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../../../context/AppContext';
 import { ManualAttendanceRegularizationRequest, AttendanceRecord } from '../../../../types';
 import { PageHeader } from '../../../../shared/components/PageHeader';
+import { Button } from '../../../../shared/components/Button';
 import { AppDatePicker } from '../../../../shared/components/AppDatePicker';
 import { MultiSelectFilter, matchesMultiSelect } from '../../../../shared/components/MultiSelectFilter';
 import { TablePagination } from '../../../../shared/components/TablePagination';
@@ -933,13 +934,14 @@ export const ManualAttendanceView: React.FC = () => {
         rightAction={
           canApplyRegularization ? (
             <div className="flex items-center justify-end space-x-2 ml-auto">
-              <button
+              <Button
+                variant="primary"
+                size="md"
                 onClick={() => handleOpenApplyModal()}
-                className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer ml-auto"
+                leftIcon={<PlusCircle className="w-4 h-4" />}
               >
-                <PlusCircle className="w-4 h-4" />
-                <span>Apply Manual Attendance</span>
-              </button>
+                Apply Manual Attendance
+              </Button>
             </div>
           ) : undefined
         }
@@ -1243,7 +1245,7 @@ export const ManualAttendanceView: React.FC = () => {
                 }
               }
             }}
-            className="bg-[#ea580c] hover:bg-[#c2410c] active:bg-[#9a3412] text-white font-bold text-xs px-5 py-2 rounded-full shadow-2xs transition-all cursor-pointer shrink-0 flex items-center space-x-1.5"
+            className="bg-[#2563eb] hover:bg-[#1d4ed8] active:bg-[#400c0e] text-white font-bold text-xs px-4 py-2 rounded-xl shadow-xs transition-all cursor-pointer shrink-0 flex items-center space-x-1.5"
           >
             <span>Review Queue ({pendingManagerQueue.length})</span>
           </button>
@@ -1739,7 +1741,7 @@ export const ManualAttendanceView: React.FC = () => {
         )}
 
         {/* Stable Full-Width Footer & Pagination (Fixed at bottom of card, outside horizontal scroll) */}
-        <div className="w-full border-t border-slate-200/90 bg-white">
+        <div className="w-full border-t border-slate-200/90 bg-white rounded-b-2xl">
           <TablePagination
             currentPage={manualPage}
             totalPages={Math.ceil(sortedRequests.length / manualPageSize)}
@@ -1753,23 +1755,25 @@ export const ManualAttendanceView: React.FC = () => {
 
       {/* --- APPLY / EDIT MODAL --- */}
       {showApplyModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 my-8">
+        <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-150 my-8">
             {/* Modal Header */}
-            <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 px-4 sm:px-6 py-3.5 sm:py-4 text-white flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-white/10 rounded-xl backdrop-blur-md shrink-0">
-                  <Clock className="w-5 h-5 text-blue-300" />
+            <div className="relative overflow-hidden px-5 py-4 border-b border-blue-900/60 flex items-center justify-between bg-gradient-to-r from-[#091224] via-[#0f214a] to-[#1a3675] text-white shrink-0 rounded-t-2xl">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
+              <div className="relative z-10 flex items-center space-x-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#183063] to-[#0c1938] border border-blue-700/60 flex items-center justify-center text-blue-200 shrink-0 shadow-sm">
+                  <Clock className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-blue-200" />
                 </div>
-                <div>
-                  <h2 className="text-base font-bold tracking-wide">
-                    Manual Attendance
+                <div className="min-w-0">
+                  <h2 className="text-base font-bold text-white tracking-tight truncate">
+                    {editingRequest ? 'Edit Manual Attendance Requisition' : 'Apply for Manual Attendance Regularization'}
                   </h2>
                 </div>
               </div>
               <button
                 onClick={() => setShowApplyModal(false)}
-                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                className="relative z-10 p-1.5 rounded-lg text-blue-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
+                aria-label="Close dialog"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1947,29 +1951,46 @@ export const ManualAttendanceView: React.FC = () => {
       {/* --- DELETE CONFIRMATION MODAL --- */}
       {deleteConfirmId && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden p-5 text-center space-y-4 animate-in fade-in zoom-in-95 duration-200">
-            <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 mx-auto flex items-center justify-center">
-              <Trash2 className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="font-bold text-sm text-slate-900">Delete Manual Attendance Request?</h3>
-              <p className="text-xs text-slate-500 mt-1">
-                Are you sure you want to delete this pending manual attendance request? This action cannot be undone.
-              </p>
-            </div>
-            <div className="flex items-center space-x-2 pt-2">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="relative overflow-hidden px-5 py-4 border-b border-blue-900/60 bg-gradient-to-r from-[#091224] via-[#0f214a] to-[#1a3675] text-white flex items-center justify-between shrink-0">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
+              <div className="relative z-10 flex items-center space-x-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#183063] to-[#0c1938] border border-blue-700/60 flex items-center justify-center text-rose-300 shrink-0 shadow-sm">
+                  <Trash2 className="w-4.5 h-4.5 text-rose-300" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white tracking-tight">Delete Attendance Request</h3>
+                  <p className="text-xs text-blue-200/80 mt-0.5">This action cannot be undone</p>
+                </div>
+              </div>
               <button
                 onClick={() => setDeleteConfirmId(null)}
-                className="flex-1 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
+                className="relative z-10 p-1.5 rounded-lg text-blue-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                aria-label="Close dialog"
               >
-                Cancel
+                <X className="w-5 h-5" />
               </button>
-              <button
-                onClick={() => handleDelete(deleteConfirmId)}
-                className="flex-1 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
-              >
-                Yes, Delete
-              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Are you sure you want to permanently delete this manual attendance regularisation request?
+              </p>
+
+              <div className="flex items-center space-x-2 pt-2">
+                <button
+                  onClick={() => setDeleteConfirmId(null)}
+                  className="flex-1 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleDelete(deleteConfirmId)}
+                  className="flex-1 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+                >
+                  Yes, Delete
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1977,16 +1998,22 @@ export const ManualAttendanceView: React.FC = () => {
 
       {/* --- DETAIL MODAL --- */}
       {detailModalReq && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 px-6 py-4 text-white flex items-center justify-between">
-              <div className="flex items-center space-x-2.5">
-                <Clock className="w-4 h-4 text-blue-300" />
-                <h3 className="font-bold text-sm">Manual Attendance Details</h3>
+        <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="relative overflow-hidden px-5 py-4 border-b border-blue-900/60 bg-gradient-to-r from-[#091224] via-[#0f214a] to-[#1a3675] text-white flex items-center justify-between shrink-0 rounded-t-2xl">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
+              <div className="relative z-10 flex items-center space-x-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#183063] to-[#0c1938] border border-blue-700/60 flex items-center justify-center text-blue-200 shrink-0 shadow-sm">
+                  <Clock className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-blue-200" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-base font-bold text-white tracking-tight truncate">Manual Attendance Details</h3>
+                </div>
               </div>
               <button
                 onClick={() => setDetailModalReq(null)}
-                className="p-1 hover:bg-white/10 rounded-lg text-slate-300 hover:text-white cursor-pointer"
+                className="relative z-10 p-1.5 hover:bg-white/10 rounded-lg text-blue-300 hover:text-white transition-colors cursor-pointer shrink-0"
+                aria-label="Close dialog"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -2133,22 +2160,23 @@ export const ManualAttendanceView: React.FC = () => {
 
       {/* Cancel Approved Manual Attendance Modal */}
       {cancelModalReq && (
-        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl max-w-md w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden border border-slate-200 animate-in fade-in zoom-in duration-150 text-xs">
+        <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] flex flex-col shadow-xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-150 text-xs">
             {/* Header */}
-            <div className="shrink-0 bg-gradient-to-r from-rose-900 via-rose-950 to-slate-900 text-white p-4 sm:p-5 flex items-center justify-between border-b border-rose-950/40 shadow-sm">
-              <div className="flex items-center space-x-2.5">
-                <div className="p-2 bg-rose-500/20 rounded-xl border border-rose-400/30">
-                  <RotateCcw className="w-5 h-5 text-rose-300" />
+            <div className="relative overflow-hidden shrink-0 bg-gradient-to-r from-[#091224] via-[#0f214a] to-[#1a3675] text-white px-5 py-4 flex items-center justify-between border-b border-blue-900/60 rounded-t-2xl">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
+              <div className="relative z-10 flex items-center space-x-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#183063] to-[#0c1938] border border-blue-700/60 flex items-center justify-center text-blue-200 shrink-0 shadow-sm">
+                  <RotateCcw className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-blue-200" />
                 </div>
-                <div>
-                  <h3 className="font-bold text-base text-white tracking-wide">Cancel Approved Attendance</h3>
-                  <p className="text-[11px] text-rose-200/80">Revoke approval for manual attendance record</p>
+                <div className="min-w-0">
+                  <h3 className="font-bold text-base text-white tracking-tight truncate">Cancel Approved Attendance</h3>
                 </div>
               </div>
               <button
                 onClick={() => setCancelModalReq(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                className="relative z-10 p-1.5 rounded-lg text-blue-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
+                aria-label="Close dialog"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -2204,22 +2232,23 @@ export const ManualAttendanceView: React.FC = () => {
         </div>
       )}
       {actionModalReq && (
-        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl max-w-md w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden border border-slate-200 animate-in fade-in zoom-in duration-150 text-xs">
+        <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] flex flex-col shadow-xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-150 text-xs">
             {/* Header */}
-            <div className="shrink-0 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 sm:p-5 flex items-center justify-between border-b border-indigo-950/40 shadow-sm">
-              <div className="flex items-center space-x-2.5">
-                <div className="p-2 bg-indigo-500/20 rounded-xl border border-indigo-400/30">
-                  <ShieldCheck className="w-5 h-5 text-indigo-400" />
+            <div className="relative overflow-hidden shrink-0 bg-gradient-to-r from-[#091224] via-[#0f214a] to-[#1a3675] text-white px-5 py-4 flex items-center justify-between border-b border-blue-900/60 rounded-t-2xl">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
+              <div className="relative z-10 flex items-center space-x-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#183063] to-[#0c1938] border border-blue-700/60 flex items-center justify-center text-blue-200 shrink-0 shadow-sm">
+                  <ShieldCheck className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-blue-200" />
                 </div>
-                <div>
-                  <h3 className="font-bold text-base text-white tracking-wide">Review Manual Attendance</h3>
-                  <p className="text-[11px] text-indigo-200/80">Authorize or reject missing punch attendance</p>
+                <div className="min-w-0">
+                  <h3 className="font-bold text-base text-white tracking-tight truncate">Review Manual Attendance</h3>
                 </div>
               </div>
               <button
                 onClick={() => setActionModalReq(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                className="relative z-10 p-1.5 rounded-lg text-blue-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
+                aria-label="Close dialog"
               >
                 <X className="w-5 h-5" />
               </button>

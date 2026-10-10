@@ -75,8 +75,8 @@ export const MODULE_ROLE_DEFINITIONS: Record<EnterpriseModuleId, ModuleRoleDef[]
   lams: [
     {
       id: 'hrms_admin',
-      name: 'HRMS Administrator',
-      shortName: 'HR Admin',
+      name: 'Administrator',
+      shortName: 'Administrator',
       description: 'Full administrative control over HR policies, shifts, biometrics, regularization and leave quotas.',
       moduleId: 'lams',
       color: 'purple',
@@ -86,8 +86,8 @@ export const MODULE_ROLE_DEFINITIONS: Record<EnterpriseModuleId, ModuleRoleDef[]
     },
     {
       id: 'hrms_reporting',
-      name: 'Reporting Officer (L1)',
-      shortName: 'L1 Manager',
+      name: 'Reporting Manager',
+      shortName: 'Reporting Manager',
       description: 'First-level approver for team member leave applications, manual attendance, and outdoor duty.',
       moduleId: 'lams',
       color: 'blue',
@@ -97,9 +97,9 @@ export const MODULE_ROLE_DEFINITIONS: Record<EnterpriseModuleId, ModuleRoleDef[]
     },
     {
       id: 'hrms_reviewing',
-      name: 'Reviewing Officer / HoD (L2)',
-      shortName: 'HoD / L2 Reviewer',
-      description: 'Second-level reviewing authority, departmental head approval for extended leaves and special permissions.',
+      name: 'HoD',
+      shortName: 'HoD',
+      description: 'Head of Department / reviewing authority approval for extended leaves and special permissions.',
       moduleId: 'lams',
       color: 'amber',
       badgeBg: 'bg-amber-100 border-amber-300',
@@ -108,8 +108,8 @@ export const MODULE_ROLE_DEFINITIONS: Record<EnterpriseModuleId, ModuleRoleDef[]
     },
     {
       id: 'hrms_staff',
-      name: 'General Staff / Employee',
-      shortName: 'HR Staff',
+      name: 'User',
+      shortName: 'User',
       description: 'Self-service access to attendance punch, leave application, outdoor duty, and profile records.',
       moduleId: 'lams',
       color: 'emerald',
@@ -316,43 +316,25 @@ export const MODULE_ROLE_DEFINITIONS: Record<EnterpriseModuleId, ModuleRoleDef[]
 };
 
 export const getUserModuleRoles = (user?: Partial<User> | null, moduleId?: EnterpriseModuleId): string[] => {
-  if (!user) return ['hrms_staff'];
+  if (!user) return [];
   
-  if (user.moduleRoles && moduleId && user.moduleRoles[moduleId]) {
-    const assigned = user.moduleRoles[moduleId];
-    if (assigned && assigned.length > 0) return assigned;
+  if (user.moduleRoles && moduleId) {
+    if (moduleId in user.moduleRoles) {
+      return user.moduleRoles[moduleId] || [];
+    }
+    return [];
   }
 
-  const legacyRole = user.role || 'general_staff';
-  if (legacyRole === 'administrator') {
-    if (moduleId === 'pms') return ['pms_admin', 'pms_pi'];
-    if (moduleId === 'sims') return ['sims_admin', 'sims_approver'];
-    if (moduleId === 'fms') return ['fms_admin', 'fms_officer'];
-    if (moduleId === 'finance') return ['fin_admin', 'fin_officer'];
-    return ['hrms_admin', 'hrms_reviewing'];
+  // Only fallback for HRMS (lams) if moduleRoles is completely undefined on user
+  if (moduleId === 'lams' && !user.moduleRoles) {
+    const legacyRole = user.role || 'general_staff';
+    if (legacyRole === 'administrator') return ['hrms_admin', 'hrms_reviewing'];
+    if (legacyRole === 'reviewing_manager') return ['hrms_reviewing'];
+    if (legacyRole === 'reporting_manager') return ['hrms_reporting'];
+    return ['hrms_staff'];
   }
 
-  if (legacyRole === 'reviewing_manager') {
-    if (moduleId === 'pms') return ['pms_pi'];
-    if (moduleId === 'sims') return ['sims_approver', 'sims_indenter'];
-    if (moduleId === 'fms') return ['fms_officer', 'fms_requester'];
-    if (moduleId === 'finance') return ['fin_officer', 'fin_claimant'];
-    return ['hrms_reviewing', 'hrms_reporting'];
-  }
-
-  if (legacyRole === 'reporting_manager') {
-    if (moduleId === 'pms') return ['pms_pi', 'pms_co_pi'];
-    if (moduleId === 'sims') return ['sims_approver', 'sims_indenter'];
-    if (moduleId === 'fms') return ['fms_requester'];
-    if (moduleId === 'finance') return ['fin_claimant'];
-    return ['hrms_reporting', 'hrms_staff'];
-  }
-
-  if (moduleId === 'pms') return ['pms_researcher'];
-  if (moduleId === 'sims') return ['sims_indenter'];
-  if (moduleId === 'fms') return ['fms_requester'];
-  if (moduleId === 'finance') return ['fin_claimant'];
-  return ['hrms_staff'];
+  return [];
 };
 
 export const userHasModuleRole = (user: Partial<User> | null | undefined, moduleId: EnterpriseModuleId, roleId: string): boolean => {

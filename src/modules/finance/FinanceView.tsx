@@ -1,17 +1,34 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
+  PageHeader,
+  Button,
+  Badge,
+  MetricCard,
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+  TableEmpty,
+  TablePagination,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  FormField,
+  Input,
+  Select
+} from '../../shared/components';
+import {
   Receipt,
   Plus,
   Search,
-  CheckCircle2,
   IndianRupee,
-  FileCheck,
   CreditCard,
   Building,
-  UploadCloud,
-  ChevronRight,
-  Sparkles
+  Download
 } from 'lucide-react';
 
 interface FinanceViewProps {
@@ -80,11 +97,16 @@ export const FinanceView: React.FC<FinanceViewProps> = ({ onReturnToLobby }) => 
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [showModal, setShowModal] = useState(false);
 
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
   // Form state
   const [claimType, setClaimType] = useState<'Tour TA/DA' | 'Field Contingency' | 'Consumables Bill'>('Tour TA/DA');
   const [claimAmount, setClaimAmount] = useState('');
   const [selectedOdRef, setSelectedOdRef] = useState(odRequests[0]?.id || 'OD-2026-081');
   const [budgetHead, setBudgetHead] = useState('Institute Grant Budget 2026-27');
+  const [formError, setFormError] = useState('');
 
   const formatCurrency = (amt: number) => {
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amt);
@@ -92,7 +114,12 @@ export const FinanceView: React.FC<FinanceViewProps> = ({ onReturnToLobby }) => 
 
   const handleCreateClaim = (e: React.FormEvent) => {
     e.preventDefault();
-    const amt = Number(claimAmount) || 12000;
+    const amt = Number(claimAmount);
+    if (!amt || amt <= 0) {
+      setFormError('Please enter a valid claim amount greater than 0.');
+      return;
+    }
+
     const newClaim: ClaimRecord = {
       id: `CLM-${String(claims.length + 1).padStart(2, '0')}`,
       claimNo: `TA-2026-${Math.floor(100 + Math.random() * 900)}`,
@@ -109,6 +136,31 @@ export const FinanceView: React.FC<FinanceViewProps> = ({ onReturnToLobby }) => 
     setClaims([newClaim, ...claims]);
     setShowModal(false);
     setClaimAmount('');
+    setFormError('');
+  };
+
+  const handleExportCSV = () => {
+    const headers = ['Claim No', 'Claim Type', 'Claimant Name', 'Department', 'Associated OD Ref', 'Amount Claimed', 'Amount Sanctioned', 'Submitted Date', 'Budget Head', 'Status'];
+    const rows = filteredClaims.map((c) => [
+      `"${c.claimNo}"`,
+      `"${c.claimType}"`,
+      `"${c.claimantName}"`,
+      `"${c.department}"`,
+      `"${c.associatedOdRef || ''}"`,
+      c.amountClaimed,
+      c.amountSanctioned,
+      c.submittedDate,
+      `"${c.budgetHead}"`,
+      `"${c.status}"`
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `WII_FinPay_Claims_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const filteredClaims = claims.filter((c) => {
@@ -120,284 +172,271 @@ export const FinanceView: React.FC<FinanceViewProps> = ({ onReturnToLobby }) => 
     return matchesStatus && matchesSearch;
   });
 
+  const paginatedClaims = filteredClaims.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
+
   const totalDisbursed = claims.filter((c) => c.status === 'Disbursed via PFMS').reduce((acc, c) => acc + c.amountSanctioned, 0);
+  const totalAudit = claims.filter((c) => c.status === 'In Audit').reduce((acc, c) => acc + c.amountClaimed, 0);
 
   return (
     <div className="space-y-6 pb-12 animate-in fade-in duration-300">
-      {/* Module Header Bar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white border border-slate-200/90 rounded-2xl p-5 shadow-2xs">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-rose-600 text-white rounded-xl shadow-xs">
-            <Receipt className="w-6 h-6" />
+      {/* Standardized Module PageHeader */}
+      <PageHeader
+        icon={Receipt}
+        title="Finance & TA/DA Claims Management (FinPay)"
+        subtitle="Tour TA/DA reimbursement, Outdoor Duty (OD) sync, field expense vouchers & PFMS e-disbursement."
+        breadcrumbs={[
+          { label: 'Portal Hub', onClick: onReturnToLobby },
+          { label: 'Finance & TA/DA' }
+        ]}
+        actions={
+          <div className="flex items-center space-x-2">
+            <Button
+              variant="outline"
+              size="sm"
+              leftIcon={<Download className="w-4 h-4" />}
+              onClick={handleExportCSV}
+            >
+              Export CSV
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Plus className="w-4 h-4" />}
+              onClick={() => {
+                setFormError('');
+                setShowModal(true);
+              }}
+            >
+              Submit TA/DA Claim
+            </Button>
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">
-                WII-FinPay • Finance &amp; TA/DA Portal
-              </h2>
-              <span className="text-[10px] font-mono font-bold bg-rose-50 text-rose-900 border border-rose-200 px-2 py-0.5 rounded-full">
-                MOD-FIN-05
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5 font-medium">
-              Tour TA/DA Reimbursement, Outdoor Duty (OD) Sync, Field Vouchers &amp; PFMS Disbursal
-            </p>
-          </div>
-        </div>
+        }
+      />
 
-        <div className="flex items-center gap-2 self-end sm:self-auto">
-          <button
-            type="button"
-            onClick={() => setShowModal(true)}
-            className="px-4 py-2 rounded-xl text-xs font-bold bg-rose-700 hover:bg-rose-800 text-white shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Submit TA/DA Bill</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Overview Cards matching Attendance theme */}
+      {/* Metrics Row using Standardized MetricCard */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {/* 1. Claims Lodged */}
-        <div className="bg-blue-50/70 border border-blue-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-blue-800 truncate">Claims Lodged</p>
-              <p className="text-xl sm:text-2xl font-black text-blue-900 mt-0.5">{claims.length} Claims</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-100 border border-blue-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <Receipt className="w-4 h-4 text-blue-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-blue-200/60 text-[10px] sm:text-[11px] font-semibold text-blue-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            TA/DA &amp; Field Vouchers
-          </div>
-        </div>
-
-        {/* 2. Audit Queue */}
-        <div className="bg-amber-50/70 border border-amber-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800 truncate">Audit Queue</p>
-              <p className="text-xl sm:text-2xl font-black text-amber-900 mt-0.5">{claims.filter((c) => c.status === 'In Audit').length} Pending</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-100 border border-amber-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <FileCheck className="w-4 h-4 text-amber-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-amber-200/60 text-[10px] sm:text-[11px] font-semibold text-amber-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            Drawing &amp; Disbursing Officer
-          </div>
-        </div>
-
-        {/* 3. Disbursed (Month) */}
-        <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 truncate">Disbursed (Month)</p>
-              <p className="text-xl sm:text-2xl font-black text-emerald-900 mt-0.5">{formatCurrency(totalDisbursed)}</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-100 border border-emerald-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <IndianRupee className="w-4 h-4 text-emerald-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-emerald-200/60 text-[10px] sm:text-[11px] font-semibold text-emerald-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            Direct PFMS Transfer
-          </div>
-        </div>
-
-        {/* 4. OD Sync Status */}
-        <div className="bg-purple-50/70 border border-purple-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-purple-800 truncate">OD Sync Status</p>
-              <p className="text-xl sm:text-2xl font-black text-purple-900 mt-0.5">100% Validated</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-purple-100 border border-purple-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <CheckCircle2 className="w-4 h-4 text-purple-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-purple-200/60 text-[10px] sm:text-[11px] font-semibold text-purple-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            Outdoor Duty Cross-Checked
-          </div>
-        </div>
+        <MetricCard
+          title="Disbursed via PFMS"
+          value={formatCurrency(totalDisbursed)}
+          subtitle="Direct Beneficiary Transfer"
+          icon={IndianRupee}
+          variant="success"
+        />
+        <MetricCard
+          title="Audit Queue"
+          value={formatCurrency(totalAudit)}
+          subtitle={`${claims.filter((c) => c.status === 'In Audit').length} Bills Under Scrutiny`}
+          icon={CreditCard}
+          variant="warning"
+        />
+        <MetricCard
+          title="Claims Reconciled"
+          value={`${claims.length} Records`}
+          subtitle="Tour TA/DA & Contingency"
+          icon={Receipt}
+          variant="primary"
+        />
+        <MetricCard
+          title="Grant Corpus"
+          value="₹14.8 Cr"
+          subtitle="Annual Sanction Head"
+          icon={Building}
+          variant="info"
+        />
       </div>
 
       {/* Search & Filter Bar */}
-      <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="relative w-full sm:w-80">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Search claim no, employee, budget head..."
+      <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="w-full sm:w-80">
+          <Input
+            placeholder="Search claim no, claimant name, budget head..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-3 py-1.5 text-xs font-medium focus:bg-white focus:ring-2 focus:ring-rose-700 focus:outline-none"
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setCurrentPage(1);
+            }}
+            leftIcon={Search}
+            size="sm"
           />
         </div>
 
-        <div className="flex items-center space-x-1.5 w-full sm:w-auto justify-end">
-          <span className="text-xs font-semibold text-slate-500 mr-1">Status:</span>
+        <div className="flex items-center space-x-1.5 w-full sm:w-auto justify-end overflow-x-auto">
+          <span className="text-xs font-semibold text-slate-500 mr-1 shrink-0">Status:</span>
           {['ALL', 'In Audit', 'DDO Approved', 'Disbursed via PFMS'].map((st) => (
-            <button
+            <Button
               key={st}
-              onClick={() => setSelectedStatus(st)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
-                selectedStatus === st
-                  ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
-                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-              }`}
+              size="xs"
+              variant={selectedStatus === st ? 'primary' : 'outline'}
+              onClick={() => {
+                setSelectedStatus(st);
+                setCurrentPage(1);
+              }}
             >
               {st}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
 
-      {/* Claims Table */}
-      <div className="bg-white border border-slate-200/90 rounded-2xl overflow-hidden shadow-2xs">
-        <div className="w-full min-w-0 overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse table-fixed">
-            <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 text-[11px]">
-              <tr className="h-10">
-                <th className="px-4 py-2.5 whitespace-nowrap align-middle w-[20%]">Claim No &amp; Type</th>
-                <th className="px-4 py-2.5 whitespace-nowrap align-middle w-[22%]">Claimant</th>
-                <th className="px-4 py-2.5 whitespace-nowrap align-middle w-[26%]">OD Reference / Budget Head</th>
-                <th className="px-4 py-2.5 whitespace-nowrap align-middle w-[14%]">Claimed Amount</th>
-                <th className="px-4 py-2.5 whitespace-nowrap align-middle w-[10%]">Submitted</th>
-                <th className="px-4 py-2.5 text-center whitespace-nowrap align-middle w-[8%]">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredClaims.map((c) => (
-                <tr key={c.id} className="hover:bg-slate-50/80 transition-colors">
-                  <td className="px-4 py-3 font-mono font-bold text-slate-900 align-middle">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-900 border border-rose-200 block w-fit mb-0.5">
-                      {c.claimType}
-                    </span>
+      {/* Standardized Claims Table */}
+      <div className="bg-white border border-slate-200/90 rounded-xl overflow-hidden shadow-2xs">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[18%]">Claim Voucher No</TableHead>
+              <TableHead className="w-[20%]">Claimant &amp; Department</TableHead>
+              <TableHead className="w-[22%]">Type &amp; Budget Head</TableHead>
+              <TableHead className="w-[16%]">Claimed vs Sanctioned</TableHead>
+              <TableHead className="w-[12%]">Submission Date</TableHead>
+              <TableHead align="center" className="w-[12%]">Status</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {paginatedClaims.length === 0 ? (
+              <TableEmpty colSpan={6} message="No finance claims found matching search criteria." />
+            ) : (
+              paginatedClaims.map((c) => (
+                <TableRow key={c.id}>
+                  <TableCell className="align-middle font-mono font-bold text-slate-800 text-xs">
                     {c.claimNo}
-                  </td>
-                  <td className="px-4 py-3 align-middle">
-                    <div className="font-bold text-slate-800">{c.claimantName}</div>
-                    <div className="text-[11px] text-slate-500">{c.department}</div>
-                  </td>
-                  <td className="px-4 py-3 align-middle">
                     {c.associatedOdRef && (
-                      <span className="font-mono text-[11px] text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded inline-block mb-0.5">
-                        OD: {c.associatedOdRef}
-                      </span>
+                      <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                        Ref: {c.associatedOdRef}
+                      </div>
                     )}
-                    <div className="text-xs text-slate-700 font-medium">{c.budgetHead}</div>
-                  </td>
-                  <td className="px-4 py-3 font-bold text-slate-900 align-middle">
-                    <div className="text-sm font-black">{formatCurrency(c.amountClaimed)}</div>
-                    <div className="text-[10px] text-slate-500">Sanctioned: {formatCurrency(c.amountSanctioned)}</div>
-                  </td>
-                  <td className="px-4 py-3 font-mono text-slate-600 align-middle">
+                  </TableCell>
+                  <TableCell className="align-middle">
+                    <div className="font-bold text-slate-900 leading-snug">{c.claimantName}</div>
+                    <div className="text-[11px] text-slate-500">{c.department}</div>
+                  </TableCell>
+                  <TableCell className="align-middle">
+                    <Badge variant="neutral" size="sm" className="mb-0.5">
+                      {c.claimType}
+                    </Badge>
+                    <div className="text-[11px] text-slate-600 truncate max-w-xs">{c.budgetHead}</div>
+                  </TableCell>
+                  <TableCell className="align-middle font-medium text-slate-900">
+                    <div className="font-bold text-slate-900">{formatCurrency(c.amountSanctioned)}</div>
+                    {c.amountClaimed !== c.amountSanctioned && (
+                      <div className="text-[10px] text-slate-400">Claimed: {formatCurrency(c.amountClaimed)}</div>
+                    )}
+                  </TableCell>
+                  <TableCell className="align-middle font-mono text-slate-700 text-xs whitespace-nowrap">
                     {c.submittedDate}
-                  </td>
-                  <td className="px-4 py-3 text-center align-middle">
-                    <span
-                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                        c.status === 'Disbursed via PFMS'
-                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                          : c.status === 'DDO Approved'
-                          ? 'bg-blue-50 text-blue-800 border border-blue-200'
-                          : 'bg-amber-50 text-amber-900 border border-amber-200'
-                      }`}
-                    >
-                      {c.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  </TableCell>
+                  <TableCell align="center" className="align-middle whitespace-nowrap">
+                    {c.status === 'Disbursed via PFMS' ? (
+                      <Badge variant="success">PFMS Disbursed</Badge>
+                    ) : c.status === 'DDO Approved' ? (
+                      <Badge variant="info">DDO Approved</Badge>
+                    ) : (
+                      <Badge variant="warning">In Audit</Badge>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+
+        {filteredClaims.length > pageSize && (
+          <div className="border-t border-slate-100">
+            <TablePagination
+              currentPage={currentPage}
+              totalPages={Math.ceil(filteredClaims.length / pageSize)}
+              totalItems={filteredClaims.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(newSize) => {
+                setPageSize(newSize);
+                setCurrentPage(1);
+              }}
+            />
+          </div>
+        )}
       </div>
 
-      {/* TA/DA Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-xl overflow-hidden">
-            <div className="p-4 bg-rose-900 text-white flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Receipt className="w-5 h-5 text-rose-300" />
-                <h3 className="font-bold text-sm">Submit Official Tour TA/DA Claim</h3>
+      {/* Standardized Submit Claim Modal */}
+      <Modal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        size="md"
+      >
+        <ModalHeader
+          title="Submit Tour TA/DA or Expense Claim"
+          subtitle="Attach bill amounts against approved Outdoor Duty (OD) or institutional budget heads."
+          icon={Receipt}
+          onClose={() => setShowModal(false)}
+        />
+        <form onSubmit={handleCreateClaim}>
+          <ModalBody className="space-y-4">
+            {formError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs font-semibold text-red-800">
+                {formError}
               </div>
-              <button onClick={() => setShowModal(false)} className="text-white/80 hover:text-white cursor-pointer">
-                ✕
-              </button>
-            </div>
+            )}
 
-            <form onSubmit={handleCreateClaim} className="p-5 space-y-4 text-xs">
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Claim Type</label>
-                <select
-                  value={claimType}
-                  onChange={(e) => setClaimType(e.target.value as any)}
-                  className="w-full border border-slate-200 rounded-lg p-2 text-xs focus:ring-2 focus:ring-rose-600 focus:outline-none"
-                >
-                  <option value="Tour TA/DA">Official Tour TA / DA Bill</option>
-                  <option value="Field Contingency">Field Tour Contingency Expenses</option>
-                  <option value="Consumables Bill">Lab / Station Consumables Invoice</option>
-                </select>
-              </div>
+            <FormField label="Claim Category" required>
+              <Select
+                value={claimType}
+                onChange={(val) => setClaimType(String(val) as any)}
+                options={[
+                  { value: 'Tour TA/DA', label: 'Tour TA / DA Requisition' },
+                  { value: 'Field Contingency', label: 'Field Expedition Contingency' },
+                  { value: 'Consumables Bill', label: 'Lab Consumables / Store Voucher' }
+                ]}
+              />
+            </FormField>
 
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Total Claim Amount (₹)</label>
-                <input
-                  type="number"
-                  required
-                  placeholder="e.g. 18500"
-                  value={claimAmount}
-                  onChange={(e) => setClaimAmount(e.target.value)}
-                  className="w-full border border-slate-200 rounded-lg p-2 text-xs font-mono focus:ring-2 focus:ring-rose-600 focus:outline-none"
-                />
-              </div>
+            <FormField label="Associated Outdoor Duty (OD) Reference">
+              <Select
+                value={selectedOdRef}
+                onChange={(val) => setSelectedOdRef(String(val))}
+                options={odRequests.map((od) => ({
+                  value: od.id,
+                  label: `${od.id} — ${od.location} (${od.startDate} to ${od.endDate})`
+                }))}
+              />
+            </FormField>
 
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Sanctioned OD Reference</label>
-                <input
-                  type="text"
-                  value={selectedOdRef}
-                  onChange={(e) => setSelectedOdRef(e.target.value)}
-                  placeholder="e.g. OD-2026-081"
-                  className="w-full border border-slate-200 rounded-lg p-2 text-xs font-mono focus:ring-2 focus:ring-rose-600 focus:outline-none"
-                />
-                <p className="text-[10px] text-slate-500 mt-1">Cross-references approved Outdoor Duty dates and funding sanction.</p>
-              </div>
+            <FormField label="Claim Amount (INR)" required>
+              <Input
+                type="number"
+                value={claimAmount}
+                onChange={(e) => setClaimAmount(e.target.value)}
+                placeholder="e.g. 18500"
+                required
+              />
+            </FormField>
 
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Chargeable Budget Head</label>
-                <input
-                  type="text"
-                  value={budgetHead}
-                  onChange={(e) => setBudgetHead(e.target.value)}
-                  className="w-full border border-slate-200 rounded-lg p-2 text-xs focus:ring-2 focus:ring-rose-600 focus:outline-none"
-                />
-              </div>
-
-              <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-4 py-2 border border-slate-200 rounded-lg text-slate-700 font-bold hover:bg-slate-50 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-rose-700 hover:bg-rose-800 text-white rounded-lg font-bold shadow-xs cursor-pointer"
-                >
-                  Submit for DDO Audit
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+            <FormField label="Accounting Budget Head">
+              <Input
+                value={budgetHead}
+                onChange={(e) => setBudgetHead(e.target.value)}
+                placeholder="e.g. Institute Non-Plan Travel Head / CAMPA Project"
+              />
+            </FormField>
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+            >
+              Submit Voucher
+            </Button>
+          </ModalFooter>
+        </form>
+      </Modal>
     </div>
   );
 };

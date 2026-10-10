@@ -241,9 +241,7 @@ export const LeavePolicyMaster: React.FC = () => {
               <FileText className="w-4 h-4 text-slate-900" />
               <span>Leave Policy</span>
             </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Configure institutional leave rules, annual quotas, approval workflows, and employee category entitlements.
-            </p>
+            
           </div>
 
           <div className="flex items-center space-x-2 shrink-0">
@@ -269,9 +267,7 @@ export const LeavePolicyMaster: React.FC = () => {
                 {filteredPolicies.length} Rules • 7 Categories
               </span>
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Manage annual leave quotas and toggle which employee types are entitled to specific leave schemes.
-            </p>
+            
           </div>
 
           {/* Search Box */}
@@ -429,38 +425,37 @@ export const LeavePolicyMaster: React.FC = () => {
 
       {/* MODAL 2: COMPREHENSIVE ADD / EDIT LEAVE POLICY (ROW) */}
       {isPolicyModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/55 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-xl border border-slate-200 overflow-hidden my-auto">
             {/* Modal Header */}
-            <div className="p-4 px-6 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-              <div className="flex items-center space-x-2.5">
-                <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
-                  <Sliders className="w-4 h-4" />
+            <div className="relative overflow-hidden px-5 py-4 bg-gradient-to-r from-[#091224] via-[#0f214a] to-[#1a3675] text-white flex items-center justify-between shrink-0 border-b border-blue-900/60 rounded-t-2xl">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
+              <div className="relative z-10 flex items-center space-x-3">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#183063] to-[#0c1938] border border-blue-700/60 flex items-center justify-center text-blue-200 shrink-0 shadow-sm font-bold">
+                  <Sliders className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-blue-200" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">
+                  <h3 className="font-bold text-base leading-tight text-white tracking-tight">
                     {editingPolicy ? `Configure: ${editingPolicy.name}` : 'Add New Leave Policy (Row)'}
                   </h3>
-                  <p className="text-xs text-slate-500">
-                    Set up leave quotas, eligible categories, accrual frequencies, and compliance rules.
-                  </p>
                 </div>
               </div>
               <button
                 onClick={() => setIsPolicyModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-200/60 cursor-pointer"
+                className="relative z-10 text-blue-300 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                aria-label="Close dialog"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Modal Tabs */}
-            <div className="flex border-b border-slate-200 bg-white px-6">
+            <div className="flex border-b border-slate-200 bg-slate-50/70 px-5 overflow-x-auto no-scrollbar">
               <button
                 onClick={() => setPolicyModalTab('general')}
-                className={`py-2.5 px-3 text-xs font-bold border-b-2 transition-colors cursor-pointer ${
+                className={`py-2.5 px-3 text-xs font-bold border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
                   policyModalTab === 'general'
-                    ? 'border-indigo-600 text-indigo-700'
+                    ? 'border-blue-600 text-blue-700 bg-white shadow-2xs'
                     : 'border-transparent text-slate-500 hover:text-slate-800'
                 }`}
               >
@@ -468,9 +463,9 @@ export const LeavePolicyMaster: React.FC = () => {
               </button>
               <button
                 onClick={() => setPolicyModalTab('quota')}
-                className={`py-2.5 px-3 text-xs font-bold border-b-2 transition-colors cursor-pointer ${
+                className={`py-2.5 px-3 text-xs font-bold border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
                   policyModalTab === 'quota'
-                    ? 'border-indigo-600 text-indigo-700'
+                    ? 'border-blue-600 text-blue-700 bg-white shadow-2xs'
                     : 'border-transparent text-slate-500 hover:text-slate-800'
                 }`}
               >
@@ -478,9 +473,9 @@ export const LeavePolicyMaster: React.FC = () => {
               </button>
               <button
                 onClick={() => setPolicyModalTab('eligibility')}
-                className={`py-2.5 px-3 text-xs font-bold border-b-2 transition-colors cursor-pointer ${
+                className={`py-2.5 px-3 text-xs font-bold border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
                   policyModalTab === 'eligibility'
-                    ? 'border-indigo-600 text-indigo-700'
+                    ? 'border-blue-600 text-blue-700 bg-white shadow-2xs'
                     : 'border-transparent text-slate-500 hover:text-slate-800'
                 }`}
               >
@@ -488,9 +483,9 @@ export const LeavePolicyMaster: React.FC = () => {
               </button>
               <button
                 onClick={() => setPolicyModalTab('rules')}
-                className={`py-2.5 px-3 text-xs font-bold border-b-2 transition-colors cursor-pointer ${
+                className={`py-2.5 px-3 text-xs font-bold border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
                   policyModalTab === 'rules'
-                    ? 'border-indigo-600 text-indigo-700'
+                    ? 'border-blue-600 text-blue-700 bg-white shadow-2xs'
                     : 'border-transparent text-slate-500 hover:text-slate-800'
                 }`}
               >
@@ -514,7 +509,7 @@ export const LeavePolicyMaster: React.FC = () => {
                         placeholder="e.g. Earned Leave (EL)"
                         value={formData.name || ''}
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold focus:ring-2 focus:ring-indigo-600 focus:outline-none"
+                        className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 text-xs font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 shadow-2xs transition-all"
                       />
                     </div>
 
@@ -528,7 +523,7 @@ export const LeavePolicyMaster: React.FC = () => {
                         placeholder="e.g. EL, CL, HPL"
                         value={formData.code || ''}
                         onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold uppercase font-mono focus:ring-2 focus:ring-indigo-600 focus:outline-none"
+                        className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 text-xs font-semibold uppercase font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 shadow-2xs transition-all"
                       />
                     </div>
                   </div>
@@ -541,7 +536,7 @@ export const LeavePolicyMaster: React.FC = () => {
                         placeholder="e.g. Rule 26, Executive Orders"
                         value={formData.ccsRuleNumber || ''}
                         onChange={(e) => setFormData({ ...formData, ccsRuleNumber: e.target.value })}
-                        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-600 focus:outline-none"
+                        className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 text-xs font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 shadow-2xs transition-all"
                       />
                     </div>
 
@@ -556,7 +551,7 @@ export const LeavePolicyMaster: React.FC = () => {
                             isDebited: e.target.value === 'Debited Leave'
                           })
                         }
-                        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold focus:ring-2 focus:ring-indigo-600 focus:outline-none cursor-pointer"
+                        className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 text-xs font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 shadow-2xs transition-all cursor-pointer"
                       >
                         <option value="Debited Leave">Debited Leave (Deducts from Quota)</option>
                         <option value="Special Leave (Non-Debited)">Special Leave (Non-Debited Scheme)</option>
@@ -572,7 +567,7 @@ export const LeavePolicyMaster: React.FC = () => {
                       placeholder="Enter policy terms, eligibility conditions, and guidelines..."
                       value={formData.description || ''}
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      className="w-full bg-white border border-slate-200 rounded-lg p-3 text-xs leading-relaxed focus:ring-2 focus:ring-indigo-600 focus:outline-none"
+                      className="w-full bg-slate-50 border border-slate-200/90 rounded-xl p-3 text-xs leading-relaxed focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 shadow-2xs transition-all"
                     />
                   </div>
                 </div>
@@ -705,7 +700,7 @@ export const LeavePolicyMaster: React.FC = () => {
                       <select
                         value={formData.genderEligibility || 'all'}
                         onChange={(e) => setFormData({ ...formData, genderEligibility: e.target.value as any })}
-                        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold focus:ring-2 focus:ring-indigo-600 focus:outline-none"
+                        className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 text-xs font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 shadow-2xs transition-all cursor-pointer"
                       >
                         <option value="all">All Employees (Male, Female &amp; Other)</option>
                         <option value="female_only">Female Employees Only (e.g. Maternity, CCL)</option>
@@ -718,7 +713,7 @@ export const LeavePolicyMaster: React.FC = () => {
                       <select
                         value={formData.minServiceMonths ?? 0}
                         onChange={(e) => setFormData({ ...formData, minServiceMonths: Number(e.target.value) })}
-                        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold focus:ring-2 focus:ring-indigo-600 focus:outline-none"
+                        className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 text-xs font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 shadow-2xs transition-all cursor-pointer"
                       >
                         <option value="0">Immediate upon joining (0 Months)</option>
                         <option value="6">After 6 Months Probation</option>
@@ -818,7 +813,7 @@ export const LeavePolicyMaster: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsPolicyModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer"
+                  className="h-9 px-4 bg-white hover:bg-slate-100 text-slate-700 font-bold rounded-xl text-xs border border-slate-200/90 cursor-pointer transition-colors shadow-2xs"
                 >
                   Cancel
                 </button>
@@ -832,7 +827,7 @@ export const LeavePolicyMaster: React.FC = () => {
                         else if (policyModalTab === 'quota') setPolicyModalTab('eligibility');
                         else if (policyModalTab === 'eligibility') setPolicyModalTab('rules');
                       }}
-                      className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-xs flex items-center space-x-1.5 transition-colors cursor-pointer"
+                      className="h-9 px-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs flex items-center space-x-1.5 transition-colors cursor-pointer shadow-2xs"
                     >
                       <span>Next Step</span>
                       <ArrowRight className="w-3.5 h-3.5" />
@@ -841,9 +836,9 @@ export const LeavePolicyMaster: React.FC = () => {
 
                   <button
                     type="submit"
-                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs flex items-center space-x-1.5 shadow-sm transition-colors cursor-pointer"
+                    className="h-9 px-5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-xl text-xs flex items-center space-x-1.5 shadow-2xs transition-all cursor-pointer active:scale-95"
                   >
-                    <Check className="w-4 h-4" />
+                    <Check className="w-3.5 h-3.5" />
                     <span>{editingPolicy ? 'Save Policy Changes' : 'Create Leave Policy'}</span>
                   </button>
                 </div>

@@ -1,21 +1,35 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
+  PageHeader,
+  Button,
+  Badge,
+  StatusBadge,
+  MetricCard,
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+  TableEmpty,
+  TablePagination,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  FormField,
+  Input,
+  Select
+} from '../../shared/components';
+import {
   Briefcase,
   Plus,
   Search,
-  Filter,
   Users,
-  Calendar,
   IndianRupee,
-  CheckCircle2,
-  Clock,
-  AlertCircle,
-  FileText,
-  ChevronRight,
   TrendingUp,
-  MapPin,
-  Sparkles
+  Download
 } from 'lucide-react';
 
 interface PMSViewProps {
@@ -113,11 +127,18 @@ export const PMSView: React.FC<PMSViewProps> = ({ onReturnToLobby }) => {
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [showAddModal, setShowAddModal] = useState(false);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
   // New project form state
   const [newTitle, setNewTitle] = useState('');
   const [newCode, setNewCode] = useState('');
   const [newAgency, setNewAgency] = useState('');
   const [newSanction, setNewSanction] = useState('');
+  const [newStartDate, setNewStartDate] = useState('');
+  const [newEndDate, setNewEndDate] = useState('');
+  const [formError, setFormError] = useState('');
 
   const formatCurrency = (amt: number) => {
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amt);
@@ -125,7 +146,10 @@ export const PMSView: React.FC<PMSViewProps> = ({ onReturnToLobby }) => {
 
   const handleCreateProject = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim() || !newCode.trim()) return;
+    if (!newTitle.trim() || !newCode.trim()) {
+      setFormError('Please fill in required fields (Project Code and Project Title).');
+      return;
+    }
 
     const newProject: ProjectItem = {
       id: `PRJ-${String(projects.length + 1).padStart(2, '0')}`,
@@ -135,8 +159,8 @@ export const PMSView: React.FC<PMSViewProps> = ({ onReturnToLobby }) => {
       fundingAgency: newAgency.trim() || 'Institute Sponsored',
       sanctionAmount: Number(newSanction) || 1500000,
       spentAmount: 0,
-      startDate: new Date().toISOString().split('T')[0],
-      endDate: '2027-12-31',
+      startDate: newStartDate || new Date().toISOString().split('T')[0],
+      endDate: newEndDate || '2027-12-31',
       status: 'Ongoing',
       staffCount: 1,
       milestonesTotal: 4,
@@ -149,6 +173,32 @@ export const PMSView: React.FC<PMSViewProps> = ({ onReturnToLobby }) => {
     setNewCode('');
     setNewAgency('');
     setNewSanction('');
+    setNewStartDate('');
+    setNewEndDate('');
+    setFormError('');
+  };
+
+  const handleExportCSV = () => {
+    const headers = ['Project Code', 'Project Title', 'Principal Investigator', 'Funding Agency', 'Sanction Amount', 'Spent Amount', 'Start Date', 'End Date', 'Status'];
+    const rows = filteredProjects.map((p) => [
+      `"${p.code}"`,
+      `"${p.title.replace(/"/g, '""')}"`,
+      `"${p.piName}"`,
+      `"${p.fundingAgency}"`,
+      p.sanctionAmount,
+      p.spentAmount,
+      p.startDate,
+      p.endDate,
+      p.status
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `WII_PMS_Projects_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const filteredProjects = projects.filter((p) => {
@@ -161,300 +211,304 @@ export const PMSView: React.FC<PMSViewProps> = ({ onReturnToLobby }) => {
     return matchesStatus && matchesSearch;
   });
 
+  const paginatedProjects = filteredProjects.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
+
   const totalSanction = projects.reduce((acc, p) => acc + p.sanctionAmount, 0);
   const totalSpent = projects.reduce((acc, p) => acc + p.spentAmount, 0);
 
+  const getStatusBadge = (status: ProjectItem['status']) => {
+    switch (status) {
+      case 'Ongoing':
+        return <Badge variant="info">Ongoing</Badge>;
+      case 'Completed':
+        return <Badge variant="success">Completed</Badge>;
+      case 'Delayed':
+        return <Badge variant="error">Delayed</Badge>;
+      case 'Review':
+        return <Badge variant="warning">Review</Badge>;
+      default:
+        return <Badge variant="neutral">{status}</Badge>;
+    }
+  };
+
   return (
     <div className="space-y-6 pb-12 animate-in fade-in duration-300">
-      {/* Module Header Bar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white border border-slate-200/90 rounded-2xl p-5 shadow-2xs">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-blue-600 text-white rounded-xl shadow-xs">
-            <Briefcase className="w-6 h-6" />
+      {/* Standardized Module PageHeader */}
+      <PageHeader
+        icon={Briefcase}
+        title="Project Management System (PMS)"
+        subtitle="Research grants, sanctions, Principal Investigator portfolios, deliverables & field staff allocations."
+        breadcrumbs={[
+          { label: 'Portal Hub', onClick: onReturnToLobby },
+          { label: 'Project Management' }
+        ]}
+        actions={
+          <div className="flex items-center space-x-2">
+            <Button
+              variant="outline"
+              size="sm"
+              leftIcon={<Download className="w-4 h-4" />}
+              onClick={handleExportCSV}
+            >
+              Export CSV
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Plus className="w-4 h-4" />}
+              onClick={() => {
+                setFormError('');
+                setShowAddModal(true);
+              }}
+            >
+              Add Project
+            </Button>
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">
-                WII-PMS • Project Management System
-              </h2>
-              <span className="text-[10px] font-mono font-bold bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-full">
-                MOD-PMS-02
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5 font-medium">
-              Research Grants, Sanctions, PI Portfolios, Deliverables &amp; Field Staff Rosters
-            </p>
-          </div>
-        </div>
+        }
+      />
 
-        <div className="flex items-center gap-2 self-end sm:self-auto">
-          <button
-            type="button"
-            onClick={() => setShowAddModal(true)}
-            className="px-4 py-2 rounded-xl text-xs font-bold bg-blue-700 hover:bg-blue-800 text-white shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
-          >
-            <Plus className="w-4 h-4" />
-            <span>New Project Charter</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Metrics Row matching Attendance theme */}
+      {/* Metrics Row using Standardized MetricCard */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {/* 1. Active Projects */}
-        <div className="bg-blue-50/70 border border-blue-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-blue-800 truncate">Active Projects</p>
-              <p className="text-xl sm:text-2xl font-black text-blue-900 mt-0.5">{projects.length}</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-100 border border-blue-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <Briefcase className="w-4 h-4 text-blue-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-blue-200/60 text-[10px] sm:text-[11px] font-semibold text-blue-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            Multi-year Research Grants
-          </div>
-        </div>
-
-        {/* 2. Total Sanctioned */}
-        <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 truncate">Total Sanctioned</p>
-              <p className="text-xl sm:text-2xl font-black text-emerald-900 mt-0.5">{formatCurrency(totalSanction)}</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-100 border border-emerald-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <IndianRupee className="w-4 h-4 text-emerald-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-emerald-200/60 text-[10px] sm:text-[11px] font-semibold text-emerald-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            Approved Grant Corpus
-          </div>
-        </div>
-
-        {/* 3. Utilization */}
-        <div className="bg-amber-50/70 border border-amber-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800 truncate">Utilization</p>
-              <p className="text-xl sm:text-2xl font-black text-amber-900 mt-0.5">{Math.round((totalSpent / totalSanction) * 100)}%</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-100 border border-amber-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <TrendingUp className="w-4 h-4 text-amber-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-amber-200/60 text-[10px] sm:text-[11px] font-semibold text-amber-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            {formatCurrency(totalSpent)} disbursed
-          </div>
-        </div>
-
-        {/* 4. Field Scholars */}
-        <div className="bg-purple-50/70 border border-purple-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-purple-800 truncate">Field Scholars</p>
-              <p className="text-xl sm:text-2xl font-black text-purple-900 mt-0.5">80 Fellows</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-purple-100 border border-purple-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <Users className="w-4 h-4 text-purple-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-purple-200/60 text-[10px] sm:text-[11px] font-semibold text-purple-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            JRF, SRF, Research Associates
-          </div>
-        </div>
+        <MetricCard
+          title="Active Projects"
+          value={projects.length}
+          subtitle="Multi-year Research Grants"
+          icon={Briefcase}
+          variant="primary"
+        />
+        <MetricCard
+          title="Total Sanctioned"
+          value={formatCurrency(totalSanction)}
+          subtitle="Approved Grant Corpus"
+          icon={IndianRupee}
+          variant="success"
+        />
+        <MetricCard
+          title="Grant Utilization"
+          value={`${Math.round((totalSpent / totalSanction) * 100)}%`}
+          subtitle={`${formatCurrency(totalSpent)} disbursed`}
+          icon={TrendingUp}
+          variant="warning"
+        />
+        <MetricCard
+          title="Field Scholars"
+          value="80 Fellows"
+          subtitle="JRF, SRF, Project Scientists"
+          icon={Users}
+          variant="info"
+        />
       </div>
 
       {/* Search & Filter Bar */}
-      <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="relative w-full sm:w-80">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
+      <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="w-full sm:w-80">
+          <Input
             placeholder="Search title, code, PI name, agency..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-3 py-1.5 text-xs font-medium focus:bg-white focus:ring-2 focus:ring-blue-700 focus:outline-none"
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setCurrentPage(1);
+            }}
+            leftIcon={Search}
+            size="sm"
           />
         </div>
 
-        <div className="flex items-center space-x-1.5 w-full sm:w-auto justify-end">
-          <span className="text-xs font-semibold text-slate-500 mr-1">Status:</span>
+        <div className="flex items-center space-x-1.5 w-full sm:w-auto justify-end overflow-x-auto">
+          <span className="text-xs font-semibold text-slate-500 mr-1 shrink-0">Status:</span>
           {['ALL', 'Ongoing', 'Review', 'Completed'].map((st) => (
-            <button
+            <Button
               key={st}
-              onClick={() => setSelectedStatus(st)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
-                selectedStatus === st
-                  ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
-                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-              }`}
+              size="xs"
+              variant={selectedStatus === st ? 'primary' : 'outline'}
+              onClick={() => {
+                setSelectedStatus(st);
+                setCurrentPage(1);
+              }}
             >
               {st}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
 
-      {/* Projects Table */}
-      <div className="bg-white border border-slate-200/90 rounded-2xl overflow-hidden shadow-2xs">
-        <div className="w-full min-w-0 overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse table-fixed">
-            <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 text-[11px]">
-              <tr className="h-10">
-                <th className="px-4 py-2.5 whitespace-nowrap align-middle w-[26%]">Project Code &amp; Title</th>
-                <th className="px-4 py-2.5 whitespace-nowrap align-middle w-[20%]">PI &amp; Agency</th>
-                <th className="px-4 py-2.5 whitespace-nowrap align-middle w-[20%]">Sanction &amp; Spend</th>
-                <th className="px-4 py-2.5 whitespace-nowrap align-middle w-[14%]">Duration</th>
-                <th className="px-4 py-2.5 text-center whitespace-nowrap align-middle w-[10%]">Milestones</th>
-                <th className="px-4 py-2.5 text-center whitespace-nowrap align-middle w-[10%]">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredProjects.map((p) => (
-                <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
-                  <td className="px-4 py-3 align-top max-w-sm">
-                    <span className="font-mono font-bold text-blue-900 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded text-[10px] inline-block mb-1">
+      {/* Standardized Projects Table */}
+      <div className="bg-white border border-slate-200/90 rounded-xl overflow-hidden shadow-2xs">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[28%]">Project Code &amp; Title</TableHead>
+              <TableHead className="w-[22%]">PI &amp; Funding Agency</TableHead>
+              <TableHead className="w-[20%]">Sanction &amp; Spend</TableHead>
+              <TableHead className="w-[14%]">Duration</TableHead>
+              <TableHead align="center" className="w-[8%]">Milestones</TableHead>
+              <TableHead align="center" className="w-[8%]">Status</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {paginatedProjects.length === 0 ? (
+              <TableEmpty colSpan={6} message="No project charters found matching search criteria." />
+            ) : (
+              paginatedProjects.map((p) => (
+                <TableRow key={p.id}>
+                  <TableCell className="align-top">
+                    <span className="font-mono font-bold text-[#2563eb] bg-[#eff6ff] border border-[#bfdbfe] px-1.5 py-0.5 rounded text-[10px] inline-block mb-1">
                       {p.code}
                     </span>
                     <div className="font-bold text-slate-900 leading-snug">{p.title}</div>
-                    <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2">
-                      <span className="flex items-center gap-1">
-                        <Users className="w-3 h-3" /> {p.staffCount} Staff Allocated
-                      </span>
+                    <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-slate-400" />
+                      <span>{p.staffCount} Staff Allocated</span>
                     </div>
-                  </td>
-                  <td className="px-4 py-3 align-top whitespace-nowrap">
+                  </TableCell>
+                  <TableCell className="align-top whitespace-nowrap">
                     <div className="font-bold text-slate-800">{p.piName}</div>
-                    {p.coPiName && <div className="text-[10px] text-slate-500">Co-PI: {p.coPiName}</div>}
-                    <div className="text-[11px] text-blue-700 font-medium mt-1">{p.fundingAgency}</div>
-                  </td>
-                  <td className="px-4 py-3 align-top whitespace-nowrap">
+                    {p.coPiName && <div className="text-[11px] text-slate-500">Co-PI: {p.coPiName}</div>}
+                    <div className="text-[11px] text-[#2563eb] font-medium mt-1 truncate max-w-xs">{p.fundingAgency}</div>
+                  </TableCell>
+                  <TableCell className="align-top whitespace-nowrap">
                     <div className="font-bold text-slate-900">{formatCurrency(p.sanctionAmount)}</div>
-                    <div className="text-[10px] text-slate-500">Spent: {formatCurrency(p.spentAmount)}</div>
-                    <div className="w-24 bg-slate-100 h-1.5 rounded-full overflow-hidden mt-1.5 border border-slate-200">
+                    <div className="text-[11px] text-slate-500">Spent: {formatCurrency(p.spentAmount)}</div>
+                    <div className="w-24 bg-slate-100 h-1.5 rounded-sm overflow-hidden mt-1.5 border border-slate-200">
                       <div
-                        className="bg-blue-600 h-full rounded-full"
+                        className="bg-[#2563eb] h-full rounded-sm"
                         style={{ width: `${Math.min(100, Math.round((p.spentAmount / p.sanctionAmount) * 100))}%` }}
                       />
                     </div>
-                  </td>
-                  <td className="px-4 py-3 align-top whitespace-nowrap text-[11px] text-slate-600 font-mono">
+                  </TableCell>
+                  <TableCell className="align-top whitespace-nowrap text-[11px] text-slate-600 font-mono">
                     <div>{p.startDate}</div>
-                    <div className="text-slate-400">to</div>
+                    <div className="text-slate-400 text-[10px]">to</div>
                     <div>{p.endDate}</div>
-                  </td>
-                  <td className="px-4 py-3 align-top text-center whitespace-nowrap">
+                  </TableCell>
+                  <TableCell align="center" className="align-top whitespace-nowrap">
                     <span className="font-bold text-slate-800">
                       {p.milestonesCompleted} / {p.milestonesTotal}
                     </span>
-                    <div className="text-[10px] text-slate-400">Deliverables Done</div>
-                  </td>
-                  <td className="px-4 py-3 align-top text-center whitespace-nowrap">
-                    <span
-                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                        p.status === 'Ongoing'
-                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                          : p.status === 'Review'
-                          ? 'bg-amber-50 text-amber-900 border border-amber-200'
-                          : 'bg-blue-50 text-blue-800 border border-blue-200'
-                      }`}
-                    >
-                      {p.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                    <div className="text-[10px] text-slate-400">Deliverables</div>
+                  </TableCell>
+                  <TableCell align="center" className="align-top whitespace-nowrap">
+                    {getStatusBadge(p.status)}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+
+        {filteredProjects.length > pageSize && (
+          <div className="border-t border-slate-100">
+            <TablePagination
+              currentPage={currentPage}
+              totalPages={Math.ceil(filteredProjects.length / pageSize)}
+              totalItems={filteredProjects.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(newSize) => {
+                setPageSize(newSize);
+                setCurrentPage(1);
+              }}
+            />
+          </div>
+        )}
       </div>
 
-      {/* Add Project Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-xl overflow-hidden">
-            <div className="p-4 bg-blue-900 text-white flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Briefcase className="w-5 h-5 text-blue-300" />
-                <h3 className="font-bold text-sm">Register New Project Charter</h3>
+      {/* Standardized Add Project Modal */}
+      <Modal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        size="lg"
+      >
+        <ModalHeader
+          title="Register New Project Charter"
+          subtitle="Enter research grant sanction details and Principal Investigator metadata."
+          icon={Briefcase}
+          onClose={() => setShowAddModal(false)}
+        />
+        <form onSubmit={handleCreateProject}>
+          <ModalBody className="space-y-4">
+            {formError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs font-semibold text-red-800">
+                {formError}
               </div>
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="text-white/80 hover:text-white cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
+            )}
 
-            <form onSubmit={handleCreateProject} className="p-5 space-y-4 text-xs">
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Project Code / Sanction No.</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g., WII-NTCA-2026-01"
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField label="Project Code / Sanction No." required>
+                <Input
                   value={newCode}
                   onChange={(e) => setNewCode(e.target.value)}
-                  className="w-full border border-slate-200 rounded-lg p-2 font-mono text-xs focus:ring-2 focus:ring-blue-600 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Full Project Title</label>
-                <textarea
+                  placeholder="e.g. WII-MOEF-2026-05"
                   required
-                  rows={3}
-                  placeholder="Enter sanctioned research project title..."
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  className="w-full border border-slate-200 rounded-lg p-2 text-xs focus:ring-2 focus:ring-blue-600 focus:outline-none"
                 />
-              </div>
+              </FormField>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Funding Agency</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. MoEFCC / NTCA / DST"
-                    value={newAgency}
-                    onChange={(e) => setNewAgency(e.target.value)}
-                    className="w-full border border-slate-200 rounded-lg p-2 text-xs focus:ring-2 focus:ring-blue-600 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Sanction Amount (₹)</label>
-                  <input
-                    type="number"
-                    placeholder="e.g. 2500000"
-                    value={newSanction}
-                    onChange={(e) => setNewSanction(e.target.value)}
-                    className="w-full border border-slate-200 rounded-lg p-2 text-xs focus:ring-2 focus:ring-blue-600 focus:outline-none font-mono"
-                  />
-                </div>
-              </div>
+              <FormField label="Funding Agency" required>
+                <Input
+                  value={newAgency}
+                  onChange={(e) => setNewAgency(e.target.value)}
+                  placeholder="e.g. MoEFCC / NTCA / DST"
+                  required
+                />
+              </FormField>
+            </div>
 
-              <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 border border-slate-200 rounded-lg text-slate-700 font-bold hover:bg-slate-50 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-lg font-bold shadow-xs cursor-pointer"
-                >
-                  Register Project
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+            <FormField label="Full Project Title" required>
+              <Input
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                placeholder="e.g. Landscape Ecology & Spatial Modelling of Wildlife Corridors"
+                required
+              />
+            </FormField>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <FormField label="Sanction Amount (INR)">
+                <Input
+                  type="number"
+                  value={newSanction}
+                  onChange={(e) => setNewSanction(e.target.value)}
+                  placeholder="e.g. 2500000"
+                />
+              </FormField>
+
+              <FormField label="Start Date">
+                <Input
+                  type="date"
+                  value={newStartDate}
+                  onChange={(e) => setNewStartDate(e.target.value)}
+                />
+              </FormField>
+
+              <FormField label="End Date">
+                <Input
+                  type="date"
+                  value={newEndDate}
+                  onChange={(e) => setNewEndDate(e.target.value)}
+                />
+              </FormField>
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowAddModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+            >
+              Save Changes
+            </Button>
+          </ModalFooter>
+        </form>
+      </Modal>
     </div>
   );
 };

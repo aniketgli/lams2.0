@@ -39,42 +39,46 @@ export const ReviewingManagerDashboard: React.FC<ReviewingManagerDashboardProps>
       <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-xs">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <button
+            type="button"
             onClick={() => onNavigate('manual_attendance')}
-            className="p-3.5 bg-indigo-50/80 hover:bg-indigo-100 text-indigo-900 border border-indigo-200/80 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 text-center"
+            className="p-3.5 bg-[#204088]/5 hover:bg-[#204088]/10 text-[#204088] border-[#204088]/20 hover:border-[#204088]/40 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 text-center group"
           >
-            <Clock className="w-5 h-5 text-indigo-600 shrink-0" />
-            <span>Manual</span>
+            <Clock className="w-5 h-5 text-[#204088] shrink-0 transition-colors" />
+            <span>Manual Attendance</span>
           </button>
           <button
+            type="button"
             onClick={() => onNavigate('od')}
-            className="p-3.5 bg-emerald-50/80 hover:bg-emerald-100 text-emerald-900 border border-emerald-200/80 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 text-center"
+            className="p-3.5 bg-[#204088]/5 hover:bg-[#204088]/10 text-[#204088] border-[#204088]/20 hover:border-[#204088]/40 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 text-center group"
           >
-            <MapPin className="w-5 h-5 text-emerald-600 shrink-0" />
-            <span>OD</span>
+            <MapPin className="w-5 h-5 text-[#204088] shrink-0 transition-colors" />
+            <span>Outdoor Duty</span>
           </button>
           <button
+            type="button"
             onClick={() => onNavigate('leave')}
-            className="p-3.5 bg-blue-50/80 hover:bg-blue-100 text-blue-900 border border-blue-200/80 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 text-center"
+            className="p-3.5 bg-[#204088]/5 hover:bg-[#204088]/10 text-[#204088] border-[#204088]/20 hover:border-[#204088]/40 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 text-center group"
           >
-            <Calendar className="w-5 h-5 text-blue-600 shrink-0" />
-            <span>Leave</span>
+            <Calendar className="w-5 h-5 text-[#204088] shrink-0 transition-colors" />
+            <span>Leave Management</span>
           </button>
           <button
+            type="button"
             onClick={() => onNavigate('holiday_calendar')}
-            className="p-3.5 bg-purple-50/80 hover:bg-purple-100 text-purple-900 border border-purple-200/80 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 text-center"
+            className="p-3.5 bg-[#204088]/5 hover:bg-[#204088]/10 text-[#204088] border-[#204088]/20 hover:border-[#204088]/40 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 text-center group"
           >
-            <Calendar className="w-5 h-5 text-purple-600 shrink-0" />
-            <span>Calendar</span>
+            <Calendar className="w-5 h-5 text-[#204088] shrink-0 transition-colors" />
+            <span>Holiday Calendar</span>
           </button>
         </div>
       </div>
 
       {/* Leave Section */}
-      <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs">
+      <div className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <h3 className="text-sm font-bold text-slate-900 flex items-center space-x-2 min-w-0">
-            <FileText className="w-4.5 h-4.5 text-blue-600 shrink-0" />
-            <span className="truncate">Leave</span>
+            <FileText className="w-4.5 h-4.5 text-[#204088] shrink-0" />
+            <span className="truncate">Pending Leave Level-2 Approvals</span>
           </h3>
           <button
             onClick={() => onNavigate('leave')}
@@ -87,7 +91,7 @@ export const ReviewingManagerDashboard: React.FC<ReviewingManagerDashboardProps>
 
         {pendingLevel2.length === 0 ? (
           <div className="border border-dashed border-slate-200 bg-slate-50/50 rounded-xl py-8 text-center text-slate-400 text-xs font-medium mt-4">
-            No active leave records.
+            No pending leave approvals required.
           </div>
         ) : (
           <div className="space-y-3 text-xs mt-4">
@@ -98,7 +102,7 @@ export const ReviewingManagerDashboard: React.FC<ReviewingManagerDashboardProps>
                     <span className="font-bold text-slate-900 text-xs block truncate">{lv.userName}</span>
                     <span className="text-slate-400 text-[11px] font-medium block truncate">({lv.employmentType.replace('_', ' ')})</span>
                   </div>
-                  <span className="text-[10px] bg-blue-50 text-blue-700 font-extrabold px-2 py-0.5 rounded border border-blue-200 uppercase shrink-0">
+                  <span className="text-[10px] bg-amber-50 text-amber-800 font-extrabold px-2 py-0.5 rounded border border-amber-200 shrink-0">
                     {lv.leaveTypeName}
                   </span>
                 </div>

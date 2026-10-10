@@ -1188,14 +1188,16 @@ export const MultiUserLeaveBalanceMatrix: React.FC<MultiUserLeaveBalanceMatrixPr
           </div>
 
           {/* Table Footer Pagination */}
-          <TablePagination
-            currentPage={matrixPage}
-            totalPages={Math.ceil(sortedAndFilteredUsers.length / matrixPageSize)}
-            totalItems={sortedAndFilteredUsers.length}
-            pageSize={matrixPageSize}
-            onPageChange={setMatrixPage}
-            onPageSizeChange={setMatrixPageSize}
-          />
+          <div className="w-full border-t border-slate-200/90 bg-white rounded-b-2xl">
+            <TablePagination
+              currentPage={matrixPage}
+              totalPages={Math.ceil(sortedAndFilteredUsers.length / matrixPageSize)}
+              totalItems={sortedAndFilteredUsers.length}
+              pageSize={matrixPageSize}
+              onPageChange={setMatrixPage}
+              onPageSizeChange={setMatrixPageSize}
+            />
+          </div>
         </div>
       ) : (
         /* 5. Card Grid View Option */
@@ -1219,7 +1221,7 @@ export const MultiUserLeaveBalanceMatrix: React.FC<MultiUserLeaveBalanceMatrixPr
                     />
                     <div className="min-w-0">
                       <h4 className="font-bold text-sm text-slate-900 truncate">{u.name}</h4>
-                      <p className="text-xs text-slate-500 truncate">{u.designation || 'Staff'}</p>
+                      
                       <div className="flex items-center space-x-1.5 mt-1">
                         {u.biometricId && (
                           <span className="font-mono text-[10px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">
@@ -1312,29 +1314,28 @@ export const MultiUserLeaveBalanceMatrix: React.FC<MultiUserLeaveBalanceMatrixPr
 
       {/* 6. Quick Balance Adjust Modal for Single Employee */}
       {adjustingUser && (
-        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-xl w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col">
-            {/* Uniform Modal Header */}
-            <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white px-5 py-4 flex items-center justify-between border-b border-slate-800 shadow-xs shrink-0">
-              <div className="flex items-center space-x-3">
+        <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-xl w-full overflow-hidden animate-in zoom-in-95 duration-150 flex flex-col">
+            {/* Uniform Institutional Header */}
+            <div className="relative overflow-hidden bg-gradient-to-r from-[#091224] via-[#0f214a] to-[#1a3675] text-white px-5 py-4 flex items-center justify-between border-b border-blue-900/60 shrink-0 rounded-t-2xl">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
+              <div className="relative z-10 flex items-center space-x-3">
                 <img
                   src={adjustingUser.avatar}
                   alt={adjustingUser.name}
-                  className="w-10 h-10 rounded-xl object-cover border border-blue-400/40 shadow-xs"
+                  className="w-10 h-10 rounded-xl object-cover border border-blue-700/60 shadow-sm"
                 />
                 <div>
                   <h3 className="font-bold text-base text-white tracking-tight">
                     Adjust Leave Balances: {adjustingUser.name}
                   </h3>
-                  <p className="text-xs text-slate-300 mt-0.5">
-                    {adjustingUser.designation || adjustingUser.department} • Session {selectedYear} ({getUserLeaveCycleType(adjustingUser)})
-                  </p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setAdjustingUser(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                className="relative z-10 p-1.5 rounded-lg text-blue-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                aria-label="Close dialog"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1463,30 +1464,29 @@ export const MultiUserLeaveBalanceMatrix: React.FC<MultiUserLeaveBalanceMatrixPr
 
       {/* 7. Employee Detailed Leave History & Ledger Drawer */}
       {ledgerUser && (
-        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-3xl w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
-            {/* Uniform Modal Header */}
-            <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white px-5 py-4 flex items-center justify-between border-b border-slate-800 shadow-xs shrink-0">
-              <div className="flex items-center space-x-3.5">
+        <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-3xl w-full overflow-hidden animate-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
+            {/* Uniform Institutional Header */}
+            <div className="relative overflow-hidden bg-gradient-to-r from-[#091224] via-[#0f214a] to-[#1a3675] text-white px-5 py-4 flex items-center justify-between border-b border-blue-900/60 shrink-0 rounded-t-2xl">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
+              <div className="relative z-10 flex items-center space-x-3.5">
                 <img
                   src={ledgerUser.avatar}
                   alt={ledgerUser.name}
-                  className="w-11 h-11 rounded-xl object-cover border border-blue-400/40 shadow-xs"
+                  className="w-11 h-11 rounded-xl object-cover border border-blue-700/60 shadow-sm"
                 />
                 <div>
                   <h3 className="font-bold text-base text-white tracking-tight">{ledgerUser.name}</h3>
-                  <p className="text-xs text-slate-300 mt-0.5">
-                    {ledgerUser.designation} • ID: <span className="font-mono font-bold text-blue-300">{ledgerUser.biometricId || 'N/A'}</span>
-                  </p>
-                  <p className="text-[11px] text-blue-200 font-semibold mt-0.5">
-                    Cycle: <strong>{getAccountingCycleLabel(ledgerUser, selectedYear)}</strong> ({ledgerUser.employmentType.replace('_', ' ')})
+                  <p className="text-[11px] text-blue-200/80 font-medium mt-0.5">
+                    Cycle: <strong className="text-white">{getAccountingCycleLabel(ledgerUser, selectedYear)}</strong> ({ledgerUser.employmentType.replace('_', ' ')})
                   </p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setLedgerUser(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                className="relative z-10 p-1.5 rounded-lg text-blue-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                aria-label="Close dialog"
               >
                 <X className="w-5 h-5" />
               </button>

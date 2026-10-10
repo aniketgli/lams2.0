@@ -45,191 +45,79 @@ const ROLE_ROWS: RoleRowDef[] = [
   },
   {
     tierId: 'l2',
-    title: 'Reviewing Officer / HoD'
+    title: 'HoD'
   },
   {
     tierId: 'l1',
-    title: 'Reporting Officer'
+    title: 'Reporting Manager'
   },
   {
     tierId: 'staff',
-    title: 'General Staff'
+    title: 'user'
   }
 ];
 
-interface CellRoleItem {
-  id: string;
-  name: string;
-  shortName: string;
-  description: string;
-  moduleKey: string;
-}
-
-function getRolesForCell(tierId: 'admin' | 'l2' | 'l1' | 'staff', colId: EnterpriseModuleId): CellRoleItem[] {
-  const defs = MODULE_ROLE_DEFINITIONS[colId] || [];
-
-  if (tierId === 'admin') {
-    const adminRoles = defs.filter((d) => d.level === 'admin');
-    if (adminRoles.length > 0) {
-      return adminRoles.map((r) => ({
-        id: r.id,
-        name: r.name,
-        shortName: r.shortName || r.name,
-        description: r.description,
-        moduleKey: colId
-      }));
-    }
-    return [{
-      id: `${colId}_admin`,
-      name: `${colId.toUpperCase()} Admin`,
-      shortName: 'Admin',
-      description: `Full administrative access to ${colId.toUpperCase()}`,
-      moduleKey: colId
-    }];
+// Direct 1-to-1 deterministic mapping of Role Tier & Module to exact Role ID
+export const ROLE_MATRIX_CELL_MAP: Record<'admin' | 'l2' | 'l1' | 'staff', Record<EnterpriseModuleId, string>> = {
+  admin: {
+    lams: 'hrms_admin',
+    pms: 'pms_admin',
+    sims: 'sims_admin',
+    finance: 'fin_admin',
+    fms: 'fms_admin'
+  },
+  l2: {
+    lams: 'hrms_reviewing',
+    pms: 'pms_pi',
+    sims: 'sims_approver',
+    finance: 'fin_officer',
+    fms: 'fms_officer'
+  },
+  l1: {
+    lams: 'hrms_reporting',
+    pms: 'pms_co_pi',
+    sims: 'sims_store_keeper',
+    finance: 'fin_accountant',
+    fms: 'fms_supervisor'
+  },
+  staff: {
+    lams: 'hrms_staff',
+    pms: 'pms_researcher',
+    sims: 'sims_indenter',
+    finance: 'fin_claimant',
+    fms: 'fms_requester'
   }
-
-  if (tierId === 'l2') {
-    const l2Roles = defs.filter(
-      (d) =>
-        d.id === 'hrms_reviewing' ||
-        d.id === 'pms_pi' ||
-        d.id === 'sims_approver' ||
-        d.id === 'fin_officer' ||
-        d.id === 'fms_officer' ||
-        d.level === 'manager'
-    );
-    if (l2Roles.length > 0) {
-      return l2Roles.map((r) => ({
-        id: r.id,
-        name: r.name,
-        shortName: r.shortName || r.name,
-        description: r.description,
-        moduleKey: colId
-      }));
-    }
-    return [{
-      id: `${colId}_reviewing`,
-      name: `${colId.toUpperCase()} Reviewing Officer`,
-      shortName: 'Reviewing Officer',
-      description: `Reviewing Officer access for ${colId.toUpperCase()}`,
-      moduleKey: colId
-    }];
-  }
-
-  if (tierId === 'l1') {
-    const l1Roles = defs.filter(
-      (d) =>
-        d.id === 'hrms_reporting' ||
-        d.id === 'pms_co_pi' ||
-        d.id === 'sims_store_keeper' ||
-        d.id === 'fin_accountant' ||
-        d.id === 'fms_supervisor'
-    );
-    if (l1Roles.length > 0) {
-      return l1Roles.map((r) => ({
-        id: r.id,
-        name: r.name,
-        shortName: r.shortName || r.name,
-        description: r.description,
-        moduleKey: colId
-      }));
-    }
-    return [{
-      id: `${colId}_reporting`,
-      name: `${colId.toUpperCase()} Reporting Officer`,
-      shortName: 'Reporting Officer',
-      description: `Reporting Officer access for ${colId.toUpperCase()}`,
-      moduleKey: colId
-    }];
-  }
-
-  // Staff / Self-service
-  const staffRoles = defs.filter(
-    (d) =>
-      d.id === 'hrms_staff' ||
-      d.id === 'pms_researcher' ||
-      d.id === 'sims_indenter' ||
-      d.id === 'fin_claimant' ||
-      d.id === 'fms_requester' ||
-      d.level === 'staff'
-  );
-  if (staffRoles.length > 0) {
-    return staffRoles.map((r) => ({
-      id: r.id,
-      name: r.name,
-      shortName: r.shortName || r.name,
-      description: r.description,
-      moduleKey: colId
-    }));
-  }
-  return [{
-    id: `${colId}_staff`,
-    name: `${colId.toUpperCase()} Staff`,
-    shortName: 'General Staff',
-    description: `Staff access for ${colId.toUpperCase()}`,
-    moduleKey: colId
-  }];
-}
+};
 
 export const RoleMatrixTable: React.FC<RoleMatrixTableProps> = ({
   mode,
-  systemRoles,
   moduleRoles,
   onToggleModuleRole
 }) => {
-  const isChecked = (cellItems: CellRoleItem[], tierId: string): boolean => {
-    // If explicit module role is in moduleRoles state
-    const isExplicitInModule = cellItems.some((item) => (moduleRoles[item.moduleKey] || []).includes(item.id));
-    if (isExplicitInModule) return true;
-
-    // System roles hierarchy mapping
-    if (tierId === 'admin') {
-      return !!systemRoles?.includes('administrator');
+  const handleToggle = (moduleId: EnterpriseModuleId, roleId: string) => {
+    if (mode === 'view') return;
+    if (onToggleModuleRole) {
+      onToggleModuleRole(moduleId, roleId);
     }
-
-    if (tierId === 'l2') {
-      return !!(systemRoles?.includes('administrator') || systemRoles?.includes('reviewing_manager'));
-    }
-
-    if (tierId === 'l1') {
-      return !!(systemRoles?.includes('administrator') || systemRoles?.includes('reviewing_manager') || systemRoles?.includes('reporting_manager'));
-    }
-
-    if (tierId === 'staff') {
-      // General staff tier or higher gets general staff access
-      return !!(
-        systemRoles?.includes('administrator') ||
-        systemRoles?.includes('reviewing_manager') ||
-        systemRoles?.includes('reporting_manager') ||
-        systemRoles?.includes('general_staff') ||
-        !systemRoles ||
-        systemRoles.length === 0
-      );
-    }
-
-    return false;
   };
 
-  const handleToggle = (cellItems: CellRoleItem[]) => {
-    if (mode === 'view') return;
-    if (onToggleModuleRole && cellItems.length > 0) {
-      const first = cellItems[0];
-      onToggleModuleRole(first.moduleKey, first.id);
-    }
+  const getRoleDescription = (colId: EnterpriseModuleId, roleId: string) => {
+    const defs = MODULE_ROLE_DEFINITIONS[colId] || [];
+    const found = defs.find((d) => d.id === roleId);
+    return found ? `${found.name}: ${found.description}` : `${colId.toUpperCase()} Role`;
   };
 
   return (
     <div className="bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden">
-      {/* Exactly 6 Columns Table matching image.png */}
       <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[620px]">
+        <table className="w-full text-left border-collapse min-w-[580px]">
           {/* Columns Header */}
           <thead>
-            <tr className="bg-[#f8fafd] border-b border-slate-200 text-slate-900 text-xs sm:text-sm">
+            <tr className="bg-slate-50 border-b border-slate-200 text-slate-900 text-xs sm:text-sm">
               {/* Column 1: Role Header */}
-              <th className="p-3.5 font-bold text-slate-900 w-[220px] min-w-[200px] border-r border-slate-200 bg-[#f8fafd]">
+              <th className="p-3 font-bold text-slate-800 w-[180px] min-w-[160px] border-r border-slate-200 bg-slate-50/90">
                 <div className="flex items-center space-x-2 font-bold text-slate-900">
-                  <Shield className="w-4 h-4 text-indigo-600 stroke-[2.2]" />
+                  <Shield className="w-4 h-4 text-blue-600 stroke-[2.2]" />
                   <span>Role</span>
                 </div>
               </th>
@@ -238,9 +126,9 @@ export const RoleMatrixTable: React.FC<RoleMatrixTableProps> = ({
               {MODULE_COLUMNS.map((col) => (
                 <th
                   key={col.id}
-                  className="p-3.5 font-bold text-center border-r border-slate-200 last:border-r-0 min-w-[90px] text-slate-900"
+                  className="p-3 font-bold text-center border-r border-slate-200 last:border-r-0 min-w-[85px] text-slate-900"
                 >
-                  <span className="whitespace-nowrap font-bold text-slate-900 text-xs sm:text-sm tracking-wide">
+                  <span className="whitespace-nowrap font-bold text-slate-800 text-xs tracking-wide">
                     {col.shortLabel}
                   </span>
                 </th>
@@ -254,29 +142,29 @@ export const RoleMatrixTable: React.FC<RoleMatrixTableProps> = ({
               return (
                 <tr
                   key={row.tierId}
-                  className="hover:bg-slate-50/70 transition-colors"
+                  className="hover:bg-slate-50/60 transition-colors"
                 >
                   {/* Row Header: Role Title */}
-                  <td className="p-3.5 bg-white border-r border-slate-200 align-middle">
+                  <td className="p-3 bg-white border-r border-slate-200 align-middle">
                     <span className="font-bold text-slate-900 text-xs sm:text-sm block">
                       {row.title}
                     </span>
                   </td>
 
-                  {/* Module Cells: Only Checkbox in each cell */}
+                  {/* Module Cells: Direct Checkbox Toggle */}
                   {MODULE_COLUMNS.map((col) => {
-                    const cellRoles = getRolesForCell(row.tierId, col.id);
-                    const active = isChecked(cellRoles, row.tierId);
-                    const roleItem = cellRoles[0];
+                    const roleId = ROLE_MATRIX_CELL_MAP[row.tierId][col.id];
+                    const active = (moduleRoles[col.id] || []).includes(roleId);
+                    const desc = getRoleDescription(col.id, roleId);
 
                     return (
                       <td
                         key={col.id}
-                        onClick={() => handleToggle(cellRoles)}
-                        title={roleItem ? `${roleItem.name} (${col.label}): ${roleItem.description}` : col.label}
-                        className={`p-3.5 text-center border-r border-slate-100 last:border-r-0 align-middle transition-colors ${
+                        onClick={() => handleToggle(col.id, roleId)}
+                        title={desc}
+                        className={`p-3 text-center border-r border-slate-100 last:border-r-0 align-middle transition-colors ${
                           mode === 'edit'
-                            ? 'cursor-pointer hover:bg-emerald-50/20'
+                            ? 'cursor-pointer hover:bg-blue-50/30'
                             : 'cursor-default'
                         }`}
                       >
@@ -287,7 +175,7 @@ export const RoleMatrixTable: React.FC<RoleMatrixTableProps> = ({
                             aria-checked={active}
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleToggle(cellRoles);
+                              handleToggle(col.id, roleId);
                             }}
                             disabled={mode === 'view'}
                             className={`w-6 h-6 rounded-md border flex items-center justify-center transition-all select-none ${
@@ -296,7 +184,7 @@ export const RoleMatrixTable: React.FC<RoleMatrixTableProps> = ({
                                 : 'cursor-default'
                             } ${
                               active
-                                ? 'bg-[#059669] border-[#059669] text-white shadow-2xs'
+                                ? 'bg-emerald-600 border-emerald-600 text-white shadow-2xs'
                                 : 'bg-white border-slate-300 hover:border-slate-400'
                             }`}
                           >
@@ -317,4 +205,3 @@ export const RoleMatrixTable: React.FC<RoleMatrixTableProps> = ({
     </div>
   );
 };
-

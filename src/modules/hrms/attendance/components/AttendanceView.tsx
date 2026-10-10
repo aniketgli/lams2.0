@@ -697,7 +697,7 @@ export const AttendanceView: React.FC = () => {
   };
 
   return (
-    <div className="w-full min-w-0 space-y-6 pb-24">
+    <div className="w-full min-w-0 space-y-6 pb-6">
       {/* Page Header Banner */}
       <PageHeader
         icon={Clock}
@@ -1414,21 +1414,25 @@ export const AttendanceView: React.FC = () => {
       {/* Remark Modal for Reading Full Long Remarks */}
       {activeRemarkModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl max-w-lg w-full border border-slate-200 shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">Full Biometric Punch Remark</h3>
-                <p className="text-xs text-slate-500">
-                  {activeRemarkModal.employeeName} • {activeRemarkModal.dateAndDay}
-                </p>
+          <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="relative overflow-hidden px-5 py-4 border-b border-blue-900/60 bg-gradient-to-r from-[#091224] via-[#0f214a] to-[#1a3675] text-white flex items-center justify-between shrink-0">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
+              <div className="relative z-10 flex items-center space-x-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#183063] to-[#0c1938] border border-blue-700/60 flex items-center justify-center text-blue-200 shrink-0 shadow-sm">
+                  <FileText className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-blue-200" />
+                </div>
+                <h3 className="text-base font-bold text-white tracking-tight">Full Biometric Punch Remark</h3>
               </div>
               <button
                 onClick={() => setActiveRemarkModal(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                className="relative z-10 p-1.5 rounded-lg text-blue-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                aria-label="Close dialog"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            <div className="p-5 space-y-4">
 
             <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-xs text-slate-800 leading-relaxed font-sans">
               {activeRemarkModal.remark}
@@ -1444,37 +1448,34 @@ export const AttendanceView: React.FC = () => {
             </div>
           </div>
         </div>
+      </div>
       )}
 
       {/* Shift Inspector Modal */}
       {activeShiftModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-xl w-full border border-slate-200 shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-xl w-full border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
             {/* Modal Header */}
-            <div className="flex items-start justify-between border-b border-slate-100 pb-4">
-              <div className="space-y-1">
-                <div className="flex items-center space-x-2">
-                  <span className="p-1.5 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200">
-                    <Clock className="w-4 h-4" />
-                  </span>
-                  <h3 className="text-base font-bold text-slate-900">
-                    Shift Timing & Attendance Evaluation
-                  </h3>
+            <div className="relative overflow-hidden px-5 py-4 border-b border-blue-900/60 bg-gradient-to-r from-[#091224] via-[#0f214a] to-[#1a3675] text-white flex items-center justify-between shrink-0">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/15 via-transparent to-transparent pointer-events-none" />
+              <div className="relative z-10 flex items-center space-x-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#183063] to-[#0c1938] border border-blue-700/60 flex items-center justify-center text-blue-200 shrink-0 shadow-sm">
+                  <Clock className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-blue-200" />
                 </div>
-                <p className="text-xs text-slate-500 pl-8">
-                  {activeShiftModal.employeeName}
-                  {activeShiftModal.employeeDesignation ? ` • ${activeShiftModal.employeeDesignation}` : ''}
-                  {activeShiftModal.employeeDept ? ` (${activeShiftModal.employeeDept})` : ''} •{' '}
-                  <span className="font-semibold text-slate-700">{activeShiftModal.dateAndDay}</span>
-                </p>
+                <h3 className="text-base font-bold text-white tracking-tight">
+                  Shift Timing &amp; Attendance Evaluation
+                </h3>
               </div>
               <button
                 onClick={() => setActiveShiftModal(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                className="relative z-10 p-1.5 rounded-lg text-blue-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                aria-label="Close dialog"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            <div className="p-6 space-y-5 overflow-y-auto flex-1">
 
             {/* Shift Rules Definition */}
             <div className="bg-slate-50/90 rounded-xl p-4 border border-slate-200/90 space-y-3">
@@ -1488,7 +1489,7 @@ export const AttendanceView: React.FC = () => {
                   </span>
                 </div>
                 {activeShiftModal.shift.isDefault && (
-                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
                     Default Shift
                   </span>
                 )}
@@ -1582,6 +1583,7 @@ export const AttendanceView: React.FC = () => {
             </div>
           </div>
         </div>
+      </div>
       )}
     </div>
   );

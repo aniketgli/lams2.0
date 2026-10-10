@@ -333,13 +333,284 @@ interface AppContextType {
   dismissEmailToast: () => void;
   sendCustomEmail: (to: string, toName: string, subject: string, message: string) => Promise<{ success: boolean; message: string }>;
   testSmtpConnection: (config: EmailConfig) => Promise<{ success: boolean; message: string }>;
+
+  // Profile & Department Masters
+  departmentsMaster: string[];
+  designationsMaster: string[];
+  categoriesMaster: string[];
+  projectsMaster: string[];
+  coursesMaster: string[];
+  batchesMaster: string[];
+  phdEnrollmentMaster: string[];
+  locationsMaster: string[];
+  addProfileMasterItem: (
+    type: 'departments' | 'designations' | 'categories' | 'projects' | 'courses' | 'batches' | 'phdEnrollment' | 'locations',
+    item: string
+  ) => { success: boolean; message: string };
+  deleteProfileMasterItem: (
+    type: 'departments' | 'designations' | 'categories' | 'projects' | 'courses' | 'batches' | 'phdEnrollment' | 'locations',
+    item: string
+  ) => { success: boolean; message: string };
+  resetProfileMasterToDefaults: (
+    type?: 'departments' | 'designations' | 'categories' | 'projects' | 'courses' | 'batches' | 'phdEnrollment' | 'locations' | 'all'
+  ) => { success: boolean; message: string };
 }
+
+export const DEFAULT_DEPARTMENTS_MASTER = [
+  'Wildlife Ecology & Management',
+  'Habitat Ecology',
+  'Landscape Level Planning & Management',
+  'Eco-development & Planning',
+  'Protected Area Network, Wildlife Management & Conservation Biology',
+  'EIA & Climate Change Cell',
+  'Geoinformatics / GIS Cell',
+  'Wildlife Forensic & Conservation Genetics',
+  'Computer & IT Cell',
+  'Administration & Establishment',
+  'Finance & Accounts',
+  'Library & Documentation',
+  'Publication & Public Relations',
+  'Directorate & Executive'
+];
+
+export const DEFAULT_DESIGNATIONS_MASTER = [
+  'Director',
+  'Dean',
+  'Scientist G',
+  'Scientist F',
+  'Scientist E',
+  'Scientist D',
+  'Scientist C',
+  'Registrar',
+  'Senior Administrative Officer (SAO)',
+  'Finance & Accounts Officer',
+  'Technical Officer',
+  'Senior Technical Assistant',
+  'Technical Assistant',
+  'Junior Research Fellow (JRF)',
+  'Senior Research Fellow (SRF)',
+  'Research Associate (RA)',
+  'Project Scientist',
+  'Project Associate',
+  'Project Assistant',
+  'Office Assistant',
+  'Upper Division Clerk (UDC)',
+  'Lower Division Clerk (LDC)',
+  'Multi-Tasking Staff (MTS)',
+  'Ph.D. Scholar',
+  'M.Sc. Student',
+  'Intern'
+];
+
+export const DEFAULT_CATEGORIES_MASTER = [
+  'Administrative',
+  'Scientific',
+  'Technical',
+  'Support'
+];
+
+export const DEFAULT_PROJECTS_MASTER = [
+  'National Tiger Conservation Authority (NTCA) Project',
+  'CAMPA - Recovery Program for Bustard',
+  'Ganga Rejuvenation & River Biodiversity Project',
+  'All India Synchronized Elephant Population Estimation',
+  'Snow Leopard Population Assessment in India (SPAI)',
+  'Central Indian Landscape Wildlife Corridor Monitoring',
+  'EIA Study of Infrastructure Projects in Eco-Sensitive Zones',
+  'Wildlife Crime Control & Forensic Species Identification',
+  'GIS & Spatial Ecology of Protected Areas',
+  'Bio-Resource Conservation & Community Livelihoods'
+];
+
+export const DEFAULT_COURSES_MASTER = [
+  'Wildlife Sciences',
+  'Freshwater Ecology',
+  'Heritage Conservation & Management',
+  'Biodiversity Conservation',
+  'Landscape Level Planning & Management',
+  'Environmental Science'
+];
+
+export const DEFAULT_BATCHES_MASTER = [
+  '2021-2023',
+  '2022-2024',
+  '2023-2025',
+  '2024-2026',
+  '2025-2027',
+  '2026-2028',
+  '2027-2029'
+];
+
+export const DEFAULT_PHD_ENROLLMENT_MASTER = [
+  'Fellowship (CSIR / UGC / ICAR / DST)',
+  'Project Funded',
+  'Institute Scholar',
+  'Self-Financed / Direct'
+];
+
+export const DEFAULT_LOCATIONS_MASTER = [
+  'Main Campus HQ, Dehradun',
+  'Regional Station A, New Delhi',
+  'North Division Camp, Tehri',
+  'Field Station, Sariska',
+  'High Altitude Field Lab, Leh'
+];
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Version key to ensure updated rich seed data is refreshed
   const SEED_VERSION_KEY = 'la_hub_seed_v11_el_joining_test';
+
+  // Profile Masters State
+  const [departmentsMaster, setDepartmentsMaster] = useState<string[]>(() => {
+    const saved = localStorage.getItem('la_hub_departments_master');
+    return saved ? JSON.parse(saved) : DEFAULT_DEPARTMENTS_MASTER;
+  });
+
+  const [designationsMaster, setDesignationsMaster] = useState<string[]>(() => {
+    const saved = localStorage.getItem('la_hub_designations_master');
+    return saved ? JSON.parse(saved) : DEFAULT_DESIGNATIONS_MASTER;
+  });
+
+  const [categoriesMaster, setCategoriesMaster] = useState<string[]>(() => {
+    const saved = localStorage.getItem('la_hub_categories_master');
+    return saved ? JSON.parse(saved) : DEFAULT_CATEGORIES_MASTER;
+  });
+
+  const [projectsMaster, setProjectsMaster] = useState<string[]>(() => {
+    const saved = localStorage.getItem('la_hub_projects_master');
+    return saved ? JSON.parse(saved) : DEFAULT_PROJECTS_MASTER;
+  });
+
+  const [coursesMaster, setCoursesMaster] = useState<string[]>(() => {
+    const saved = localStorage.getItem('la_hub_courses_master');
+    return saved ? JSON.parse(saved) : DEFAULT_COURSES_MASTER;
+  });
+
+  const [batchesMaster, setBatchesMaster] = useState<string[]>(() => {
+    const saved = localStorage.getItem('la_hub_batches_master');
+    return saved ? JSON.parse(saved) : DEFAULT_BATCHES_MASTER;
+  });
+
+  const [phdEnrollmentMaster, setPhdEnrollmentMaster] = useState<string[]>(() => {
+    const saved = localStorage.getItem('la_hub_phd_enrollment_master');
+    return saved ? JSON.parse(saved) : DEFAULT_PHD_ENROLLMENT_MASTER;
+  });
+
+  const [locationsMaster, setLocationsMaster] = useState<string[]>(() => {
+    const saved = localStorage.getItem('la_hub_locations_master');
+    return saved ? JSON.parse(saved) : DEFAULT_LOCATIONS_MASTER;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('la_hub_departments_master', JSON.stringify(departmentsMaster));
+  }, [departmentsMaster]);
+  useEffect(() => {
+    localStorage.setItem('la_hub_designations_master', JSON.stringify(designationsMaster));
+  }, [designationsMaster]);
+  useEffect(() => {
+    localStorage.setItem('la_hub_categories_master', JSON.stringify(categoriesMaster));
+  }, [categoriesMaster]);
+  useEffect(() => {
+    localStorage.setItem('la_hub_projects_master', JSON.stringify(projectsMaster));
+  }, [projectsMaster]);
+  useEffect(() => {
+    localStorage.setItem('la_hub_courses_master', JSON.stringify(coursesMaster));
+  }, [coursesMaster]);
+  useEffect(() => {
+    localStorage.setItem('la_hub_batches_master', JSON.stringify(batchesMaster));
+  }, [batchesMaster]);
+  useEffect(() => {
+    localStorage.setItem('la_hub_phd_enrollment_master', JSON.stringify(phdEnrollmentMaster));
+  }, [phdEnrollmentMaster]);
+  useEffect(() => {
+    localStorage.setItem('la_hub_locations_master', JSON.stringify(locationsMaster));
+  }, [locationsMaster]);
+
+  const addProfileMasterItem = (type: any, item: string) => {
+    const trimmed = item.trim();
+    if (!trimmed) return { success: false, message: 'Item name cannot be empty.' };
+
+    if (type === 'departments') {
+      if (departmentsMaster.some((x) => x.toLowerCase() === trimmed.toLowerCase())) return { success: false, message: 'Department already exists.' };
+      setDepartmentsMaster((prev) => [...prev, trimmed]);
+      return { success: true, message: `Department "${trimmed}" added to master.` };
+    } else if (type === 'designations') {
+      if (designationsMaster.some((x) => x.toLowerCase() === trimmed.toLowerCase())) return { success: false, message: 'Designation already exists.' };
+      setDesignationsMaster((prev) => [...prev, trimmed]);
+      return { success: true, message: `Designation "${trimmed}" added to master.` };
+    } else if (type === 'categories') {
+      if (categoriesMaster.some((x) => x.toLowerCase() === trimmed.toLowerCase())) return { success: false, message: 'Category already exists.' };
+      setCategoriesMaster((prev) => [...prev, trimmed]);
+      return { success: true, message: `Category "${trimmed}" added to master.` };
+    } else if (type === 'projects') {
+      if (projectsMaster.some((x) => x.toLowerCase() === trimmed.toLowerCase())) return { success: false, message: 'Project already exists.' };
+      setProjectsMaster((prev) => [...prev, trimmed]);
+      return { success: true, message: `Project "${trimmed}" added to master.` };
+    } else if (type === 'courses') {
+      if (coursesMaster.some((x) => x.toLowerCase() === trimmed.toLowerCase())) return { success: false, message: 'Course already exists.' };
+      setCoursesMaster((prev) => [...prev, trimmed]);
+      return { success: true, message: `Course "${trimmed}" added to master.` };
+    } else if (type === 'batches') {
+      if (batchesMaster.some((x) => x.toLowerCase() === trimmed.toLowerCase())) return { success: false, message: 'Batch already exists.' };
+      setBatchesMaster((prev) => [...prev, trimmed]);
+      return { success: true, message: `Batch "${trimmed}" added to master.` };
+    } else if (type === 'phdEnrollment') {
+      if (phdEnrollmentMaster.some((x) => x.toLowerCase() === trimmed.toLowerCase())) return { success: false, message: 'PhD enrollment type already exists.' };
+      setPhdEnrollmentMaster((prev) => [...prev, trimmed]);
+      return { success: true, message: `PhD enrollment type "${trimmed}" added to master.` };
+    } else if (type === 'locations') {
+      if (locationsMaster.some((x) => x.toLowerCase() === trimmed.toLowerCase())) return { success: false, message: 'Location already exists.' };
+      setLocationsMaster((prev) => [...prev, trimmed]);
+      return { success: true, message: `Location "${trimmed}" added to master.` };
+    }
+    return { success: false, message: 'Invalid master type.' };
+  };
+
+  const deleteProfileMasterItem = (type: any, item: string) => {
+    if (type === 'departments') {
+      setDepartmentsMaster((prev) => prev.filter((x) => x !== item));
+      return { success: true, message: `Department "${item}" removed.` };
+    } else if (type === 'designations') {
+      setDesignationsMaster((prev) => prev.filter((x) => x !== item));
+      return { success: true, message: `Designation "${item}" removed.` };
+    } else if (type === 'categories') {
+      setCategoriesMaster((prev) => prev.filter((x) => x !== item));
+      return { success: true, message: `Category "${item}" removed.` };
+    } else if (type === 'projects') {
+      setProjectsMaster((prev) => prev.filter((x) => x !== item));
+      return { success: true, message: `Project "${item}" removed.` };
+    } else if (type === 'courses') {
+      setCoursesMaster((prev) => prev.filter((x) => x !== item));
+      return { success: true, message: `Course "${item}" removed.` };
+    } else if (type === 'batches') {
+      setBatchesMaster((prev) => prev.filter((x) => x !== item));
+      return { success: true, message: `Batch "${item}" removed.` };
+    } else if (type === 'phdEnrollment') {
+      setPhdEnrollmentMaster((prev) => prev.filter((x) => x !== item));
+      return { success: true, message: `PhD enrollment type "${item}" removed.` };
+    } else if (type === 'locations') {
+      setLocationsMaster((prev) => prev.filter((x) => x !== item));
+      return { success: true, message: `Location "${item}" removed.` };
+    }
+    return { success: false, message: 'Invalid master type.' };
+  };
+
+  const resetProfileMasterToDefaults = (type?: string) => {
+    if (!type || type === 'all') {
+      setDepartmentsMaster(DEFAULT_DEPARTMENTS_MASTER);
+      setDesignationsMaster(DEFAULT_DESIGNATIONS_MASTER);
+      setCategoriesMaster(DEFAULT_CATEGORIES_MASTER);
+      setProjectsMaster(DEFAULT_PROJECTS_MASTER);
+      setCoursesMaster(DEFAULT_COURSES_MASTER);
+      setBatchesMaster(DEFAULT_BATCHES_MASTER);
+      setPhdEnrollmentMaster(DEFAULT_PHD_ENROLLMENT_MASTER);
+      setLocationsMaster(DEFAULT_LOCATIONS_MASTER);
+      return { success: true, message: 'All profile masters reset to system defaults.' };
+    }
+    return { success: true, message: 'Master reset to defaults.' };
+  };
 
   // Load initial states from localStorage or use updated rich seed data
   const [users, setUsers] = useState<User[]>(() => {
@@ -606,7 +877,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     orgHindiName: '',
     badgeText: 'HUB',
     logoType: 'custom',
-    themePrimaryColor: '#701618',
+    themePrimaryColor: '#2563eb',
     updatedAt: new Date().toISOString(),
     updatedBy: 'System Administrator'
   };
@@ -789,7 +1060,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const htmlContent = wrapOfficialEmailHtml({
       title: subject,
       badgeText: 'Official Communication',
-      badgeBg: '#701618',
+      badgeBg: '#2563eb',
       recipientName: toName || 'Colleague',
       leadParagraph: message,
       detailsTable: [
@@ -3480,7 +3751,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     roles?: UserRole[]
   ) => {
     const assignedRoles = roles && roles.length > 0 ? roles : [role];
-    const primaryRole = assignedRoles[0] || role;
+    const primaryRole = role || assignedRoles[0] || 'general_staff';
 
     setUsers((prev) =>
       prev.map((u) => {
@@ -3529,6 +3800,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (targetUser) {
       const isActivating = targetUser.status === 'deactivated';
+      const eventDate = effectiveDate || new Date().toISOString().split('T')[0];
+
+      // Auto-update project & posting history timeline on active / deactive / reactive
+      if (!isActivating) {
+        // User was active, now deactivated -> close ongoing posting record
+        setProjectHistories((prev) =>
+          prev.map((item) => {
+            if (item.userId === userId && item.isOngoing) {
+              return {
+                ...item,
+                isOngoing: false,
+                endDate: eventDate,
+                remarks: reason ? `Posting concluded: ${reason}` : 'Tenure completed / Deactivated'
+              };
+            }
+            return item;
+          })
+        );
+      } else {
+        // User was deactivated, now reactivated -> auto create / resume active posting
+        setProjectHistories((prev) => {
+          const hasOngoing = prev.some((item) => item.userId === userId && item.isOngoing);
+          if (!hasOngoing) {
+            const lastPast = prev.find((item) => item.userId === userId);
+            const newHistory: UserProjectHistory = {
+              id: `proj-hist-${Date.now()}`,
+              userId: targetUser!.id,
+              userName: targetUser!.name,
+              projectName: lastPast?.projectName || (targetUser!.department ? `${targetUser!.department} Core Research & Project Assignment` : 'Core Institutional Project'),
+              projectCode: lastPast?.projectCode,
+              piName: targetUser!.piName || lastPast?.piName || 'Designated PI / HoD',
+              piEmail: lastPast?.piEmail,
+              roleInProject: targetUser!.designation || lastPast?.roleInProject || 'Project Staff',
+              pay: lastPast?.pay || 'As per Project Norms',
+              startDate: eventDate,
+              isOngoing: true,
+              department: targetUser!.department || lastPast?.department || 'Wildlife Sciences',
+              addedBy: currentUser ? currentUser.name : 'Administrator',
+              addedAt: eventDate,
+              remarks: reason ? `Reactivated: ${reason}` : 'Account & active project posting reactivated'
+            };
+            return [newHistory, ...prev];
+          }
+          return prev;
+        });
+      }
+
       const actionTitle = isActivating ? '🟢 User Account Reactivated' : '🔴 User Account Deactivated';
       sendSlackNotification(
         slackConfig,
@@ -4426,7 +4744,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         latestEmailToast,
         dismissEmailToast,
         sendCustomEmail,
-        testSmtpConnection
+        testSmtpConnection,
+        departmentsMaster,
+        designationsMaster,
+        categoriesMaster,
+        projectsMaster,
+        coursesMaster,
+        batchesMaster,
+        phdEnrollmentMaster,
+        locationsMaster,
+        addProfileMasterItem,
+        deleteProfileMasterItem,
+        resetProfileMasterToDefaults
       }}
     >
       {children}

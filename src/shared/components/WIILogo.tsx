@@ -15,7 +15,7 @@ export const WIILogo: React.FC<WIILogoProps> = ({
   variant = 'horizontal',
   className = '',
   size = 'md',
-  textColor = 'text-[#701618]',
+  textColor = 'text-[#2563eb]',
   customLogoUrl,
   align = 'left'
 }) => {
@@ -69,7 +69,7 @@ export const WIILogo: React.FC<WIILogoProps> = ({
 
   if (variant === 'mark') {
     return (
-      <div className={`inline-flex items-center justify-center ${boxSize} rounded-xl bg-[#701618] text-white shadow-2xs shrink-0 ${className}`}>
+      <div className={`inline-flex items-center justify-center ${boxSize} rounded-xl bg-[#2563eb] text-white shadow-2xs shrink-0 ${className}`}>
         <Building2 size={iconSize} />
       </div>
     );
@@ -78,7 +78,7 @@ export const WIILogo: React.FC<WIILogoProps> = ({
   if (variant === 'compact') {
     return (
       <div className={`flex items-center space-x-2.5 ${className}`}>
-        <div className={`flex items-center justify-center w-8 h-8 rounded-lg bg-[#701618] text-white shadow-2xs shrink-0`}>
+        <div className={`flex items-center justify-center w-8 h-8 rounded-lg bg-[#2563eb] text-white shadow-2xs shrink-0`}>
           <Building2 size={16} />
         </div>
         <div className="leading-tight">
@@ -99,7 +99,7 @@ export const WIILogo: React.FC<WIILogoProps> = ({
 
   return (
     <div className={`flex items-center ${justifyClass} space-x-2.5 sm:space-x-3 select-none w-full ${className}`}>
-      <div className={`flex items-center justify-center ${boxSize} rounded-xl bg-[#701618] text-white shadow-2xs shrink-0`}>
+      <div className={`flex items-center justify-center ${boxSize} rounded-xl bg-[#2563eb] text-white shadow-2xs shrink-0`}>
         <Building2 size={iconSize} />
       </div>
       <div className="flex flex-col justify-center leading-tight min-w-0 flex-1 text-left">

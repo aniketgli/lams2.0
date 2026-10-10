@@ -186,7 +186,12 @@ export const MultiSelectFilter: React.FC<MultiSelectFilterProps> = ({
       </button>
       {icon && (
         <span className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-          {icon}
+          {React.isValidElement(icon) ? (
+            icon
+          ) : typeof icon === 'function' ||
+            (typeof icon === 'object' && icon !== null && ('$$typeof' in (icon as any) || 'render' in (icon as any))) ? (
+            React.createElement(icon as any, { className: 'w-3.5 h-3.5' })
+          ) : null}
         </span>
       )}
 
