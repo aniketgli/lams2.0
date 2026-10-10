@@ -1,14 +1,22 @@
 import React from 'react';
 import { LucideIcon, Sparkles } from 'lucide-react';
 
-interface PageHeaderProps {
+export interface BreadcrumbItem {
+  label: string;
+  href?: string;
+  onClick?: () => void;
+}
+
+export interface PageHeaderProps {
   icon?: LucideIcon;
   title: string;
   subtitle?: string;
-  badge?: string;
+  breadcrumb?: BreadcrumbItem[];
+  badge?: string | { text: string; variant?: 'success' | 'warning' | 'error' | 'info' | 'primary' | 'neutral' };
   badgeColor?: string;
   rightAction?: React.ReactNode;
   action?: React.ReactNode;
+  actions?: React.ReactNode;
 }
 
 export const PageHeader: React.FC<PageHeaderProps> = ({
@@ -18,10 +26,12 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   badge,
   badgeColor = 'bg-blue-500/20 text-blue-300 border-blue-400/30',
   rightAction,
-  action
+  action,
+  actions: actionsProp
 }) => {
   const HeaderIcon = Icon || Sparkles;
-  const actions = rightAction || action;
+  const actions = rightAction || action || actionsProp;
+  const badgeText = typeof badge === 'string' ? badge : badge?.text;
 
   return (
     <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 border border-slate-800 rounded-xl p-4 sm:p-5 text-white shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 min-h-[82px] min-w-0">
@@ -32,9 +42,9 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
         <div>
           <div className="flex items-center space-x-2 min-w-0 flex-wrap">
             <h1 className="text-base font-bold text-white tracking-tight break-words">{title}</h1>
-            {badge && (
+            {badgeText && (
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border ${badgeColor}`}>
-                {badge}
+                {badgeText}
               </span>
             )}
           </div>
