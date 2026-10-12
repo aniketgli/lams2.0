@@ -2035,7 +2035,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
       />
 
       {/* Leave Summary Stat Cards: Placed immediately below PageHeader */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 my-6">
         {/* 1. Approved Leaves */}
         <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
           <div className="flex items-start justify-between gap-1.5">
