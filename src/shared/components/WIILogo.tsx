@@ -37,7 +37,7 @@ export const WIILogo: React.FC<WIILogoProps> = ({
   // If a logo is uploaded, render the uploaded logo across all layouts
   if (effectiveLogoUrl) {
     const heightClass =
-      size === 'sm' ? 'h-8' : size === 'md' ? 'h-10 sm:h-11' : size === 'lg' ? 'h-13 sm:h-14' : 'h-16 sm:h-18';
+      size === 'sm' ? 'h-12' : size === 'md' ? 'h-16 sm:h-20' : size === 'lg' ? 'h-24 sm:h-28' : 'h-32 sm:h-36';
     const objectPos = align === 'center' ? 'object-center' : align === 'right' ? 'object-right' : 'object-left';
 
     if (variant === 'mark') {
