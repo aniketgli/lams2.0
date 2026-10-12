@@ -18,6 +18,7 @@ export const DashboardPage: React.FC<DashboardProps> = ({ onNavigate, onOpenSlac
   const renderRoleDashboard = () => {
     switch (currentUser.role) {
       case 'administrator':
+      case 'audit':
         return <AdminDashboard onNavigate={onNavigate} onOpenSlackModal={onOpenSlackModal} />;
       case 'reporting_manager':
         return <ReportingManagerDashboard onNavigate={onNavigate} />;

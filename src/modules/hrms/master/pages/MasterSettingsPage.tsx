@@ -42,8 +42,10 @@ import {
   Phone,
   Mail,
   Globe,
-  Landmark
+  Landmark,
+  Download
 } from 'lucide-react';
+import { exportHRMSToCSV, exportHRMSToPDF, HRMSExportColumn, HRMSFilterTag } from '../../utils/hrmsExportUtils';
 
 export interface BiometricMachine {
   id: string; // DeviceId (e.g. BIO-01)
@@ -60,7 +62,7 @@ export interface BiometricMachine {
 }
 
 export const MasterSettingsPage: React.FC = () => {
-  const { orgBranding, updateOrgBranding, resetOrgBranding, setIsLogoViewerOpen, shifts } = useApp();
+  const { currentUser, orgBranding, updateOrgBranding, resetOrgBranding, setIsLogoViewerOpen, shifts } = useApp();
 
   const [activeSubMaster, setActiveSubMaster] = useState<
     'attendance' | 'biometric' | 'leave' | 'departments' | 'organization'
@@ -219,6 +221,85 @@ export const MasterSettingsPage: React.FC = () => {
       return matchesSearch;
     });
   }, [biometricMachines, machineSearchQuery, machineFilterCount]);
+
+  const getBiometricMachinesExportConfig = () => {
+    const activeFiltersList: HRMSFilterTag[] = [
+      {
+        label: 'Attendance Counting Status',
+        value: machineFilterCount === 'ALL' ? 'All Machines' : machineFilterCount === 'COUNTED' ? 'Counted Only' : 'Excluded Only'
+      }
+    ];
+    if (machineSearchQuery.trim()) {
+      activeFiltersList.push({ label: 'Search Query', value: machineSearchQuery.trim() });
+    }
+
+    const columns: HRMSExportColumn[] = [
+      { header: '#', key: 'sno', width: 10, align: 'center' },
+      { header: 'Device ID', key: 'deviceId', width: 22 },
+      { header: 'Device Name', key: 'name', width: 38 },
+      { header: 'Location / Area', key: 'location', width: 34 },
+      { header: 'IP / Terminal Address', key: 'ipOrSerial', width: 28 },
+      { header: 'Device Serial (SR)', key: 'deviceSR', width: 28 },
+      { header: 'Count for Attendance', key: 'attendanceCountStr', width: 22, align: 'center' },
+      { header: 'Status', key: 'statusStr', width: 18, align: 'center' }
+    ];
+
+    const exportData = filteredMachines.map((m, idx) => ({
+      sno: idx + 1,
+      deviceId: m.id,
+      name: m.name,
+      location: m.location,
+      ipOrSerial: m.ipOrSerial,
+      deviceSR: m.deviceSR || '-',
+      attendanceCountStr: m.countForAttendance ? 'Counted' : 'Excluded',
+      statusStr: m.status
+    }));
+
+    return {
+      title: 'Biometric Machines & Hardware Terminals Register',
+      subtitle: 'Central Hardware Gate Punch Readers, Terminal Mapping & IP Network Configuration',
+      category: 'HRMS • Hardware & Device Management',
+      institution: 'WILDLIFE INSTITUTE OF INDIA (WII)',
+      generatedBy: {
+        name: currentUser.name,
+        designation: currentUser.designation,
+        department: currentUser.department,
+        email: currentUser.email
+      },
+      filters: activeFiltersList,
+      summaryItems: [
+        { label: 'Total Machines', value: filteredMachines.length },
+        { label: 'Counted for Attendance', value: filteredMachines.filter((m) => m.countForAttendance).length },
+        { label: 'Excluded Devices', value: filteredMachines.filter((m) => !m.countForAttendance).length }
+      ],
+      columns,
+      data: exportData,
+      fileName: `WII_Biometric_Machines_Register_${new Date().toISOString().split('T')[0]}`
+    };
+  };
+
+  const handleExportMachinesCSV = () => {
+    if (filteredMachines.length === 0) {
+      showToast('No machines match current filters.');
+      return;
+    }
+    const config = getBiometricMachinesExportConfig();
+    exportHRMSToCSV(config);
+    showToast('Biometric machines register exported to CSV successfully.');
+  };
+
+  const handleExportMachinesPDF = () => {
+    if (filteredMachines.length === 0) {
+      showToast('No machines match current filters.');
+      return;
+    }
+    const config = getBiometricMachinesExportConfig();
+    exportHRMSToPDF({
+      ...config,
+      orientation: 'landscape'
+    });
+    showToast('Biometric machines register PDF report downloaded.');
+  };
 
   // Biometric Machine Handlers
   const handleToggleCountForAttendance = (id: string) => {
@@ -444,27 +525,49 @@ export const MasterSettingsPage: React.FC = () => {
                 
               </div>
 
-              <Button
-                variant="primary"
-                size="sm"
-                leftIcon={<Plus className="w-4 h-4" />}
-                onClick={() => {
-                  setEditingMachine(null);
-                  setNewMachineId(`BIO-0${biometricMachines.length + 1}`);
-                  setNewMachineName('');
-                  setNewMachineSR(`SRN-${Math.floor(10000000 + Math.random() * 90000000)}`);
-                  setNewMachineModel('');
-                  setNewMachineIp('');
-                  setNewMachineLocation('Main Campus HQ, Dehradun');
-                  setNewMachinePunchMode('BOTH');
-                  setNewMachineCountForAttendance(true);
-                  setNewMachineStatus('ACTIVE');
-                  setNewMachineGateType('General Entry Gate');
-                  setShowAddMachineModal(true);
-                }}
-              >
-                Add Biometric Machine
-              </Button>
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  leftIcon={<Download className="w-3.5 h-3.5 text-emerald-600" />}
+                  onClick={handleExportMachinesCSV}
+                  title="Export Biometric Machines as CSV"
+                >
+                  Export CSV
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  leftIcon={<FileText className="w-3.5 h-3.5 text-rose-500" />}
+                  onClick={handleExportMachinesPDF}
+                  title="Export Biometric Machines to PDF"
+                >
+                  Export PDF
+                </Button>
+
+                <Button
+                  variant="primary"
+                  size="sm"
+                  leftIcon={<Plus className="w-4 h-4" />}
+                  onClick={() => {
+                    setEditingMachine(null);
+                    setNewMachineId(`BIO-0${biometricMachines.length + 1}`);
+                    setNewMachineName('');
+                    setNewMachineSR(`SRN-${Math.floor(10000000 + Math.random() * 90000000)}`);
+                    setNewMachineModel('');
+                    setNewMachineIp('');
+                    setNewMachineLocation('Main Campus HQ, Dehradun');
+                    setNewMachinePunchMode('BOTH');
+                    setNewMachineCountForAttendance(true);
+                    setNewMachineStatus('ACTIVE');
+                    setNewMachineGateType('General Entry Gate');
+                    setShowAddMachineModal(true);
+                  }}
+                >
+                  Add Biometric Machine
+                </Button>
+              </div>
             </div>
 
             {/* Summary KPI Bar */}

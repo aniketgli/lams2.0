@@ -49,8 +49,7 @@ import { PageHeader } from '../../../../shared/components/PageHeader';
 import { LeaveQuotaImportModal } from './LeaveQuotaImportModal';
 import { LeaveCycleDropdown } from './LeaveCycleDropdown';
 import { MultiSelectFilter } from '../../../../shared/components/MultiSelectFilter';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import { exportHRMSToCSV, exportHRMSToPDF, HRMSExportColumn, HRMSFilterTag } from '../../utils/hrmsExportUtils';
 
 interface MultiUserLeaveBalanceMatrixProps {
   onOpenQuotaImportModal?: () => void;
@@ -448,31 +447,66 @@ export const MultiUserLeaveBalanceMatrix: React.FC<MultiUserLeaveBalanceMatrixPr
     }
   };
 
-  // Export Matrix to CSV
-  const handleExportCSV = () => {
-    const headers = [
-      'Biometric ID',
-      'Employee Name',
-      'Department',
-      'Designation',
-      'Employment Cadre',
-      'Leave Cycle',
-      'Accounting Year',
-      'CL Quota',
-      'CL Used',
-      'CL Available',
-      'EL Quota',
-      'EL Used',
-      'EL Available',
-      'HPL Quota',
-      'HPL Used',
-      'HPL Available',
-      'RH Available',
-      'Comp-Off Available',
-      'Total Net Available Days'
+  // Export Configuration Builder for Staff Leave Balance Matrix
+  const getLeaveMatrixExportConfig = () => {
+    const activeFiltersList: HRMSFilterTag[] = [
+      { label: 'Leave Accounting Cycle', value: selectedYear }
     ];
 
-    const rows = filteredUsers.map((u) => {
+    if (!filterDepartment.includes('all')) {
+      activeFiltersList.push({
+        label: 'Department',
+        value: filterDepartment.join(', ')
+      });
+    }
+
+    if (!filterDesignation.includes('all')) {
+      activeFiltersList.push({
+        label: 'Designation',
+        value: filterDesignation.join(', ')
+      });
+    }
+
+    if (!filterStatus.includes('all')) {
+      activeFiltersList.push({
+        label: 'Cadre / Type',
+        value: filterStatus.join(', ')
+      });
+    }
+
+    if (!filterReportingManager.includes('all')) {
+      const mgrNames = filterReportingManager
+        .map((id) => users.find((u) => u.id === id)?.name || id)
+        .join(', ');
+      activeFiltersList.push({
+        label: 'Reporting Manager',
+        value: mgrNames
+      });
+    }
+
+    if (searchQuery.trim()) {
+      activeFiltersList.push({
+        label: 'Search Query',
+        value: searchQuery.trim()
+      });
+    }
+
+    const columns: HRMSExportColumn[] = [
+      { header: '#', key: 'sno', width: 10, align: 'center' },
+      { header: 'Bio ID', key: 'biometricId', width: 18, align: 'center' },
+      { header: 'Employee Name', key: 'name', width: 36 },
+      { header: 'Department', key: 'department', width: 28 },
+      { header: 'Designation', key: 'designation', width: 28 },
+      { header: 'Cadre (Cycle)', key: 'cadreStr', width: 26 },
+      { header: 'CL (Avail/Tot)', key: 'clStr', width: 22, align: 'center' },
+      { header: 'EL (Avail/Tot)', key: 'elStr', width: 22, align: 'center' },
+      { header: 'HPL (Avail/Tot)', key: 'hplStr', width: 22, align: 'center' },
+      { header: 'RH (Avail)', key: 'rhStr', width: 18, align: 'center' },
+      { header: 'C-OFF (Avail)', key: 'coffStr', width: 18, align: 'center' },
+      { header: 'Net Balance', key: 'netBalanceStr', width: 20, align: 'center' }
+    ];
+
+    const exportData = filteredUsers.map((u, idx) => {
       const cl = getUserBal(u, 'casual', selectedYear);
       const el = getUserBal(u, 'earned', selectedYear);
       const hpl = getUserBal(u, 'half_pay', selectedYear);
@@ -487,111 +521,60 @@ export const MultiUserLeaveBalanceMatrix: React.FC<MultiUserLeaveBalanceMatrixPr
 
       const cycle = getUserLeaveCycleType(u);
 
-      return [
-        `"${u.biometricId || '-'}"`,
-        `"${u.name}"`,
-        `"${u.department || '-'}"`,
-        `"${u.designation || '-'}"`,
-        `"${u.employmentType}"`,
-        `"${cycle}"`,
-        `"${selectedYear}"`,
-        cl.isAllowed ? cl.total : 'N/A',
-        cl.isAllowed ? cl.used : 'N/A',
-        cl.isAllowed ? cl.available : 'N/A',
-        el.isAllowed ? el.total : 'N/A',
-        el.isAllowed ? el.used : 'N/A',
-        el.isAllowed ? el.available : 'N/A',
-        hpl.isAllowed ? hpl.total : 'N/A',
-        hpl.isAllowed ? hpl.used : 'N/A',
-        hpl.isAllowed ? hpl.available : 'N/A',
-        rh.isAllowed ? rh.available : 'N/A',
-        coff.isAllowed ? coff.available : 'N/A',
-        totalAvail
-      ].join(',');
+      return {
+        sno: idx + 1,
+        biometricId: u.biometricId || '-',
+        name: u.name,
+        department: u.department || '-',
+        designation: u.designation || '-',
+        cadreStr: `${u.employmentType.replace('_', ' ')} (${cycle})`,
+        clStr: cl.isAllowed ? `${cl.available} / ${cl.total}` : 'N/A',
+        elStr: el.isAllowed ? `${el.available} / ${el.total}` : 'N/A',
+        hplStr: hpl.isAllowed ? `${hpl.available} / ${hpl.total}` : 'N/A',
+        rhStr: rh.isAllowed ? `${rh.available} / ${rh.total}` : 'N/A',
+        coffStr: coff.isAllowed ? `${coff.available} / ${coff.total}` : 'N/A',
+        netBalanceStr: `${totalAvail} Days`
+      };
     });
 
-    const csvContent = [headers.join(','), ...rows].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `WII_Staff_Leave_Balances_Matrix_${selectedYear}_${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    return {
+      title: 'Institutional Staff Leave Balances Register & Matrix',
+      subtitle: `Central Civil Services Leave Allocations & Balances Ledger for Year ${selectedYear}`,
+      category: 'Leave & Attendance Management (LAMS 2.0)',
+      institution: 'WILDLIFE INSTITUTE OF INDIA (WII)',
+      generatedBy: {
+        name: currentUser.name,
+        designation: currentUser.designation,
+        department: currentUser.department,
+        email: currentUser.email
+      },
+      filters: activeFiltersList,
+      summaryItems: [
+        { label: 'Total Staff Monitored', value: filteredUsers.length },
+        { label: 'Permanent Cadre', value: filteredUsers.filter((u) => u.employmentType === 'permanent').length },
+        { label: 'Contractual / Project', value: filteredUsers.filter((u) => u.employmentType !== 'permanent').length }
+      ],
+      columns,
+      data: exportData,
+      fileName: `WII_Staff_Leave_Balances_Matrix_${selectedYear}`
+    };
+  };
+
+  // Export Matrix to CSV
+  const handleExportCSV = () => {
+    if (filteredUsers.length === 0) return;
+    const config = getLeaveMatrixExportConfig();
+    exportHRMSToCSV(config);
   };
 
   // Export Matrix to PDF
   const handleExportPDF = () => {
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-
-    doc.setFontSize(14);
-    doc.setTextColor(112, 22, 24);
-    doc.text('WILDLIFE INSTITUTE OF INDIA (WII)', 14, 12);
-
-    doc.setFontSize(10);
-    doc.setTextColor(51, 65, 85);
-    doc.text(`Institutional Staff Leave Balances Register & Matrix — Year ${selectedYear}`, 14, 18);
-    doc.setFontSize(8);
-    doc.text(
-      `Generated on: ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })} • Total Monitored Staff: ${filteredUsers.length}`,
-      14,
-      23
-    );
-
-    const tableData = filteredUsers.map((u) => {
-      const cl = getUserBal(u, 'casual', selectedYear);
-      const el = getUserBal(u, 'earned', selectedYear);
-      const hpl = getUserBal(u, 'half_pay', selectedYear);
-      const rh = getUserBal(u, 'restricted', selectedYear);
-      const coff = getUserBal(u, 'compensatory_off', selectedYear);
-      const totalAvail =
-        (cl.isAllowed ? cl.available : 0) +
-        (el.isAllowed ? el.available : 0) +
-        (hpl.isAllowed ? hpl.available : 0) +
-        (rh.isAllowed ? rh.available : 0) +
-        (coff.isAllowed ? coff.available : 0);
-
-      const cycle = getUserLeaveCycleType(u);
-
-      return [
-        u.biometricId || '-',
-        u.name,
-        u.department,
-        `${u.employmentType.replace('_', ' ')} (${cycle})`,
-        cl.isAllowed ? `${cl.available} / ${cl.total}` : '—',
-        el.isAllowed ? `${el.available} / ${el.total}` : '—',
-        hpl.isAllowed ? `${hpl.available} / ${hpl.total}` : '—',
-        rh.isAllowed ? `${rh.available} / ${rh.total}` : '—',
-        coff.isAllowed ? `${coff.available} / ${coff.total}` : '—',
-        `${totalAvail} Days`
-      ];
+    if (filteredUsers.length === 0) return;
+    const config = getLeaveMatrixExportConfig();
+    exportHRMSToPDF({
+      ...config,
+      orientation: 'landscape'
     });
-
-    autoTable(doc, {
-      startY: 27,
-      head: [
-        [
-          'Bio ID',
-          'Employee Name',
-          'Department',
-          'Cadre (Cycle)',
-          'CL (Avail/Tot)',
-          'EL (Avail/Tot)',
-          'HPL (Avail/Tot)',
-          'RH (Avail/Tot)',
-          'C-OFF (Avail/Tot)',
-          'Net Balance'
-        ]
-      ],
-      body: tableData,
-      theme: 'grid',
-      styles: { fontSize: 8, cellPadding: 2.5 },
-      headStyles: { fillColor: [112, 22, 24], textColor: 255, fontStyle: 'bold' },
-      alternateRowStyles: { fillColor: [248, 250, 252] }
-    });
-
-    doc.save(`WII_Staff_Leave_Balances_Matrix_${selectedYear}.pdf`);
   };
 
   return (
@@ -1159,14 +1142,16 @@ export const MultiUserLeaveBalanceMatrix: React.FC<MultiUserLeaveBalanceMatrixPr
                         <td className="py-3 px-4 text-right align-middle whitespace-nowrap">
                           <div className="flex items-center justify-end space-x-1.5">
                             {/* Quick Adjust Button */}
-                            <button
-                              type="button"
-                              onClick={() => handleOpenAdjustModal(u)}
-                              className="p-1.5 bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white border border-blue-200/80 hover:border-blue-600 rounded-lg transition-all shadow-2xs cursor-pointer"
-                              title={`Adjust leave balances for ${u.name}`}
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
+                            {currentUser.role !== 'audit' && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenAdjustModal(u)}
+                                className="p-1.5 bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white border border-blue-200/80 hover:border-blue-600 rounded-lg transition-all shadow-2xs cursor-pointer"
+                                title={`Adjust leave balances for ${u.name}`}
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
 
                             {/* View Ledger Button */}
                             <button
@@ -1242,14 +1227,16 @@ export const MultiUserLeaveBalanceMatrix: React.FC<MultiUserLeaveBalanceMatrixPr
                   </div>
 
                   <div className="flex items-center space-x-1 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenAdjustModal(u)}
-                      className="p-1.5 bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white rounded-lg transition-colors cursor-pointer"
-                      title="Adjust Balances"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
+                    {currentUser.role !== 'audit' && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenAdjustModal(u)}
+                        className="p-1.5 bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white rounded-lg transition-colors cursor-pointer"
+                        title="Adjust Balances"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => setLedgerUser(u)}
@@ -1605,18 +1592,20 @@ export const MultiUserLeaveBalanceMatrix: React.FC<MultiUserLeaveBalanceMatrixPr
 
             {/* Footer */}
             <div className="pt-2 border-t border-slate-100 flex items-center justify-between shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  const target = ledgerUser;
-                  setLedgerUser(null);
-                  handleOpenAdjustModal(target);
-                }}
-                className="px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer"
-              >
-                <Edit2 className="w-3.5 h-3.5 text-blue-600" />
-                <span>Adjust Quotas</span>
-              </button>
+              {currentUser.role !== 'audit' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = ledgerUser;
+                    setLedgerUser(null);
+                    handleOpenAdjustModal(target);
+                  }}
+                  className="px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer"
+                >
+                  <Edit2 className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Adjust Quotas</span>
+                </button>
+              )}
 
               <button
                 type="button"

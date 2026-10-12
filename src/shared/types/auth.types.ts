@@ -1,6 +1,6 @@
 import { EnterpriseModuleId, ModuleRoleDef } from './module.types';
 
-export type UserRole = 'administrator' | 'reporting_manager' | 'reviewing_manager' | 'general_staff';
+export type UserRole = 'administrator' | 'reporting_manager' | 'reviewing_manager' | 'general_staff' | 'audit';
 
 export type EmploymentType = 
   | 'permanent'

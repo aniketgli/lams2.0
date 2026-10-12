@@ -48,6 +48,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const isAdminOrManager = currentUser.role === 'administrator' || currentUser.role === 'reporting_manager' || currentUser.role === 'reviewing_manager';
   const isAdmin = currentUser.role === 'administrator';
+  const isAudit = currentUser.role === 'audit';
+  const canSeeAdminTabs = isAdmin || isAudit;
 
   const handleNavClick = (id: string) => {
     setActiveModule('lams');
@@ -280,7 +282,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         <span>Profiles</span>
                       </button>
 
-                      {isAdmin && (
+                      {canSeeAdminTabs && (
                         <>
                           <button
                             onClick={() => handleNavClick('user_controls')}
@@ -311,8 +313,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   )}
                 </div>
 
-                {/* 5. Master Settings (For Administrator) */}
-                {currentUser.role === 'administrator' && (
+                {/* 5. Master Settings (For Administrator & Audit) */}
+                {canSeeAdminTabs && (
                   <button
                     onClick={() => {
                       setExpandedGroup(null);

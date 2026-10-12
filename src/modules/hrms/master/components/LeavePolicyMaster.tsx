@@ -292,15 +292,15 @@ export const LeavePolicyMaster: React.FC = () => {
         </div>
 
         {/* Matrix Table - Uniform with other Master tables, zero vertical borders */}
-        <div className="w-full overflow-hidden">
-          <table className="w-full text-left text-xs border-collapse table-fixed">
+        <div className="w-full overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse min-w-[860px]">
             <colgroup>
-              <col className="w-[25%]" />
-              <col className="w-[9%]" />
+              <col className="w-[24%] min-w-[190px]" />
+              <col className="w-[8%] min-w-[70px]" />
               {employeeCategories.map((cat) => (
-                <col key={cat.id} style={{ width: `${56 / Math.max(employeeCategories.length, 1)}%` }} />
+                <col key={cat.id} className="w-[8%] min-w-[50px]" />
               ))}
-              <col className="w-[10%]" />
+              <col className="w-[12%] min-w-[110px]" />
             </colgroup>
             <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 text-[11px]">
               <tr className="h-11">
@@ -321,7 +321,7 @@ export const LeavePolicyMaster: React.FC = () => {
                     className="px-1 py-2.5 align-middle text-center"
                     title={cat.label}
                   >
-                    <span className="font-bold text-slate-800 tracking-wider truncate max-w-full text-[11px]">
+                    <span className="font-bold text-slate-800 tracking-wider truncate max-w-full text-[11px] block text-center">
                       {cat.short.toUpperCase()}
                     </span>
                   </th>
@@ -338,8 +338,8 @@ export const LeavePolicyMaster: React.FC = () => {
                 return (
                   <tr key={pol.type} className="hover:bg-slate-50/80 transition-colors group/row">
                     {/* Row Title Cell */}
-                    <td className="px-4 py-3 align-middle overflow-hidden">
-                      <div className="flex items-center space-x-2.5">
+                    <td className="px-4 py-3 align-middle">
+                      <div className="flex items-center space-x-2.5 min-w-0">
                         <span className="px-2 py-0.5 rounded font-mono font-bold text-[10px] bg-slate-900 text-white shrink-0 shadow-2xs">
                           {pol.code || pol.type.toUpperCase()}
                         </span>
@@ -355,62 +355,74 @@ export const LeavePolicyMaster: React.FC = () => {
                     </td>
 
                     {/* Quota with quick inline edit */}
-                    <td className="px-2 py-3 align-middle text-center">
-                      <input
-                        type="number"
-                        min="0"
-                        max="730"
-                        value={pol.defaultQuota}
-                        onChange={(e) => updateLeavePolicy(pol.type, { defaultQuota: Number(e.target.value) || 0 })}
-                        className="w-12 text-center font-bold text-slate-800 bg-white border border-slate-200 rounded-lg py-1 text-xs focus:ring-2 focus:ring-blue-600 focus:outline-none shadow-2xs"
-                        title="Click to edit annual quota directly"
-                      />
+                    <td className="px-2 py-3 align-middle text-center whitespace-nowrap">
+                      <div className="flex items-center justify-center">
+                        <input
+                          type="number"
+                          min="0"
+                          max="730"
+                          value={pol.defaultQuota}
+                          onChange={(e) => updateLeavePolicy(pol.type, { defaultQuota: Number(e.target.value) || 0 })}
+                          className="w-12 text-center font-bold text-slate-800 bg-white border border-slate-200 rounded-lg py-1 text-xs focus:ring-2 focus:ring-blue-600 focus:outline-none shadow-2xs shrink-0"
+                          title="Click to edit annual quota directly"
+                        />
+                      </div>
                     </td>
 
                     {/* Dynamic Category Cells (Click to toggle) */}
                     {employeeCategories.map((cat) => {
                       const isAllotted = pol.allowedEmploymentTypes.includes(cat.id as EmploymentType);
                       return (
-                        <td key={cat.id} className="px-1 py-3 align-middle text-center">
-                          <button
-                            onClick={() => toggleEmployeeTypeForLeave(pol.type, cat.id as EmploymentType)}
-                            className={`w-6.5 h-6.5 rounded-lg inline-flex items-center justify-center transition-all cursor-pointer ${
-                              isAllotted
-                                ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs active:scale-95'
-                                : 'bg-slate-100/90 hover:bg-slate-200 text-slate-300 hover:text-slate-500'
-                            }`}
-                            title={`${isAllotted ? 'Revoke entitlement from' : 'Grant entitlement to'} ${cat.label}`}
-                          >
-                            {isAllotted ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : <X className="w-3.5 h-3.5 stroke-[2]" />}
-                          </button>
+                        <td key={cat.id} className="px-1 py-3 align-middle text-center whitespace-nowrap">
+                          <div className="flex items-center justify-center">
+                            <button
+                              type="button"
+                              onClick={() => toggleEmployeeTypeForLeave(pol.type, cat.id as EmploymentType)}
+                              className={`w-7 h-7 rounded-lg inline-flex items-center justify-center transition-all cursor-pointer shrink-0 ${
+                                isAllotted
+                                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs active:scale-95'
+                                  : 'bg-slate-100 hover:bg-slate-200 text-slate-300 hover:text-slate-500'
+                              }`}
+                              title={`${isAllotted ? 'Revoke entitlement from' : 'Grant entitlement to'} ${cat.label}`}
+                            >
+                              {isAllotted ? (
+                                <Check className="w-3.5 h-3.5 stroke-[3] shrink-0" />
+                              ) : (
+                                <X className="w-3.5 h-3.5 stroke-[2] shrink-0" />
+                              )}
+                            </button>
+                          </div>
                         </td>
                       );
                     })}
 
                     {/* Row Action Buttons */}
-                    <td className="px-4 py-3 align-middle text-right">
-                      <div className="flex items-center justify-end space-x-1.5">
+                    <td className="px-4 py-3 align-middle text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-1.5 shrink-0">
                         <button
+                          type="button"
                           onClick={() => handleDuplicatePolicy(pol)}
-                          className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                          className="w-7 h-7 inline-flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 border border-slate-200/60 rounded-lg transition-colors cursor-pointer shrink-0 shadow-2xs active:scale-95"
                           title="Duplicate Policy Row"
                         >
-                          <Copy className="w-3.5 h-3.5" />
+                          <Copy className="w-3.5 h-3.5 shrink-0" />
                         </button>
                         <button
+                          type="button"
                           onClick={() => handleOpenEditPolicy(pol)}
-                          className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 border border-blue-200/80 rounded-lg transition-colors cursor-pointer"
+                          className="w-7 h-7 inline-flex items-center justify-center text-blue-600 hover:text-blue-800 hover:bg-blue-50 border border-blue-200/80 rounded-lg transition-colors cursor-pointer shrink-0 shadow-2xs active:scale-95"
                           title="Edit Policy Parameters"
                         >
-                          <Edit2 className="w-3.5 h-3.5" />
+                          <Edit2 className="w-3.5 h-3.5 shrink-0" />
                         </button>
                         {!isCore && (
                           <button
+                            type="button"
                             onClick={() => handleDeletePolicy(pol.type, pol.name)}
-                            className="p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 border border-rose-200/80 rounded-lg transition-colors cursor-pointer"
+                            className="w-7 h-7 inline-flex items-center justify-center text-rose-600 hover:text-rose-800 hover:bg-rose-50 border border-rose-200/80 rounded-lg transition-colors cursor-pointer shrink-0 shadow-2xs active:scale-95"
                             title="Delete Policy Row"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-3.5 h-3.5 shrink-0" />
                           </button>
                         )}
                       </div>

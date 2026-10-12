@@ -69,6 +69,7 @@ export const OutdoorDutyView: React.FC = () => {
 
   // Role Checks
   const isAdmin = currentUser.role === 'administrator';
+  const isAudit = currentUser.role === 'audit';
   const isReportingManager = currentUser.role === 'reporting_manager';
   const isReviewingManager = currentUser.role === 'reviewing_manager';
   const isNonPermanentPI =
@@ -76,10 +77,10 @@ export const OutdoorDutyView: React.FC = () => {
     (Boolean(currentUser.piName) || users.some((u) => u.reportingManagerId === currentUser.id));
   const isReportingManagerOrPI = isReportingManager || isNonPermanentPI;
 
-  const canSeeReportingManagerFilter = isAdmin || isReviewingManager;
-  const canSeeTeamFilters = isAdmin || isReviewingManager || isReportingManagerOrPI;
-  // Apply permission: User can apply for self; Admin can apply on behalf of others; RM & HoD CANNOT apply.
-  const canApplyOd = isAdmin || (!isReportingManager && !isReviewingManager);
+  const canSeeReportingManagerFilter = isAdmin || isAudit || isReviewingManager;
+  const canSeeTeamFilters = isAdmin || isAudit || isReviewingManager || isReportingManagerOrPI;
+  // Apply permission: User can apply for self; Admin can apply on behalf of others; RM, HoD & Audit CANNOT apply.
+  const canApplyOd = !isAudit && (isAdmin || (!isReportingManager && !isReviewingManager));
 
   // Success / Alert Toast
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
@@ -205,7 +206,7 @@ export const OutdoorDutyView: React.FC = () => {
 
   // Accessible Scope for User List
   const accessibleUsers = useMemo(() => {
-    if (isAdmin || currentUser.baseRole === 'administrator' || isReviewingManager) return users;
+    if (isAdmin || isAudit || currentUser.baseRole === 'administrator' || isReviewingManager) return users;
     if (isReportingManagerOrPI || currentUser.role === 'reporting_manager') {
       return users.filter(
         (u) =>
@@ -216,7 +217,7 @@ export const OutdoorDutyView: React.FC = () => {
       );
     }
     return [currentUser];
-  }, [currentUser, users, isAdmin, isReportingManagerOrPI, isReviewingManager]);
+  }, [currentUser, users, isAdmin, isAudit, isReportingManagerOrPI, isReviewingManager]);
 
   const accessibleUserIds = useMemo(() => accessibleUsers.map((u) => u.id), [accessibleUsers]);
 
@@ -232,13 +233,13 @@ export const OutdoorDutyView: React.FC = () => {
     return odRequests.filter((o) => {
       // Exclude self records for Manager, HoD, and Admin roles unless explicitly selected in user filter
       const isFilteringSelf = filterUser.includes(currentUser.id);
-      if (isReportingManager || isReviewingManager || isAdmin) {
+      if (isReportingManager || isReviewingManager || isAdmin || isAudit) {
         if (o.userId === currentUser.id && !isFilteringSelf) return false;
       } else {
         if (o.userId !== currentUser.id) return false;
       }
 
-      if (!isAdmin && currentUser.baseRole !== 'administrator' && !accessibleUserIds.includes(o.userId)) return false;
+      if (!isAdmin && !isAudit && currentUser.baseRole !== 'administrator' && !accessibleUserIds.includes(o.userId)) return false;
       if (!matchesMultiSelect(filterStatus, o.status)) return false;
       if (!matchesMultiSelect(filterOdType, o.odType)) return false;
       if (!matchesMultiSelect(filterUser, o.userId)) return false;
@@ -444,6 +445,7 @@ export const OutdoorDutyView: React.FC = () => {
   // Helper Rules Checkers:
   // 1. User Can Edit/Delete: Allowed for applicant when pending and before applicable date, or Admin anytime
   const canUserModify = (od: OutdoorDutyRequest) => {
+    if (isAudit) return false;
     if (isAdmin) return true;
     if (od.status !== 'pending') return false;
     if (od.userId !== currentUser.id) return false;
@@ -453,6 +455,7 @@ export const OutdoorDutyView: React.FC = () => {
 
   // 2. Manager Can Approve / Reject: Admin (any pending), or Reporting Manager (for subordinates / assigned pending requests)
   const canManagerAction = (od: OutdoorDutyRequest) => {
+    if (isAudit) return false;
     if (od.status !== 'pending') return false;
     if (isReviewingManager) return false; // Reviewing Manager is strictly view-only
     if (isAdmin || currentUser.baseRole === 'administrator') {
@@ -477,6 +480,7 @@ export const OutdoorDutyView: React.FC = () => {
 
   // 3. Manager Can Cancel Approved Record: Reporting Manager or Admin can revoke/cancel approved OD before applicable date
   const canManagerCancelApproval = (od: OutdoorDutyRequest) => {
+    if (isAudit) return false;
     if (od.status !== 'approved') return false;
     if (isReviewingManager) return false; // Reviewing Manager view-only
     if (isAdmin || currentUser.baseRole === 'administrator') {

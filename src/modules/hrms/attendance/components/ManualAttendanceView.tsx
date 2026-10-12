@@ -168,23 +168,24 @@ export const ManualAttendanceView: React.FC = () => {
 
   // Role Checks
   const isAdmin = currentUser.role === 'administrator';
+  const isAudit = currentUser.role === 'audit';
   const isReportingManager = currentUser.role === 'reporting_manager';
   const isReviewingManager = currentUser.role === 'reviewing_manager';
-  // Apply permission: User can apply for self; Admin can apply on behalf of others; RM & HoD CANNOT apply.
-  const canApplyRegularization = isAdmin || (!isReportingManager && !isReviewingManager);
+  // Apply permission: User can apply for self; Admin can apply on behalf of others; RM, HoD & Audit CANNOT apply.
+  const canApplyRegularization = !isAudit && (isAdmin || (!isReportingManager && !isReviewingManager));
 
   // Role Visibility Matrix Flags (per specification table)
   // 1. General (Staff): Status filter only
   // 2. Reporting Manager / PI (if user is other than Permanent): Employee, designation, department, Status
   // 3. Reviewing Manager: Employee, designation, department, Reporting Manager, Status
-  // 4. Administrator: Employee, designation, department, Reporting Manager, Status
+  // 4. Administrator & Audit: Employee, designation, department, Reporting Manager, Status
   const isNonPermanentPI =
     currentUser.employmentType !== 'permanent' &&
     (Boolean(currentUser.piName) || users.some((u) => u.reportingManagerId === currentUser.id));
   const isReportingManagerOrPI = isReportingManager || isNonPermanentPI;
 
-  const canSeeReportingManagerFilter = isAdmin || isReviewingManager;
-  const canSeeTeamFilters = isAdmin || isReviewingManager || isReportingManagerOrPI;
+  const canSeeReportingManagerFilter = isAdmin || isAudit || isReviewingManager;
+  const canSeeTeamFilters = isAdmin || isAudit || isReviewingManager || isReportingManagerOrPI;
 
   // Toast
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
@@ -466,6 +467,7 @@ export const ManualAttendanceView: React.FC = () => {
   // Helper Rules Checkers:
   // 1. User Can Edit/Delete: Allowed ONLY for applicant before approval/forwarding & applicable date, or Admin anytime.
   const canUserModify = (req: ManualAttendanceRegularizationRequest) => {
+    if (isAudit) return false;
     if (isAdmin) return true;
     if (isReviewingManager || isReportingManager) return false; // Managers acting in manager capacity
     if (req.userId !== currentUser.id) return false;
@@ -476,6 +478,7 @@ export const ManualAttendanceView: React.FC = () => {
 
   // 2. Manager Can Approve / Reject: Reporting Manager of the request or Admin
   const canManagerAction = (req: ManualAttendanceRegularizationRequest) => {
+    if (isAudit) return false;
     if (req.status !== 'pending') return false;
     if (isAdmin || isReportingManager || isReportingManagerOrPI || currentUser.role === 'reporting_manager') {
       return true;
@@ -485,6 +488,7 @@ export const ManualAttendanceView: React.FC = () => {
 
   // 3. Manager Can Cancel / Revoke Approved Attendance: Reporting Manager or Admin
   const canManagerCancelApproval = (req: ManualAttendanceRegularizationRequest) => {
+    if (isAudit) return false;
     if (req.status !== 'approved') return false;
     if (isAdmin || isReportingManager || isReportingManagerOrPI || currentUser.role === 'reporting_manager') {
       return true;
@@ -519,7 +523,7 @@ export const ManualAttendanceView: React.FC = () => {
       if (tabFilter === 'pending' && req.status !== 'pending') return false;
 
       // Access Filter
-      if (!isAdmin && !isReviewingManager) {
+      if (!isAdmin && !isAudit && !isReviewingManager) {
         if (isReportingManager) {
           if (req.userId !== currentUser.id && req.reportingManagerId !== currentUser.id) {
             return false;
@@ -812,22 +816,29 @@ export const ManualAttendanceView: React.FC = () => {
   const getManualAttendanceExportConfig = () => {
     const activeFiltersList: HRMSFilterTag[] = [
       { label: 'Date Range', value: `${filterStartDate} to ${filterEndDate}` },
-      { label: 'Status', value: selectedStatusFilter.includes('all') ? 'All Statuses' : selectedStatusFilter.join(', ').toUpperCase() },
-      { label: 'Category', value: selectedCategoryFilter.includes('all') ? 'All Categories' : selectedCategoryFilter.join(', ') }
+      { label: 'Status', value: filterStatus.includes('all') ? 'All Statuses' : filterStatus.join(', ').toUpperCase() },
+      { label: 'Category', value: filterReasonCategory.includes('all') ? 'All Categories' : filterReasonCategory.join(', ') }
     ];
 
-    if (canSeeExtendedFilters) {
-      if (!selectedDeptFilter.includes('all')) {
-        activeFiltersList.push({ label: 'Department', value: selectedDeptFilter.join(', ') });
+    if (canSeeTeamFilters) {
+      if (!filterDept.includes('all')) {
+        activeFiltersList.push({ label: 'Department', value: filterDept.join(', ') });
       }
-      if (!selectedEmployeeFilter.includes('all')) {
-        const empNames = selectedEmployeeFilter.map((id) => users.find((u) => u.id === id)?.name || id).join(', ');
+      if (!filterUser.includes('all')) {
+        const empNames = filterUser.map((id) => users.find((u) => u.id === id)?.name || id).join(', ');
         activeFiltersList.push({ label: 'Employee', value: empNames });
+      }
+      if (!filterDesignation.includes('all')) {
+        activeFiltersList.push({ label: 'Designation', value: filterDesignation.join(', ') });
+      }
+      if (!filterReportingManager.includes('all')) {
+        const mgrNames = filterReportingManager.map((id) => users.find((u) => u.id === id)?.name || id).join(', ');
+        activeFiltersList.push({ label: 'Reporting Manager', value: mgrNames });
       }
     }
 
-    if (searchQuery.trim()) {
-      activeFiltersList.push({ label: 'Search Query', value: searchQuery.trim() });
+    if (searchTerm.trim()) {
+      activeFiltersList.push({ label: 'Search Query', value: searchTerm.trim() });
     }
 
     const columns: HRMSExportColumn[] = [
@@ -873,9 +884,9 @@ export const ManualAttendanceView: React.FC = () => {
       filters: activeFiltersList,
       summaryItems: [
         { label: 'Total Requisitions', value: sortedRequests.length },
-        { label: 'Pending', value: pendingCount },
-        { label: 'Approved', value: approvedCount },
-        { label: 'Rejected', value: rejectedCount }
+        { label: 'Pending', value: stats.pending },
+        { label: 'Approved', value: stats.approved },
+        { label: 'Rejected', value: stats.rejected }
       ],
       columns,
       data: exportData,

@@ -95,7 +95,7 @@ const AppContent: React.FC = () => {
                 }
               />
             )}
-            {activeTab === 'master' && currentUser.role === 'administrator' && <MasterSettingsPage />}
+            {activeTab === 'master' && (currentUser.role === 'administrator' || currentUser.role === 'audit') && <MasterSettingsPage />}
           </>
         )}
 

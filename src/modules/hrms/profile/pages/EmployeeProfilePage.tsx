@@ -71,6 +71,7 @@ import {
   Grid3X3
 } from 'lucide-react';
 import { RoleMatrixTable } from '../../master/components/RoleMatrixTable';
+import { exportHRMSToCSV, exportHRMSToPDF, HRMSExportColumn, HRMSFilterTag } from '../../utils/hrmsExportUtils';
 
 // Master Data Lists for Dropdowns
 export const DEPARTMENTS_MASTER = [
@@ -229,18 +230,20 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
   // Role Checks
   const isAdmin = currentUser.role === 'administrator';
+  const isAudit = currentUser.role === 'audit';
   const isManager = currentUser.role === 'reporting_manager' || currentUser.role === 'reviewing_manager';
+  const canAccessAdminSubTabs = isAdmin || isAudit;
 
   // Sub-tabs State
   const [activeTab, setActiveTab] = useState<'profile' | 'user_controls' | 'transfers'>(initialTab);
 
   useEffect(() => {
-    if (!isAdmin && (initialTab === 'user_controls' || initialTab === 'transfers')) {
+    if (!canAccessAdminSubTabs && (initialTab === 'user_controls' || initialTab === 'transfers')) {
       setActiveTab('profile');
     } else if (initialTab) {
       setActiveTab(initialTab);
     }
-  }, [initialTab, isAdmin]);
+  }, [initialTab, canAccessAdminSubTabs]);
 
   // User Project History Modal State
   const [historyUser, setHistoryUser] = useState<UserType | null>(null);
@@ -300,9 +303,9 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   // Directory View Mode: 'grid' (Category Cards Grid) or 'detail' (Single Detailed Profile View)
   const [directoryViewMode, setDirectoryViewMode] = useState<'grid' | 'detail'>('grid');
 
-  // Accessible profiles: Admin sees all, Managers see reportees/under-employees + self, General Staff see self only
+  // Accessible profiles: Admin & Audit see all, Managers see reportees/under-employees + self, General Staff see self only
   const accessibleProfiles = useMemo(() => {
-    if (isAdmin) return users;
+    if (isAdmin || isAudit) return users;
     if (isManager) {
       return users.filter((u) => {
         if (u.id === currentUser.id) return true;
@@ -314,7 +317,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       });
     }
     return users.filter((u) => u.id === currentUser.id);
-  }, [currentUser, users, isAdmin, isManager]);
+  }, [currentUser, users, isAdmin, isAudit, isManager]);
 
   // Dynamic Designations List
   const designationsList = useMemo(() => {
@@ -909,7 +912,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   };
 
   const handleExportTransfersPDF = () => {
-    window.print();
+    executeExportTransfersPDF();
   };
 
   // Search & Multi-Select Filters in User Controls (Module, Role, Status)
@@ -1340,67 +1343,76 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     setActiveTransferModal('none');
   };
 
+  const getTransfersExportConfig = () => {
+    const columns: HRMSExportColumn[] = [
+      { header: '#', key: 'sno', width: 10, align: 'center' },
+      { header: 'Employee Name', key: 'userName', width: 36 },
+      { header: 'Previous Department', key: 'previousDept', width: 32 },
+      { header: 'New Department', key: 'newDept', width: 32 },
+      { header: 'Previous Manager', key: 'previousManagerName', width: 28 },
+      { header: 'New Manager', key: 'newManagerName', width: 28 },
+      { header: 'Effective Date', key: 'effectiveDate', width: 24, align: 'center' },
+      { header: 'Authorized By', key: 'transferredBy', width: 26 },
+      { header: 'Official Notes', key: 'notes', width: 36 }
+    ];
+
+    const exportData = transferLogs.map((l, idx) => ({
+      sno: idx + 1,
+      userName: l.userName,
+      previousDept: l.previousDept,
+      newDept: l.newDept,
+      previousManagerName: l.previousManagerName || '-',
+      newManagerName: l.newManagerName || '-',
+      effectiveDate: l.effectiveDate,
+      transferredBy: l.transferredBy || '-',
+      notes: l.notes || '-'
+    }));
+
+    return {
+      title: 'Transfers & Postings Register',
+      subtitle: 'Official Institutional Inter-Departmental Transfers and Reporting Manager Relocations',
+      category: 'HRMS • LAMS 2.0',
+      institution: 'WILDLIFE INSTITUTE OF INDIA (WII)',
+      generatedBy: {
+        name: currentUser.name,
+        designation: currentUser.designation,
+        department: currentUser.department,
+        email: currentUser.email
+      },
+      filters: [
+        { label: 'Register Scope', value: 'Complete Institutional Transfer History' }
+      ],
+      summaryItems: [
+        { label: 'Total Transfer Records', value: transferLogs.length },
+        { label: 'Unique Employees Involved', value: new Set(transferLogs.map((l) => l.userId)).size }
+      ],
+      columns,
+      data: exportData,
+      fileName: `WII_Transfer_Posting_Register_${new Date().toISOString().split('T')[0]}`
+    };
+  };
+
   const handleExportTransfersCSV = () => {
     if (transferLogs.length === 0) {
       showToast('No transfer records to export.');
       return;
     }
-    const headers = ['Log ID', 'Employee Name', 'Previous Dept', 'New Dept', 'Previous Manager', 'New Manager', 'Effective Date', 'Authorized By', 'Timestamp', 'Notes'];
-    const rows = transferLogs.map((l) => [
-      l.id,
-      `"${l.userName.replace(/"/g, '""')}"`,
-      `"${l.previousDept.replace(/"/g, '""')}"`,
-      `"${l.newDept.replace(/"/g, '""')}"`,
-      `"${l.previousManagerName.replace(/"/g, '""')}"`,
-      `"${l.newManagerName.replace(/"/g, '""')}"`,
-      l.effectiveDate,
-      `"${l.transferredBy.replace(/"/g, '""')}"`,
-      `"${l.timestamp.replace(/"/g, '""')}"`,
-      `"${(l.notes || '').replace(/"/g, '""')}"`
-    ]);
-
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `WII_Transfer_Posting_Register_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    showToast('Transfer Register exported as CSV!');
+    const config = getTransfersExportConfig();
+    exportHRMSToCSV(config);
+    showToast('Transfer Register exported to CSV successfully!');
   };
 
-  const handleExportUserControlsCSV = () => {
-    if (filteredUsersForControls.length === 0) {
-      showToast('No user records match the current filter criteria.');
+  const executeExportTransfersPDF = () => {
+    if (transferLogs.length === 0) {
+      showToast('No transfer records to export.');
       return;
     }
-    const headers = ['User ID', 'Name', 'Email', 'Biometric ID', 'Department', 'Designation', 'Primary Role', 'Assigned Roles', 'Account Status'];
-    const rows = filteredUsersForControls.map((u) => [
-      u.id,
-      `"${u.name.replace(/"/g, '""')}"`,
-      `"${u.email.replace(/"/g, '""')}"`,
-      `"${(u.biometricId || '').replace(/"/g, '""')}"`,
-      `"${(u.department || '').replace(/"/g, '""')}"`,
-      `"${(u.designation || '').replace(/"/g, '""')}"`,
-      `"${u.role}"`,
-      `"${(u.roles || [u.role]).join('; ')}"`,
-      `"${u.status || 'active'}"`
-    ]);
-
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `WII_User_Permissions_Matrix_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    showToast('User Access & Permissions Register exported as CSV!');
-  };
-
-  const handleExportUserControlsPDF = () => {
-    window.print();
+    const config = getTransfersExportConfig();
+    exportHRMSToPDF({
+      ...config,
+      orientation: 'landscape'
+    });
+    showToast('Transfer Register exported to PDF successfully!');
   };
 
   // Filtered Users for User Controls tab
@@ -1508,6 +1520,108 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     return sortedUsersForControls.slice(start, start + userControlsPageSize);
   }, [sortedUsersForControls, userControlsPage, userControlsPageSize]);
 
+  // Export Configuration Builder for User Access & Permissions
+  const getUserControlsExportConfig = () => {
+    const activeFiltersList: HRMSFilterTag[] = [];
+
+    if (!userControlsModuleFilter.includes('all')) {
+      activeFiltersList.push({
+        label: 'Module Filter',
+        value: userControlsModuleFilter.join(', ').toUpperCase()
+      });
+    }
+
+    if (!userControlsRoleFilter.includes('all')) {
+      activeFiltersList.push({
+        label: 'Role Filter',
+        value: userControlsRoleFilter.join(', ').replace(/_/g, ' ')
+      });
+    }
+
+    if (!userControlsStatusFilter.includes('all')) {
+      activeFiltersList.push({
+        label: 'Status',
+        value: userControlsStatusFilter.join(', ').toUpperCase()
+      });
+    }
+
+    if (userSearchTerm.trim()) {
+      activeFiltersList.push({
+        label: 'Search Query',
+        value: userSearchTerm.trim()
+      });
+    }
+
+    const columns: HRMSExportColumn[] = [
+      { header: '#', key: 'sno', width: 10, align: 'center' },
+      { header: 'Employee Name', key: 'name', width: 34 },
+      { header: 'Official Email', key: 'email', width: 38 },
+      { header: 'Bio ID', key: 'biometricId', width: 18, align: 'center' },
+      { header: 'Department', key: 'department', width: 28 },
+      { header: 'Designation', key: 'designation', width: 28 },
+      { header: 'System Role', key: 'role', width: 22 },
+      { header: 'Assigned Roles', key: 'assignedRoles', width: 34 },
+      { header: 'Status', key: 'statusStr', width: 16, align: 'center' }
+    ];
+
+    const exportData = filteredUsersForControls.map((u, idx) => ({
+      sno: idx + 1,
+      name: u.name,
+      email: u.email,
+      biometricId: u.biometricId || '-',
+      department: u.department || '-',
+      designation: u.designation || '-',
+      role: u.role.replace(/_/g, ' ').toUpperCase(),
+      assignedRoles: (u.roles || [u.role]).join('; '),
+      statusStr: (u.status || 'active').toUpperCase()
+    }));
+
+    return {
+      title: 'User Roles & System Access Control Register',
+      subtitle: 'Multi-Module Authorization, Profile Verification and Active Status Audit Matrix',
+      category: 'HRMS • Security & Role-Based Access Control (RBAC)',
+      institution: 'WILDLIFE INSTITUTE OF INDIA (WII)',
+      generatedBy: {
+        name: currentUser.name,
+        designation: currentUser.designation,
+        department: currentUser.department,
+        email: currentUser.email
+      },
+      filters: activeFiltersList,
+      summaryItems: [
+        { label: 'Total Users Monitored', value: filteredUsersForControls.length },
+        { label: 'Active Accounts', value: filteredUsersForControls.filter((u) => u.status !== 'inactive').length },
+        { label: 'Inactive / Suspended', value: filteredUsersForControls.filter((u) => u.status === 'inactive').length }
+      ],
+      columns,
+      data: exportData,
+      fileName: `WII_User_Permissions_Matrix_${new Date().toISOString().split('T')[0]}`
+    };
+  };
+
+  const handleExportUserControlsCSV = () => {
+    if (filteredUsersForControls.length === 0) {
+      showToast('No user records match the current filter criteria.');
+      return;
+    }
+    const config = getUserControlsExportConfig();
+    exportHRMSToCSV(config);
+    showToast('User Access Matrix exported to CSV successfully!');
+  };
+
+  const handleExportUserControlsPDF = () => {
+    if (filteredUsersForControls.length === 0) {
+      showToast('No user records match the current filter criteria.');
+      return;
+    }
+    const config = getUserControlsExportConfig();
+    exportHRMSToPDF({
+      ...config,
+      orientation: 'landscape'
+    });
+    showToast('User Access Matrix exported to PDF successfully!');
+  };
+
   return (
     <div className="space-y-6 pb-6">
       {/* Page Header */}
@@ -1524,7 +1638,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
             ? 'User Controls & Roles'
             : activeTab === 'transfers'
             ? 'Employees Mapping'
-            : isAdmin
+            : (isAdmin || isAudit)
             ? 'Employee Profiles & Directory'
             : isManager
             ? 'Employee Directory'
@@ -1535,14 +1649,14 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
             ? 'Manage user accounts, system roles, reporting hierarchy & access permissions'
             : activeTab === 'transfers'
             ? 'Manage employee department transfers, posting orders & manager replacements'
-            : isAdmin
+            : (isAdmin || isAudit)
             ? 'Manage employee profiles, service cadres & official personnel records'
             : isManager
             ? 'View employee profiles, service cadre information & official contact details'
             : 'Personal employment record, service tenure, cadre details & official contact information'
         }
         rightAction={
-          isAdmin ? (
+          isAdmin && !isAudit ? (
             activeTab === 'profile' || !activeTab ? (
               <button
                 type="button"
@@ -1590,10 +1704,10 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       {/* ==================================================================== */}
       {/* TAB 1: EMPLOYEE PROFILE DETAILS */}
       {/* ==================================================================== */}
-      {(activeTab === 'profile' || !isAdmin) && (
+      {(activeTab === 'profile' || (!isAdmin && !isAudit)) && (
         <div className="space-y-5">
-          {/* Category Filter & Directory View Mode Switcher Console (Admin & Managers) */}
-          {(isAdmin || isManager) && (
+          {/* Category Filter & Directory View Mode Switcher Console (Admin, Audit & Managers) */}
+          {(isAdmin || isAudit || isManager) && (
             <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3.5">
               {/* Top Bar: Clean Themed Scope & Export Action Buttons */}
               <div className="flex items-center justify-between gap-3.5 border-b border-slate-100 pb-3.5">

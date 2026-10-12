@@ -44,8 +44,7 @@ import {
   AlertTriangle,
   Layers
 } from 'lucide-react';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import { exportHRMSToCSV, exportHRMSToPDF, HRMSExportColumn, HRMSFilterTag } from '../../utils/hrmsExportUtils';
 
 interface HolidayCalendarPageProps {
   onNavigate?: (tab: string) => void;
@@ -310,98 +309,108 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
     setSearchTerm('');
   };
 
+  // Export Configuration Builder
+  const getHolidayExportConfig = () => {
+    const activeFiltersList: HRMSFilterTag[] = [
+      { label: 'Calendar Year', value: selectedYear }
+    ];
+
+    if (!selectedType.includes('all')) {
+      activeFiltersList.push({
+        label: 'Holiday Type',
+        value: selectedType
+          .map((t) => (t === 'gazetted' ? 'Gazetted (GH)' : t === 'restricted' ? 'Restricted (RH)' : 'Local (LH)'))
+          .join(', ')
+      });
+    }
+
+    if (!selectedCategory.includes('all')) {
+      activeFiltersList.push({
+        label: 'Category',
+        value: selectedCategory.join(', ')
+      });
+    }
+
+    if (searchTerm.trim()) {
+      activeFiltersList.push({
+        label: 'Search Query',
+        value: searchTerm.trim()
+      });
+    }
+
+    const columns: HRMSExportColumn[] = [
+      { header: '#', key: 'sno', width: 10, align: 'center' },
+      { header: 'Date', key: 'dateStr', width: 26 },
+      { header: 'Day', key: 'dayOfWeek', width: 18 },
+      { header: 'Holiday Name', key: 'name', width: 44 },
+      { header: 'Hindi Name', key: 'hindiName', width: 34 },
+      { header: 'Classification', key: 'typeLabel', width: 26 },
+      { header: 'Category', key: 'category', width: 24 },
+      { header: 'Long Weekend', key: 'longWeekend', width: 16, align: 'center' }
+    ];
+
+    const exportData = filteredHolidays.map((h, idx) => ({
+      sno: idx + 1,
+      dateStr: new Date(h.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+      dayOfWeek: h.dayOfWeek,
+      name: h.name,
+      hindiName: h.hindiName || '-',
+      typeLabel: h.type === 'gazetted' ? 'Gazetted (GH)' : h.type === 'restricted' ? 'Restricted (RH)' : 'Local (LH)',
+      category: h.category,
+      longWeekend: h.isLongWeekend ? 'Yes' : 'No'
+    }));
+
+    const ghCount = filteredHolidays.filter((h) => h.type === 'gazetted').length;
+    const rhCount = filteredHolidays.filter((h) => h.type === 'restricted').length;
+    const lhCount = filteredHolidays.filter((h) => h.type === 'local').length;
+
+    return {
+      title: `Official Holiday Calendar — ${selectedYear}`,
+      subtitle: 'Central Civil Services (CCS) Gazetted, Restricted & Local Public Holidays',
+      category: 'Leave & Attendance Management (LAMS 2.0)',
+      institution: 'WILDLIFE INSTITUTE OF INDIA (WII)',
+      generatedBy: {
+        name: currentUser.name,
+        designation: currentUser.designation,
+        department: currentUser.department,
+        email: currentUser.email
+      },
+      filters: activeFiltersList,
+      summaryItems: [
+        { label: 'Total Holidays', value: filteredHolidays.length },
+        { label: 'Gazetted (GH)', value: ghCount },
+        { label: 'Restricted (RH)', value: rhCount },
+        { label: 'Local (LH)', value: lhCount }
+      ],
+      columns,
+      data: exportData,
+      fileName: `WII_Official_Holiday_Calendar_${selectedYear}`
+    };
+  };
+
   // Export CSV
   const handleExportCSV = () => {
-    const headers = ['ID', 'Date', 'Day', 'Holiday Name', 'Hindi Name', 'Type', 'Category', 'Description', 'Long Weekend'];
-    const rows = filteredHolidays.map((h) => [
-      h.id,
-      h.date,
-      h.dayOfWeek,
-      `"${h.name}"`,
-      `"${h.hindiName || ''}"`,
-      h.type.toUpperCase(),
-      h.category,
-      `"${h.description}"`,
-      h.isLongWeekend ? 'Yes' : 'No'
-    ]);
-
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Holiday_Calendar_${currentYear}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    showToast('Holiday calendar exported to CSV');
+    if (filteredHolidays.length === 0) {
+      showToast('No holidays match current filter criteria.');
+      return;
+    }
+    const config = getHolidayExportConfig();
+    exportHRMSToCSV(config);
+    showToast('Holiday calendar exported to CSV successfully.');
   };
 
   // Export PDF Report
   const handleExportPDF = () => {
-    const doc = new jsPDF('p', 'mm', 'a4');
-
-    // Header Banner
-    doc.setFillColor(30, 41, 59); // slate-900
-    doc.rect(0, 0, 210, 24, 'F');
-
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text('LAMS 2.0 — Official Holiday Calendar', 14, 15);
-
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Calendar Year: ${currentYear} | Generated: ${new Date().toLocaleDateString('en-GB')}`, 196, 15, { align: 'right' });
-
-    // Meta details
-    doc.setTextColor(51, 65, 85);
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    const typeText = selectedType.includes('all') ? 'Gazetted & Restricted' : selectedType.join(', ').toUpperCase();
-    doc.text(`Year: ${selectedYear} | Category: ${selectedCategory.includes('all') ? 'All Categories' : selectedCategory.join(', ')} | Type: ${typeText} | Total: ${filteredHolidays.length}`, 14, 32);
-
-    // Table
-    const tableHead = [
-      ['#', 'Date & Day', 'Holiday Name', 'Hindi Name', 'Type', 'Category']
-    ];
-
-    const tableData = filteredHolidays.map((h, idx) => [
-      idx + 1,
-      `${new Date(h.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}\n(${h.dayOfWeek})`,
-      h.name,
-      h.hindiName || '-',
-      h.type === 'gazetted' ? 'Gazetted (GH)' : h.type === 'restricted' ? 'Restricted (RH)' : 'Local (LH)',
-      h.category
-    ]);
-
-    autoTable(doc, {
-      startY: 38,
-      head: tableHead,
-      body: tableData,
-      theme: 'grid',
-      headStyles: {
-        fillColor: [30, 41, 59],
-        textColor: [255, 255, 255],
-        fontSize: 8,
-        fontStyle: 'bold'
-      },
-      styles: {
-        fontSize: 7.5,
-        cellPadding: 2.5,
-        overflow: 'linebreak'
-      },
-      columnStyles: {
-        0: { cellWidth: 10 },
-        1: { cellWidth: 35 },
-        2: { cellWidth: 60 },
-        3: { cellWidth: 40 },
-        4: { cellWidth: 30 },
-        5: { cellWidth: 25 }
-      }
+    if (filteredHolidays.length === 0) {
+      showToast('No holidays match current filter criteria.');
+      return;
+    }
+    const config = getHolidayExportConfig();
+    exportHRMSToPDF({
+      ...config,
+      orientation: 'landscape'
     });
-
-    doc.save(`Official_Holiday_Calendar_${currentYear}.pdf`);
-    showToast('Holiday calendar PDF report downloaded');
+    showToast('Holiday calendar PDF report downloaded successfully.');
   };
 
   // Days in calendar month generation helper

@@ -37,7 +37,7 @@ const LOBBY_MODULES: LobbyCardItem[] = [
     subtitle: 'Human Resource Management System',
     icon: Users,
     iconBg: 'bg-blue-600',
-    allowedRoles: ['administrator', 'reporting_manager', 'reviewing_manager', 'general_staff']
+    allowedRoles: ['administrator', 'audit', 'reporting_manager', 'reviewing_manager', 'general_staff']
   },
   {
     id: 'sims',
@@ -45,7 +45,7 @@ const LOBBY_MODULES: LobbyCardItem[] = [
     subtitle: 'Inventory & Supply Chain Management',
     icon: Package,
     iconBg: 'bg-emerald-600',
-    allowedRoles: ['administrator', 'reporting_manager', 'reviewing_manager', 'general_staff']
+    allowedRoles: ['administrator', 'audit', 'reporting_manager', 'reviewing_manager', 'general_staff']
   },
   {
     id: 'finance',
@@ -53,7 +53,7 @@ const LOBBY_MODULES: LobbyCardItem[] = [
     subtitle: 'Financial Planning & Accounting',
     icon: IndianRupee,
     iconBg: 'bg-purple-600',
-    allowedRoles: ['administrator', 'reporting_manager', 'reviewing_manager', 'general_staff']
+    allowedRoles: ['administrator', 'audit', 'reporting_manager', 'reviewing_manager', 'general_staff']
   },
   {
     id: 'fms',
@@ -61,7 +61,7 @@ const LOBBY_MODULES: LobbyCardItem[] = [
     subtitle: 'Facilities & Asset Management',
     icon: Building2,
     iconBg: 'bg-orange-600',
-    allowedRoles: ['administrator', 'reporting_manager', 'reviewing_manager', 'general_staff']
+    allowedRoles: ['administrator', 'audit', 'reporting_manager', 'reviewing_manager', 'general_staff']
   },
   {
     id: 'pms',
@@ -69,7 +69,7 @@ const LOBBY_MODULES: LobbyCardItem[] = [
     subtitle: 'Projects & Task Tracking',
     icon: FolderKanban,
     iconBg: 'bg-teal-600',
-    allowedRoles: ['administrator', 'reporting_manager', 'reviewing_manager', 'general_staff']
+    allowedRoles: ['administrator', 'audit', 'reporting_manager', 'reviewing_manager', 'general_staff']
   }
 ];
 

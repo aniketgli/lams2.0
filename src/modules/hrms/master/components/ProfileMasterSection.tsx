@@ -15,8 +15,11 @@ import {
   FolderKanban,
   Edit2,
   X,
-  BookOpen
+  BookOpen,
+  Download,
+  FileText
 } from 'lucide-react';
+import { exportHRMSToCSV, exportHRMSToPDF, HRMSExportColumn, HRMSFilterTag } from '../../utils/hrmsExportUtils';
 
 // Master Record Types
 export interface MasterRecord {
@@ -119,7 +122,7 @@ const SEED_LOCATION_MASTER: MasterRecord[] = [
 ];
 
 export const ProfileMasterSection: React.FC = () => {
-  const { users, addProfileMasterItem, deleteProfileMasterItem } = useApp();
+  const { currentUser, users, addProfileMasterItem, deleteProfileMasterItem } = useApp();
 
   type MasterKey =
     | 'departments'
@@ -514,6 +517,76 @@ export const ProfileMasterSection: React.FC = () => {
     setDeletingRecord(null);
   };
 
+  const getMasterExportConfig = () => {
+    const activeFiltersList: HRMSFilterTag[] = [
+      { label: 'Master Category', value: currentMeta.title }
+    ];
+    if (searchQuery.trim()) {
+      activeFiltersList.push({ label: 'Search Query', value: searchQuery.trim() });
+    }
+
+    const columns: HRMSExportColumn[] = [
+      { header: '#', key: 'sno', width: 12, align: 'center' },
+      { header: currentMeta.nameHeader, key: 'name', width: 55 },
+      { header: currentMeta.codeHeader, key: 'code', width: 28 },
+      { header: currentMeta.typeHeader, key: 'typeStr', width: 45 },
+      { header: 'Status', key: 'status', width: 20, align: 'center' }
+    ];
+
+    const exportData = filteredList.map((item, idx) => ({
+      sno: idx + 1,
+      name: item.name,
+      code: item.code,
+      typeStr: item.type || item.empType || item.parentStream || item.parentCourse || '-',
+      status: item.status
+    }));
+
+    return {
+      title: `${currentMeta.title} Register`,
+      subtitle: 'Official Institutional Master Records & Classification Ledger',
+      category: 'HRMS • Master Configuration Settings',
+      institution: 'WILDLIFE INSTITUTE OF INDIA (WII)',
+      generatedBy: {
+        name: currentUser.name,
+        designation: currentUser.designation,
+        department: currentUser.department,
+        email: currentUser.email
+      },
+      filters: activeFiltersList,
+      summaryItems: [
+        { label: 'Total Records', value: filteredList.length },
+        { label: 'Active', value: filteredList.filter((i) => i.status === 'Active').length },
+        { label: 'Inactive', value: filteredList.filter((i) => i.status === 'Inactive').length }
+      ],
+      columns,
+      data: exportData,
+      fileName: `WII_Master_${currentMeta.title.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}`
+    };
+  };
+
+  const handleExportCSV = () => {
+    if (filteredList.length === 0) {
+      showToast('No records available to export.');
+      return;
+    }
+    const config = getMasterExportConfig();
+    exportHRMSToCSV(config);
+    showToast(`${currentMeta.title} exported to CSV successfully.`);
+  };
+
+  const handleExportPDF = () => {
+    if (filteredList.length === 0) {
+      showToast('No records available to export.');
+      return;
+    }
+    const config = getMasterExportConfig();
+    exportHRMSToPDF({
+      ...config,
+      orientation: 'landscape'
+    });
+    showToast(`${currentMeta.title} PDF report generated successfully.`);
+  };
+
   const tabPillsConfig: Array<{ id: MasterKey; label: string; icon: any }> = [
     { id: 'departments', label: 'Organization Master', icon: Building2 },
     { id: 'designations', label: 'Designation Master', icon: Award },
@@ -583,14 +656,36 @@ export const ProfileMasterSection: React.FC = () => {
             
           </div>
 
-          <button
-            type="button"
-            onClick={openAddModal}
-            className="bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold px-4 py-2.5 rounded-xl text-xs shadow-sm transition-all cursor-pointer flex items-center justify-center space-x-1.5 shrink-0"
-          >
-            <Plus className="w-4 h-4" />
-            <span>{currentMeta.buttonLabel}</span>
-          </button>
+          <div className="flex items-center space-x-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleExportCSV}
+              className="bg-white hover:bg-slate-50 text-slate-700 font-bold px-3 py-2 rounded-xl text-xs border border-slate-200/90 shadow-2xs transition-all cursor-pointer flex items-center space-x-1.5"
+              title="Export as CSV"
+            >
+              <Download className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Export CSV</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleExportPDF}
+              className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-3 py-2 rounded-xl text-xs border border-slate-900 shadow-2xs transition-all cursor-pointer flex items-center space-x-1.5"
+              title="Export as PDF"
+            >
+              <FileText className="w-3.5 h-3.5 text-rose-400" />
+              <span>Export PDF</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={openAddModal}
+              className="bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold px-4 py-2.5 rounded-xl text-xs shadow-sm transition-all cursor-pointer flex items-center justify-center space-x-1.5 shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              <span>{currentMeta.buttonLabel}</span>
+            </button>
+          </div>
         </div>
 
         {/* Search Bar */}

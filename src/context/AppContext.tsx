@@ -620,7 +620,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return INITIAL_USERS;
     }
     const saved = localStorage.getItem('la_hub_users');
-    return saved && JSON.parse(saved).length >= INITIAL_USERS.length ? JSON.parse(saved) : INITIAL_USERS;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          if (!parsed.some((u: any) => u.id === 'usr-audit')) {
+            const auditUser = INITIAL_USERS.find((u) => u.id === 'usr-audit');
+            if (auditUser) {
+              parsed.push(auditUser);
+              localStorage.setItem('la_hub_users', JSON.stringify(parsed));
+            }
+          }
+          return parsed;
+        }
+      } catch {
+        // Fall back to INITIAL_USERS
+      }
+    }
+    return INITIAL_USERS;
   });
 
   const [currentUserId, setCurrentUserId] = useState<string>(() => {
@@ -869,11 +886,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Organization Branding State
   const DEFAULT_ORG_BRANDING: OrgBranding = {
-    orgName: 'Wildlife Institute of India',
+    orgName: 'Organization',
     logoUrl: '',
-    address: 'Chandrabani, Dehradun - 248001, Uttarakhand, India',
-    copyrightText: '© 2026 Wildlife Institute of India • Integrated Enterprise Suite',
-    appName: 'LAMS 2.0 Enterprise Portal',
+    address: 'Office Location',
+    copyrightText: `© ${new Date().getFullYear()} Organization • Integrated Enterprise Suite`,
+    appName: 'Enterprise Portal',
     orgHindiName: '',
     badgeText: 'HUB',
     logoType: 'custom',

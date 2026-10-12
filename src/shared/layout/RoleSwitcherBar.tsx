@@ -15,8 +15,11 @@ export const RoleSwitcherBar: React.FC<RoleSwitcherBarProps> = ({ onRoleChangedG
     onRoleChangedGoDashboard();
   };
 
+  const isAuditUser = currentUser.id === 'usr-audit' || currentUser.role === 'audit';
+
   const roleButtons: { role: UserRole; label: string; desc: string }[] = [
     { role: 'administrator', label: 'Administrator', desc: 'Full System & Role Master' },
+    ...(isAuditUser ? [{ role: 'audit' as UserRole, label: 'Auditor', desc: 'Read-Only Audit & Full Export Privileges' }] : []),
     { role: 'reporting_manager', label: 'Reporting Manager', desc: 'Team OD & Level-1 Leave Approval' },
     { role: 'reviewing_manager', label: 'HoD', desc: 'Department & Level-2 Leave Approval' },
     { role: 'general_staff', label: 'Staff User', desc: 'View Attendance, Apply OD & Leaves' }

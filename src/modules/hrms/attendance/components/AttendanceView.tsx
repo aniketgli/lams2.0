@@ -56,16 +56,17 @@ export const AttendanceView: React.FC = () => {
 
   // Role Checks
   const isAdmin = currentUser.role === 'administrator';
+  const isAudit = currentUser.role === 'audit';
   const isReportingManager = currentUser.role === 'reporting_manager';
   const isReviewingManager = currentUser.role === 'reviewing_manager';
   const isManager = isReportingManager || isReviewingManager;
 
   // Accessible Users list based on Role
-  // Admin: All users
+  // Admin & Audit: All users
   // Manager: Team members reporting/reviewing under currentUser + currentUser
   // Employee: Only currentUser
   const accessibleUsers = React.useMemo(() => {
-    if (isAdmin) {
+    if (isAdmin || isAudit) {
       return users;
     }
     if (isManager) {
@@ -77,7 +78,7 @@ export const AttendanceView: React.FC = () => {
       );
     }
     return users.filter((u) => u.id === currentUser.id);
-  }, [currentUser, users, isAdmin, isManager]);
+  }, [currentUser, users, isAdmin, isAudit, isManager]);
 
   const accessibleUserIds = React.useMemo(() => accessibleUsers.map((u) => u.id), [accessibleUsers]);
 
@@ -87,10 +88,18 @@ export const AttendanceView: React.FC = () => {
   // Current date (today) YYYY-MM-DD
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
 
+  // Toast Notification State
+  const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage({ text, type });
+    setTimeout(() => setToastMessage(null), 4000);
+  };
+
   // Default Dates:
-  // For Reporting Manager, HoD (Reviewing Manager), and Administrator: by default show current date's attendance
+  // For Reporting Manager, HoD (Reviewing Manager), Audit, and Administrator: by default show current date's attendance
   // For General Staff: default to full month range
-  const isManagerOrAdmin = isAdmin || isReportingManager || isReviewingManager;
+  const isManagerOrAdmin = isAdmin || isAudit || isReportingManager || isReviewingManager;
   const DEFAULT_START_DATE = isManagerOrAdmin ? todayStr : '2026-08-01';
   const DEFAULT_END_DATE = isManagerOrAdmin ? todayStr : '2026-09-30';
 
@@ -100,12 +109,12 @@ export const AttendanceView: React.FC = () => {
   // Role Visibility Matrix Flags (per specification table)
   // 1. General (Staff): Status filter only
   // 2. Reporting Manager / PI (if non-permanent): Employee, Designation, Department, Type, Status
-  // 3. Reviewing Manager & Admin: Employee, Designation, Department, Reporting Manager, Type, Status
+  // 3. Reviewing Manager & Admin & Audit: Employee, Designation, Department, Reporting Manager, Type, Status
   const isNonPermanentPI = currentUser.employmentType !== 'permanent' && (Boolean(currentUser.piName) || accessibleUsers.length > 1);
   const isReportingManagerOrPI = isReportingManager || isNonPermanentPI;
 
-  const canSeeReportingManagerFilter = isAdmin || isReviewingManager;
-  const canSeeTeamFilters = isAdmin || isReviewingManager || isReportingManagerOrPI;
+  const canSeeReportingManagerFilter = isAdmin || isAudit || isReviewingManager;
+  const canSeeTeamFilters = isAdmin || isAudit || isReviewingManager || isReportingManagerOrPI;
 
   // User (General Staff) role check: Shift column is removed ONLY for user role
   const isUserRole = currentUser.role === 'general_staff';
@@ -657,6 +666,24 @@ export const AttendanceView: React.FC = () => {
 
   return (
     <div className="w-full min-w-0 space-y-6 pb-6">
+      {/* Toast Alert */}
+      {toastMessage && (
+        <div
+          className={`fixed top-4 right-4 z-50 flex items-center space-x-2 px-4 py-3 rounded-xl shadow-lg border text-xs font-bold animate-bounce transition-all ${
+            toastMessage.type === 'success'
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+              : 'bg-rose-50 text-rose-800 border-rose-200'
+          }`}
+        >
+          {toastMessage.type === 'success' ? (
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+          ) : (
+            <AlertCircle className="w-4 h-4 text-rose-600" />
+          )}
+          <span>{toastMessage.text}</span>
+        </div>
+      )}
+
       {/* Page Header Banner */}
       <PageHeader
         icon={Clock}

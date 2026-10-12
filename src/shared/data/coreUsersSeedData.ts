@@ -546,6 +546,43 @@ export const INITIAL_USERS: User[] = [
       half_pay: { total: 20, used: 0, pending: 0 },
       restricted: { total: 2, used: 0, pending: 0 }
     }
+  },
+  {
+    id: 'usr-audit',
+    name: 'Statutory Audit Officer',
+    email: 'audit@inst.org',
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=200',
+    role: 'audit',
+    roles: ['audit'],
+    baseRole: 'audit',
+    employmentType: 'permanent',
+    department: 'Statutory Audit & Vigilance Cell',
+    designation: 'Senior Audit Officer / Vigilance Inspector',
+    joiningDate: '2016-02-15',
+    dob: '1979-08-22',
+    isOnProbation: false,
+    hodName: 'Director General',
+    piName: 'Director General',
+    phone: '+91 98765 43299',
+    officeLocation: 'Statutory Vigilance Wing, Room 05',
+    emergencyContactName: 'Auditor Support Desk',
+    emergencyContactPhone: '+91 98765 43298',
+    bio: 'Statutory Audit & Inspection persona with comprehensive institutional read and export rights across all leave registers, biometric attendance, and employee records without edit/delete privileges.',
+    slackHandle: '@audit.officer',
+    shiftId: 'shift-gen',
+    moduleRoles: {
+      lams: ['hrms_admin', 'hrms_reviewing', 'hrms_reporting', 'hrms_staff'],
+      pms: ['pms_reviewer'],
+      sims: ['sims_admin'],
+      fms: ['fms_admin'],
+      finance: ['fin_admin']
+    },
+    leaveBalances: {
+      casual: { total: 12, used: 0, pending: 0 },
+      earned: { total: 30, used: 0, pending: 0 },
+      half_pay: { total: 20, used: 0, pending: 0 },
+      restricted: { total: 2, used: 0, pending: 0 }
+    }
   }
 ];
 

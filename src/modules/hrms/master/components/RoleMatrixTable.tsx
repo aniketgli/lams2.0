@@ -34,7 +34,7 @@ const MODULE_COLUMNS: ModuleColumnDef[] = [
 ];
 
 interface RoleRowDef {
-  tierId: 'admin' | 'l2' | 'l1' | 'staff';
+  tierId: 'admin' | 'l2' | 'l1' | 'staff' | 'audit';
   title: string;
 }
 
@@ -54,11 +54,15 @@ const ROLE_ROWS: RoleRowDef[] = [
   {
     tierId: 'staff',
     title: 'user'
+  },
+  {
+    tierId: 'audit',
+    title: 'Auditor'
   }
 ];
 
 // Direct 1-to-1 deterministic mapping of Role Tier & Module to exact Role ID
-export const ROLE_MATRIX_CELL_MAP: Record<'admin' | 'l2' | 'l1' | 'staff', Record<EnterpriseModuleId, string>> = {
+export const ROLE_MATRIX_CELL_MAP: Record<'admin' | 'l2' | 'l1' | 'staff' | 'audit', Record<EnterpriseModuleId, string>> = {
   admin: {
     lams: 'hrms_admin',
     pms: 'pms_admin',
@@ -86,6 +90,13 @@ export const ROLE_MATRIX_CELL_MAP: Record<'admin' | 'l2' | 'l1' | 'staff', Recor
     sims: 'sims_indenter',
     finance: 'fin_claimant',
     fms: 'fms_requester'
+  },
+  audit: {
+    lams: 'hrms_staff', // Assuming auditor needs staff view access for now
+    pms: 'pms_reviewer', // Using the existing pms_reviewer role
+    sims: 'sims_indenter', // Placeholder
+    finance: 'fin_accountant', // Placeholder
+    fms: 'fms_requester' // Placeholder
   }
 };
 

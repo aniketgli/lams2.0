@@ -40,6 +40,8 @@ export const Header: React.FC<HeaderProps> = ({
     switch (role) {
       case 'administrator':
         return 'Administrator';
+      case 'audit':
+        return 'Auditor';
       case 'reporting_manager':
         return 'Reporting Manager';
       case 'reviewing_manager':
@@ -53,6 +55,8 @@ export const Header: React.FC<HeaderProps> = ({
     switch (role) {
       case 'administrator':
         return 'bg-[#eff6ff] text-[#2563eb] border-[#bfdbfe]';
+      case 'audit':
+        return 'bg-purple-50 text-purple-800 border-purple-200';
       case 'reporting_manager':
         return 'bg-blue-50 text-blue-800 border-blue-200';
       case 'reviewing_manager':
@@ -67,6 +71,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   const allRolesList: { role: UserRole; label: string }[] = [
     { role: 'administrator', label: 'Administrator' },
+    ...(currentUser.id === 'usr-audit' || userRoles.includes('audit') ? [{ role: 'audit' as UserRole, label: 'Auditor' }] : []),
     { role: 'reporting_manager', label: 'Reporting Manager' },
     { role: 'reviewing_manager', label: 'HoD' },
     { role: 'general_staff', label: 'User' }

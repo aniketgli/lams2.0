@@ -582,25 +582,54 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
   const [level1Comments, setLevel1Comments] = useState<{ [id: string]: string }>({});
   const [level2Comments, setLevel2Comments] = useState<{ [id: string]: string }>({});
 
+  // Export & Action Toast Notification
+  const [toastMessage, setToastMessage] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  useEffect(() => {
+    if (toastMessage) {
+      const timer = setTimeout(() => setToastMessage(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [toastMessage]);
+
+  const formatStatusLabel = (status: string): string => {
+    switch (status) {
+      case 'approved':
+        return 'Approved';
+      case 'rejected':
+        return 'Rejected';
+      case 'pending_level_1':
+        return 'Pending (RM)';
+      case 'pending_level_2':
+        return 'Pending (HoD)';
+      case 'cancelled':
+        return 'Cancelled';
+      default:
+        return status.replace(/_/g, ' ').toUpperCase();
+    }
+  };
+
   const todayStr = new Date().toISOString().split('T')[0];
 
   const isAdmin = currentUser.role === 'administrator';
+  const isAudit = currentUser.role === 'audit';
   const isReportingManager = currentUser.role === 'reporting_manager';
   const isReviewingManager = currentUser.role === 'reviewing_manager';
   const isGeneralStaff = currentUser.role === 'general_staff';
-  const isUserView = isGeneralStaff || (!isAdmin && !isReportingManager && !isReviewingManager);
+  const isUserView = isGeneralStaff || (!isAdmin && !isAudit && !isReportingManager && !isReviewingManager);
 
-  const canApplyLeave = true;
+  const canApplyLeave = !isAudit;
   // Leave Balances table is only visible for regular staff (general_staff / user view).
-  // Removed from Administrator role as requested ("administrator role se bhi ye table remove kar do").
+  // Removed from Administrator and Audit roles
   const isManagerOrHod =
     !isAdmin &&
+    !isAudit &&
     !isUserView &&
     !isGeneralStaff &&
     (currentUser.role === 'reporting_manager' || currentUser.role === 'reviewing_manager');
 
-  // Leave Balances table is explicitly hidden for Administrator, and only shown for regular employees
-  const showBalanceSection = !isAdmin && (isUserView || isGeneralStaff);
+  // Leave Balances table is explicitly hidden for Administrator & Audit, and only shown for regular employees
+  const showBalanceSection = !isAdmin && !isAudit && (isUserView || isGeneralStaff);
 
   // Target user for employee-specific leave cycles and balance inspection
   const targetEmployeeUser = useMemo(() => {
@@ -642,7 +671,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
 
   // Accessible Users for filters and actions based on user role
   const accessibleUsers = useMemo(() => {
-    if (isAdmin || isReviewingManager) return users;
+    if (isAdmin || isAudit || isReviewingManager) return users;
     if (isReportingManager) {
       return users.filter(
         (u) =>
@@ -652,7 +681,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
       );
     }
     return [currentUser];
-  }, [currentUser, users, isAdmin, isReportingManager, isReviewingManager]);
+  }, [currentUser, users, isAdmin, isAudit, isReportingManager, isReviewingManager]);
 
   // Dropdown options lists for filters
   const designationsList = useMemo(() => {
@@ -895,9 +924,9 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
           l.userId !== currentUser.id &&
           (l.reviewingManagerId === currentUser.id || l.department === currentUser.department)
       );
-    } else if (isAdmin) {
-      // Administrator role: exclude self records
-      baseList = leaveRequests.filter((l) => l.userId !== currentUser.id);
+    } else if (isAdmin || isAudit) {
+      // Administrator & Audit role: access all records across institution
+      baseList = isAudit ? leaveRequests : leaveRequests.filter((l) => l.userId !== currentUser.id);
     }
 
     return baseList.filter((l) => {
@@ -1065,6 +1094,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
 
   // 1. User Can Edit/Delete: Allowed for applicant before approval/forwarding & applicable date (future pending), or Admin anytime.
   const canUserModify = (lv: LeaveRequest) => {
+    if (isAudit) return false;
     if (isAdmin) return true; // Administration role: any time
     if (lv.userId !== currentUser.id) return false;
     if (lv.status !== 'pending_level_1' && lv.status !== 'pending_level_2') return false; // Future pending only
@@ -1074,6 +1104,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
 
   // 2. Manager Can Approve / Reject / Forward
   const canManagerAction = (lv: LeaveRequest) => {
+    if (isAudit) return false;
     if (isAdmin) {
       return lv.status === 'pending_level_1' || lv.status === 'pending_level_2';
     }
@@ -1101,6 +1132,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
 
   // 3. Manager/Admin Can Cancel Approved Leave Record
   const canManagerCancelApproval = (lv: LeaveRequest) => {
+    if (isAudit) return false;
     if (lv.status !== 'approved') return false;
     if (isAdmin) return true;
     if (lv.userId === currentUser.id && !isAdmin) return false;
@@ -1963,6 +1995,24 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
 
   return (
     <div className="w-full min-w-0 space-y-6 pb-6">
+      {/* Toast Alert */}
+      {toastMessage && (
+        <div
+          className={`fixed top-4 right-4 z-50 flex items-center space-x-2 px-4 py-3 rounded-xl shadow-lg border text-xs font-bold transition-all ${
+            toastMessage.type === 'success'
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+              : 'bg-rose-50 text-rose-800 border-rose-200'
+          }`}
+        >
+          {toastMessage.type === 'success' ? (
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+          ) : (
+            <AlertCircle className="w-4 h-4 text-rose-600" />
+          )}
+          <span>{toastMessage.message}</span>
+        </div>
+      )}
+
       {/* Uniform Page Header */}
       <PageHeader
         icon={FileText}
@@ -2163,8 +2213,8 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
           {/* Filter Dropdowns Uniform Flex Wrap */}
           <div className="pt-2 border-t border-slate-100">
             <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 flex-nowrap responsive-filter-row">
-              {/* Employee Filter (Reporting Manager, HoD, Admin) */}
-              {(isReportingManager || isReviewingManager || isAdmin) && (
+              {/* Employee Filter (Reporting Manager, HoD, Admin, Audit) */}
+              {(isReportingManager || isReviewingManager || isAdmin || isAudit) && (
                 <div className="flex-1 min-w-[125px] max-w-[200px] shrink-0 sm:shrink">
                   <MultiSelectFilter
                     label="Employee"
@@ -2176,8 +2226,8 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                 </div>
               )}
 
-              {/* Designation Filter (Reporting Manager, HoD, Admin) */}
-              {(isReportingManager || isReviewingManager || isAdmin) && (
+              {/* Designation Filter (Reporting Manager, HoD, Admin, Audit) */}
+              {(isReportingManager || isReviewingManager || isAdmin || isAudit) && (
                 <div className="flex-1 min-w-[125px] max-w-[200px] shrink-0 sm:shrink">
                   <MultiSelectFilter
                     label="Designation"
@@ -2189,8 +2239,8 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                 </div>
               )}
 
-              {/* Department Filter (Reporting Manager, HoD, Admin) */}
-              {(isReportingManager || isReviewingManager || isAdmin) && (
+              {/* Department Filter (Reporting Manager, HoD, Admin, Audit) */}
+              {(isReportingManager || isReviewingManager || isAdmin || isAudit) && (
                 <div className="flex-1 min-w-[125px] max-w-[200px] shrink-0 sm:shrink">
                   <MultiSelectFilter
                     label="Department"
@@ -2202,8 +2252,8 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                 </div>
               )}
 
-              {/* Reporting Manager Filter (HoD, Admin) */}
-              {(isReviewingManager || isAdmin) && (
+              {/* Reporting Manager Filter (HoD, Admin, Audit) */}
+              {(isReviewingManager || isAdmin || isAudit) && (
                 <div className="flex-1 min-w-[125px] max-w-[200px] shrink-0 sm:shrink">
                   <MultiSelectFilter
                     label="Reporting Manager"
