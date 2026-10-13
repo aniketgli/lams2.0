@@ -8,7 +8,7 @@ export const isAuthenticated = (req: Request, res: Response, next: NextFunction)
 };
 
 export const isAdmin = (req: Request, res: Response, next: NextFunction) => {
-  if (req.session?.userId && typeof req.session.role === 'string' && req.session.role.toLowerCase() === 'admin') {
+  if (req.session?.userId && typeof req.session.role === 'string' && ['admin', 'administrator'].includes(req.session.role.toLowerCase())) {
     return next();
   }
   return res.status(403).json({ message: 'Forbidden' });

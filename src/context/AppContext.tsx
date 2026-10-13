@@ -664,6 +664,110 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
   }, []);
 
+  // Load the employee directory from the authenticated backend, not from seed data.
+  // Keep the richer locally-defined fields for matching users while treating MySQL
+  // as authoritative for identity and the profile columns currently stored there.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let cancelled = false;
+    const loadEmployees = async () => {
+      try {
+        const response = await fetch('/api/hrms/employees', {
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json' },
+          cache: 'no-store'
+        });
+
+        if (!response.ok) {
+          throw new Error(response.status === 401
+            ? 'Your session has expired. Please sign in again.'
+            : 'Unable to load employee records from the server.');
+        }
+
+        const rows: Array<{
+          id: string;
+          name: string;
+          email: string;
+          role: string;
+          department: string | null;
+          designation: string | null;
+          employmentType: string | null;
+          joiningDate: string | null;
+          phone: string | null;
+          officeLocation: string | null;
+          shiftId: string | null;
+        }> = await response.json();
+
+        if (cancelled || !Array.isArray(rows)) return;
+
+        const validRoles: UserRole[] = [
+          'administrator',
+          'reporting_manager',
+          'reviewing_manager',
+          'general_staff',
+          'audit'
+        ];
+        const validEmploymentTypes: EmploymentType[] = [
+          'permanent',
+          'contractual',
+          'researcher',
+          'diploma_trainee',
+          'intern',
+          'bsc_msc_student',
+          'phd_student'
+        ];
+
+        const databaseUsers: User[] = rows.map((row) => {
+          const existing = users.find(
+            (user) => user.id === row.id ||
+              (user.email && user.email.toLowerCase() === row.email.toLowerCase())
+          );
+          const role = validRoles.includes(row.role as UserRole)
+            ? row.role as UserRole
+            : existing?.role || 'general_staff';
+          const employmentType = validEmploymentTypes.includes(row.employmentType as EmploymentType)
+            ? row.employmentType as EmploymentType
+            : existing?.employmentType || 'permanent';
+
+          return {
+            ...(existing || {}),
+            id: row.id,
+            name: row.name,
+            email: row.email,
+            role,
+            baseRole: role,
+            employmentType,
+            department: row.department || existing?.department || 'Unassigned',
+            designation: row.designation || existing?.designation || 'Staff',
+            joiningDate: row.joiningDate || existing?.joiningDate,
+            phone: row.phone || existing?.phone,
+            officeLocation: row.officeLocation || existing?.officeLocation,
+            shiftId: row.shiftId || existing?.shiftId,
+            avatar: existing?.avatar || '',
+            status: existing?.status || 'active',
+            leaveBalances: existing?.leaveBalances || {
+              casual: { total: 8, used: 0, pending: 0 },
+              earned: { total: 0, used: 0, pending: 0 },
+              half_pay: { total: 0, used: 0, pending: 0 },
+              restricted: { total: 2, used: 0, pending: 0 }
+            }
+          };
+        });
+
+        setUsers(databaseUsers);
+      } catch (error) {
+        // Do not silently fall back to seed data for an authenticated directory.
+        console.error('Employee directory load failed:', error);
+      }
+    };
+
+    void loadEmployees();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated]);
+
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>(() => {
     const isLatestSeed = localStorage.getItem(SEED_VERSION_KEY);
     const todayStr = new Date().toISOString().split('T')[0];
@@ -1176,9 +1280,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const logout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    setIsAuthenticated(false);
-    setCurrentUserId('');
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'same-origin',
+        cache: 'no-store'
+      });
+    } finally {
+      setIsAuthenticated(false);
+      setCurrentUserId('');
+    }
   };
 
   useEffect(() => {
