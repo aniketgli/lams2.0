@@ -697,6 +697,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           phone: string | null;
           officeLocation: string | null;
           shiftId: string | null;
+          profileData: string | null;
         }> = await response.json();
 
         if (cancelled || !Array.isArray(rows)) return;
@@ -719,34 +720,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ];
 
         const databaseUsers: User[] = rows.map((row) => {
-          const existing = users.find(
-            (user) => user.id === row.id ||
-              (user.email && user.email.toLowerCase() === row.email.toLowerCase())
-          );
+          let savedProfile: Partial<User> = {};
+          if (row.profileData) {
+            try {
+              const parsed = JSON.parse(row.profileData);
+              if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                savedProfile = parsed as Partial<User>;
+              }
+            } catch {
+              console.warn('Ignoring invalid profile_data for employee:', row.id);
+            }
+          }
+
           const role = validRoles.includes(row.role as UserRole)
             ? row.role as UserRole
-            : existing?.role || 'general_staff';
+            : (savedProfile.role && validRoles.includes(savedProfile.role) ? savedProfile.role : 'general_staff');
           const employmentType = validEmploymentTypes.includes(row.employmentType as EmploymentType)
             ? row.employmentType as EmploymentType
-            : existing?.employmentType || 'permanent';
+            : (savedProfile.employmentType && validEmploymentTypes.includes(savedProfile.employmentType)
+              ? savedProfile.employmentType : 'permanent');
 
           return {
-            ...(existing || {}),
+            ...savedProfile,
             id: row.id,
             name: row.name,
             email: row.email,
             role,
-            baseRole: role,
+            baseRole: savedProfile.baseRole || role,
             employmentType,
-            department: row.department || existing?.department || 'Unassigned',
-            designation: row.designation || existing?.designation || 'Staff',
-            joiningDate: row.joiningDate || existing?.joiningDate,
-            phone: row.phone || existing?.phone,
-            officeLocation: row.officeLocation || existing?.officeLocation,
-            shiftId: row.shiftId || existing?.shiftId,
-            avatar: existing?.avatar || '',
-            status: existing?.status || 'active',
-            leaveBalances: existing?.leaveBalances || {
+            department: row.department || savedProfile.department || 'Unassigned',
+            designation: row.designation || savedProfile.designation || 'Staff',
+            joiningDate: row.joiningDate || savedProfile.joiningDate,
+            phone: row.phone || savedProfile.phone,
+            officeLocation: row.officeLocation || savedProfile.officeLocation,
+            shiftId: row.shiftId || savedProfile.shiftId,
+            avatar: savedProfile.avatar || '',
+            status: savedProfile.status || 'active',
+            leaveBalances: savedProfile.leaveBalances || {
               casual: { total: 8, used: 0, pending: 0 },
               earned: { total: 0, used: 0, pending: 0 },
               half_pay: { total: 0, used: 0, pending: 0 },
@@ -3771,17 +3781,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // --- PROFILE ACTIONS ---
   const updateUserProfile = (userId: string, updatedFields: Partial<User>) => {
-    setUsers((prev) =>
-      prev.map((u) => {
-        if (u.id === userId) {
-          return {
-            ...u,
-            ...updatedFields
-          };
-        }
-        return u;
-      })
-    );
+    const existing = users.find((user) => user.id === userId);
+    if (!existing) return;
+
+    const updatedUser: User = { ...existing, ...updatedFields };
+    setUsers((prev) => prev.map((user) => user.id === userId ? updatedUser : user));
+
+    // Persist profile changes to MySQL. Roll back the optimistic UI update on failure.
+    void fetch(`/api/hrms/employees/${encodeURIComponent(userId)}`, {
+      method: 'PUT',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      cache: 'no-store',
+      body: JSON.stringify(updatedUser)
+    }).then(async (response) => {
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || 'Could not save employee changes.');
+      }
+    }).catch((error) => {
+      console.error('Employee profile save failed:', error);
+      setUsers((prev) => prev.map((user) => user.id === userId ? existing : user));
+      window.alert(error instanceof Error ? error.message : 'Could not save employee changes.');
+    });
   };
 
   const addUserProfile = (newUser: Omit<User, 'id' | 'leaveBalances'>): User => {
@@ -3825,6 +3847,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setUsers((prev) => [...prev, createdUser]);
+
+    // Save the new account and full employee profile in MySQL. If the server rejects
+    // it (including duplicate email), remove the optimistic local record.
+    void fetch('/api/hrms/employees', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      cache: 'no-store',
+      body: JSON.stringify(createdUser)
+    }).then(async (response) => {
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || 'Could not save the new employee.');
+      }
+    }).catch((error) => {
+      console.error('Employee creation failed:', error);
+      setUsers((prev) => prev.filter((user) => user.id !== createdUser.id));
+      window.alert(error instanceof Error ? error.message : 'Could not save the new employee.');
+    });
 
     // Send Automated Email Notification to Concerning Parties (New User & Supervisor)
     if (emailConfig.notifyOnUserCreation && createdUser.email) {
