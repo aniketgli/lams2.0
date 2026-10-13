@@ -25,6 +25,8 @@ export const employee_profiles = mysqlTable('employee_profiles', {
   phone: varchar('phone', { length: 20 }),
   officeLocation: varchar('office_location', { length: 255 }),
   shiftId: varchar('shift_id', { length: 36 }),
+  // Preserves the full HRMS User profile (manager hierarchy, leave balances, student/research fields, module roles, etc.).
+  profileData: text('profile_data'),
 });
 
 export const shifts = mysqlTable('shifts', {
