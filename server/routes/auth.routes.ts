@@ -20,6 +20,7 @@ router.post('/login', async (req, res) => {
     req.session.role = user.role;
     res.json({ user: { id: user.id, name: user.name, role: user.role } });
   } catch (error) {
+    console.error('Login error:', error instanceof Error ? error.message : error);
     res.status(500).json({ message: 'Internal server error' });
   }
 });
