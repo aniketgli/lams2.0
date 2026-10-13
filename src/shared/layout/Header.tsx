@@ -30,7 +30,6 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const {
     currentUser,
-    switchRoleOverride,
     logout
   } = useApp();
 
@@ -82,12 +81,7 @@ export const Header: React.FC<HeaderProps> = ({
     return userRoles.includes(item.role);
   });
 
-  const handleSelectRole = (role: UserRole) => {
-    switchRoleOverride(role);
-    setIsUserMenuOpen(false);
-    setActiveTab('dashboard');
-    onRoleChangedGoDashboard();
-  };
+
 
   const handleExitModule = () => {
     setIsUserMenuOpen(false);
@@ -160,33 +154,6 @@ export const Header: React.FC<HeaderProps> = ({
                     <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${getRoleBadgeStyle(currentUser.role)}`}>
                       {getRoleLabel(currentUser.role)}
                     </span>
-                  </div>
-                </div>
-
-                {/* Integrated Role Switcher */}
-                <div className="p-2">
-                  <p className="text-[10px] font-bold text-slate-400 px-2 my-1 uppercase tracking-wider flex items-center justify-between">
-                    <span>Switch Role View</span>
-                    <ShieldCheck className="w-3.5 h-3.5 text-[#2563eb]" />
-                  </p>
-                  <div className="space-y-1">
-                    {rolesList.map((item) => {
-                      const isActive = currentUser.role === item.role;
-                      return (
-                        <button
-                          key={item.role}
-                          onClick={() => handleSelectRole(item.role)}
-                          className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition-colors flex items-center justify-between cursor-pointer ${
-                            isActive
-                              ? 'bg-[#eff6ff] text-[#2563eb] font-bold'
-                              : 'text-slate-700 hover:bg-slate-100'
-                          }`}
-                        >
-                          <span>{item.label}</span>
-                          {isActive && <Check className="w-3.5 h-3.5 text-[#2563eb]" />}
-                        </button>
-                      );
-                    })}
                   </div>
                 </div>
 

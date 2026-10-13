@@ -5,20 +5,37 @@ import type { Server as HttpServer } from 'http';
 import { createServer as createViteServer } from 'vite';
 import { emailRoutes } from './integrations/email/email.routes';
 import { slackRoutes } from './integrations/slack/slack.routes';
+import { authRoutes } from './routes/auth.routes';
+import hrmsRoutes from './routes/hrms.routes';
 import { errorHandler } from './middleware/errorHandler';
+import session from 'express-session';
 
 export async function createApp(httpServer?: HttpServer) {
   const app = express();
 
   app.use(express.json({ limit: '10mb' }));
 
+  // Session Middleware (needs MySQL store, here just basic for now)
+  app.use(session({
+    secret: process.env.SESSION_SECRET || 'dev_secret_only_for_development',
+    resave: false,
+    saveUninitialized: false,
+    cookie: { secure: process.env.NODE_ENV === 'production' }
+  }));
+  
+  if (!process.env.SESSION_SECRET && process.env.NODE_ENV === 'production') {
+    console.warn('WARNING: SESSION_SECRET is not set. Using insecure fallback secret in production.');
+  }
+
   // API Routes
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
+  app.use('/api/auth', authRoutes);
   app.use('/api/email', emailRoutes);
   app.use('/api/slack', slackRoutes);
+  app.use('/api/hrms', hrmsRoutes);
 
   // Vite Middleware (Development) vs Static Assets (Production)
   if (process.env.NODE_ENV !== 'production') {

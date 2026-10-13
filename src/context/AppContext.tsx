@@ -67,11 +67,10 @@ interface AppContextType {
   currentUser: User;
   users: User[];
   isAuthenticated: boolean;
-  login: (email: string, password?: string) => { success: boolean; message: string };
-  loginAsUser: (userId: string) => void;
+  isLoading: boolean;
+  login: (email: string, password?: string) => Promise<{ success: boolean; message: string }>;
   logout: () => void;
   setCurrentUserId: (id: string) => void;
-  switchRoleOverride: (role: UserRole) => void;
   attendanceRecords: AttendanceRecord[];
   manualAttendanceRequests: ManualAttendanceRegularizationRequest[];
   odRequests: OutdoorDutyRequest[];
@@ -644,10 +643,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return localStorage.getItem('la_hub_current_user_id') || 'usr-1'; // Default Dr. Rajesh Sharma (Admin)
   });
 
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    const savedAuth = localStorage.getItem('la_hub_is_authenticated');
-    return savedAuth !== null ? savedAuth === 'true' : false;
-  });
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then((res) => {
+        if (res.ok) return res.json();
+        throw new Error('Unauthorized');
+      })
+      .then((data) => {
+        setCurrentUserId(data.userId);
+        setIsAuthenticated(true);
+      })
+      .catch(() => {
+        setIsAuthenticated(false);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }, []);
 
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>(() => {
     const isLatestSeed = localStorage.getItem(SEED_VERSION_KEY);
@@ -1140,31 +1155,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem('la_hub_is_authenticated', String(isAuthenticated));
   }, [isAuthenticated]);
 
-  const login = (email: string, _password?: string) => {
-    const matchedUser = users.find(
-      (u) => u.email.toLowerCase().trim() === email.toLowerCase().trim()
-    );
-    if (matchedUser) {
-      if (matchedUser.status === 'deactivated') {
-        return { success: false, message: 'This account has been deactivated by the Administrator.' };
+  const login = async (email: string, password?: string) => {
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        return { success: false, message: error.message || 'Login failed' };
       }
-      setCurrentUserId(matchedUser.id);
+      const data = await res.json();
+      setCurrentUserId(data.user.id);
       setIsAuthenticated(true);
-      return { success: true, message: `Welcome back, ${matchedUser.name}!` };
-    }
-    return { success: false, message: 'Invalid credentials. No user registered with this email.' };
-  };
-
-  const loginAsUser = (userId: string) => {
-    const target = users.find((u) => u.id === userId);
-    if (target) {
-      setCurrentUserId(target.id);
-      setIsAuthenticated(true);
+      return { success: true, message: `Welcome back, ${data.user.name}!` };
+    } catch (err: any) {
+      return { success: false, message: 'Network error during login' };
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
     setIsAuthenticated(false);
+    setCurrentUserId('');
   };
 
   useEffect(() => {
@@ -1194,12 +1208,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Derived active user
   const currentUser = users.find((u) => u.id === currentUserId) || users[0];
 
-  // Role Override for quick role switching without changing person
-  const switchRoleOverride = (newRole: UserRole) => {
-    setUsers((prev) =>
-      prev.map((u) => (u.id === currentUser.id ? { ...u, role: newRole } : u))
-    );
-  };
+
 
   const addSlackLog = (log: SlackNotification) => {
     setSlackLogs((prev) => [log, ...prev]);
@@ -4668,10 +4677,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         users,
         isAuthenticated,
         login,
-        loginAsUser,
+
         logout,
         setCurrentUserId,
-        switchRoleOverride,
+
         attendanceRecords,
         manualAttendanceRequests,
         odRequests,

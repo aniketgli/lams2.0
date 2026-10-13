@@ -13,23 +13,19 @@ import {
 } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
-  const { login, loginAsUser, orgBranding } = useApp();
+  const { login, orgBranding } = useApp();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const handleQuickLogin = (userId: string) => {
-    loginAsUser(userId);
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     if (!email) {
       setError('Please enter your registered email address.');
       return;
     }
-    const res = login(email, password);
+    const res = await login(email, password);
     if (!res.success) {
       setError(res.message);
     }
