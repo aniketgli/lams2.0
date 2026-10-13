@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import bcrypt from 'bcrypt';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { db } from '../../src/db';
 import { employee_profiles, shifts, users } from '../../src/db/schema';
 import { isAuthenticated, isAdmin } from '../middleware/auth.middleware';
@@ -23,7 +25,8 @@ router.get('/employees', isAuthenticated, async (_req, res) => {
         joiningDate: employee_profiles.joiningDate,
         phone: employee_profiles.phone,
         officeLocation: employee_profiles.officeLocation,
-        shiftId: employee_profiles.shiftId
+        shiftId: employee_profiles.shiftId,
+        profileData: employee_profiles.profileData
       })
       .from(users)
       .leftJoin(employee_profiles, eq(users.id, employee_profiles.userId));
@@ -50,7 +53,8 @@ router.get('/employees/:userId', isAuthenticated, async (req, res) => {
         joiningDate: employee_profiles.joiningDate,
         phone: employee_profiles.phone,
         officeLocation: employee_profiles.officeLocation,
-        shiftId: employee_profiles.shiftId
+        shiftId: employee_profiles.shiftId,
+        profileData: employee_profiles.profileData
       })
       .from(users)
       .leftJoin(employee_profiles, eq(users.id, employee_profiles.userId))
@@ -65,21 +69,109 @@ router.get('/employees/:userId', isAuthenticated, async (req, res) => {
   }
 });
 
+const allowedRoles = new Set(['administrator', 'reporting_manager', 'reviewing_manager', 'general_staff', 'audit']);
+const allowedEmploymentTypes = new Set(['permanent', 'contractual', 'researcher', 'diploma_trainee', 'intern', 'bsc_msc_student', 'phd_student']);
+
+function normalizeEmployeePayload(body: any) {
+  const profile = body && typeof body === 'object' ? body : {};
+  const name = typeof profile.name === 'string' ? profile.name.trim() : '';
+  const email = typeof profile.email === 'string' ? profile.email.trim().toLowerCase() : '';
+  const role = typeof profile.role === 'string' && allowedRoles.has(profile.role) ? profile.role : 'general_staff';
+  const employmentType = typeof profile.employmentType === 'string' && allowedEmploymentTypes.has(profile.employmentType)
+    ? profile.employmentType : 'permanent';
+  return { profile, name, email, role, employmentType };
+}
+
+function toProfileRow(userId: string, profile: Record<string, any>, role: string, employmentType: string) {
+  return {
+    userId,
+    department: typeof profile.department === 'string' && profile.department.trim() ? profile.department.trim() : 'Unassigned',
+    designation: typeof profile.designation === 'string' && profile.designation.trim() ? profile.designation.trim() : 'Staff',
+    employmentType,
+    joiningDate: typeof profile.joiningDate === 'string' && profile.joiningDate ? profile.joiningDate.slice(0, 10) : '1970-01-01',
+    phone: typeof profile.phone === 'string' ? profile.phone : null,
+    officeLocation: typeof profile.officeLocation === 'string' ? profile.officeLocation : null,
+    shiftId: typeof profile.shiftId === 'string' ? profile.shiftId : null,
+    profileData: JSON.stringify({ ...profile, id: userId, name: profile.name, email: profile.email, role, employmentType })
+  };
+}
+
+// Create account and employee profile together. A random unknown initial password prevents
+// accidentally issuing a predictable credential; use the approved password-reset flow to activate login.
 router.post('/employees', isAdmin, async (req, res) => {
+  const { profile, name, email, role, employmentType } = normalizeEmployeePayload(req.body);
+  if (!name || !email || email.length > 255 || !email.includes('@')) {
+    return res.status(400).json({ error: 'A valid employee name and email are required.' });
+  }
+
+  const userId = typeof profile.id === 'string' && profile.id.length <= 36 ? profile.id : randomUUID();
   try {
-    await db.insert(employee_profiles).values(req.body);
-    res.status(201).json({ message: 'Employee created' });
+    const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, email));
+    if (existing) return res.status(409).json({ error: 'An account with this email already exists.' });
+
+    const initialSecret = randomBytes(32).toString('hex');
+    const passwordHash = await bcrypt.hash(initialSecret, 12);
+    const profileRow = toProfileRow(userId, { ...profile, name, email }, role, employmentType);
+
+    await db.transaction(async (tx) => {
+      await tx.insert(users).values({ id: userId, name, email, passwordHash, role });
+      await tx.insert(employee_profiles).values(profileRow);
+    });
+
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(201).json({ id: userId, message: 'Employee saved to database.' });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to create employee' });
+    const message = error instanceof Error ? error.message : '';
+    if (message.includes('Duplicate entry') || (error as any)?.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ error: 'An account or employee profile with this email/ID already exists.' });
+    }
+    console.error('Failed to create employee:', message);
+    return res.status(500).json({ error: 'Failed to create employee.' });
   }
 });
 
 router.put('/employees/:userId', isAdmin, async (req, res) => {
+  const userId = req.params.userId;
+  const { profile, name, email, role, employmentType } = normalizeEmployeePayload(req.body);
+  if (!name || !email || email.length > 255 || !email.includes('@')) {
+    return res.status(400).json({ error: 'A valid employee name and email are required.' });
+  }
+
   try {
-    await db.update(employee_profiles).set(req.body).where(eq(employee_profiles.userId, req.params.userId));
-    res.json({ message: 'Employee updated' });
+    const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.id, userId));
+    if (!existing) return res.status(404).json({ error: 'Employee account not found.' });
+
+    const [emailOwner] = await db.select({ id: users.id }).from(users).where(eq(users.email, email));
+    if (emailOwner && emailOwner.id !== userId) {
+      return res.status(409).json({ error: 'Another account already uses this email.' });
+    }
+
+    const profileRow = toProfileRow(userId, { ...profile, name, email }, role, employmentType);
+    await db.transaction(async (tx) => {
+      await tx.update(users).set({ name, email, role }).where(eq(users.id, userId));
+      await tx.insert(employee_profiles).values(profileRow).onDuplicateKeyUpdate({
+        set: {
+          department: profileRow.department,
+          designation: profileRow.designation,
+          employmentType: profileRow.employmentType,
+          joiningDate: profileRow.joiningDate,
+          phone: profileRow.phone,
+          officeLocation: profileRow.officeLocation,
+          shiftId: profileRow.shiftId,
+          profileData: profileRow.profileData
+        }
+      });
+    });
+
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ id: userId, message: 'Employee profile updated in database.' });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to update employee' });
+    const message = error instanceof Error ? error.message : '';
+    if (message.includes('Duplicate entry') || (error as any)?.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ error: 'Another account already uses this email.' });
+    }
+    console.error('Failed to update employee:', message);
+    return res.status(500).json({ error: 'Failed to update employee.' });
   }
 });
 
