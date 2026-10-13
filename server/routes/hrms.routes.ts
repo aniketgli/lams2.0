@@ -1,28 +1,67 @@
 import { Router } from 'express';
 import { db } from '../../src/db';
-import { employee_profiles, shifts } from '../../src/db/schema';
+import { employee_profiles, shifts, users } from '../../src/db/schema';
 import { isAuthenticated, isAdmin } from '../middleware/auth.middleware';
 import { eq } from 'drizzle-orm';
 
 const router = Router();
 
 // Employees
-router.get('/employees', isAuthenticated, async (req, res) => {
+router.get('/employees', isAuthenticated, async (_req, res) => {
   try {
-    const employees = await db.select().from(employee_profiles);
-    res.json(employees);
+    // The directory needs account and profile fields together. LEFT JOIN keeps
+    // valid login accounts visible even before their employee profile is completed.
+    const employees = await db
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        role: users.role,
+        department: employee_profiles.department,
+        designation: employee_profiles.designation,
+        employmentType: employee_profiles.employmentType,
+        joiningDate: employee_profiles.joiningDate,
+        phone: employee_profiles.phone,
+        officeLocation: employee_profiles.officeLocation,
+        shiftId: employee_profiles.shiftId
+      })
+      .from(users)
+      .leftJoin(employee_profiles, eq(users.id, employee_profiles.userId));
+
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json(employees);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch employees' });
+    console.error('Failed to fetch employees:', error instanceof Error ? error.message : error);
+    return res.status(500).json({ error: 'Failed to fetch employees' });
   }
 });
 
 router.get('/employees/:userId', isAuthenticated, async (req, res) => {
   try {
-    const result = await db.select().from(employee_profiles).where(eq(employee_profiles.userId, req.params.userId));
-    if (result.length === 0) return res.status(404).json({ error: 'Employee not found' });
-    res.json(result[0]);
+    const [employee] = await db
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        role: users.role,
+        department: employee_profiles.department,
+        designation: employee_profiles.designation,
+        employmentType: employee_profiles.employmentType,
+        joiningDate: employee_profiles.joiningDate,
+        phone: employee_profiles.phone,
+        officeLocation: employee_profiles.officeLocation,
+        shiftId: employee_profiles.shiftId
+      })
+      .from(users)
+      .leftJoin(employee_profiles, eq(users.id, employee_profiles.userId))
+      .where(eq(users.id, req.params.userId));
+
+    if (!employee) return res.status(404).json({ error: 'Employee not found' });
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json(employee);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch employee' });
+    console.error('Failed to fetch employee:', error instanceof Error ? error.message : error);
+    return res.status(500).json({ error: 'Failed to fetch employee' });
   }
 });
 
