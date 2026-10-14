@@ -40,4 +40,9 @@ export const shifts = mysqlTable('shifts', {
   halfDayHours: decimal('half_day_hours', { precision: 3, scale: 1 }),
   fullDayHours: decimal('full_day_hours', { precision: 3, scale: 1 }),
   isDefault: boolean('is_default').default(false),
+  isActive: boolean('is_active').default(true),
+  halfDayCutoffTime: varchar('half_day_cutoff_time', { length: 10 }),
+  description: text('description'),
+  color: varchar('color', { length: 30 }),
+  applicableDays: text('applicable_days'),
 });

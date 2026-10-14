@@ -155,7 +155,8 @@ router.put('/employees/:userId', isAdmin, async (req, res) => {
       await tx.insert(employee_profiles).values(profileRow).onDuplicateKeyUpdate({
         set: {
           suffix: profileRow.suffix,
-          department: profileRow.department, profileRow.designation,
+          department: profileRow.department,
+          designation: profileRow.designation,
           employmentType: profileRow.employmentType,
           joiningDate: profileRow.joiningDate,
           phone: profileRow.phone,
@@ -178,31 +179,113 @@ router.put('/employees/:userId', isAdmin, async (req, res) => {
   }
 });
 
-// Shifts
-router.get('/shifts', isAuthenticated, async (req, res) => {
+// Shift Master API: database is the source of truth.
+function normalizeShift(body: any) {
+  const value = body && typeof body === 'object' ? body : {};
+  const code = typeof value.code === 'string' ? value.code.trim().toUpperCase() : '';
+  const name = typeof value.name === 'string' ? value.name.trim() : '';
+  const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
+  if (!code || code.length > 50 || !name || name.length > 255) {
+    return { error: 'Shift code and name are required (maximum 50 and 255 characters).' } as const;
+  }
+  if (!timePattern.test(value.startTime) || !timePattern.test(value.endTime)) {
+    return { error: 'Start time and end time must use HH:MM format.' } as const;
+  }
+  const grace = Number(value.gracePeriodMins ?? 0);
+  const halfDay = Number(value.halfDayHours ?? value.minHalfDayHours ?? 4);
+  const fullDay = Number(value.fullDayHours ?? value.minFullDayHours ?? 8);
+  if (!Number.isFinite(grace) || grace < 0 || grace > 600 ||
+      !Number.isFinite(halfDay) || halfDay < 0 || halfDay > 24 ||
+      !Number.isFinite(fullDay) || fullDay < 0 || fullDay > 24) {
+    return { error: 'Grace period and hour values are outside allowed ranges.' } as const;
+  }
+  return { value: {
+    code, name, startTime: value.startTime, endTime: value.endTime,
+    gracePeriodMins: grace, halfDayHours: String(halfDay), fullDayHours: String(fullDay),
+    halfDayCutoffTime: typeof value.halfDayCutoffTime === 'string' && timePattern.test(value.halfDayCutoffTime) ? value.halfDayCutoffTime : null,
+    description: typeof value.description === 'string' ? value.description.trim().slice(0, 5000) : null,
+    color: typeof value.color === 'string' ? value.color.slice(0, 30) : null,
+    applicableDays: Array.isArray(value.applicableDays) ? JSON.stringify(value.applicableDays.filter((d: unknown) => typeof d === 'string').slice(0, 7)) : null,
+    isDefault: Boolean(value.isDefault),
+    isActive: value.isActive !== false
+  }} as const;
+}
+
+router.get('/shifts', isAuthenticated, async (_req, res) => {
   try {
     const shiftList = await db.select().from(shifts);
-    res.json(shiftList);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json(shiftList.map((shift) => ({
+      ...shift,
+      halfDayHours: Number(shift.halfDayHours ?? 4),
+      fullDayHours: Number(shift.fullDayHours ?? 8),
+      minHalfDayHours: Number(shift.halfDayHours ?? 4),
+      minFullDayHours: Number(shift.fullDayHours ?? 8),
+      applicableDays: (() => { try { return JSON.parse(shift.applicableDays || '[]'); } catch { return []; } })()
+    })));
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch shifts' });
+    console.error('Failed to fetch shifts:', error);
+    return res.status(500).json({ error: 'Failed to fetch shifts' });
   }
 });
 
 router.post('/shifts', isAdmin, async (req, res) => {
+  const normalized = normalizeShift(req.body);
+  if ('error' in normalized) return res.status(400).json({ error: normalized.error });
   try {
-    await db.insert(shifts).values(req.body);
-    res.status(201).json({ message: 'Shift created' });
+    const [duplicate] = await db.select({ id: shifts.id }).from(shifts).where(eq(shifts.code, normalized.value.code));
+    if (duplicate) return res.status(409).json({ error: 'A shift with this code already exists.' });
+    const id = typeof req.body.id === 'string' && req.body.id.length <= 36 ? req.body.id : randomUUID();
+    if (normalized.value.isDefault) {
+      await db.transaction(async (tx) => {
+        await tx.update(shifts).set({ isDefault: false });
+        await tx.insert(shifts).values({ id, ...normalized.value });
+      });
+    } else {
+      await db.insert(shifts).values({ id, ...normalized.value });
+    }
+    return res.status(201).json({ id, message: 'Shift created in database.' });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to create shift' });
+    console.error('Failed to create shift:', error);
+    return res.status(500).json({ error: 'Failed to create shift' });
   }
 });
 
 router.put('/shifts/:id', isAdmin, async (req, res) => {
+  const normalized = normalizeShift(req.body);
+  if ('error' in normalized) return res.status(400).json({ error: normalized.error });
   try {
-    await db.update(shifts).set(req.body).where(eq(shifts.id, req.params.id));
-    res.json({ message: 'Shift updated' });
+    const [existing] = await db.select({ id: shifts.id }).from(shifts).where(eq(shifts.id, req.params.id));
+    if (!existing) return res.status(404).json({ error: 'Shift not found.' });
+    const [duplicate] = await db.select({ id: shifts.id }).from(shifts).where(eq(shifts.code, normalized.value.code));
+    if (duplicate && duplicate.id !== req.params.id) return res.status(409).json({ error: 'A shift with this code already exists.' });
+    if (normalized.value.isDefault) {
+      await db.transaction(async (tx) => {
+        await tx.update(shifts).set({ isDefault: false });
+        await tx.update(shifts).set(normalized.value).where(eq(shifts.id, req.params.id));
+      });
+    } else {
+      await db.update(shifts).set(normalized.value).where(eq(shifts.id, req.params.id));
+    }
+    return res.json({ message: 'Shift updated in database.' });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to update shift' });
+    console.error('Failed to update shift:', error);
+    return res.status(500).json({ error: 'Failed to update shift' });
+  }
+});
+
+router.delete('/shifts/:id', isAdmin, async (req, res) => {
+  try {
+    const [target] = await db.select().from(shifts).where(eq(shifts.id, req.params.id));
+    if (!target) return res.status(404).json({ error: 'Shift not found.' });
+    if (target.isDefault) return res.status(409).json({ error: 'Set another shift as default before deleting this shift.' });
+    const [assigned] = await db.select({ id: employee_profiles.userId }).from(employee_profiles).where(eq(employee_profiles.shiftId, req.params.id));
+    if (assigned) return res.status(409).json({ error: 'This shift is assigned to employees. Deactivate it instead of deleting.' });
+    await db.delete(shifts).where(eq(shifts.id, req.params.id));
+    return res.json({ message: 'Shift deleted from database.' });
+  } catch (error) {
+    console.error('Failed to delete shift:', error);
+    return res.status(500).json({ error: 'Failed to delete shift' });
   }
 });
 
