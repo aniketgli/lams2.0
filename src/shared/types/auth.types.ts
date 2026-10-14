@@ -22,6 +22,7 @@ export interface UserModuleRoles {
 export interface User {
   id: string;
   name: string;
+  suffix?: 'Mr.' | 'Mrs.' | 'Miss' | 'Dr.';
   email: string;
   avatar: string;
   role: UserRole;
