@@ -18,6 +18,7 @@ export const sessions = mysqlTable('sessions', {
 
 export const employee_profiles = mysqlTable('employee_profiles', {
   userId: varchar('user_id', { length: 36 }).primaryKey(),
+  suffix: varchar('suffix', { length: 10 }),
   department: varchar('department', { length: 255 }).notNull(),
   designation: varchar('designation', { length: 255 }).notNull(),
   employmentType: varchar('employment_type', { length: 50 }).notNull(),
