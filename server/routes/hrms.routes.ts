@@ -17,6 +17,7 @@ router.get('/employees', isAuthenticated, async (_req, res) => {
       .select({
         id: users.id,
         name: users.name,
+        suffix: employee_profiles.suffix,
         email: users.email,
         role: users.role,
         department: employee_profiles.department,
@@ -45,6 +46,7 @@ router.get('/employees/:userId', isAuthenticated, async (req, res) => {
       .select({
         id: users.id,
         name: users.name,
+        suffix: employee_profiles.suffix,
         email: users.email,
         role: users.role,
         department: employee_profiles.department,
@@ -85,6 +87,7 @@ function normalizeEmployeePayload(body: any) {
 function toProfileRow(userId: string, profile: Record<string, any>, role: string, employmentType: string) {
   return {
     userId,
+    suffix: ['Mr.', 'Mrs.', 'Miss', 'Dr.'].includes(profile.suffix) ? profile.suffix : null,
     department: typeof profile.department === 'string' && profile.department.trim() ? profile.department.trim() : 'Unassigned',
     designation: typeof profile.designation === 'string' && profile.designation.trim() ? profile.designation.trim() : 'Staff',
     employmentType,
@@ -151,8 +154,8 @@ router.put('/employees/:userId', isAdmin, async (req, res) => {
       await tx.update(users).set({ name, email, role }).where(eq(users.id, userId));
       await tx.insert(employee_profiles).values(profileRow).onDuplicateKeyUpdate({
         set: {
-          department: profileRow.department,
-          designation: profileRow.designation,
+          suffix: profileRow.suffix,
+          department: profileRow.department, profileRow.designation,
           employmentType: profileRow.employmentType,
           joiningDate: profileRow.joiningDate,
           phone: profileRow.phone,
