@@ -86,10 +86,10 @@ interface AppContextType {
 
   // Shift Management & Dynamic Attendance Calculation
   shifts: Shift[];
-  addShift: (data: Omit<Shift, 'id'>) => { success: boolean; message: string; shift?: Shift };
-  updateShift: (id: string, data: Partial<Shift>) => { success: boolean; message: string };
-  deleteShift: (id: string) => { success: boolean; message: string };
-  setDefaultShift: (id: string) => { success: boolean; message: string };
+  addShift: (data: Omit<Shift, 'id'>) => Promise<{ success: boolean; message: string; shift?: Shift }>;
+  updateShift: (id: string, data: Partial<Shift>) => Promise<{ success: boolean; message: string }>;
+  deleteShift: (id: string) => Promise<{ success: boolean; message: string }>;
+  setDefaultShift: (id: string) => Promise<{ success: boolean; message: string }>;
   assignUserShift: (userId: string, shiftId: string) => { success: boolean; message: string };
   bulkAssignUserShift: (userIds: string[], shiftId: string) => { success: boolean; message: string };
   getUserShift: (userId: string) => Shift;
@@ -894,8 +894,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const isLatestSeed = localStorage.getItem(SEED_VERSION_KEY);
     if (!isLatestSeed) return INITIAL_SHIFTS;
     const saved = localStorage.getItem('la_hub_shifts_v2');
-    return saved ? JSON.parse(saved) : INITIAL_SHIFTS;
+    try { return saved ? JSON.parse(saved) : INITIAL_SHIFTS; } catch { return INITIAL_SHIFTS; }
   });
+
+  // MySQL is authoritative for shift definitions once the user is authenticated.
+  // Local storage remains a cache only, so an API failure never silently overwrites server data.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let cancelled = false;
+    const loadShifts = async () => {
+      try {
+        const response = await fetch('/api/hrms/shifts', {
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json' },
+          cache: 'no-store'
+        });
+        if (!response.ok) throw new Error(response.status === 401
+          ? 'Your session has expired. Please sign in again.'
+          : 'Unable to load shifts from the server.');
+        const rows = await response.json();
+        if (cancelled || !Array.isArray(rows)) return;
+        const databaseShifts: Shift[] = rows.map((row: any) => ({
+          id: String(row.id),
+          code: String(row.code || ''),
+          name: String(row.name || ''),
+          startTime: String(row.startTime || '09:00'),
+          endTime: String(row.endTime || '17:00'),
+          gracePeriodMins: Number(row.gracePeriodMins ?? 0),
+          halfDayHours: Number(row.halfDayHours ?? row.minHalfDayHours ?? 4),
+          fullDayHours: Number(row.fullDayHours ?? row.minFullDayHours ?? 8),
+          minHalfDayHours: Number(row.halfDayHours ?? row.minHalfDayHours ?? 4),
+          minFullDayHours: Number(row.fullDayHours ?? row.minFullDayHours ?? 8),
+          halfDayCutoffTime: row.halfDayCutoffTime || '13:30',
+          isDefault: Boolean(row.isDefault),
+          isActive: row.isActive !== false && row.isActive !== 0,
+          color: row.color || 'indigo',
+          description: row.description || '',
+          applicableDays: Array.isArray(row.applicableDays) ? row.applicableDays : []
+        }));
+        setShifts(databaseShifts);
+        localStorage.setItem('la_hub_shifts_v2', JSON.stringify(databaseShifts));
+      } catch (error) {
+        console.error('Shift master load failed:', error);
+      }
+    };
+    void loadShifts();
+    return () => { cancelled = true; };
+  }, [isAuthenticated]);
 
   useEffect(() => {
     localStorage.setItem('la_hub_shifts_v2', JSON.stringify(shifts));
@@ -1365,91 +1410,102 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return evaluateAttendanceByShift(clockIn, clockOut, effectiveShift, workMode);
   };
 
-  const addShift = (data: Omit<Shift, 'id'>): { success: boolean; message: string; shift?: Shift } => {
-    if (!data.name || !data.code || !data.startTime || !data.endTime) {
+  const addShift = async (data: Omit<Shift, 'id'>): Promise<{ success: boolean; message: string; shift?: Shift }> => {
+    if (!data.name?.trim() || !data.code?.trim() || !data.startTime || !data.endTime) {
       return { success: false, message: 'Shift Name, Code, Start Time, and End Time are required.' };
     }
-
+    if (!isAuthenticated) return { success: false, message: 'Please sign in before changing shift settings.' };
     const codeExists = shifts.some((s) => s.code.toLowerCase() === data.code.trim().toLowerCase());
-    if (codeExists) {
-      return { success: false, message: `Shift code '${data.code}' already exists.` };
-    }
+    if (codeExists) return { success: false, message: `Shift code '${data.code}' already exists.` };
 
-    const id = `shift-${Date.now().toString(36)}`;
     const newShift: Shift = {
       ...data,
-      id,
+      id: `shift-${Date.now().toString(36)}`,
       code: data.code.trim().toUpperCase(),
       name: data.name.trim()
     };
-
-    if (newShift.isDefault) {
-      setShifts((prev) => [newShift, ...prev.map((s) => ({ ...s, isDefault: false }))]);
-    } else {
-      setShifts((prev) => [...prev, newShift]);
+    try {
+      const response = await fetch('/api/hrms/shifts', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(newShift)
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) return { success: false, message: body.error || 'Shift could not be saved to the database.' };
+      const savedShift = { ...newShift, id: body.id || newShift.id };
+      setShifts((prev) => savedShift.isDefault
+        ? [savedShift, ...prev.map((s) => ({ ...s, isDefault: false }))]
+        : [...prev, savedShift]);
+      sendSlackNotification(
+        slackConfig,
+        {
+          channel: '#leave-and-attendance-logs',
+          sender: currentUser.name,
+          title: `🕒 New Work Shift Configured: ${savedShift.name}`,
+          message: `Admin *${currentUser.name}* created shift *${savedShift.code}* (${savedShift.startTime} - ${savedShift.endTime}, Grace: ${savedShift.gracePeriodMins}m, Half-day: ${savedShift.halfDayHours}h).`,
+          type: 'system'
+        },
+        addSlackLog
+      );
+      return { success: true, message: `Shift ${savedShift.code} (${savedShift.name}) saved to database.`, shift: savedShift };
+    } catch (error) {
+      console.error('Shift create failed:', error);
+      return { success: false, message: 'Network error: shift was not saved. Please try again.' };
     }
-
-    sendSlackNotification(
-      slackConfig,
-      {
-        channel: '#leave-and-attendance-logs',
-        sender: currentUser.name,
-        title: `🕒 New Work Shift Configured: ${newShift.name}`,
-        message: `Admin *${currentUser.name}* created shift *${newShift.code}* (${newShift.startTime} - ${newShift.endTime}, Grace: ${newShift.gracePeriodMins}m, Half-day: ${newShift.halfDayHours}h).`,
-        type: 'system'
-      },
-      addSlackLog
-    );
-
-    return { success: true, message: `Shift ${newShift.code} (${newShift.name}) configured successfully.`, shift: newShift };
   };
 
-  const updateShift = (id: string, data: Partial<Shift>): { success: boolean; message: string } => {
-    setShifts((prev) =>
-      prev.map((s) => {
-        if (s.id === id) {
-          return { ...s, ...data };
-        }
-        if (data.isDefault) {
-          return { ...s, isDefault: false };
-        }
-        return s;
-      })
-    );
-
-    return { success: true, message: 'Shift timings & rules updated successfully.' };
+  const updateShift = async (id: string, data: Partial<Shift>): Promise<{ success: boolean; message: string }> => {
+    if (!isAuthenticated) return { success: false, message: 'Please sign in before changing shift settings.' };
+    const current = shifts.find((s) => s.id === id);
+    if (!current) return { success: false, message: 'Shift not found.' };
+    const updatedShift = { ...current, ...data };
+    try {
+      const response = await fetch(`/api/hrms/shifts/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(updatedShift)
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) return { success: false, message: body.error || 'Shift update failed.' };
+      setShifts((prev) => prev.map((s) => s.id === id
+        ? updatedShift
+        : data.isDefault ? { ...s, isDefault: false } : s));
+      return { success: true, message: 'Shift timings and rules saved to database.' };
+    } catch (error) {
+      console.error('Shift update failed:', error);
+      return { success: false, message: 'Network error: shift was not updated. Please try again.' };
+    }
   };
 
-  const deleteShift = (id: string): { success: boolean; message: string } => {
-    if (shifts.length <= 1) {
-      return { success: false, message: 'At least one work shift must remain in the system.' };
-    }
+  const deleteShift = async (id: string): Promise<{ success: boolean; message: string }> => {
+    if (shifts.length <= 1) return { success: false, message: 'At least one work shift must remain in the system.' };
     const target = shifts.find((s) => s.id === id);
-    if (target?.isDefault) {
-      return { success: false, message: 'Cannot delete the designated default shift. Set another shift as default first.' };
+    if (target?.isDefault) return { success: false, message: 'Cannot delete the designated default shift. Set another shift as default first.' };
+    if (!isAuthenticated) return { success: false, message: 'Please sign in before changing shift settings.' };
+    try {
+      const response = await fetch(`/api/hrms/shifts/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json' }
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) return { success: false, message: body.error || 'Shift could not be deleted.' };
+      setShifts((prev) => prev.filter((s) => s.id !== id));
+      return { success: true, message: `Shift ${target?.code || id} deleted from database.` };
+    } catch (error) {
+      console.error('Shift delete failed:', error);
+      return { success: false, message: 'Network error: shift was not deleted. Please try again.' };
     }
-
-    const fallbackShift = shifts.find((s) => s.id !== id && s.isDefault) || shifts.find((s) => s.id !== id)!;
-    // Re-assign users using this shift to the fallback shift
-    setUsers((prev) =>
-      prev.map((u) => (u.shiftId === id ? { ...u, shiftId: fallbackShift.id } : u))
-    );
-
-    setShifts((prev) => prev.filter((s) => s.id !== id));
-    return {
-      success: true,
-      message: `Shift ${target?.code || id} deleted. Assigned staff transferred to default shift (${fallbackShift.code}).`
-    };
   };
 
-  const setDefaultShift = (id: string): { success: boolean; message: string } => {
-    setShifts((prev) =>
-      prev.map((s) => ({
-        ...s,
-        isDefault: s.id === id
-      }))
-    );
-    return { success: true, message: 'Default shift set successfully.' };
+  const setDefaultShift = async (id: string): Promise<{ success: boolean; message: string }> => {
+    const target = shifts.find((s) => s.id === id);
+    if (!target) return { success: false, message: 'Shift not found.' };
+    if (target.isActive === false) return { success: false, message: 'Activate this shift before setting it as default.' };
+    const result = await updateShift(id, { isDefault: true });
+    return result.success ? { success: true, message: 'Default shift saved to database.' } : result;
   };
 
   const assignUserShift = (userId: string, shiftId: string): { success: boolean; message: string } => {

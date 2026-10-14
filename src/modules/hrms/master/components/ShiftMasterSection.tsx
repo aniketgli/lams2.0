@@ -83,7 +83,7 @@ export const ShiftMasterSection: React.FC = () => {
   };
 
   // Submit Shift Modal Form
-  const handleSaveShift = (e: React.FormEvent) => {
+  const handleSaveShift = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formCode.trim() || !formName.trim()) {
       showToast('Shift Code and Shift Name are required.');
@@ -91,7 +91,7 @@ export const ShiftMasterSection: React.FC = () => {
     }
 
     if (editingShiftId) {
-      const res = updateShift(editingShiftId, {
+      const res = await updateShift(editingShiftId, {
         code: formCode.trim().toUpperCase(),
         name: formName.trim(),
         startTime: formStartTime,
@@ -107,8 +107,9 @@ export const ShiftMasterSection: React.FC = () => {
         isActive: formIsActive
       });
       showToast(res.message);
+      if (!res.success) return;
     } else {
-      const res = addShift({
+      const res = await addShift({
         code: formCode.trim().toUpperCase(),
         name: formName.trim(),
         startTime: formStartTime,
@@ -124,29 +125,30 @@ export const ShiftMasterSection: React.FC = () => {
         isActive: formIsActive
       });
       showToast(res.message);
+      if (!res.success) return;
     }
 
     setShowShiftModal(false);
   };
 
   // Toggle Active / Inactive Status
-  const handleToggleActive = (shift: Shift) => {
+  const handleToggleActive = async (shift: Shift) => {
     const isCurrentlyActive = shift.isActive ?? true;
     if (isCurrentlyActive && shift.isDefault) {
       showToast('Institutional default shift cannot be set to inactive. Set another shift as default first.');
       return;
     }
     const nextState = !isCurrentlyActive;
-    const res = updateShift(shift.id, { isActive: nextState });
-    showToast(`Shift ${shift.code} is now ${nextState ? 'Active' : 'Inactive'}.`);
+    const res = await updateShift(shift.id, { isActive: nextState });
+    showToast(res.success ? `Shift ${shift.code} is now ${nextState ? 'Active' : 'Inactive'}.` : res.message);
   };
 
   // Confirm Delete Handler
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!deleteTargetShift) return;
-    const res = deleteShift(deleteTargetShift.id);
+    const res = await deleteShift(deleteTargetShift.id);
     showToast(res.message);
-    setDeleteTargetShift(null);
+    if (res.success) setDeleteTargetShift(null);
   };
 
   // Calculate Shift Duration
@@ -260,8 +262,7 @@ export const ShiftMasterSection: React.FC = () => {
                       {!shift.isDefault && (
                         <button
                           onClick={() => {
-                            const res = setDefaultShift(shift.id);
-                            showToast(res.message);
+                            void setDefaultShift(shift.id).then((res) => showToast(res.message));
                           }}
                           className="p-1 text-slate-500 hover:text-amber-600 rounded hover:bg-amber-50 transition-colors cursor-pointer"
                           title="Set as Default Shift"
