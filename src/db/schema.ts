@@ -42,7 +42,6 @@ export const shifts = mysqlTable('shifts', {
   isDefault: boolean('is_default').default(false),
   isActive: boolean('is_active').default(true),
   halfDayCutoffTime: varchar('half_day_cutoff_time', { length: 10 }),
-  gracePeriodMins: int('grace_period_mins').default(0),
   description: text('description'),
   color: varchar('color', { length: 30 }),
   applicableDays: text('applicable_days'),
