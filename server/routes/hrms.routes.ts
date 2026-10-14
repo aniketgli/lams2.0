@@ -155,7 +155,8 @@ router.put('/employees/:userId', isAdmin, async (req, res) => {
       await tx.insert(employee_profiles).values(profileRow).onDuplicateKeyUpdate({
         set: {
           suffix: profileRow.suffix,
-          department: profileRow.department, profileRow.designation,
+          department: profileRow.department,
+          designation: profileRow.designation,
           employmentType: profileRow.employmentType,
           joiningDate: profileRow.joiningDate,
           phone: profileRow.phone,
