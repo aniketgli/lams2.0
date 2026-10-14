@@ -580,6 +580,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [newUserForm, setNewUserForm] = useState({
     name: '',
+    suffix: 'Mr.' as 'Mr.' | 'Mrs.' | 'Miss' | 'Dr.',
     email: '',
     gender: '',
     phone: '',
@@ -1029,7 +1030,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     const chosenCycle = (newUserForm.leaveCycle as 'CY' | 'FY') || (isCalendarYearCadre(newUserForm.employmentType as EmploymentType) ? 'CY' : 'FY');
 
     const created = addUserProfile({
-      name: newUserForm.name,
+      name: newUserForm.name.trim(),
+      suffix: newUserForm.suffix,
       email: newUserForm.email,
       gender: newUserForm.gender,
       avatar: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80`,
@@ -1068,6 +1070,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const handleOpenCreateEmployeeModal = () => {
     setNewUserForm({
       name: '',
+      suffix: 'Mr.' as 'Mr.' | 'Mrs.' | 'Miss' | 'Dr.',
       email: '',
       gender: '',
       phone: '',
@@ -3178,6 +3181,14 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
+                    <label className="block text-slate-600 font-bold mb-1">Name Suffix</label>
+                    <select
+                      value={editingUser.suffix || ''}
+                      onChange={(e) => setEditingUser({ ...editingUser, suffix: (e.target.value || undefined) as UserType['suffix'] })}
+                      className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white mb-2"
+                    >
+                      <option value="">No suffix</option><option value="Mr.">Mr.</option><option value="Mrs.">Mrs.</option><option value="Miss">Miss</option><option value="Dr.">Dr.</option>
+                    </select>
                     <label className="block text-slate-600 font-bold mb-1">Full Name *</label>
                     <input
                       type="text"
@@ -4077,7 +4088,13 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                     {/* Full Name */}
                     <div>
-                      <label className="block text-slate-700 font-bold mb-1 text-xs">
+                      <label className="block text-slate-700 font-bold mb-1 text-xs">Name Suffix</label>
+                      <AppSelect
+                        value={newUserForm.suffix}
+                        onChange={(val) => setNewUserForm({ ...newUserForm, suffix: val as 'Mr.' | 'Mrs.' | 'Miss' | 'Dr.' })}
+                        options={[{ label: 'Mr.', value: 'Mr.' }, { label: 'Mrs.', value: 'Mrs.' }, { label: 'Miss', value: 'Miss' }, { label: 'Dr.', value: 'Dr.' }]}
+                      />
+                      <label className="block text-slate-700 font-bold mb-1 text-xs mt-3">
                         Full Name <span className="text-blue-600 font-bold ml-0.5">*</span>
                       </label>
                       <input
