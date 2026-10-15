@@ -56,7 +56,8 @@ export interface BiometricMachine {
   location: string;
   punchMode: 'BOTH' | 'IN_ONLY' | 'OUT_ONLY';
   countForAttendance: boolean; // CRITICAL: Determines if punches count for official attendance
-  status: 'ACTIVE' | 'MAINTENANCE' | 'DISABLED';
+  status: 'ACTIVE' | 'INACTIVE';
+  purpose: 'ATTENDANCE' | 'ACCESS' | 'BOTH';
   lastSync: string;
   gateType?: string;
 }
@@ -99,7 +100,7 @@ export const MasterSettingsPage: React.FC = () => {
         setBiometricMachines(rows.map((row) => ({
           id: row.id, name: row.fullName, deviceSR: row.serialNumber, deviceModel: row.shortName,
           ipOrSerial: row.ipAddress, location: '', punchMode: 'BOTH' as const,
-          countForAttendance: true, status: 'ACTIVE' as const, lastSync: '—'
+          countForAttendance: row.purpose !== 'ACCESS', status: (row.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE') as 'ACTIVE' | 'INACTIVE', purpose: (row.purpose || 'ATTENDANCE') as 'ATTENDANCE' | 'ACCESS' | 'BOTH', lastSync: '—'
         })));
       })
       .catch((error) => { if (!cancelled) showToast(error.message || 'Could not load biometric machines.'); })
@@ -162,7 +163,8 @@ export const MasterSettingsPage: React.FC = () => {
   const [newMachineLocation, setNewMachineLocation] = useState('Main Campus HQ, Dehradun');
   const [newMachinePunchMode, setNewMachinePunchMode] = useState<'BOTH' | 'IN_ONLY' | 'OUT_ONLY'>('BOTH');
   const [newMachineCountForAttendance, setNewMachineCountForAttendance] = useState(true);
-  const [newMachineStatus, setNewMachineStatus] = useState<'ACTIVE' | 'MAINTENANCE' | 'DISABLED'>('ACTIVE');
+  const [newMachineStatus, setNewMachineStatus] = useState<'ACTIVE' | 'INACTIVE'>('ACTIVE');
+  const [newMachinePurpose, setNewMachinePurpose] = useState<'ATTENDANCE' | 'ACCESS' | 'BOTH'>('ATTENDANCE');
   const [newMachineGateType, setNewMachineGateType] = useState('General Entry Gate');
 
   // Filtered Biometric Machines List
@@ -279,16 +281,21 @@ export const MasterSettingsPage: React.FC = () => {
     );
   };
 
-  const handleToggleStatus = (id: string, newStatus: 'ACTIVE' | 'MAINTENANCE' | 'DISABLED') => {
-    setBiometricMachines((prev) =>
-      prev.map((m) => {
-        if (m.id === id) {
-          showToast(`Machine "${m.name}" status set to ${newStatus}`);
-          return { ...m, status: newStatus };
-        }
-        return m;
-      })
-    );
+  const handleToggleStatus = async (machine: BiometricMachine) => {
+    const newStatus: 'ACTIVE' | 'INACTIVE' = machine.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    try {
+      const response = await fetch(`/api/hrms/biometric-machines/${encodeURIComponent(machine.id)}/status`, {
+        method: 'PATCH', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Could not update machine status.');
+      setBiometricMachines((prev) => prev.map((m) => m.id === machine.id ? { ...m, status: newStatus } : m));
+      showToast(`Machine "${machine.name}" is now ${newStatus.toLowerCase()}.`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not update machine status.');
+    }
   };
 
   const handleDeleteMachine = async (id: string) => {
@@ -314,6 +321,7 @@ export const MasterSettingsPage: React.FC = () => {
     setNewMachinePunchMode(machine.punchMode);
     setNewMachineCountForAttendance(machine.countForAttendance);
     setNewMachineStatus(machine.status);
+    setNewMachinePurpose(machine.purpose || 'ATTENDANCE');
     setNewMachineGateType(machine.gateType || 'General Entry Gate');
   };
 
@@ -328,7 +336,7 @@ export const MasterSettingsPage: React.FC = () => {
       showToast('Please fill all five required device fields.');
       return;
     }
-    const payload = { id, fullName, shortName, serialNumber, ipAddress };
+    const payload = { id, fullName, shortName, serialNumber, ipAddress, status: newMachineStatus, purpose: newMachinePurpose };
     try {
       const response = await fetch(
         editingMachine ? `/api/hrms/biometric-machines/${encodeURIComponent(editingMachine.id)}` : '/api/hrms/biometric-machines',
@@ -339,7 +347,7 @@ export const MasterSettingsPage: React.FC = () => {
       if (!response.ok) throw new Error(result.error || 'Could not save biometric machine.');
       const saved: BiometricMachine = {
         id, name: fullName, deviceSR: serialNumber, deviceModel: shortName, ipOrSerial: ipAddress,
-        location: '', punchMode: 'BOTH', countForAttendance: true, status: 'ACTIVE', lastSync: '—'
+        location: '', punchMode: 'BOTH', countForAttendance: newMachinePurpose !== 'ACCESS', status: newMachineStatus, purpose: newMachinePurpose, lastSync: '—'
       };
       setBiometricMachines((prev) => editingMachine
         ? prev.map((machine) => machine.id === editingMachine.id ? saved : machine)
@@ -459,317 +467,112 @@ export const MasterSettingsPage: React.FC = () => {
 
       {/* SUB-MASTER 2: BIOMETRIC MACHINES MASTER */}
       {activeSubMaster === 'biometric' && (
-        <div className="space-y-5">
-          {/* Top Banner & Header */}
-          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 flex items-center space-x-2">
-                  <Cpu className="w-4 h-4 text-emerald-700" />
-                  <span>Biometric Machines &amp; Punch Devices Master</span>
-                </h3>
-                
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  leftIcon={<Download className="w-3.5 h-3.5 text-emerald-600" />}
-                  onClick={handleExportMachinesCSV}
-                  title="Export Biometric Machines as CSV"
-                >
-                  Export CSV
-                </Button>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  leftIcon={<FileText className="w-3.5 h-3.5 text-rose-500" />}
-                  onClick={handleExportMachinesPDF}
-                  title="Export Biometric Machines to PDF"
-                >
-                  Export PDF
-                </Button>
-
-                <Button
-                  variant="primary"
-                  size="sm"
-                  leftIcon={<Plus className="w-4 h-4" />}
-                  onClick={() => {
-                    setEditingMachine(null);
-                    setNewMachineId(`BIO-0${biometricMachines.length + 1}`);
-                    setNewMachineName('');
-                    setNewMachineSR(`SRN-${Math.floor(10000000 + Math.random() * 90000000)}`);
-                    setNewMachineModel('');
-                    setNewMachineIp('');
-                    setNewMachineLocation('Main Campus HQ, Dehradun');
-                    setNewMachinePunchMode('BOTH');
-                    setNewMachineCountForAttendance(true);
-                    setNewMachineStatus('ACTIVE');
-                    setNewMachineGateType('General Entry Gate');
-                    setShowAddMachineModal(true);
-                  }}
-                >
-                  Add Biometric Machine
-                </Button>
-              </div>
+        <div className="space-y-4">
+          <section className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <Cpu className="w-4 h-4 text-slate-600" />
+                Biometric Machine
+                <span className="text-xs font-semibold text-slate-500">({biometricMachines.length})</span>
+              </h3>
+              <Button variant="primary" size="sm" leftIcon={<Plus className="w-4 h-4" />}
+                onClick={() => {
+                  setEditingMachine(null); setNewMachineId(''); setNewMachineName('');
+                  setNewMachineSR(''); setNewMachineModel(''); setNewMachineIp('');
+                  setNewMachineStatus('ACTIVE'); setNewMachinePurpose('ATTENDANCE'); setShowAddMachineModal(true);
+                }}>
+                New Biometric Machine
+              </Button>
             </div>
-
-            {/* Summary KPI Bar */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-lg">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Total Machines</span>
-                <span className="text-lg font-black text-slate-900 mt-0.5 block">{biometricMachines.length}</span>
-              </div>
-
-              <div className="p-3 bg-emerald-50/80 border border-emerald-200/80 rounded-lg">
-                <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">Counted for Attendance</span>
-                <span className="text-lg font-black text-emerald-700 mt-0.5 block flex items-center space-x-1">
-                  <CheckCircle2 className="w-4 h-4 inline text-emerald-600 mr-1" />
-                  {biometricMachines.filter((m) => m.countForAttendance).length}
-                </span>
-              </div>
-
-              <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-lg">
-                <span className="text-[10px] font-bold text-amber-900 uppercase tracking-wider block">Excluded / Informational</span>
-                <span className="text-lg font-black text-amber-800 mt-0.5 block flex items-center space-x-1">
-                  <XCircle className="w-4 h-4 inline text-amber-600 mr-1" />
-                  {biometricMachines.filter((m) => !m.countForAttendance).length}
-                </span>
-              </div>
-
-              <div className="p-3 bg-blue-50/80 border border-blue-200/80 rounded-lg">
-                <span className="text-[10px] font-bold text-blue-900 uppercase tracking-wider block">Active Devices</span>
-                <span className="text-lg font-black text-blue-700 mt-0.5 block flex items-center space-x-1">
-                  <Server className="w-4 h-4 inline text-blue-600 mr-1" />
-                  {biometricMachines.filter((m) => m.status === 'ACTIVE').length}
-                </span>
-              </div>
-            </div>
-
-            {/* Search & Uniform Filter Bar */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-              <div className="w-full sm:w-80">
-                <Input
-                  placeholder="Search Device Name, Device SR, Device ID, IP, location..."
-                  value={machineSearchQuery}
-                  onChange={(e) => setMachineSearchQuery(e.target.value)}
-                  leftIcon={Search}
-                  size="sm"
-                />
-              </div>
-
-              <div className="flex items-center space-x-1.5 w-full sm:w-auto justify-end">
-                <span className="text-xs font-semibold text-slate-500 mr-1">Filter:</span>
-                <Button
-                  size="xs"
-                  variant={machineFilterCount === 'ALL' ? 'primary' : 'outline'}
-                  onClick={() => setMachineFilterCount('ALL')}
-                >
-                  All ({biometricMachines.length})
-                </Button>
-                <Button
-                  size="xs"
-                  variant={machineFilterCount === 'COUNTED' ? 'primary' : 'outline'}
-                  onClick={() => setMachineFilterCount('COUNTED')}
-                >
-                  Counted ({biometricMachines.filter((m) => m.countForAttendance).length})
-                </Button>
-                <Button
-                  size="xs"
-                  variant={machineFilterCount === 'EXCLUDED' ? 'primary' : 'outline'}
-                  onClick={() => setMachineFilterCount('EXCLUDED')}
-                >
-                  Excluded ({biometricMachines.filter((m) => !m.countForAttendance).length})
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          {/* Biometric Machines Table */}
-          <div className="bg-white border border-slate-200/90 rounded-2xl overflow-hidden shadow-2xs w-full">
-            <div className="w-full overflow-hidden">
-              <table className="w-full text-left text-xs border-collapse table-fixed">
-                <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 text-[11px]">
-                  <tr className="h-10">
-                    <th className="px-4 py-2.5 whitespace-nowrap align-middle">Device ID</th>
-                    <th className="px-4 py-2.5 align-middle">Device Full Name</th>
-                    <th className="px-4 py-2.5 whitespace-nowrap align-middle">Short Name</th>
-                    <th className="px-4 py-2.5 whitespace-nowrap align-middle">Serial Number</th>
-                    <th className="px-4 py-2.5 whitespace-nowrap align-middle">IP Address</th>
-                    <th className="px-4 py-2.5 text-right whitespace-nowrap align-middle">Actions</th>
+          </section>
+          <section className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[900px] text-left text-xs border-collapse">
+                <thead className="bg-slate-100 text-slate-700 uppercase tracking-wide border-b border-slate-200">
+                  <tr>
+                    <th className="px-4 py-3 font-bold whitespace-nowrap">Device ID</th>
+                    <th className="px-4 py-3 font-bold">Device Full Name</th>
+                    <th className="px-4 py-3 font-bold whitespace-nowrap">Short Name</th>
+                    <th className="px-4 py-3 font-bold whitespace-nowrap">Serial Number</th>
+                    <th className="px-4 py-3 font-bold whitespace-nowrap">IP Address</th>
+                    <th className="px-4 py-3 font-bold whitespace-nowrap">Purpose</th>
+                    <th className="px-4 py-3 font-bold whitespace-nowrap">Status</th>
+                    <th className="px-4 py-3 font-bold text-right whitespace-nowrap">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredMachines.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="p-8 text-center text-slate-400 font-medium">
-                        {isLoadingMachines ? 'Loading biometric machines…' : 'No biometric machines found matching your filters.'}
+                  {isLoadingMachines ? (
+                    <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-500">Loading biometric machines…</td></tr>
+                  ) : filteredMachines.length === 0 ? (
+                    <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-500">No biometric machines found. Use “New Biometric Machine” to add one.</td></tr>
+                  ) : filteredMachines.map((machine) => (
+                    <tr key={machine.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-4 py-3"><span className="font-mono font-semibold bg-slate-100 border border-slate-200 rounded px-2 py-1">{machine.id}</span></td>
+                      <td className="px-4 py-3 font-semibold text-slate-900">{machine.name}</td>
+                      <td className="px-4 py-3 font-mono">{machine.deviceModel}</td>
+                      <td className="px-4 py-3 font-mono">{machine.deviceSR}</td>
+                      <td className="px-4 py-3 font-mono">{machine.ipOrSerial}</td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-bold ${machine.purpose === 'ACCESS' ? 'bg-violet-50 text-violet-700 border-violet-200' : machine.purpose === 'BOTH' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                          {machine.purpose === 'BOTH' ? 'Attendance & Access' : machine.purpose === 'ACCESS' ? 'Access' : 'Attendance'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <button type="button" onClick={() => handleToggleStatus(machine)} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold transition-colors ${machine.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : 'bg-slate-100 text-slate-600 border-slate-300 hover:bg-slate-200'}`} title="Click to toggle active/inactive">
+                          <span className={`h-1.5 w-1.5 rounded-full ${machine.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                          {machine.status === 'ACTIVE' ? 'Active' : 'Inactive'}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-2">
+                          <button type="button" onClick={() => { handleOpenEditMachineModal(machine); setShowAddMachineModal(true); }} className="h-8 w-8 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 inline-flex items-center justify-center" title="Edit machine"><Pencil className="w-3.5 h-3.5" /></button>
+                          <button type="button" onClick={() => handleDeleteMachine(machine.id)} className="h-8 w-8 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 inline-flex items-center justify-center" title="Delete machine"><Trash2 className="w-3.5 h-3.5" /></button>
+                        </div>
                       </td>
                     </tr>
-                  ) : (
-                    filteredMachines.map((machine) => (
-                      <tr key={machine.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="px-4 py-3 whitespace-nowrap align-middle">
-                          <span className="font-mono font-bold text-slate-800 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-xs">{machine.id}</span>
-                        </td>
-                        <td className="px-4 py-3 align-middle font-semibold text-slate-900">{machine.name}</td>
-                        <td className="px-4 py-3 whitespace-nowrap align-middle font-mono text-xs text-slate-700">{machine.deviceModel}</td>
-                        <td className="px-4 py-3 whitespace-nowrap align-middle font-mono text-xs text-slate-700">{machine.deviceSR}</td>
-                        <td className="px-4 py-3 whitespace-nowrap align-middle font-mono text-xs text-slate-700">{machine.ipOrSerial}</td>
-
-                        {/* 5. Actions */}
-                        <td className="px-4 py-3 text-right whitespace-nowrap align-middle">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                handleOpenEditMachineModal(machine);
-                                setShowAddMachineModal(true);
-                              }}
-                              className="h-7 w-7 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 font-bold cursor-pointer text-xs inline-flex items-center justify-center border border-blue-200/80 transition-all shrink-0 active:scale-95 shadow-2xs"
-                              title="Edit Biometric Machine Details"
-                            >
-                              <Pencil className="w-3.5 h-3.5 text-blue-600 stroke-[2]" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteMachine(machine.id)}
-                              className="h-7 w-7 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold cursor-pointer text-xs inline-flex items-center justify-center border border-rose-200/80 transition-all shrink-0 active:scale-95 shadow-2xs"
-                              title="Delete Machine"
-                            >
-                              <Trash2 className="w-3.5 h-3.5 text-rose-600 stroke-[2]" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
+                  ))}
                 </tbody>
               </table>
             </div>
-          </div>
-
-          {/* Register / Edit Biometric Machine Modal */}
+          </section>
           {showAddMachineModal && (
-            <div className="fixed inset-0 z-50 bg-slate-900/55 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
-              <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-xl overflow-hidden flex flex-col max-h-[90vh] my-auto">
-                <div className="px-5 py-4 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white flex items-center justify-between shrink-0 border-b border-slate-800 rounded-t-2xl">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
-                      <Cpu className="w-5 h-5 text-blue-400" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-base leading-tight text-white tracking-tight">
-                        {editingMachine ? `Edit Machine (${editingMachine.id})` : 'Register New Biometric Machine'}
-                      </h3>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setShowAddMachineModal(false);
-                      setEditingMachine(null);
-                    }}
-                    className="p-1.5 text-slate-400 hover:text-white rounded-lg cursor-pointer hover:bg-white/10 transition-colors"
-                    aria-label="Close dialog"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
+            <div className="fixed inset-0 z-50 bg-slate-900/55 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+              <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
+                <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+                  <div><h3 className="font-bold text-base">{editingMachine ? `Edit Biometric Machine · ${editingMachine.id}` : 'New Biometric Machine'}</h3><p className="text-xs text-slate-300 mt-1">Configure device details, purpose and availability</p></div>
+                  <button type="button" onClick={() => { setShowAddMachineModal(false); setEditingMachine(null); }} className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10" aria-label="Close"><X className="w-5 h-5" /></button>
                 </div>
-
-                <form onSubmit={handleCreateOrUpdateMachine} className="p-5 space-y-3.5 text-xs overflow-y-auto">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                        Device ID (Machine ID) <span className="text-rose-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="e.g. BIO-01"
-                        value={newMachineId}
-                        onChange={(e) => setNewMachineId(e.target.value)}
-                        disabled={!!editingMachine}
-                        className={`h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 text-xs font-mono font-bold focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 focus:outline-none shadow-2xs transition-all ${
-                          editingMachine ? 'opacity-70 cursor-not-allowed bg-slate-100' : ''
-                        }`}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                        Serial Number <span className="text-rose-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="e.g. SRN-88492012"
-                        value={newMachineSR}
-                        onChange={(e) => setNewMachineSR(e.target.value)}
-                        className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 text-xs font-mono focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 focus:outline-none shadow-2xs transition-all"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                      Device Full Name <span className="text-rose-500">*</span>
+                <form onSubmit={handleCreateOrUpdateMachine} className="p-5 space-y-4 overflow-y-auto">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <label className="block text-xs font-semibold text-slate-700">Device ID *
+                      <input required value={newMachineId} disabled={!!editingMachine} onChange={(e) => setNewMachineId(e.target.value)} placeholder="e.g. BIO-01" className="mt-1.5 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm disabled:bg-slate-100" />
                     </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. HQ Main Gate Turnstile A"
-                      value={newMachineName}
-                      onChange={(e) => setNewMachineName(e.target.value)}
-                      className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 focus:outline-none shadow-2xs transition-all"
-                    />
+                    <label className="block text-xs font-semibold text-slate-700">Short Name *
+                      <input required value={newMachineModel} onChange={(e) => setNewMachineModel(e.target.value)} placeholder="e.g. MAIN-GATE" className="mt-1.5 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" />
+                    </label>
+                    <label className="block text-xs font-semibold text-slate-700 sm:col-span-2">Device Full Name *
+                      <input required value={newMachineName} onChange={(e) => setNewMachineName(e.target.value)} placeholder="e.g. Main Office Attendance Device" className="mt-1.5 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" />
+                    </label>
+                    <label className="block text-xs font-semibold text-slate-700">Serial Number *
+                      <input required value={newMachineSR} onChange={(e) => setNewMachineSR(e.target.value)} placeholder="Enter serial number" className="mt-1.5 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm" />
+                    </label>
+                    <label className="block text-xs font-semibold text-slate-700">IP Address *
+                      <input required value={newMachineIp} onChange={(e) => setNewMachineIp(e.target.value)} placeholder="192.168.1.100" className="mt-1.5 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm font-mono" />
+                    </label>
+                    <label className="block text-xs font-semibold text-slate-700">Purpose *
+                      <select value={newMachinePurpose} onChange={(e) => setNewMachinePurpose(e.target.value as 'ATTENDANCE' | 'ACCESS' | 'BOTH')} className="mt-1.5 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm">
+                        <option value="ATTENDANCE">Attendance</option><option value="ACCESS">Access</option><option value="BOTH">Attendance &amp; Access</option>
+                      </select>
+                    </label>
+                    <label className="block text-xs font-semibold text-slate-700">Status *
+                      <select value={newMachineStatus} onChange={(e) => setNewMachineStatus(e.target.value as 'ACTIVE' | 'INACTIVE')} className="mt-1.5 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm">
+                        <option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option>
+                      </select>
+                    </label>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1.5">Short Name</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. MAIN-GATE"
-                        required
-                        value={newMachineModel}
-                        onChange={(e) => setNewMachineModel(e.target.value)}
-                        className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 focus:outline-none shadow-2xs transition-all"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1.5">IP Address</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. 192.168.1.120"
-                        required
-                        value={newMachineIp}
-                        onChange={(e) => setNewMachineIp(e.target.value)}
-                        className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 text-xs font-mono focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 focus:outline-none shadow-2xs transition-all"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowAddMachineModal(false);
-                        setEditingMachine(null);
-                      }}
-                      className="h-9 px-4 bg-white hover:bg-slate-100 text-slate-700 font-bold rounded-xl text-xs border border-slate-200/90 cursor-pointer transition-colors shadow-2xs"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="h-9 px-5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-xl text-xs transition-all shadow-2xs cursor-pointer flex items-center space-x-1.5 active:scale-95"
-                    >
-                      <Save className="w-3.5 h-3.5" />
-                      <span>{editingMachine ? 'Save Changes' : 'Register Machine'}</span>
-                    </button>
+                  <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+                    <button type="button" onClick={() => { setShowAddMachineModal(false); setEditingMachine(null); }} className="h-10 px-4 rounded-lg border border-slate-300 text-slate-700 font-semibold hover:bg-slate-50">Cancel</button>
+                    <button type="submit" className="h-10 px-5 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 inline-flex items-center gap-2"><Save className="w-4 h-4" />{editingMachine ? 'Save Changes' : 'Add Machine'}</button>
                   </div>
                 </form>
               </div>

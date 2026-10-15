@@ -320,6 +320,9 @@ function normalizeBiometricPayload(body: any) {
   const shortName = typeof value.shortName === 'string' ? value.shortName.trim().toUpperCase() : '';
   const serialNumber = typeof value.serialNumber === 'string' ? value.serialNumber.trim().toUpperCase() : '';
   const ipAddress = typeof value.ipAddress === 'string' ? value.ipAddress.trim() : '';
+  const status = value.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE';
+  const allowedPurposes = ['ATTENDANCE', 'ACCESS', 'BOTH'];
+  const purpose = allowedPurposes.includes(value.purpose) ? value.purpose : 'ATTENDANCE';
   if (!id || id.length > 64 || !fullName || fullName.length > 255 ||
       !shortName || shortName.length > 80 || !serialNumber || serialNumber.length > 120) {
     return { error: 'Device ID, Device Full Name, Short Name and Serial Number are required.' } as const;
@@ -327,7 +330,7 @@ function normalizeBiometricPayload(body: any) {
   if (isIP(ipAddress) === 0) {
     return { error: 'Enter a valid IPv4 or IPv6 address.' } as const;
   }
-  return { value: { id, fullName, shortName, serialNumber, ipAddress } } as const;
+  return { value: { id, fullName, shortName, serialNumber, ipAddress, status, purpose } } as const;
 }
 
 router.get('/biometric-machines', isAuthenticated, async (_req, res) => {
@@ -373,7 +376,9 @@ router.put('/biometric-machines/:id', isAdmin, async (req, res) => {
       fullName: normalized.value.fullName,
       shortName: normalized.value.shortName,
       serialNumber: normalized.value.serialNumber,
-      ipAddress: normalized.value.ipAddress
+      ipAddress: normalized.value.ipAddress,
+      status: normalized.value.status,
+      purpose: normalized.value.purpose
     }).where(eq(biometric_machines.id, req.params.id));
     return res.json({ ...normalized.value, message: 'Biometric machine updated.' });
   } catch (error) {
@@ -382,6 +387,21 @@ router.put('/biometric-machines/:id', isAdmin, async (req, res) => {
     if (dbError.code === 'ER_DUP_ENTRY' || dbError.logMessage.includes('Duplicate entry')) {
       return res.status(409).json({ error: 'Short Name or Serial Number already belongs to another device.' });
     }
+    return res.status(500).json({ error: dbError.userMessage });
+  }
+});
+
+router.patch('/biometric-machines/:id/status', isAdmin, async (req, res) => {
+  const status = req.body?.status === 'INACTIVE' ? 'INACTIVE' : req.body?.status === 'ACTIVE' ? 'ACTIVE' : null;
+  if (!status) return res.status(400).json({ error: 'Status must be ACTIVE or INACTIVE.' });
+  try {
+    const [existing] = await db.select({ id: biometric_machines.id }).from(biometric_machines).where(eq(biometric_machines.id, req.params.id));
+    if (!existing) return res.status(404).json({ error: 'Biometric machine not found.' });
+    await db.update(biometric_machines).set({ status }).where(eq(biometric_machines.id, req.params.id));
+    return res.json({ id: req.params.id, status, message: 'Biometric machine status updated.' });
+  } catch (error) {
+    const dbError = getBiometricDatabaseError(error);
+    console.error('Failed to update biometric machine status:', { code: dbError.code, message: dbError.logMessage });
     return res.status(500).json({ error: dbError.userMessage });
   }
 });
