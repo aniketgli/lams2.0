@@ -475,7 +475,7 @@ router.post('/profile-masters/organizations', isAdmin, async (req, res) => {
   const status = typeof body.status === 'string' && body.status.toUpperCase() === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE';
   if (!name || name.length > 255 || !code || code.length > 80) return res.status(400).json({ error: 'Organization name and code are required (maximum 255 and 80 characters).' });
   if (!['Department', 'Cell', 'Project', 'Division', 'Unit', 'Other'].includes(type)) return res.status(400).json({ error: 'Select a valid organization type.' });
-  try { const id = randomUUID(); await db.insert(organization_units).values({ id, name, code, type, status }); const [organization] = await db.select().from(organization_units).where(eq(organization_units.id, id)); return res.status(201).json(organization); }
+  try { await db.insert(organization_units).values({ name, code, type, status }); const [organization] = await db.select().from(organization_units).where(eq(organization_units.code, code)); return res.status(201).json(organization); }
   catch (error: any) { if (error?.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Organization code already exists. Use a unique code.' }); console.error('Failed to create organization:', error); return res.status(500).json({ error: 'Failed to create organization.' }); }
 });
 router.put('/profile-masters/organizations/:id', isAdmin, async (req, res) => {
@@ -486,7 +486,7 @@ router.put('/profile-masters/organizations/:id', isAdmin, async (req, res) => {
   const status = typeof body.status === 'string' && body.status.toUpperCase() === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE';
   if (!name || name.length > 255 || !code || code.length > 80) return res.status(400).json({ error: 'Organization name and code are required.' });
   if (!['Department', 'Cell', 'Project', 'Division', 'Unit', 'Other'].includes(type)) return res.status(400).json({ error: 'Select a valid organization type.' });
-  try { await db.update(organization_units).set({ name, code, type, status }).where(eq(organization_units.id, req.params.id)); const [organization] = await db.select().from(organization_units).where(eq(organization_units.id, req.params.id)); if (!organization) return res.status(404).json({ error: 'Organization not found.' }); return res.json(organization); }
+  try { await db.update(organization_units).set({ name, code, type, status }).where(eq(organization_units.id, Number(req.params.id))); const [organization] = await db.select().from(organization_units).where(eq(organization_units.id, req.params.id)); if (!organization) return res.status(404).json({ error: 'Organization not found.' }); return res.json(organization); }
   catch (error: any) { if (error?.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Organization code already exists. Use a unique code.' }); console.error('Failed to update organization:', error); return res.status(500).json({ error: 'Failed to update organization.' }); }
 });
 router.delete('/profile-masters/organizations/:id', isAdmin, async (req, res) => {
