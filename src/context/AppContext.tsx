@@ -644,6 +644,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [sessionUser, setSessionUser] = useState<Partial<User> | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
@@ -653,7 +654,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         throw new Error('Unauthorized');
       })
       .then((data) => {
-        setCurrentUserId(data.userId);
+        const authenticatedUser = data.user && typeof data.user === 'object' ? data.user : null;
+        const userId = authenticatedUser?.id || data.userId;
+        if (userId) setCurrentUserId(userId);
+        if (authenticatedUser) setSessionUser(authenticatedUser);
         setIsAuthenticated(true);
       })
       .catch(() => {
@@ -1365,6 +1369,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       const data = await res.json();
       setCurrentUserId(data.user.id);
+      setSessionUser(data.user);
       setIsAuthenticated(true);
       return { success: true, message: `Welcome back, ${data.user.name}!` };
     } catch (err: any) {
@@ -1382,6 +1387,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } finally {
       setIsAuthenticated(false);
       setCurrentUserId('');
+      setSessionUser(null);
     }
   };
 
@@ -1409,8 +1415,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem('la_hub_slack_logs', JSON.stringify(slackLogs));
   }, [slackLogs]);
 
-  // Derived active user
-  const currentUser = users.find((u) => u.id === currentUserId) || users[0];
+  // The server session is the identity source of truth. Keep the signed-in user's
+  // name and role visible immediately, even while the employee directory loads.
+  const localCurrentUser = users.find((u) => u.id === currentUserId) || users[0];
+  const currentUser = sessionUser
+    ? ({ ...(localCurrentUser || {}), ...sessionUser, id: currentUserId } as User)
+    : localCurrentUser;
 
 
 
