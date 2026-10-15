@@ -593,51 +593,31 @@ export const MasterSettingsPage: React.FC = () => {
               <table className="w-full text-left text-xs border-collapse table-fixed">
                 <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 text-[11px]">
                   <tr className="h-10">
-                    <th className="px-4 py-2.5 whitespace-nowrap align-middle w-[18%]">Device ID</th>
-                    <th className="px-4 py-2.5 align-middle w-[36%]">Location / IP</th>
-                    <th className="px-4 py-2.5 whitespace-nowrap align-middle w-[22%]">Device SR</th>
-                    <th className="px-4 py-2.5 text-center whitespace-nowrap align-middle w-[14%]">Status</th>
-                    <th className="px-4 py-2.5 text-right whitespace-nowrap align-middle w-[10%]">Actions</th>
+                    <th className="px-4 py-2.5 whitespace-nowrap align-middle">Device ID</th>
+                    <th className="px-4 py-2.5 align-middle">Device Full Name</th>
+                    <th className="px-4 py-2.5 whitespace-nowrap align-middle">Short Name</th>
+                    <th className="px-4 py-2.5 whitespace-nowrap align-middle">Serial Number</th>
+                    <th className="px-4 py-2.5 whitespace-nowrap align-middle">IP Address</th>
+                    <th className="px-4 py-2.5 text-right whitespace-nowrap align-middle">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredMachines.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="p-8 text-center text-slate-400 font-medium">
+                      <td colSpan={6} className="p-8 text-center text-slate-400 font-medium">
                         No biometric machines found matching your filters.
                       </td>
                     </tr>
                   ) : (
                     filteredMachines.map((machine) => (
                       <tr key={machine.id} className="hover:bg-slate-50/80 transition-colors">
-                        {/* 1. Device ID */}
                         <td className="px-4 py-3 whitespace-nowrap align-middle">
-                          <div className="flex items-center gap-2">
-                            <div className={`p-1.5 rounded-lg shrink-0 ${machine.countForAttendance ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-slate-100 text-slate-600'}`}>
-                              <Cpu className="w-4 h-4" />
-                            </div>
-                            <span className="font-mono font-bold text-slate-800 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-xs inline-block">
-                              {machine.id}
-                            </span>
-                          </div>
+                          <span className="font-mono font-bold text-slate-800 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-xs">{machine.id}</span>
                         </td>
-
-                        {/* 2. Location / IP */}
-                        <td className="px-4 py-3 align-middle">
-                          <div className="font-bold text-slate-900 leading-snug">{machine.location}</div>
-                          <div className="text-xs text-slate-500 font-medium flex items-center gap-1.5 mt-0.5">
-                            <span className="font-mono bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[11px] border border-slate-200/80">
-                              IP: {machine.ipOrSerial}
-                            </span>
-                          </div>
-                        </td>
-
-                        {/* 3. Device SR */}
-                        <td className="px-4 py-3 whitespace-nowrap align-middle">
-                          <span className="font-mono font-semibold text-slate-700 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded text-xs inline-block">
-                            {machine.deviceSR || 'SRN-88492012'}
-                          </span>
-                        </td>
+                        <td className="px-4 py-3 align-middle font-semibold text-slate-900">{machine.name}</td>
+                        <td className="px-4 py-3 whitespace-nowrap align-middle font-mono text-xs text-slate-700">{machine.deviceModel}</td>
+                        <td className="px-4 py-3 whitespace-nowrap align-middle font-mono text-xs text-slate-700">{machine.deviceSR}</td>
+                        <td className="px-4 py-3 whitespace-nowrap align-middle font-mono text-xs text-slate-700">{machine.ipOrSerial}</td>
 
                         {/* 4. Status */}
                         <td className="px-4 py-3 text-center whitespace-nowrap align-middle">
