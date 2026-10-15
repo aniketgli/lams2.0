@@ -5,6 +5,7 @@ import { db } from '../../src/db';
 import { biometric_machines, employee_profiles, organization_settings, shifts, users } from '../../src/db/schema';
 import { isAuthenticated, isAdmin } from '../middleware/auth.middleware';
 import { eq } from 'drizzle-orm';
+import { isIP } from 'node:net';
 
 const router = Router();
 
@@ -299,13 +300,11 @@ function normalizeBiometricPayload(body: any) {
   const shortName = typeof value.shortName === 'string' ? value.shortName.trim().toUpperCase() : '';
   const serialNumber = typeof value.serialNumber === 'string' ? value.serialNumber.trim().toUpperCase() : '';
   const ipAddress = typeof value.ipAddress === 'string' ? value.ipAddress.trim() : '';
-  const ipv4 = /^(?:(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)\\.){3}(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)$/;
-  const ipv6 = /^[0-9a-fA-F:]{3,45}$/;
   if (!id || id.length > 64 || !fullName || fullName.length > 255 ||
       !shortName || shortName.length > 80 || !serialNumber || serialNumber.length > 120) {
     return { error: 'Device ID, Device Full Name, Short Name and Serial Number are required.' } as const;
   }
-  if (!(ipv4.test(ipAddress) || ipv6.test(ipAddress))) {
+  if (isIP(ipAddress) === 0) {
     return { error: 'Enter a valid IPv4 or IPv6 address.' } as const;
   }
   return { value: { id, fullName, shortName, serialNumber, ipAddress } } as const;
@@ -391,7 +390,7 @@ router.put('/organization', isAdmin, async (req, res) => {
   const logoData = typeof body.logoData === 'string' && body.logoData ? body.logoData : null;
   if (!orgName || orgName.length > 255) return res.status(400).json({ error: 'Organization name is required (maximum 255 characters).' });
   if (address.length > 5000 || copyrightText.length > 500) return res.status(400).json({ error: 'Address or copyright text exceeds the allowed length.' });
-  if (logoData && (!/^data:image\\/(png|jpeg|webp|svg\\+xml);base64,/.test(logoData) || logoData.length > 2_800_000)) {
+  if (logoData && !(/^data:image\\/(png|jpeg|webp|svg\\+xml);base64,/.test(logoData) || /^https?:\\/\\//i.test(logoData)) || (logoData && logoData.length > 2_800_000)) {
     return res.status(400).json({ error: 'Logo must be PNG, JPG, WEBP or SVG and smaller than 2 MB.' });
   }
   try {
