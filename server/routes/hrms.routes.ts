@@ -130,8 +130,8 @@ async function validateEmployeeProfile(profile: Record<string, any>, employmentT
     }
     const table = getProfileMasterTable(key);
     if (!table) return false;
-    const [row] = await db.select({ id: table.id }).from(table).where(eq(table.name, value.trim()));
-    return Boolean(row);
+    const [row] = await db.select({ id: table.id, status: table.status }).from(table).where(eq(table.name, value.trim()));
+    return Boolean(row && String(row.status).toUpperCase() === 'ACTIVE');
   };
   const requireMaster = async (key: string, value: unknown, label: string) => {
     if (!await isMasterValue(key, value)) return `${label} must be selected from an active database master.`;
