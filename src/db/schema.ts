@@ -93,3 +93,78 @@ export const profile_master_records = mysqlTable('profile_master_records', {
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 }, (table) => ({ masterCodeUnique: uniqueIndex('profile_master_key_code_unique').on(table.masterKey, table.code) }));
+
+/** Dedicated database tables for each Profile Master. The metadata column retains
+ * master-specific optional fields without forcing unrelated columns into every table. */
+export const designations = mysqlTable('designations', {
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  name: varchar('name', { length: 255 }).notNull(),
+  code: varchar('code', { length: 100 }).notNull().unique(),
+  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
+  metadata: longtext('metadata'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+});
+export const msc_streams = mysqlTable('msc_streams', {
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  name: varchar('name', { length: 255 }).notNull(),
+  code: varchar('code', { length: 100 }).notNull().unique(),
+  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
+  metadata: longtext('metadata'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+});
+export const msc_batches = mysqlTable('msc_batches', {
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  name: varchar('name', { length: 255 }).notNull(),
+  code: varchar('code', { length: 100 }).notNull().unique(),
+  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
+  metadata: longtext('metadata'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+});
+export const training_courses = mysqlTable('training_courses', {
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  name: varchar('name', { length: 255 }).notNull(),
+  code: varchar('code', { length: 100 }).notNull().unique(),
+  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
+  metadata: longtext('metadata'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+});
+export const trainee_batches = mysqlTable('trainee_batches', {
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  name: varchar('name', { length: 255 }).notNull(),
+  code: varchar('code', { length: 100 }).notNull().unique(),
+  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
+  metadata: longtext('metadata'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+});
+export const projects = mysqlTable('projects', {
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  name: varchar('name', { length: 255 }).notNull(),
+  code: varchar('code', { length: 100 }).notNull().unique(),
+  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
+  metadata: longtext('metadata'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+});
+export const categories = mysqlTable('categories', {
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  name: varchar('name', { length: 255 }).notNull(),
+  code: varchar('code', { length: 100 }).notNull().unique(),
+  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
+  metadata: longtext('metadata'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+});
+export const phd_enrollments = mysqlTable('phd_enrollments', {
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  name: varchar('name', { length: 255 }).notNull(),
+  code: varchar('code', { length: 100 }).notNull().unique(),
+  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
+  metadata: longtext('metadata'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+});
