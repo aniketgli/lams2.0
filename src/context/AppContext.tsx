@@ -4170,7 +4170,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteUser = (userId: string) => {
-    setUsers((prev) => prev.filter((u) => u.id !== userId));
+    const existing = users.find((user) => user.id === userId);
+    if (!existing) return;
+    setUsers((prev) => prev.filter((user) => user.id !== userId));
+    void fetch(`/api/hrms/employees/${encodeURIComponent(userId)}`, {
+      method: 'DELETE', credentials: 'same-origin', headers: { Accept: 'application/json' }, cache: 'no-store'
+    }).then(async (response) => {
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || 'Could not delete employee.');
+      }
+    }).catch((error) => {
+      console.error('Employee deletion failed:', error);
+      setUsers((prev) => prev.some((user) => user.id === existing.id) ? prev : [...prev, existing]);
+      window.alert(error instanceof Error ? error.message : 'Could not delete employee.');
+    });
   };
 
   // --- MULTI-MODULE ROLES ACTIONS ---
