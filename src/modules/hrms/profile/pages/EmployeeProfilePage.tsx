@@ -580,7 +580,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [newUserForm, setNewUserForm] = useState({
     name: '',
-    suffix: 'Mr.' as 'Mr.' | 'Mrs.' | 'Miss' | 'Dr.',
+    suffix: '' as 'Mr.' | 'Mrs.' | 'Miss' | 'Dr.',
     email: '',
     gender: '',
     phone: '',
@@ -592,11 +592,11 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     leaveCycleBasis: '' as 'calendar_year' | 'financial_year' | '',
     department: '',
     designation: '',
-    role: 'general_staff' as UserRole,
-    employmentType: 'permanent' as EmploymentType,
+    role: '' as UserRole,
+    employmentType: '' as EmploymentType,
     employeeCategory: '',
     isPhDEnrolled: false,
-    officeLocation: 'Main Campus, Building A',
+    officeLocation: '',
     reportingManagerId: '',
     reviewingManagerId: '',
     joiningDate: '',
@@ -977,6 +977,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
     const missingFields: string[] = [];
     if (!newUserForm.name?.trim()) missingFields.push('Full Name');
+    if (!newUserForm.role) missingFields.push('Account Role');
     if (!newUserForm.gender?.trim()) missingFields.push('Gender');
     if (!newUserForm.dob?.trim()) missingFields.push('Date of Birth (DOB)');
     if (!newUserForm.phone?.trim()) missingFields.push('Mobile Number');
@@ -1043,22 +1044,22 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       email: newUserForm.email,
       gender: newUserForm.gender,
       avatar: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80`,
-      role: newUserForm.role || 'general_staff',
-      employmentType: (newUserForm.employmentType as EmploymentType) || 'permanent',
-      employeeCategory: newUserForm.employeeCategory || 'Administrative',
+      role: newUserForm.role,
+      employmentType: newUserForm.employmentType as EmploymentType,
+      employeeCategory: newUserForm.employeeCategory,
       isPhDEnrolled: newUserForm.isPhDEnrolled,
-      department: newUserForm.department || 'Wildlife Sciences',
-      designation: newUserForm.designation || 'Staff',
-      phone: newUserForm.phone || '+91 98765 00000',
+      department: newUserForm.department,
+      designation: newUserForm.designation,
+      phone: newUserForm.phone,
       emergencyContactPhone: newUserForm.emergencyContactPhone || newUserForm.biometricId,
       biometricId: newUserForm.biometricId || newUserForm.emergencyContactPhone,
-      shiftId: newUserForm.shiftId || defaultShiftId,
+      shiftId: newUserForm.shiftId,
       leaveCycle: chosenCycle,
       leaveCycleBasis: chosenCycle === 'FY' ? 'financial_year' : 'calendar_year',
       officeLocation: newUserForm.officeLocation,
       reportingManagerId: newUserForm.reportingManagerId,
       reviewingManagerId: newUserForm.reviewingManagerId,
-      joiningDate: newUserForm.joiningDate || new Date().toISOString().split('T')[0],
+      joiningDate: newUserForm.joiningDate,
       dob: newUserForm.dob,
       isOnProbation: newUserForm.isOnProbation,
       probationEndDate: newUserForm.probationEndDate,
@@ -1078,7 +1079,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const handleOpenCreateEmployeeModal = () => {
     setNewUserForm({
       name: '',
-      suffix: 'Mr.' as 'Mr.' | 'Mrs.' | 'Miss' | 'Dr.',
+      suffix: '' as 'Mr.' | 'Mrs.' | 'Miss' | 'Dr.',
       email: '',
       gender: '',
       phone: '',
