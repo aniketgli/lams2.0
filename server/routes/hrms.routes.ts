@@ -397,7 +397,7 @@ router.put('/organization', isAdmin, async (req, res) => {
     logoData.startsWith('https://') ||
     logoData.startsWith('http://');
   if (!validLogoData || (logoData && logoData.length > 2_800_000)) {
-    return res.status(400).json({ error: 'Logo must be PNG, JPG, WEBP or SVG and smaller than 2 MB.' });
+    return res.status(400).json({ error: 'Logo must be PNG, JPG or WEBP and smaller than 2 MB.' });
   }
   try {
     await db.insert(organization_settings).values({
