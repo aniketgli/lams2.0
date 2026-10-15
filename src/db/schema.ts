@@ -1,4 +1,4 @@
-import { mysqlTable, varchar, text, timestamp, boolean, int, decimal } from 'drizzle-orm/mysql-core';
+import { mysqlTable, varchar, text, longtext, timestamp, boolean, int, decimal } from 'drizzle-orm/mysql-core';
 
 export const users = mysqlTable('users', {
   id: varchar('id', { length: 36 }).primaryKey(),
@@ -45,4 +45,26 @@ export const shifts = mysqlTable('shifts', {
   description: text('description'),
   color: varchar('color', { length: 30 }),
   applicableDays: text('applicable_days'),
+});
+
+
+// Biometric device registry. Device ID, short name and serial number are unique.
+export const biometric_machines = mysqlTable('biometric_machines', {
+  id: varchar('id', { length: 64 }).primaryKey(),
+  fullName: varchar('full_name', { length: 255 }).notNull(),
+  shortName: varchar('short_name', { length: 80 }).notNull().unique(),
+  serialNumber: varchar('serial_number', { length: 120 }).notNull().unique(),
+  ipAddress: varchar('ip_address', { length: 45 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+});
+
+// One active organization record (id = 'default'). Logo is stored as a validated data URL.
+export const organization_settings = mysqlTable('organization_settings', {
+  id: varchar('id', { length: 32 }).primaryKey(),
+  orgName: varchar('org_name', { length: 255 }).notNull(),
+  logoData: longtext('logo_data'),
+  address: text('address'),
+  copyrightText: varchar('copyright_text', { length: 500 }),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });

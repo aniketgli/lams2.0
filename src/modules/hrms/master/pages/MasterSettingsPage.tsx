@@ -85,6 +85,45 @@ export const MasterSettingsPage: React.FC = () => {
     );
   }, [orgBranding]);
 
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoadingMachines(true);
+    fetch('/api/hrms/biometric-machines', { credentials: 'same-origin' })
+      .then(async (response) => {
+        if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || 'Could not load biometric machines.');
+        return response.json();
+      })
+      .then((rows: any[]) => {
+        if (cancelled) return;
+        setBiometricMachines(rows.map((row) => ({
+          id: row.id, name: row.fullName, deviceSR: row.serialNumber, deviceModel: row.shortName,
+          ipOrSerial: row.ipAddress, location: '', punchMode: 'BOTH' as const,
+          countForAttendance: true, status: 'ACTIVE' as const, lastSync: '—'
+        })));
+      })
+      .catch((error) => { if (!cancelled) showToast(error.message || 'Could not load biometric machines.'); })
+      .finally(() => { if (!cancelled) setIsLoadingMachines(false); });
+
+    fetch('/api/hrms/organization', { credentials: 'same-origin' })
+      .then(async (response) => {
+        if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || 'Could not load organization settings.');
+        return response.json();
+      })
+      .then((row) => {
+        if (cancelled || !row) return;
+        const logo = row.logoData || '';
+        setBrandingOrgName(row.orgName || '');
+        setBrandingLogoUrl(logo);
+        setOrgAddress(row.address || '');
+        setOrgCopyrightText(row.copyrightText || '');
+        updateOrgBranding({ orgName: row.orgName || '', logoUrl: logo, address: row.address || '', copyrightText: row.copyrightText || '' });
+      })
+      .catch((error) => { if (!cancelled) showToast(error.message || 'Could not load organization settings.'); });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [toastMessage, setToastMessage] = useState<string>('');
 
   // Department & Location Master State
@@ -103,87 +142,10 @@ export const MasterSettingsPage: React.FC = () => {
   ]);
   const [newLocation, setNewLocation] = useState('');
 
-  // Biometric Machines Master State
-  const [biometricMachines, setBiometricMachines] = useState<BiometricMachine[]>([
-    {
-      id: 'BIO-01',
-      name: 'HQ Main Gate Turnstile A',
-      deviceSR: 'SRN-88492012',
-      deviceModel: 'eSSL SilkBio-101TC',
-      ipOrSerial: '192.168.1.101',
-      location: 'Main Campus HQ, Dehradun',
-      punchMode: 'BOTH',
-      countForAttendance: true,
-      status: 'ACTIVE',
-      lastSync: 'Today, 08:30',
-      gateType: 'Main Entry / Exit Gate'
-    },
-    {
-      id: 'BIO-02',
-      name: 'Admin Block Reception Bio-Reader',
-      deviceSR: 'SRN-88492013',
-      deviceModel: 'ZKTeco uFace800',
-      ipOrSerial: '192.168.1.102',
-      location: 'Main Campus HQ, Dehradun',
-      punchMode: 'BOTH',
-      countForAttendance: true,
-      status: 'ACTIVE',
-      lastSync: 'Today, 08:28',
-      gateType: 'Administration Wing'
-    },
-    {
-      id: 'BIO-03',
-      name: 'Research Wing B Lab Turnstile',
-      deviceSR: 'SRN-88492015',
-      deviceModel: 'Matrix COSEC Door',
-      ipOrSerial: '192.168.1.105',
-      location: 'Research Wing B',
-      punchMode: 'IN_ONLY',
-      countForAttendance: true,
-      status: 'ACTIVE',
-      lastSync: 'Today, 08:15',
-      gateType: 'Research Laboratory'
-    },
-    {
-      id: 'BIO-04',
-      name: 'Central Cafeteria / Mess Entrance',
-      deviceSR: 'SRN-88492020',
-      deviceModel: 'Realtime T502',
-      ipOrSerial: '192.168.1.110',
-      location: 'Central Cafeteria',
-      punchMode: 'BOTH',
-      countForAttendance: false, // Excluded from official attendance calculation
-      status: 'ACTIVE',
-      lastSync: 'Today, 08:00',
-      gateType: 'Cafeteria / Mess Counter'
-    },
-    {
-      id: 'BIO-05',
-      name: 'Regional Station A Main Door',
-      deviceSR: 'SRN-88492025',
-      deviceModel: 'eSSL MB20',
-      ipOrSerial: '10.0.4.15',
-      location: 'Regional Station A, New Delhi',
-      punchMode: 'BOTH',
-      countForAttendance: true,
-      status: 'ACTIVE',
-      lastSync: 'Yesterday, 18:45',
-      gateType: 'Regional Gate'
-    },
-    {
-      id: 'BIO-06',
-      name: 'IT Lab Test & Demo Device',
-      deviceSR: 'SRN-88492030',
-      deviceModel: 'ZKTeco K40',
-      ipOrSerial: '192.168.1.200',
-      location: 'IT Server Room',
-      punchMode: 'BOTH',
-      countForAttendance: false, // Excluded from official attendance calculation
-      status: 'MAINTENANCE',
-      lastSync: '2 days ago',
-      gateType: 'Testing Lab'
-    }
-  ]);
+  // Biometric Machines Master State (database is the source of truth)
+  const [biometricMachines, setBiometricMachines] = useState<BiometricMachine[]>([]);
+  const [isLoadingMachines, setIsLoadingMachines] = useState(false);
+
 
   // Biometric Machine Filters & Modal State
   const [machineSearchQuery, setMachineSearchQuery] = useState('');
@@ -329,9 +291,16 @@ export const MasterSettingsPage: React.FC = () => {
     );
   };
 
-  const handleDeleteMachine = (id: string) => {
-    setBiometricMachines((prev) => prev.filter((m) => m.id !== id));
-    showToast('Biometric machine removed from master list.');
+  const handleDeleteMachine = async (id: string) => {
+    try {
+      const response = await fetch(`/api/hrms/biometric-machines/${encodeURIComponent(id)}`, { method: 'DELETE', credentials: 'same-origin' });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Could not delete biometric machine.');
+      setBiometricMachines((prev) => prev.filter((m) => m.id !== id));
+      showToast('Biometric machine deleted from database.');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not delete biometric machine.');
+    }
   };
 
   const handleOpenEditMachineModal = (machine: BiometricMachine) => {
@@ -348,62 +317,39 @@ export const MasterSettingsPage: React.FC = () => {
     setNewMachineGateType(machine.gateType || 'General Entry Gate');
   };
 
-  const handleCreateOrUpdateMachine = (e: React.FormEvent) => {
+  const handleCreateOrUpdateMachine = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMachineName.trim()) return;
-
-    if (editingMachine) {
-      // Update existing machine
-      setBiometricMachines((prev) =>
-        prev.map((m) => {
-          if (m.id === editingMachine.id) {
-            return {
-              ...m,
-              name: newMachineName.trim(),
-              deviceSR: newMachineSR.trim() || `SRN-${Math.floor(10000000 + Math.random() * 90000000)}`,
-              deviceModel: newMachineModel.trim() || 'eSSL / ZKTeco Reader',
-              ipOrSerial: newMachineIp.trim() || '192.168.1.150',
-              location: newMachineLocation,
-              punchMode: newMachinePunchMode,
-              countForAttendance: newMachineCountForAttendance,
-              status: newMachineStatus,
-              gateType: newMachineGateType || 'General Entry Gate'
-            };
-          }
-          return m;
-        })
-      );
-      showToast(`Biometric Machine "${newMachineName.trim()}" updated successfully!`);
-      setEditingMachine(null);
-    } else {
-      // Create new machine
-      const newMachine: BiometricMachine = {
-        id: newMachineId.trim() || `BIO-0${biometricMachines.length + 1}`,
-        name: newMachineName.trim(),
-        deviceSR: newMachineSR.trim() || `SRN-${Math.floor(10000000 + Math.random() * 90000000)}`,
-        deviceModel: newMachineModel.trim() || 'eSSL / ZKTeco Reader',
-        ipOrSerial: newMachineIp.trim() || '192.168.1.150',
-        location: newMachineLocation,
-        punchMode: newMachinePunchMode,
-        countForAttendance: newMachineCountForAttendance,
-        status: newMachineStatus,
-        lastSync: 'Just now',
-        gateType: newMachineGateType || 'General Entry Gate'
-      };
-
-      setBiometricMachines([...biometricMachines, newMachine]);
-      showToast(`New Biometric Machine "${newMachine.name}" added successfully!`);
+    const id = newMachineId.trim();
+    const fullName = newMachineName.trim();
+    const shortName = newMachineModel.trim();
+    const serialNumber = newMachineSR.trim();
+    const ipAddress = newMachineIp.trim();
+    if (!id || !fullName || !shortName || !serialNumber || !ipAddress) {
+      showToast('Please fill all five required device fields.');
+      return;
     }
-
-    setShowAddMachineModal(false);
-    setEditingMachine(null);
-    setNewMachineId('');
-    setNewMachineName('');
-    setNewMachineSR('');
-    setNewMachineModel('');
-    setNewMachineIp('');
-    setNewMachineCountForAttendance(true);
-    setNewMachineStatus('ACTIVE');
+    const payload = { id, fullName, shortName, serialNumber, ipAddress };
+    try {
+      const response = await fetch(
+        editingMachine ? `/api/hrms/biometric-machines/${encodeURIComponent(editingMachine.id)}` : '/api/hrms/biometric-machines',
+        { method: editingMachine ? 'PUT' : 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }
+      );
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Could not save biometric machine.');
+      const saved: BiometricMachine = {
+        id, name: fullName, deviceSR: serialNumber, deviceModel: shortName, ipOrSerial: ipAddress,
+        location: '', punchMode: 'BOTH', countForAttendance: true, status: 'ACTIVE', lastSync: '—'
+      };
+      setBiometricMachines((prev) => editingMachine
+        ? prev.map((machine) => machine.id === editingMachine.id ? saved : machine)
+        : [...prev, saved]);
+      setShowAddMachineModal(false);
+      setEditingMachine(null);
+      showToast(editingMachine ? 'Biometric machine updated successfully.' : 'Biometric machine saved successfully.');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not save biometric machine.');
+    }
   };
 
   const showToast = (msg: string) => {
@@ -647,70 +593,31 @@ export const MasterSettingsPage: React.FC = () => {
               <table className="w-full text-left text-xs border-collapse table-fixed">
                 <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 text-[11px]">
                   <tr className="h-10">
-                    <th className="px-4 py-2.5 whitespace-nowrap align-middle w-[18%]">Device ID</th>
-                    <th className="px-4 py-2.5 align-middle w-[36%]">Location / IP</th>
-                    <th className="px-4 py-2.5 whitespace-nowrap align-middle w-[22%]">Device SR</th>
-                    <th className="px-4 py-2.5 text-center whitespace-nowrap align-middle w-[14%]">Status</th>
-                    <th className="px-4 py-2.5 text-right whitespace-nowrap align-middle w-[10%]">Actions</th>
+                    <th className="px-4 py-2.5 whitespace-nowrap align-middle">Device ID</th>
+                    <th className="px-4 py-2.5 align-middle">Device Full Name</th>
+                    <th className="px-4 py-2.5 whitespace-nowrap align-middle">Short Name</th>
+                    <th className="px-4 py-2.5 whitespace-nowrap align-middle">Serial Number</th>
+                    <th className="px-4 py-2.5 whitespace-nowrap align-middle">IP Address</th>
+                    <th className="px-4 py-2.5 text-right whitespace-nowrap align-middle">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredMachines.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="p-8 text-center text-slate-400 font-medium">
-                        No biometric machines found matching your filters.
+                      <td colSpan={6} className="p-8 text-center text-slate-400 font-medium">
+                        {isLoadingMachines ? 'Loading biometric machines…' : 'No biometric machines found matching your filters.'}
                       </td>
                     </tr>
                   ) : (
                     filteredMachines.map((machine) => (
                       <tr key={machine.id} className="hover:bg-slate-50/80 transition-colors">
-                        {/* 1. Device ID */}
                         <td className="px-4 py-3 whitespace-nowrap align-middle">
-                          <div className="flex items-center gap-2">
-                            <div className={`p-1.5 rounded-lg shrink-0 ${machine.countForAttendance ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-slate-100 text-slate-600'}`}>
-                              <Cpu className="w-4 h-4" />
-                            </div>
-                            <span className="font-mono font-bold text-slate-800 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-xs inline-block">
-                              {machine.id}
-                            </span>
-                          </div>
+                          <span className="font-mono font-bold text-slate-800 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-xs">{machine.id}</span>
                         </td>
-
-                        {/* 2. Location / IP */}
-                        <td className="px-4 py-3 align-middle">
-                          <div className="font-bold text-slate-900 leading-snug">{machine.location}</div>
-                          <div className="text-xs text-slate-500 font-medium flex items-center gap-1.5 mt-0.5">
-                            <span className="font-mono bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[11px] border border-slate-200/80">
-                              IP: {machine.ipOrSerial}
-                            </span>
-                          </div>
-                        </td>
-
-                        {/* 3. Device SR */}
-                        <td className="px-4 py-3 whitespace-nowrap align-middle">
-                          <span className="font-mono font-semibold text-slate-700 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded text-xs inline-block">
-                            {machine.deviceSR || 'SRN-88492012'}
-                          </span>
-                        </td>
-
-                        {/* 4. Status */}
-                        <td className="px-4 py-3 text-center whitespace-nowrap align-middle">
-                          <select
-                            value={machine.status}
-                            onChange={(e) => handleToggleStatus(machine.id, e.target.value as any)}
-                            className={`text-xs font-bold px-2.5 py-1.5 rounded-lg border focus:outline-none cursor-pointer text-center ${
-                              machine.status === 'ACTIVE'
-                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                : machine.status === 'MAINTENANCE'
-                                ? 'bg-amber-50 text-amber-900 border-amber-200'
-                                : 'bg-slate-100 text-slate-600 border-slate-200'
-                            }`}
-                          >
-                            <option value="ACTIVE">ACTIVE</option>
-                            <option value="MAINTENANCE">MAINTENANCE</option>
-                            <option value="DISABLED">DISABLED</option>
-                          </select>
-                        </td>
+                        <td className="px-4 py-3 align-middle font-semibold text-slate-900">{machine.name}</td>
+                        <td className="px-4 py-3 whitespace-nowrap align-middle font-mono text-xs text-slate-700">{machine.deviceModel}</td>
+                        <td className="px-4 py-3 whitespace-nowrap align-middle font-mono text-xs text-slate-700">{machine.deviceSR}</td>
+                        <td className="px-4 py-3 whitespace-nowrap align-middle font-mono text-xs text-slate-700">{machine.ipOrSerial}</td>
 
                         {/* 5. Actions */}
                         <td className="px-4 py-3 text-right whitespace-nowrap align-middle">
@@ -792,7 +699,7 @@ export const MasterSettingsPage: React.FC = () => {
 
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                        Device Serial No. (DeviceSR) <span className="text-rose-500">*</span>
+                        Serial Number <span className="text-rose-500">*</span>
                       </label>
                       <input
                         type="text"
@@ -807,7 +714,7 @@ export const MasterSettingsPage: React.FC = () => {
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                      Device Name (DeviceName) <span className="text-rose-500">*</span>
+                      Device Full Name <span className="text-rose-500">*</span>
                     </label>
                     <input
                       type="text"
@@ -821,10 +728,11 @@ export const MasterSettingsPage: React.FC = () => {
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1.5">Device Model / Brand</label>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">Short Name</label>
                       <input
                         type="text"
-                        placeholder="e.g. eSSL SilkBio-101TC"
+                        placeholder="e.g. MAIN-GATE"
+                        required
                         value={newMachineModel}
                         onChange={(e) => setNewMachineModel(e.target.value)}
                         className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 focus:outline-none shadow-2xs transition-all"
@@ -832,68 +740,14 @@ export const MasterSettingsPage: React.FC = () => {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1.5">IP Address / Serial</label>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">IP Address</label>
                       <input
                         type="text"
                         placeholder="e.g. 192.168.1.120"
+                        required
                         value={newMachineIp}
                         onChange={(e) => setNewMachineIp(e.target.value)}
                         className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 text-xs font-mono focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 focus:outline-none shadow-2xs transition-all"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1.5">Campus Location</label>
-                      <AppSelect
-                        value={newMachineLocation}
-                        onChange={(val) => setNewMachineLocation(val)}
-                        options={locations.map((loc) => ({ label: loc, value: loc }))}
-                        className="w-full"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1.5">Direction Mode</label>
-                      <AppSelect
-                        value={newMachinePunchMode}
-                        onChange={(val) => setNewMachinePunchMode(val as any)}
-                        options={[
-                          { label: 'IN & OUT (Both Directions)', value: 'BOTH' },
-                          { label: 'IN Only (Entry Gate)', value: 'IN_ONLY' },
-                          { label: 'OUT Only (Exit Gate)', value: 'OUT_ONLY' }
-                        ]}
-                        className="w-full"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Gate / Location Description</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Administration Wing Entry Turnstile"
-                      value={newMachineGateType}
-                      onChange={(e) => setNewMachineGateType(e.target.value)}
-                      className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 focus:outline-none shadow-2xs transition-all"
-                    />
-                  </div>
-
-                  {/* CRITICAL ATTENDANCE COUNT TOGGLE */}
-                  <div className="p-3 bg-blue-50/70 border border-blue-200/80 rounded-xl space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <label className="font-extrabold text-blue-950 text-xs block">Count Punches for Official Attendance?</label>
-                        <span className="text-[10.5px] text-blue-800 block mt-0.5">
-                          Uncheck for cafeteria readers, test devices, or non-attendance access gates.
-                        </span>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={newMachineCountForAttendance}
-                        onChange={(e) => setNewMachineCountForAttendance(e.target.checked)}
-                        className="w-4.5 h-4.5 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
                       />
                     </div>
                   </div>
@@ -1011,11 +865,16 @@ export const MasterSettingsPage: React.FC = () => {
                         <span>Upload Logo File</span>
                         <input
                           type="file"
-                          accept="image/*"
+                          accept="image/png,image/jpeg,image/webp"
                           className="hidden"
                           onChange={(e) => {
                             const file = e.target.files?.[0];
                             if (file) {
+                              if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 2 * 1024 * 1024) {
+                                showToast('Please choose PNG, JPG or WEBP logo under 2 MB.');
+                                e.currentTarget.value = '';
+                                return;
+                              }
                               const reader = new FileReader();
                               reader.onload = (evt) => {
                                 if (evt.target?.result) {
@@ -1136,15 +995,23 @@ export const MasterSettingsPage: React.FC = () => {
                 <div className="pt-2 flex items-center space-x-3">
                   <button
                     type="button"
-                    onClick={() => {
-                      updateOrgBranding({
-                        orgName: brandingOrgName,
-                        logoUrl: brandingLogoUrl,
-                        logoType: 'custom',
-                        address: orgAddress,
-                        copyrightText: orgCopyrightText
-                      });
-                      showToast('Organization settings saved successfully!');
+                    onClick={async () => {
+                      try {
+                        const response = await fetch('/api/hrms/organization', {
+                          method: 'PUT', credentials: 'same-origin',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ orgName: brandingOrgName, logoData: brandingLogoUrl, address: orgAddress, copyrightText: orgCopyrightText })
+                        });
+                        const result = await response.json().catch(() => ({}));
+                        if (!response.ok) throw new Error(result.error || 'Could not save organization settings.');
+                        updateOrgBranding({
+                          orgName: result.orgName, logoUrl: result.logoData || '', logoType: 'custom',
+                          address: result.address || '', copyrightText: result.copyrightText || ''
+                        });
+                        showToast('Organization settings saved to database.');
+                      } catch (error) {
+                        showToast(error instanceof Error ? error.message : 'Could not save organization settings.');
+                      }
                     }}
                     className="px-6 py-2.5 bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-xl font-extrabold text-xs transition-all flex items-center justify-center space-x-2 shadow-sm cursor-pointer"
                   >
