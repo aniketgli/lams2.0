@@ -513,7 +513,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     Promise.all([
       loadMaster('organizations'), loadMaster('designations'), loadMaster('categories'), loadMaster('projects'),
-      loadMaster('courses'), loadMaster('batches'), loadMaster('traineeBatches'), loadMaster('phdEnrollment')
+      loadMaster('courses'), loadMaster('mscBatches'), loadMaster('traineeBatches'), loadMaster('phdEnrollment')
     ]).then(([departments, designations, categories, projects, courses, batches, traineeBatches, phd]) => {
       if (cancelled) return;
       setDepartmentsMaster(departments);
