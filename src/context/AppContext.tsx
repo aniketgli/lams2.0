@@ -636,37 +636,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true, message: 'Master reset to defaults.' };
   };
 
-  // Load initial states from localStorage or use updated rich seed data
-  const [users, setUsers] = useState<User[]>(() => {
-    const isLatestSeed = localStorage.getItem(SEED_VERSION_KEY);
-    if (!isLatestSeed) {
-      localStorage.setItem(SEED_VERSION_KEY, 'true');
-      return INITIAL_USERS;
-    }
-    const saved = localStorage.getItem('la_hub_users');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          if (!parsed.some((u: any) => u.id === 'usr-audit')) {
-            const auditUser = INITIAL_USERS.find((u) => u.id === 'usr-audit');
-            if (auditUser) {
-              parsed.push(auditUser);
-              localStorage.setItem('la_hub_users', JSON.stringify(parsed));
-            }
-          }
-          return parsed;
-        }
-      } catch {
-        // Fall back to INITIAL_USERS
-      }
-    }
-    return INITIAL_USERS;
-  });
-
-  const [currentUserId, setCurrentUserId] = useState<string>(() => {
-    return localStorage.getItem('la_hub_current_user_id') || 'usr-1'; // Default Dr. Rajesh Sharma (Admin)
-  });
+  // Employee records must come only from the authenticated server/database.
+  // Never initialize the live directory from browser storage or demo seed data.
+  const [users, setUsers] = useState<User[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string>('');
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [sessionUser, setSessionUser] = useState<Partial<User> | null>(null);
@@ -796,8 +769,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         setUsers(databaseUsers);
       } catch (error) {
-        // Do not silently fall back to seed data for an authenticated directory.
+        // A failed API call must never leave demo/localStorage users visible.
         console.error('Employee directory load failed:', error);
+        if (!cancelled) setUsers([]);
       }
     };
 
