@@ -144,6 +144,7 @@ export const ProfileMasterSection: React.FC = () => {
 
   // Deletion Confirmation State (eliminates window.confirm sandbox issues)
   const [deletingRecord, setDeletingRecord] = useState<MasterRecord | null>(null);
+  const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
 
   // Derive Active Permanent and Deputation Users for PI Dropdown
   const activePermAndDepUsers = (users || []).filter((u) => {
@@ -524,6 +525,25 @@ export const ProfileMasterSection: React.FC = () => {
     setIsModalOpen(false);
   };
 
+  const toggleOrganizationStatus = async (record: MasterRecord) => {
+    if (activeTab !== 'departments' || statusUpdatingId) return;
+    const nextStatus = record.status === 'Active' ? 'INACTIVE' : 'ACTIVE';
+    setStatusUpdatingId(record.id);
+    try {
+      const response = await fetch(`/api/hrms/profile-masters/organizations/${encodeURIComponent(record.id)}`, {
+        method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: record.name, code: record.code, type: record.type || 'Department', status: nextStatus })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Could not update organization status.');
+      const row = payload.organization || payload;
+      const status: MasterRecord['status'] = String(row.status).toUpperCase() === 'INACTIVE' ? 'Inactive' : 'Active';
+      setMasterData((prev) => ({ ...prev, departments: prev.departments.map((item) => item.id === record.id ? { ...item, status } : item) }));
+      showToast('Organization marked ' + status.toLowerCase() + '.');
+    } catch (error) { showToast(error instanceof Error ? error.message : 'Could not update organization status.'); }
+    finally { setStatusUpdatingId(null); }
+  };
+
   const confirmDeleteRecord = async (record: MasterRecord) => {
     if (activeTab === 'departments') {
       try {
@@ -646,7 +666,7 @@ export const ProfileMasterSection: React.FC = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-extrabold text-slate-600 uppercase tracking-wider">
-                <th className="py-3 px-4 w-12 text-center">ID</th>
+                {activeTab !== 'departments' && <th className="py-3 px-4 w-12 text-center">ID</th>}
                 <th className="py-3 px-4">{currentMeta.nameHeader}</th>
                 <th className="py-3 px-4">{currentMeta.codeHeader}</th>
                 <th className="py-3 px-4">{currentMeta.typeHeader}</th>
@@ -657,7 +677,7 @@ export const ProfileMasterSection: React.FC = () => {
             <tbody className="divide-y divide-slate-100 text-xs">
               {filteredList.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-500 bg-slate-50/40">
+                  <td colSpan={activeTab === 'departments' ? 5 : 6} className="py-8 text-center text-slate-500 bg-slate-50/40">
                     No records found matching &ldquo;{searchQuery}&rdquo;.
                   </td>
                 </tr>
@@ -666,8 +686,7 @@ export const ProfileMasterSection: React.FC = () => {
                   const HeaderIcon = currentMeta.icon;
                   return (
                     <tr key={row.id || idx} className="hover:bg-slate-50/70 transition-colors">
-                      {/* ID */}
-                      <td className="py-3.5 px-4 text-center font-medium text-slate-500">{row.id}</td>
+                      {activeTab !== 'departments' && <td className="py-3.5 px-4 text-center font-medium text-slate-500">{row.id}</td>}
 
                       {/* Name with Icon */}
                       <td className="py-3.5 px-4">
@@ -785,15 +804,16 @@ export const ProfileMasterSection: React.FC = () => {
 
                       {/* Status */}
                       <td className="py-3.5 px-4">
-                        {row.status === 'Inactive' ? (
-                          <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
-                            <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
-                            <span>Inactive</span>
-                          </span>
+                        {activeTab === 'departments' ? (
+                          <button type="button" onClick={() => void toggleOrganizationStatus(row)} disabled={statusUpdatingId === row.id}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-colors disabled:opacity-60 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-300 ${row.status === 'Inactive' ? 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'}`}
+                            title="Click to toggle status" aria-label={`Change organization status from ${row.status}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${row.status === 'Inactive' ? 'bg-slate-400' : 'bg-emerald-500'}`}></span>
+                            {statusUpdatingId === row.id ? 'Saving…' : row.status}
+                          </button>
                         ) : (
-                          <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                            <span>Active</span>
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border ${row.status === 'Inactive' ? 'bg-slate-100 text-slate-600 border-slate-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${row.status === 'Inactive' ? 'bg-slate-400' : 'bg-emerald-500'}`}></span>{row.status}
                           </span>
                         )}
                       </td>
@@ -804,7 +824,7 @@ export const ProfileMasterSection: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => openEditModal(row)}
-                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                            className="p-2 text-blue-600 bg-blue-50 border border-blue-100 hover:bg-blue-100 rounded-lg transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-300"
                             title="Edit Record"
                           >
                             <Edit2 className="w-4 h-4" />
@@ -812,7 +832,7 @@ export const ProfileMasterSection: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => setDeletingRecord(row)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                            className="p-2 text-rose-600 bg-rose-50 border border-rose-100 hover:bg-rose-100 rounded-lg transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-rose-300"
                             title="Delete Record"
                           >
                             <Trash2 className="w-4 h-4" />

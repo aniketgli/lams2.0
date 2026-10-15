@@ -1,4 +1,4 @@
-import { mysqlTable, varchar, text, longtext, timestamp, boolean, int, decimal } from 'drizzle-orm/mysql-core';
+import { mysqlTable, varchar, text, longtext, timestamp, boolean, int, decimal, bigint } from 'drizzle-orm/mysql-core';
 
 export const users = mysqlTable('users', {
   id: varchar('id', { length: 36 }).primaryKey(),
@@ -74,7 +74,7 @@ export const organization_settings = mysqlTable('organization_settings', {
 
 // Shared organization units used by HRMS Profile Master.
 export const organization_units = mysqlTable('organization_units', {
-  id: varchar('id', { length: 36 }).primaryKey(),
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
   name: varchar('name', { length: 255 }).notNull(),
   code: varchar('code', { length: 80 }).notNull().unique(),
   type: varchar('type', { length: 50 }).notNull().default('Department'),
