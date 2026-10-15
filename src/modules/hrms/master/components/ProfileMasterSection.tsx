@@ -613,14 +613,12 @@ export const ProfileMasterSection: React.FC = () => {
 
                       {/* Status */}
                       <td className="py-3.5 px-4">
-                        {(
-                          <button type="button" onClick={() => void toggleOrganizationStatus(row)} disabled={statusUpdatingId === row.id}
+                        <button type="button" onClick={() => void toggleOrganizationStatus(row) disabled={statusUpdatingId === row.id}
                             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-colors disabled:opacity-60 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-300 ${row.status === 'Inactive' ? 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'}`}
                             title="Click to toggle status" aria-label={`Change status from ${row.status}`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${row.status === 'Inactive' ? 'bg-slate-400' : 'bg-emerald-500'}`}></span>
                             {statusUpdatingId === row.id ? 'Saving…' : row.status}
                           </button>
-}
                       </td>
 
                       {/* Actions */}
