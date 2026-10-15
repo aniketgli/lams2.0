@@ -844,8 +844,6 @@ export const ProfileMasterSection: React.FC = () => {
               )}
 
               
-              </div>
-
               {/* Primary Code Field */}
               <div>
                 <label className="block text-slate-700 font-bold mb-1 text-xs">{currentMeta.codeHeader} *</label>
