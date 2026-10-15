@@ -33,8 +33,25 @@ router.get('/employees', isAuthenticated, async (_req, res) => {
       .from(users)
       .leftJoin(employee_profiles, eq(users.id, employee_profiles.userId));
 
+    const sessionUserId = req.session.userId;
+    const sessionRole = String(req.session.role || '').toLowerCase();
+    let visibleEmployees = employees;
+    if (!['admin', 'administrator'].includes(sessionRole)) {
+      const current = employees.find((employee) => employee.id === sessionUserId);
+      if (['reporting_manager', 'reviewing_manager', 'manager'].includes(sessionRole)) {
+        visibleEmployees = employees.filter((employee) => {
+          if (employee.id === sessionUserId) return true;
+          let data: any = {};
+          try { data = typeof employee.profileData === 'string' ? JSON.parse(employee.profileData) : employee.profileData || {}; } catch { data = {}; }
+          return data.reportingManagerId === sessionUserId || data.reviewingManagerId === sessionUserId ||
+            (sessionRole === 'reviewing_manager' && current && employee.department === current.department);
+        });
+      } else {
+        visibleEmployees = current ? [current] : [];
+      }
+    }
     res.setHeader('Cache-Control', 'no-store');
-    return res.json(employees);
+    return res.json(visibleEmployees);
   } catch (error) {
     console.error('Failed to fetch employees:', error instanceof Error ? error.message : error);
     return res.status(500).json({ error: 'Failed to fetch employees' });
@@ -64,6 +81,19 @@ router.get('/employees/:userId', isAuthenticated, async (req, res) => {
       .where(eq(users.id, req.params.userId));
 
     if (!employee) return res.status(404).json({ error: 'Employee not found' });
+    const sessionUserId = req.session.userId;
+    const sessionRole = String(req.session.role || '').toLowerCase();
+    const isAdministrator = ['admin', 'administrator'].includes(sessionRole);
+    if (!isAdministrator && employee.id !== sessionUserId) {
+      const [manager] = await db.select({ id: users.id, role: users.role, department: employee_profiles.department })
+        .from(users).leftJoin(employee_profiles, eq(users.id, employee_profiles.userId)).where(eq(users.id, sessionUserId));
+      let data: any = {};
+      try { data = typeof employee.profileData === 'string' ? JSON.parse(employee.profileData) : employee.profileData || {}; } catch { data = {}; }
+      const isManager = ['reporting_manager', 'reviewing_manager', 'manager'].includes(String(manager?.role || sessionRole).toLowerCase());
+      const managesEmployee = isManager && (data.reportingManagerId === sessionUserId || data.reviewingManagerId === sessionUserId ||
+        (String(manager?.role || sessionRole).toLowerCase() === 'reviewing_manager' && manager?.department && manager.department === employee.department));
+      if (!managesEmployee) return res.status(403).json({ error: 'You are not allowed to view this employee profile.' });
+    }
     res.setHeader('Cache-Control', 'no-store');
     return res.json(employee);
   } catch (error) {
@@ -177,6 +207,23 @@ router.put('/employees/:userId', isAdmin, async (req, res) => {
     }
     console.error('Failed to update employee:', message);
     return res.status(500).json({ error: 'Failed to update employee.' });
+  }
+});
+
+// Only administrators may permanently delete employee accounts and their profile rows.
+router.delete('/employees/:userId', isAdmin, async (req, res) => {
+  const userId = req.params.userId;
+  try {
+    const [target] = await db.select({ id: users.id }).from(users).where(eq(users.id, userId));
+    if (!target) return res.status(404).json({ error: 'Employee account not found.' });
+    await db.transaction(async (tx) => {
+      await tx.delete(employee_profiles).where(eq(employee_profiles.userId, userId));
+      await tx.delete(users).where(eq(users.id, userId));
+    });
+    return res.json({ message: 'Employee account and profile deleted.' });
+  } catch (error) {
+    console.error('Failed to delete employee:', error instanceof Error ? error.message : error);
+    return res.status(500).json({ error: 'Failed to delete employee.' });
   }
 });
 
