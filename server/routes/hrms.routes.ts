@@ -372,7 +372,8 @@ router.delete('/biometric-machines/:id', isAdmin, async (req, res) => {
 });
 
 // Organization Master: a single row keyed by "default".
-router.get('/organization', isAuthenticated, async (_req, res) => {
+// Public read-only branding is needed on the login/lobby screen before authentication.
+router.get('/organization', async (_req, res) => {
   try {
     const [organization] = await db.select().from(organization_settings).where(eq(organization_settings.id, 'default'));
     return res.json(organization || null);
