@@ -1092,6 +1092,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem('la_hub_org_branding', JSON.stringify(orgBranding));
   }, [orgBranding]);
 
+  // Load public organization branding as soon as the app starts. This ensures
+  // first-time visitors see the configured logo before opening Master Settings.
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch('/api/hrms/organization', {
+      method: 'GET',
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json' }
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`Organization branding request failed (${response.status}).`);
+        }
+        return response.json();
+      })
+      .then((organization) => {
+        if (cancelled || !organization) return;
+
+        setOrgBranding((previous) => ({
+          ...previous,
+          orgName: organization.orgName || previous.orgName,
+          logoUrl: organization.logoData || previous.logoUrl,
+          address: organization.address || previous.address,
+          copyrightText: organization.copyrightText || previous.copyrightText,
+          updatedAt: organization.updatedAt || previous.updatedAt
+        }));
+      })
+      .catch((error) => {
+        // Keep the cached/default branding available if the API is temporarily unavailable.
+        console.warn('Could not load organization branding during app startup:', error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const updateOrgBranding = (branding: Partial<OrgBranding>) => {
     setOrgBranding((prev) => ({
       ...prev,
