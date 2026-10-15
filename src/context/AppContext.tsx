@@ -688,6 +688,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const rows: Array<{
           id: string;
           name: string;
+          suffix: string | null;
+          biometricId: string | null;
           email: string;
           role: string;
           department: string | null;
@@ -756,6 +758,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ...savedProfile,
             id: row.id,
             name: row.name,
+            suffix: row.suffix || savedProfile.suffix,
+            biometricId: row.biometricId || savedProfile.biometricId,
             email: row.email,
             role,
             baseRole: savedProfile.baseRole || role,
