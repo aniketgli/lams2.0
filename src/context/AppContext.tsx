@@ -502,6 +502,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return saved ? JSON.parse(saved) : DEFAULT_LOCATIONS_MASTER;
   });
 
+  // Load Profile Master dropdown options from the authenticated server/database.
+  useEffect(() => {
+    let cancelled = false;
+    const loadMaster = async (key: string): Promise<string[]> => {
+      const response = await fetch(`/api/hrms/profile-masters/${key}`, { credentials: 'same-origin', cache: 'no-store' });
+      if (!response.ok) throw new Error(`Could not load ${key} master.`);
+      const rows = await response.json();
+      return Array.isArray(rows) ? rows.filter((row: any) => String(row.status || 'ACTIVE').toUpperCase() === 'ACTIVE').map((row: any) => String(row.name || '')).filter(Boolean) : [];
+    };
+    Promise.all([
+      loadMaster('organizations'), loadMaster('designations'), loadMaster('categories'), loadMaster('projects'),
+      loadMaster('courses'), loadMaster('batches'), loadMaster('traineeBatches'), loadMaster('phdEnrollment')
+    ]).then(([departments, designations, categories, projects, courses, batches, traineeBatches, phd]) => {
+      if (cancelled) return;
+      setDepartmentsMaster(departments);
+      setDesignationsMaster(designations);
+      setCategoriesMaster(categories);
+      setProjectsMaster(projects);
+      setCoursesMaster(courses);
+      setBatchesMaster([...batches, ...traineeBatches].filter((value, index, array) => array.indexOf(value) === index));
+      setPhdEnrollmentMaster(phd);
+    }).catch((error) => console.error('Profile Master dropdown loading failed:', error));
+    return () => { cancelled = true; };
+  }, []);
+
   useEffect(() => {
     localStorage.setItem('la_hub_departments_master', JSON.stringify(departmentsMaster));
   }, [departmentsMaster]);
