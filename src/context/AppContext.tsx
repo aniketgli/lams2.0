@@ -719,7 +719,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           'phd_student'
         ];
 
-        const databaseUsers: User[] = rows.map((row) => {
+        // Defensively collapse duplicate join rows by account ID (and then email).
+        // The database remains the source of truth; this prevents one account from
+        // appearing multiple times in the employee/profile selectors if legacy data
+        // contains duplicate profile rows.
+        const uniqueRows = Array.from(
+          rows.reduce((byIdentity, row) => {
+            const identity = row.id || row.email.trim().toLowerCase();
+            if (identity && !byIdentity.has(identity)) byIdentity.set(identity, row);
+            return byIdentity;
+          }, new Map<string, typeof rows[number]>()).values()
+        );
+
+        const databaseUsers: User[] = uniqueRows.map((row) => {
           let savedProfile: Partial<User> = {};
           if (row.profileData) {
             try {
