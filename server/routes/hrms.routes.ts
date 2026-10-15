@@ -124,9 +124,9 @@ async function validateEmployeeProfile(profile: Record<string, any>, employmentT
   const isMasterValue = async (key: string, value: unknown): Promise<boolean> => {
     if (typeof value !== 'string' || !value.trim()) return false;
     if (key === 'organizations') {
-      const [row] = await db.select({ id: organization_units.id }).from(organization_units)
+      const [row] = await db.select({ id: organization_units.id, status: organization_units.status }).from(organization_units)
         .where(eq(organization_units.name, value.trim()));
-      return Boolean(row);
+      return Boolean(row && String(row.status).toUpperCase() === 'ACTIVE');
     }
     const table = getProfileMasterTable(key);
     if (!table) return false;
