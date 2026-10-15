@@ -293,6 +293,26 @@ router.delete('/shifts/:id', isAdmin, async (req, res) => {
 
 
 // Biometric Machines Master
+function getBiometricDatabaseError(error: unknown): { code: string; logMessage: string; userMessage: string } {
+  const err = error as { code?: string; errno?: number; sqlMessage?: string; message?: string };
+  const code = String(err?.code || err?.errno || 'UNKNOWN');
+  const logMessage = String(err?.sqlMessage || err?.message || error || 'Unknown database error');
+
+  const userMessages: Record<string, string> = {
+    ER_NO_SUCH_TABLE: 'The biometric_machines table is missing in the application database. Apply the biometric master migration.',
+    ER_BAD_FIELD_ERROR: 'The biometric_machines table columns do not match the application schema. Verify its column names.',
+    ER_DATA_TOO_LONG: 'One of the entered values is longer than the database column allows.',
+    ER_DUP_ENTRY: 'Device ID, Short Name or Serial Number already exists.',
+    ECONNREFUSED: 'The application cannot connect to MySQL. Check the database service and connection settings.'
+  };
+
+  return {
+    code,
+    logMessage,
+    userMessage: userMessages[code] || 'Could not save biometric machine. Check the application server log for the database error.'
+  };
+}
+
 function normalizeBiometricPayload(body: any) {
   const value = body && typeof body === 'object' ? body : {};
   const id = typeof value.id === 'string' ? value.id.trim() : '';
@@ -312,10 +332,13 @@ function normalizeBiometricPayload(body: any) {
 
 router.get('/biometric-machines', isAuthenticated, async (_req, res) => {
   try {
-    return res.json(await db.select().from(biometric_machines));
+    const rows = await db.select().from(biometric_machines);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json(rows);
   } catch (error) {
-    console.error('Failed to fetch biometric machines:', error);
-    return res.status(500).json({ error: 'Failed to fetch biometric machines.' });
+    const dbError = getBiometricDatabaseError(error);
+    console.error('Failed to fetch biometric machines:', { code: dbError.code, message: dbError.logMessage });
+    return res.status(500).json({ error: dbError.userMessage });
   }
 });
 
@@ -326,12 +349,12 @@ router.post('/biometric-machines', isAdmin, async (req, res) => {
     await db.insert(biometric_machines).values(normalized.value);
     return res.status(201).json({ ...normalized.value, message: 'Biometric machine saved.' });
   } catch (error) {
-    const err = error as any;
-    if (err?.code === 'ER_DUP_ENTRY' || String(err?.message || '').includes('Duplicate entry')) {
+    const dbError = getBiometricDatabaseError(error);
+    if (dbError.code === 'ER_DUP_ENTRY' || dbError.logMessage.includes('Duplicate entry')) {
       return res.status(409).json({ error: 'Device ID, Short Name or Serial Number already exists.' });
     }
-    console.error('Failed to create biometric machine:', error);
-    return res.status(500).json({ error: 'Failed to save biometric machine.' });
+    console.error('Failed to create biometric machine:', { code: dbError.code, message: dbError.logMessage });
+    return res.status(500).json({ error: dbError.userMessage });
   }
 });
 
@@ -354,8 +377,12 @@ router.put('/biometric-machines/:id', isAdmin, async (req, res) => {
     }).where(eq(biometric_machines.id, req.params.id));
     return res.json({ ...normalized.value, message: 'Biometric machine updated.' });
   } catch (error) {
-    console.error('Failed to update biometric machine:', error);
-    return res.status(500).json({ error: 'Failed to update biometric machine.' });
+    const dbError = getBiometricDatabaseError(error);
+    console.error('Failed to update biometric machine:', { code: dbError.code, message: dbError.logMessage });
+    if (dbError.code === 'ER_DUP_ENTRY' || dbError.logMessage.includes('Duplicate entry')) {
+      return res.status(409).json({ error: 'Short Name or Serial Number already belongs to another device.' });
+    }
+    return res.status(500).json({ error: dbError.userMessage });
   }
 });
 
