@@ -502,6 +502,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return saved ? JSON.parse(saved) : DEFAULT_LOCATIONS_MASTER;
   });
 
+  // Load Profile Master dropdown options from the authenticated server/database.
+  useEffect(() => {
+    let cancelled = false;
+    const loadMaster = async (key: string): Promise<string[]> => {
+      const response = await fetch(`/api/hrms/profile-masters/${key}`, { credentials: 'same-origin', cache: 'no-store' });
+      if (!response.ok) throw new Error(`Could not load ${key} master.`);
+      const rows = await response.json();
+      return Array.isArray(rows) ? rows.filter((row: any) => String(row.status || 'ACTIVE').toUpperCase() === 'ACTIVE').map((row: any) => String(row.name || '')).filter(Boolean) : [];
+    };
+    Promise.all([
+      loadMaster('organizations'), loadMaster('designations'), loadMaster('categories'), loadMaster('projects'),
+      loadMaster('courses'), loadMaster('mscBatches'), loadMaster('traineeBatches'), loadMaster('phdEnrollment')
+    ]).then(([departments, designations, categories, projects, courses, batches, traineeBatches, phd]) => {
+      if (cancelled) return;
+      setDepartmentsMaster(departments);
+      setDesignationsMaster(designations);
+      setCategoriesMaster(categories);
+      setProjectsMaster(projects);
+      setCoursesMaster(courses);
+      setBatchesMaster([...batches, ...traineeBatches].filter((value, index, array) => array.indexOf(value) === index));
+      setPhdEnrollmentMaster(phd);
+    }).catch((error) => console.error('Profile Master dropdown loading failed:', error));
+    return () => { cancelled = true; };
+  }, []);
+
   useEffect(() => {
     localStorage.setItem('la_hub_departments_master', JSON.stringify(departmentsMaster));
   }, [departmentsMaster]);
@@ -4145,7 +4170,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteUser = (userId: string) => {
-    setUsers((prev) => prev.filter((u) => u.id !== userId));
+    const existing = users.find((user) => user.id === userId);
+    if (!existing) return;
+    setUsers((prev) => prev.filter((user) => user.id !== userId));
+    void fetch(`/api/hrms/employees/${encodeURIComponent(userId)}`, {
+      method: 'DELETE', credentials: 'same-origin', headers: { Accept: 'application/json' }, cache: 'no-store'
+    }).then(async (response) => {
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || 'Could not delete employee.');
+      }
+    }).catch((error) => {
+      console.error('Employee deletion failed:', error);
+      setUsers((prev) => prev.some((user) => user.id === existing.id) ? prev : [...prev, existing]);
+      window.alert(error instanceof Error ? error.message : 'Could not delete employee.');
+    });
   };
 
   // --- MULTI-MODULE ROLES ACTIONS ---

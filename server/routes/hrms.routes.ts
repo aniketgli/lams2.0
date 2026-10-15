@@ -33,8 +33,25 @@ router.get('/employees', isAuthenticated, async (_req, res) => {
       .from(users)
       .leftJoin(employee_profiles, eq(users.id, employee_profiles.userId));
 
+    const sessionUserId = req.session.userId;
+    const sessionRole = String(req.session.role || '').toLowerCase();
+    let visibleEmployees = employees;
+    if (!['admin', 'administrator'].includes(sessionRole)) {
+      const current = employees.find((employee) => employee.id === sessionUserId);
+      if (['reporting_manager', 'reviewing_manager', 'manager'].includes(sessionRole)) {
+        visibleEmployees = employees.filter((employee) => {
+          if (employee.id === sessionUserId) return true;
+          let data: any = {};
+          try { data = typeof employee.profileData === 'string' ? JSON.parse(employee.profileData) : employee.profileData || {}; } catch { data = {}; }
+          return data.reportingManagerId === sessionUserId || data.reviewingManagerId === sessionUserId ||
+            (sessionRole === 'reviewing_manager' && current && employee.department === current.department);
+        });
+      } else {
+        visibleEmployees = current ? [current] : [];
+      }
+    }
     res.setHeader('Cache-Control', 'no-store');
-    return res.json(employees);
+    return res.json(visibleEmployees);
   } catch (error) {
     console.error('Failed to fetch employees:', error instanceof Error ? error.message : error);
     return res.status(500).json({ error: 'Failed to fetch employees' });
@@ -64,6 +81,19 @@ router.get('/employees/:userId', isAuthenticated, async (req, res) => {
       .where(eq(users.id, req.params.userId));
 
     if (!employee) return res.status(404).json({ error: 'Employee not found' });
+    const sessionUserId = req.session.userId;
+    const sessionRole = String(req.session.role || '').toLowerCase();
+    const isAdministrator = ['admin', 'administrator'].includes(sessionRole);
+    if (!isAdministrator && employee.id !== sessionUserId) {
+      const [manager] = await db.select({ id: users.id, role: users.role, department: employee_profiles.department })
+        .from(users).leftJoin(employee_profiles, eq(users.id, employee_profiles.userId)).where(eq(users.id, sessionUserId));
+      let data: any = {};
+      try { data = typeof employee.profileData === 'string' ? JSON.parse(employee.profileData) : employee.profileData || {}; } catch { data = {}; }
+      const isManager = ['reporting_manager', 'reviewing_manager', 'manager'].includes(String(manager?.role || sessionRole).toLowerCase());
+      const managesEmployee = isManager && (data.reportingManagerId === sessionUserId || data.reviewingManagerId === sessionUserId ||
+        (String(manager?.role || sessionRole).toLowerCase() === 'reviewing_manager' && manager?.department && manager.department === employee.department));
+      if (!managesEmployee) return res.status(403).json({ error: 'You are not allowed to view this employee profile.' });
+    }
     res.setHeader('Cache-Control', 'no-store');
     return res.json(employee);
   } catch (error) {
@@ -79,10 +109,66 @@ function normalizeEmployeePayload(body: any) {
   const profile = body && typeof body === 'object' ? body : {};
   const name = typeof profile.name === 'string' ? profile.name.trim() : '';
   const email = typeof profile.email === 'string' ? profile.email.trim().toLowerCase() : '';
-  const role = typeof profile.role === 'string' && allowedRoles.has(profile.role) ? profile.role : 'general_staff';
+  const role = typeof profile.role === 'string' && allowedRoles.has(profile.role) ? profile.role : '';
   const employmentType = typeof profile.employmentType === 'string' && allowedEmploymentTypes.has(profile.employmentType)
-    ? profile.employmentType : 'permanent';
+    ? profile.employmentType : '';
   return { profile, name, email, role, employmentType };
+}
+
+async function validateEmployeeProfile(profile: Record<string, any>, employmentType: string): Promise<string | null> {
+  if (!profile.name?.trim() || !profile.email?.trim() || !profile.gender?.trim() || !profile.phone?.trim() ||
+      !profile.dob?.trim() || !profile.joiningDate?.trim() || !profile.role || !employmentType) {
+    return 'Complete all required personal, account, employment type, and joining-date fields.';
+  }
+  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(String(profile.email))) return 'Enter a valid email address.';
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(String(profile.joiningDate)) ||
+      Number.isNaN(Date.parse(String(profile.joiningDate)))) return 'Select a valid date of joining.';
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(String(profile.dob)) ||
+      Number.isNaN(Date.parse(String(profile.dob)))) return 'Select a valid date of birth.';
+  if (String(profile.phone).trim().length < 7 || String(profile.phone).trim().length > 20) return 'Enter a valid mobile number.';
+  if (profile.shiftId) {
+    const [shift] = await db.select({ id: shifts.id, isActive: shifts.isActive }).from(shifts).where(eq(shifts.id, String(profile.shiftId)));
+    if (!shift || shift.isActive === false) return 'Shift must be selected from an active Shift Master.';
+  }
+  for (const managerId of [profile.reportingManagerId, profile.reviewingManagerId].filter(Boolean)) {
+    const [manager] = await db.select({ id: users.id, role: users.role }).from(users).where(eq(users.id, String(managerId)));
+    if (!manager || !['administrator', 'reporting_manager', 'reviewing_manager'].includes(String(manager.role).toLowerCase())) {
+      return 'Reporting Manager / HoD must be selected from a valid manager account.';
+    }
+  }
+  const isMasterValue = async (key: string, value: unknown): Promise<boolean> => {
+    if (typeof value !== 'string' || !value.trim()) return false;
+    if (key === 'organizations') {
+      const [row] = await db.select({ id: organization_units.id, status: organization_units.status }).from(organization_units)
+        .where(eq(organization_units.name, value.trim()));
+      return Boolean(row && String(row.status).toUpperCase() === 'ACTIVE');
+    }
+    const table = getProfileMasterTable(key);
+    if (!table) return false;
+    const [row] = await db.select({ id: table.id, status: table.status }).from(table).where(eq(table.name, value.trim()));
+    return Boolean(row && String(row.status).toUpperCase() === 'ACTIVE');
+  };
+  const requireMaster = async (key: string, value: unknown, label: string) => {
+    if (!await isMasterValue(key, value)) return `${label} must be selected from an active database master.`;
+    return null;
+  };
+  const required: Array<[string, unknown, string]> = [];
+  if (['permanent', 'contractual'].includes(employmentType)) {
+    required.push(['organizations', profile.department, 'Department / Organization'], ['designations', profile.designation, 'Designation'], ['categories', profile.employeeCategory, 'Category']);
+  }
+  if (employmentType === 'researcher') {
+    required.push(['projects', profile.department, 'Project'], ['designations', profile.designation, 'Designation']);
+  }
+  if (['diploma_trainee', 'bsc_msc_student'].includes(employmentType)) {
+    required.push(['courses', profile.courseProgram, 'Course'], ['mscBatches', profile.courseBatch, 'Batch']);
+  }
+  if (employmentType === 'phd_student') required.push(['phdEnrollment', profile.enrolledThrough, 'PhD enrollment type']);
+  if (employmentType === 'intern') required.push(['organizations', profile.department, 'Department / Organization']);
+  for (const [key, value, label] of required) {
+    const error = await requireMaster(key, value, label);
+    if (error) return error;
+  }
+  return null;
 }
 
 function toProfileRow(userId: string, profile: Record<string, any>, role: string, employmentType: string) {
@@ -104,6 +190,9 @@ function toProfileRow(userId: string, profile: Record<string, any>, role: string
 // accidentally issuing a predictable credential; use the approved password-reset flow to activate login.
 router.post('/employees', isAdmin, async (req, res) => {
   const { profile, name, email, role, employmentType } = normalizeEmployeePayload(req.body);
+  if (!role || !employmentType) return res.status(400).json({ error: 'Select a valid account role and employment type.' });
+  const validationError = await validateEmployeeProfile({ ...profile, name, email, role }, employmentType);
+  if (validationError) return res.status(400).json({ error: validationError });
   if (!name || !email || email.length > 255 || !email.includes('@')) {
     return res.status(400).json({ error: 'A valid employee name and email are required.' });
   }
@@ -137,6 +226,9 @@ router.post('/employees', isAdmin, async (req, res) => {
 router.put('/employees/:userId', isAdmin, async (req, res) => {
   const userId = req.params.userId;
   const { profile, name, email, role, employmentType } = normalizeEmployeePayload(req.body);
+  if (!role || !employmentType) return res.status(400).json({ error: 'Select a valid account role and employment type.' });
+  const validationError = await validateEmployeeProfile({ ...profile, name, email, role }, employmentType);
+  if (validationError) return res.status(400).json({ error: validationError });
   if (!name || !email || email.length > 255 || !email.includes('@')) {
     return res.status(400).json({ error: 'A valid employee name and email are required.' });
   }
@@ -177,6 +269,23 @@ router.put('/employees/:userId', isAdmin, async (req, res) => {
     }
     console.error('Failed to update employee:', message);
     return res.status(500).json({ error: 'Failed to update employee.' });
+  }
+});
+
+// Only administrators may permanently delete employee accounts and their profile rows.
+router.delete('/employees/:userId', isAdmin, async (req, res) => {
+  const userId = req.params.userId;
+  try {
+    const [target] = await db.select({ id: users.id }).from(users).where(eq(users.id, userId));
+    if (!target) return res.status(404).json({ error: 'Employee account not found.' });
+    await db.transaction(async (tx) => {
+      await tx.delete(employee_profiles).where(eq(employee_profiles.userId, userId));
+      await tx.delete(users).where(eq(users.id, userId));
+    });
+    return res.json({ message: 'Employee account and profile deleted.' });
+  } catch (error) {
+    console.error('Failed to delete employee:', error instanceof Error ? error.message : error);
+    return res.status(500).json({ error: 'Failed to delete employee.' });
   }
 });
 
