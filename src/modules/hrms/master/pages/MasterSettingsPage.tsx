@@ -619,25 +619,6 @@ export const MasterSettingsPage: React.FC = () => {
                         <td className="px-4 py-3 whitespace-nowrap align-middle font-mono text-xs text-slate-700">{machine.deviceSR}</td>
                         <td className="px-4 py-3 whitespace-nowrap align-middle font-mono text-xs text-slate-700">{machine.ipOrSerial}</td>
 
-                        {/* 4. Status */}
-                        <td className="px-4 py-3 text-center whitespace-nowrap align-middle">
-                          <select
-                            value={machine.status}
-                            onChange={(e) => handleToggleStatus(machine.id, e.target.value as any)}
-                            className={`text-xs font-bold px-2.5 py-1.5 rounded-lg border focus:outline-none cursor-pointer text-center ${
-                              machine.status === 'ACTIVE'
-                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                : machine.status === 'MAINTENANCE'
-                                ? 'bg-amber-50 text-amber-900 border-amber-200'
-                                : 'bg-slate-100 text-slate-600 border-slate-200'
-                            }`}
-                          >
-                            <option value="ACTIVE">ACTIVE</option>
-                            <option value="MAINTENANCE">MAINTENANCE</option>
-                            <option value="DISABLED">DISABLED</option>
-                          </select>
-                        </td>
-
                         {/* 5. Actions */}
                         <td className="px-4 py-3 text-right whitespace-nowrap align-middle">
                           <div className="flex items-center justify-end gap-1.5">
@@ -767,61 +748,6 @@ export const MasterSettingsPage: React.FC = () => {
                         value={newMachineIp}
                         onChange={(e) => setNewMachineIp(e.target.value)}
                         className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 text-xs font-mono focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 focus:outline-none shadow-2xs transition-all"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1.5">Campus Location</label>
-                      <AppSelect
-                        value={newMachineLocation}
-                        onChange={(val) => setNewMachineLocation(val)}
-                        options={locations.map((loc) => ({ label: loc, value: loc }))}
-                        className="w-full"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1.5">Direction Mode</label>
-                      <AppSelect
-                        value={newMachinePunchMode}
-                        onChange={(val) => setNewMachinePunchMode(val as any)}
-                        options={[
-                          { label: 'IN & OUT (Both Directions)', value: 'BOTH' },
-                          { label: 'IN Only (Entry Gate)', value: 'IN_ONLY' },
-                          { label: 'OUT Only (Exit Gate)', value: 'OUT_ONLY' }
-                        ]}
-                        className="w-full"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Gate / Location Description</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Administration Wing Entry Turnstile"
-                      value={newMachineGateType}
-                      onChange={(e) => setNewMachineGateType(e.target.value)}
-                      className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 focus:outline-none shadow-2xs transition-all"
-                    />
-                  </div>
-
-                  {/* CRITICAL ATTENDANCE COUNT TOGGLE */}
-                  <div className="p-3 bg-blue-50/70 border border-blue-200/80 rounded-xl space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <label className="font-extrabold text-blue-950 text-xs block">Count Punches for Official Attendance?</label>
-                        <span className="text-[10.5px] text-blue-800 block mt-0.5">
-                          Uncheck for cafeteria readers, test devices, or non-attendance access gates.
-                        </span>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={newMachineCountForAttendance}
-                        onChange={(e) => setNewMachineCountForAttendance(e.target.checked)}
-                        className="w-4.5 h-4.5 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
                       />
                     </div>
                   </div>
