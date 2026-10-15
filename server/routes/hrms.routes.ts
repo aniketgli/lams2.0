@@ -109,10 +109,50 @@ function normalizeEmployeePayload(body: any) {
   const profile = body && typeof body === 'object' ? body : {};
   const name = typeof profile.name === 'string' ? profile.name.trim() : '';
   const email = typeof profile.email === 'string' ? profile.email.trim().toLowerCase() : '';
-  const role = typeof profile.role === 'string' && allowedRoles.has(profile.role) ? profile.role : 'general_staff';
+  const role = typeof profile.role === 'string' && allowedRoles.has(profile.role) ? profile.role : '';
   const employmentType = typeof profile.employmentType === 'string' && allowedEmploymentTypes.has(profile.employmentType)
-    ? profile.employmentType : 'permanent';
+    ? profile.employmentType : '';
   return { profile, name, email, role, employmentType };
+}
+
+async function validateEmployeeProfile(profile: Record<string, any>, employmentType: string): Promise<string | null> {
+  if (!profile.name?.trim() || !profile.email?.trim() || !profile.gender?.trim() || !profile.phone?.trim() ||
+      !profile.dob?.trim() || !profile.joiningDate?.trim() || !profile.role || !employmentType) {
+    return 'Complete all required personal, account, employment type, and joining-date fields.';
+  }
+  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(String(profile.email))) return 'Enter a valid email address.';
+  const isMasterValue = async (key: string, value: unknown): Promise<boolean> => {
+    if (typeof value !== 'string' || !value.trim()) return false;
+    if (key === 'organizations') {
+      const [row] = await db.select({ id: organization_units.id }).from(organization_units)
+        .where(eq(organization_units.name, value.trim()));
+      return Boolean(row);
+    }
+    const table = getProfileMasterTable(key);
+    if (!table) return false;
+    const [row] = await db.select({ id: table.id }).from(table).where(eq(table.name, value.trim()));
+    return Boolean(row);
+  };
+  const requireMaster = async (key: string, value: unknown, label: string) => {
+    if (!await isMasterValue(key, value)) return `${label} must be selected from an active database master.`;
+    return null;
+  };
+  const required: Array<[string, unknown, string]> = [];
+  if (['permanent', 'contractual'].includes(employmentType)) {
+    required.push(['organizations', profile.department, 'Department / Organization'], ['designations', profile.designation, 'Designation'], ['categories', profile.employeeCategory, 'Category']);
+  }
+  if (employmentType === 'researcher') {
+    required.push(['projects', profile.department, 'Project'], ['designations', profile.designation, 'Designation']);
+  }
+  if (['diploma_trainee', 'bsc_msc_student'].includes(employmentType)) {
+    required.push(['courses', profile.courseProgram, 'Course'], ['mscBatches', profile.courseBatch, 'Batch']);
+  }
+  if (employmentType === 'phd_student') required.push(['phdEnrollment', profile.enrolledThrough, 'PhD enrollment type']);
+  for (const [key, value, label] of required) {
+    const error = await requireMaster(key, value, label);
+    if (error) return error;
+  }
+  return null;
 }
 
 function toProfileRow(userId: string, profile: Record<string, any>, role: string, employmentType: string) {
@@ -134,6 +174,9 @@ function toProfileRow(userId: string, profile: Record<string, any>, role: string
 // accidentally issuing a predictable credential; use the approved password-reset flow to activate login.
 router.post('/employees', isAdmin, async (req, res) => {
   const { profile, name, email, role, employmentType } = normalizeEmployeePayload(req.body);
+  if (!role || !employmentType) return res.status(400).json({ error: 'Select a valid account role and employment type.' });
+  const validationError = await validateEmployeeProfile({ ...profile, name, email, role }, employmentType);
+  if (validationError) return res.status(400).json({ error: validationError });
   if (!name || !email || email.length > 255 || !email.includes('@')) {
     return res.status(400).json({ error: 'A valid employee name and email are required.' });
   }
@@ -167,6 +210,9 @@ router.post('/employees', isAdmin, async (req, res) => {
 router.put('/employees/:userId', isAdmin, async (req, res) => {
   const userId = req.params.userId;
   const { profile, name, email, role, employmentType } = normalizeEmployeePayload(req.body);
+  if (!role || !employmentType) return res.status(400).json({ error: 'Select a valid account role and employment type.' });
+  const validationError = await validateEmployeeProfile({ ...profile, name, email, role }, employmentType);
+  if (validationError) return res.status(400).json({ error: validationError });
   if (!name || !email || email.length > 255 || !email.includes('@')) {
     return res.status(400).json({ error: 'A valid employee name and email are required.' });
   }
