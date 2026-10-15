@@ -2,7 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { db } from '../../src/db';
-import { employee_profiles, shifts, users } from '../../src/db/schema';
+import { biometric_machines, employee_profiles, organization_settings, shifts, users } from '../../src/db/schema';
 import { isAuthenticated, isAdmin } from '../middleware/auth.middleware';
 import { eq } from 'drizzle-orm';
 
@@ -286,6 +286,125 @@ router.delete('/shifts/:id', isAdmin, async (req, res) => {
   } catch (error) {
     console.error('Failed to delete shift:', error);
     return res.status(500).json({ error: 'Failed to delete shift' });
+  }
+});
+
+
+
+// Biometric Machines Master
+function normalizeBiometricPayload(body: any) {
+  const value = body && typeof body === 'object' ? body : {};
+  const id = typeof value.id === 'string' ? value.id.trim() : '';
+  const fullName = typeof value.fullName === 'string' ? value.fullName.trim() : '';
+  const shortName = typeof value.shortName === 'string' ? value.shortName.trim().toUpperCase() : '';
+  const serialNumber = typeof value.serialNumber === 'string' ? value.serialNumber.trim().toUpperCase() : '';
+  const ipAddress = typeof value.ipAddress === 'string' ? value.ipAddress.trim() : '';
+  const ipv4 = /^(?:(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)\\.){3}(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)$/;
+  const ipv6 = /^[0-9a-fA-F:]{3,45}$/;
+  if (!id || id.length > 64 || !fullName || fullName.length > 255 ||
+      !shortName || shortName.length > 80 || !serialNumber || serialNumber.length > 120) {
+    return { error: 'Device ID, Device Full Name, Short Name and Serial Number are required.' } as const;
+  }
+  if (!(ipv4.test(ipAddress) || ipv6.test(ipAddress))) {
+    return { error: 'Enter a valid IPv4 or IPv6 address.' } as const;
+  }
+  return { value: { id, fullName, shortName, serialNumber, ipAddress } } as const;
+}
+
+router.get('/biometric-machines', isAuthenticated, async (_req, res) => {
+  try {
+    return res.json(await db.select().from(biometric_machines));
+  } catch (error) {
+    console.error('Failed to fetch biometric machines:', error);
+    return res.status(500).json({ error: 'Failed to fetch biometric machines.' });
+  }
+});
+
+router.post('/biometric-machines', isAdmin, async (req, res) => {
+  const normalized = normalizeBiometricPayload(req.body);
+  if ('error' in normalized) return res.status(400).json({ error: normalized.error });
+  try {
+    await db.insert(biometric_machines).values(normalized.value);
+    return res.status(201).json({ ...normalized.value, message: 'Biometric machine saved.' });
+  } catch (error) {
+    const err = error as any;
+    if (err?.code === 'ER_DUP_ENTRY' || String(err?.message || '').includes('Duplicate entry')) {
+      return res.status(409).json({ error: 'Device ID, Short Name or Serial Number already exists.' });
+    }
+    console.error('Failed to create biometric machine:', error);
+    return res.status(500).json({ error: 'Failed to save biometric machine.' });
+  }
+});
+
+router.put('/biometric-machines/:id', isAdmin, async (req, res) => {
+  const normalized = normalizeBiometricPayload({ ...req.body, id: req.params.id });
+  if ('error' in normalized) return res.status(400).json({ error: normalized.error });
+  try {
+    const [existing] = await db.select({ id: biometric_machines.id }).from(biometric_machines).where(eq(biometric_machines.id, req.params.id));
+    if (!existing) return res.status(404).json({ error: 'Biometric machine not found.' });
+    const [shortNameOwner] = await db.select({ id: biometric_machines.id }).from(biometric_machines).where(eq(biometric_machines.shortName, normalized.value.shortName));
+    const [serialOwner] = await db.select({ id: biometric_machines.id }).from(biometric_machines).where(eq(biometric_machines.serialNumber, normalized.value.serialNumber));
+    if ((shortNameOwner && shortNameOwner.id !== req.params.id) || (serialOwner && serialOwner.id !== req.params.id)) {
+      return res.status(409).json({ error: 'Short Name or Serial Number already belongs to another device.' });
+    }
+    await db.update(biometric_machines).set({
+      fullName: normalized.value.fullName,
+      shortName: normalized.value.shortName,
+      serialNumber: normalized.value.serialNumber,
+      ipAddress: normalized.value.ipAddress
+    }).where(eq(biometric_machines.id, req.params.id));
+    return res.json({ ...normalized.value, message: 'Biometric machine updated.' });
+  } catch (error) {
+    console.error('Failed to update biometric machine:', error);
+    return res.status(500).json({ error: 'Failed to update biometric machine.' });
+  }
+});
+
+router.delete('/biometric-machines/:id', isAdmin, async (req, res) => {
+  try {
+    const [existing] = await db.select({ id: biometric_machines.id }).from(biometric_machines).where(eq(biometric_machines.id, req.params.id));
+    if (!existing) return res.status(404).json({ error: 'Biometric machine not found.' });
+    await db.delete(biometric_machines).where(eq(biometric_machines.id, req.params.id));
+    return res.json({ message: 'Biometric machine deleted.' });
+  } catch (error) {
+    console.error('Failed to delete biometric machine:', error);
+    return res.status(500).json({ error: 'Failed to delete biometric machine.' });
+  }
+});
+
+// Organization Master: a single row keyed by "default".
+router.get('/organization', isAuthenticated, async (_req, res) => {
+  try {
+    const [organization] = await db.select().from(organization_settings).where(eq(organization_settings.id, 'default'));
+    return res.json(organization || null);
+  } catch (error) {
+    console.error('Failed to fetch organization settings:', error);
+    return res.status(500).json({ error: 'Failed to fetch organization settings.' });
+  }
+});
+
+router.put('/organization', isAdmin, async (req, res) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const orgName = typeof body.orgName === 'string' ? body.orgName.trim() : '';
+  const address = typeof body.address === 'string' ? body.address.trim() : '';
+  const copyrightText = typeof body.copyrightText === 'string' ? body.copyrightText.trim() : '';
+  const logoData = typeof body.logoData === 'string' && body.logoData ? body.logoData : null;
+  if (!orgName || orgName.length > 255) return res.status(400).json({ error: 'Organization name is required (maximum 255 characters).' });
+  if (address.length > 5000 || copyrightText.length > 500) return res.status(400).json({ error: 'Address or copyright text exceeds the allowed length.' });
+  if (logoData && (!/^data:image\\/(png|jpeg|webp|svg\\+xml);base64,/.test(logoData) || logoData.length > 2_800_000)) {
+    return res.status(400).json({ error: 'Logo must be PNG, JPG, WEBP or SVG and smaller than 2 MB.' });
+  }
+  try {
+    await db.insert(organization_settings).values({
+      id: 'default', orgName, logoData, address: address || null, copyrightText: copyrightText || null
+    }).onDuplicateKeyUpdate({
+      set: { orgName, logoData, address: address || null, copyrightText: copyrightText || null }
+    });
+    const [saved] = await db.select().from(organization_settings).where(eq(organization_settings.id, 'default'));
+    return res.json(saved);
+  } catch (error) {
+    console.error('Failed to save organization settings:', error);
+    return res.status(500).json({ error: 'Failed to save organization settings.' });
   }
 });
 
