@@ -34,89 +34,6 @@ export interface MasterRecord {
   group?: string;         // e.g. Cadre A, Research Cadre
 }
 
-// Default Seed Data matching exact user screenshots & WII structure
-const SEED_ORGANIZATION_MASTER: MasterRecord[] = [
-  { id: '1', name: 'Wildlife Institute of India', code: 'WII', type: 'Department', status: 'Active' },
-  { id: '2', name: 'RS/GIS & AV Cell', code: 'RSGIS', type: 'Cell', status: 'Active' },
-  { id: '3', name: 'IT Cell', code: 'IT', type: 'Cell', status: 'Active' },
-  { id: '4', name: 'Project Tiger', code: 'PT', type: 'Project', status: 'Active' },
-  { id: '5', name: 'Research Laboratories Division', code: 'RLD', type: 'Department', status: 'Active' },
-  { id: '6', name: 'National Tiger Conservation Project', code: 'NTCP', type: 'Project', status: 'Active' },
-  { id: '7', name: 'Wildlife Ecology & Management', code: 'WEM', type: 'Department', status: 'Active' },
-  { id: '8', name: 'Habitat Ecology', code: 'HE', type: 'Department', status: 'Active' }
-];
-
-const SEED_DESIGNATION_MASTER: MasterRecord[] = [
-  { id: '1', name: 'Technical Assistant', code: 'TA', empType: 'Permanent', status: 'Active' },
-  { id: '2', name: 'Scientist-B', code: 'SCI-B', empType: 'Permanent', status: 'Active' },
-  { id: '3', name: 'Project Associate', code: 'PA', empType: 'Contractual', status: 'Active' },
-  { id: '4', name: 'Assistant Director', code: 'AD', empType: 'Deputation', status: 'Active' },
-  { id: '5', name: 'Scientist-C', code: 'SCI-C', empType: 'Permanent', status: 'Active' },
-  { id: '6', name: 'Scientist-E', code: 'SCI-E', empType: 'Permanent', status: 'Active' },
-  { id: '7', name: 'Senior Project Associate', code: 'SPA', empType: 'Contractual', status: 'Active' },
-  { id: '8', name: 'Junior Research Fellow', code: 'JRF', empType: 'Researcher / Project Staff', status: 'Active' },
-  { id: '9', name: 'Senior Research Fellow', code: 'SRF', empType: 'Researcher / Project Staff', status: 'Active' },
-  { id: '10', name: 'Project Fellow', code: 'PF', empType: 'Researcher / Project Staff', status: 'Active' },
-  { id: '11', name: 'MSc Scholar', code: 'MSC-SCH', empType: 'MSc Student', status: 'Active' }
-];
-
-const SEED_STREAM_MASTER: MasterRecord[] = [
-  { id: '1', name: 'Fresh Water Ecology', code: 'FWE', totalBatches: 2, status: 'Active' },
-  { id: '2', name: 'Wildlife Sciences', code: 'WS', totalBatches: 2, status: 'Active' },
-  { id: '3', name: 'Conservation Biology', code: 'CB', totalBatches: 1, status: 'Active' }
-];
-
-const SEED_MSC_BATCH_MASTER: MasterRecord[] = [
-  { id: '1', name: '21st Batch', parentStream: 'Fresh Water Ecology', code: 'FWE-21', validity: '2026–2028', status: 'Active' },
-  { id: '2', name: '22nd Batch', parentStream: 'Fresh Water Ecology', code: 'FWE-22', validity: '2027–2029', status: 'Active' },
-  { id: '3', name: '2nd Batch', parentStream: 'Wildlife Sciences', code: 'WS-02', validity: '2026–2028', status: 'Active' },
-  { id: '4', name: '3rd Batch', parentStream: 'Wildlife Sciences', code: 'WS-03', validity: '2027–2029', status: 'Active' },
-  { id: '5', name: '15th Batch', parentStream: 'Conservation Biology', code: 'CB-15', validity: '2026–2028', status: 'Active' }
-];
-
-const SEED_COURSE_MASTER: MasterRecord[] = [
-  { id: '1', name: 'Certificate', code: 'CERT', totalBatches: 2, status: 'Active' },
-  { id: '2', name: 'Diploma', code: 'DIP', totalBatches: 2, status: 'Active' },
-  { id: '3', name: 'PG Diploma in Wildlife Management', code: 'PGDWM', totalBatches: 0, status: 'Active' }
-];
-
-const SEED_TRAINEE_BATCH_MASTER: MasterRecord[] = [
-  { id: '1', name: '46th Batch', parentCourse: 'Certificate', code: 'CERT-46', validity: '2026', status: 'Active' },
-  { id: '2', name: '47th Batch', parentCourse: 'Certificate', code: 'CERT-47', validity: '2027', status: 'Active' },
-  { id: '3', name: '20th Batch', parentCourse: 'Diploma', code: 'DIP-20', validity: '2026', status: 'Active' },
-  { id: '4', name: '21st Batch', parentCourse: 'Diploma', code: 'DIP-21', validity: '2027', status: 'Active' }
-];
-
-const SEED_PROJECT_MASTER: MasterRecord[] = [
-  { id: '1', name: 'National Tiger Conservation Authority (NTCA) Project', code: 'NTCA', pi: 'Dr. Y. V. Jhala (Scientist-G, Permanent)', status: 'Active' },
-  { id: '2', name: 'CAMPA - Recovery Program for Bustard', code: 'CAMPA-GIB', pi: 'Dr. Sutirtha Dutta (Scientist-E, Permanent)', status: 'Active' },
-  { id: '3', name: 'Ganga Rejuvenation & River Biodiversity Project', code: 'NMCG-GRP', pi: 'Dr. Ruchi Badola (Scientist-G, Permanent)', status: 'Active' },
-  { id: '4', name: 'All India Synchronized Elephant Population Estimation', code: 'AISEPE', pi: 'Dr. Qamar Qureshi (Scientist-G, Permanent)', status: 'Active' },
-  { id: '5', name: 'Snow Leopard Population Assessment in India (SPAI)', code: 'SPAI', pi: 'Dr. S. Sathyakumar (Scientist-G, Permanent)', status: 'Active' }
-];
-
-const SEED_CATEGORY_MASTER: MasterRecord[] = [
-  { id: '1', name: 'Administrative', code: 'ADMIN', group: 'Cadre A', status: 'Active' },
-  { id: '2', name: 'Scientific', code: 'SCI', group: 'Research Cadre', status: 'Active' },
-  { id: '3', name: 'Technical', code: 'TECH', group: 'Technical Staff', status: 'Active' },
-  { id: '4', name: 'Academic', code: 'ACAD', group: 'Faculty / Student', status: 'Active' }
-];
-
-const SEED_PHD_ENROLLMENT_MASTER: MasterRecord[] = [
-  { id: '1', name: 'UGC-NET JRF', code: 'UGC-JRF', category: 'National Fellowship', status: 'Active' },
-  { id: '2', name: 'CSIR-NET JRF', code: 'CSIR-JRF', category: 'National Fellowship', status: 'Active' },
-  { id: '3', name: 'DST-INSPIRE Fellowship', code: 'INSPIRE', category: 'Govt Grant', status: 'Active' },
-  { id: '4', name: 'WII Institutional Fellowship', code: 'WII-FEL', category: 'Institutional', status: 'Active' },
-  { id: '5', name: 'Project Funded PhD Fellowship', code: 'PRJ-PhD', category: 'Project Grant', status: 'Active' }
-];
-
-const SEED_LOCATION_MASTER: MasterRecord[] = [
-  { id: '1', name: 'Dehradun Campus (HQ)', code: 'DDN-HQ', type: 'Headquarters', status: 'Active' },
-  { id: '2', name: 'Southern Regional Center - Bengaluru', code: 'SRC-BLR', type: 'Regional Office', status: 'Active' },
-  { id: '3', name: 'High Altitude Field Station - Leh', code: 'HAFS-LEH', type: 'Field Station', status: 'Active' },
-  { id: '4', name: 'Ganga Biodiversity Center - Rishikesh', code: 'GBC-RSK', type: 'Research Center', status: 'Active' }
-];
-
 export const ProfileMasterSection: React.FC = () => {
   const { users } = useApp();
 
@@ -696,18 +613,14 @@ export const ProfileMasterSection: React.FC = () => {
 
                       {/* Status */}
                       <td className="py-3.5 px-4">
-                        {true ? (
+                        {(
                           <button type="button" onClick={() => void toggleOrganizationStatus(row)} disabled={statusUpdatingId === row.id}
                             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-colors disabled:opacity-60 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-300 ${row.status === 'Inactive' ? 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'}`}
                             title="Click to toggle status" aria-label={`Change status from ${row.status}`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${row.status === 'Inactive' ? 'bg-slate-400' : 'bg-emerald-500'}`}></span>
                             {statusUpdatingId === row.id ? 'Saving…' : row.status}
                           </button>
-                        ) : (
-                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border ${row.status === 'Inactive' ? 'bg-slate-100 text-slate-600 border-slate-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${row.status === 'Inactive' ? 'bg-slate-400' : 'bg-emerald-500'}`}></span>{row.status}
-                          </span>
-                        )}
+}
                       </td>
 
                       {/* Actions */}
