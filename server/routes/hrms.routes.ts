@@ -121,6 +121,21 @@ async function validateEmployeeProfile(profile: Record<string, any>, employmentT
     return 'Complete all required personal, account, employment type, and joining-date fields.';
   }
   if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(String(profile.email))) return 'Enter a valid email address.';
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(String(profile.joiningDate)) ||
+      Number.isNaN(Date.parse(String(profile.joiningDate)))) return 'Select a valid date of joining.';
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(String(profile.dob)) ||
+      Number.isNaN(Date.parse(String(profile.dob)))) return 'Select a valid date of birth.';
+  if (String(profile.phone).trim().length < 7 || String(profile.phone).trim().length > 20) return 'Enter a valid mobile number.';
+  if (profile.shiftId) {
+    const [shift] = await db.select({ id: shifts.id, isActive: shifts.isActive }).from(shifts).where(eq(shifts.id, String(profile.shiftId)));
+    if (!shift || shift.isActive === false) return 'Shift must be selected from an active Shift Master.';
+  }
+  for (const managerId of [profile.reportingManagerId, profile.reviewingManagerId].filter(Boolean)) {
+    const [manager] = await db.select({ id: users.id, role: users.role }).from(users).where(eq(users.id, String(managerId)));
+    if (!manager || !['administrator', 'reporting_manager', 'reviewing_manager'].includes(String(manager.role).toLowerCase())) {
+      return 'Reporting Manager / HoD must be selected from a valid manager account.';
+    }
+  }
   const isMasterValue = async (key: string, value: unknown): Promise<boolean> => {
     if (typeof value !== 'string' || !value.trim()) return false;
     if (key === 'organizations') {
@@ -148,6 +163,7 @@ async function validateEmployeeProfile(profile: Record<string, any>, employmentT
     required.push(['courses', profile.courseProgram, 'Course'], ['mscBatches', profile.courseBatch, 'Batch']);
   }
   if (employmentType === 'phd_student') required.push(['phdEnrollment', profile.enrolledThrough, 'PhD enrollment type']);
+  if (employmentType === 'intern') required.push(['organizations', profile.department, 'Department / Organization']);
   for (const [key, value, label] of required) {
     const error = await requireMaster(key, value, label);
     if (error) return error;
