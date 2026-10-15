@@ -23,7 +23,7 @@ export interface MasterRecord {
   name: string;
   code: string;
   status: 'Active' | 'Inactive';
-  type?: string;          // e.g. Department, Cell, Project (Organization) or Location Type
+  type?: string;          // e.g. Department, Cell, Project
   empType?: string;       // e.g. Permanent, Contractual, Deputation (Designation)
   parentStream?: string;  // e.g. Fresh Water Ecology (MSc Batches)
   parentCourse?: string;  // e.g. Certificate (Trainee Batches)
@@ -328,7 +328,7 @@ export const ProfileMasterSection: React.FC = () => {
     }
 
     try {
-      const body = { name: formData.name.trim(), code: formData.code.trim().toUpperCase(), status: formData.status.toUpperCase(), type: formData.type, empType: formData.empType, parentStream: formData.parentStream, parentCourse: formData.parentCourse, validity: formData.validity, category: formData.category, pi: formData.pi, group: formData.group, totalBatches: formData.totalBatches || 0 };
+      const body = { name: formData.name.trim(), code: formData.code.trim().toUpperCase(), status: formData.status.toUpperCase(), type: formData.type, empType: formData.empType, parentStream: formData.parentStream, parentCourse: formData.parentCourse, validity: formData.validity, category: formData.category, pi: formData.pi, group: formData.group, totalBatches: 0 };
       const url = editingRecord ? `/api/hrms/profile-masters/${activeTab}/${encodeURIComponent(editingRecord.id)}` : `/api/hrms/profile-masters/${activeTab}`;
       const response = await fetch(url, { method: editingRecord ? 'PUT' : 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const payload = await response.json().catch(() => ({}));
@@ -843,96 +843,7 @@ export const ProfileMasterSection: React.FC = () => {
                 </div>
               )}
 
-              {false && (
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1 text-xs">
-                    Facility / Location Type *
-                  </label>
-                  <select
-                    value={formData.type}
-                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 focus:outline-none transition-all"
-                  >
-                    <option value="Headquarters">Headquarters</option>
-                    <option value="Regional Office">Regional Office</option>
-                    <option value="Field Station">Field Station</option>
-                    <option value="Research Center">Research Center</option>
-                    <option value="Field Camp">Field Camp</option>
-                  </select>
-                </div>
-              )}
-
-              {activeTab === 'mscBatches' && (
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1 text-xs">
-                    Parent Stream (Relationship) *
-                  </label>
-                  <select
-                    value={formData.parentStream}
-                    onChange={(e) => setFormData({ ...formData, parentStream: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 focus:outline-none transition-all"
-                  >
-                    {(masterData.mscStreams || []).map((st) => (
-                      <option key={st.id} value={st.name}>
-                        {st.name} ({st.code})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {activeTab === 'traineeBatches' && (
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1 text-xs">
-                    Parent Course (Relationship) *
-                  </label>
-                  <select
-                    value={formData.parentCourse}
-                    onChange={(e) => setFormData({ ...formData, parentCourse: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 focus:outline-none transition-all"
-                  >
-                    {(masterData.courses || []).map((cr) => (
-                      <option key={cr.id} value={cr.name}>
-                        {cr.name} ({cr.code})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* Primary Name Field */}
-              <div>
-                <label className="block text-slate-700 font-bold mb-1 text-xs">{currentMeta.nameHeader} *</label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => {
-                    setFormData({ ...formData, name: e.target.value });
-                    if (formError) setFormError(null);
-                  }}
-                  placeholder={`e.g. ${
-                    activeTab === 'departments'
-                      ? 'Wildlife Institute of India, IT Cell, Project Tiger'
-                      : activeTab === 'designations'
-                      ? 'Technical Assistant, Scientist-B, Project Associate'
-                      : activeTab === 'mscStreams'
-                      ? 'Fresh Water Ecology, Wildlife Sciences'
-                      : activeTab === 'mscBatches'
-                      ? '21st Batch, 2nd Batch'
-                      : activeTab === 'courses'
-                      ? 'Certificate, Diploma, PG Diploma in Wildlife Management'
-                      : activeTab === 'projects'
-                      ? 'National Tiger Conservation Project'
-                      : 'New Record Title...'
-                  }`}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 focus:outline-none transition-all"
-                  required
-                />
-                {activeTab === 'mscBatches' && (
-                  <p className="text-[11px] text-slate-500 font-medium mt-1">
-                    Numbering is stream-specific (Fresh Water Ecology &rarr; 21st Batch, Wildlife Sciences &rarr; 2nd Batch).
-                  </p>
-                )}
+              
               </div>
 
               {/* Primary Code Field */}
