@@ -413,7 +413,7 @@ export const MasterSettingsPage: React.FC = () => {
           }`}
         >
           <Clock className="w-3.5 h-3.5" />
-          <span>Attendance Master</span>
+          <span>Attendance</span>
         </button>
 
         <button
@@ -425,7 +425,7 @@ export const MasterSettingsPage: React.FC = () => {
           }`}
         >
           <Cpu className="w-3.5 h-3.5" />
-          <span>Biometric Machines Master</span>
+          <span>Biometric Machines</span>
         </button>
 
         <button
@@ -437,7 +437,7 @@ export const MasterSettingsPage: React.FC = () => {
           }`}
         >
           <FileText className="w-3.5 h-3.5" />
-          <span>Leave Policy Master</span>
+          <span>Leave Policy</span>
         </button>
 
         <button
@@ -461,7 +461,7 @@ export const MasterSettingsPage: React.FC = () => {
           }`}
         >
           <Building2 className="w-3.5 h-3.5" />
-          <span>Organization Master</span>
+          <span>Organization</span>
         </button>
       </div>
 
