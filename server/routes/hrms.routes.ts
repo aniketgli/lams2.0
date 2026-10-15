@@ -390,7 +390,13 @@ router.put('/organization', isAdmin, async (req, res) => {
   const logoData = typeof body.logoData === 'string' && body.logoData ? body.logoData : null;
   if (!orgName || orgName.length > 255) return res.status(400).json({ error: 'Organization name is required (maximum 255 characters).' });
   if (address.length > 5000 || copyrightText.length > 500) return res.status(400).json({ error: 'Address or copyright text exceeds the allowed length.' });
-  if (logoData && !(/^data:image\\/(png|jpeg|webp|svg\\+xml);base64,/.test(logoData) || /^https?:\\/\\//i.test(logoData)) || (logoData && logoData.length > 2_800_000)) {
+  const validLogoData = !logoData ||
+    logoData.startsWith('data:image/png;base64,') ||
+    logoData.startsWith('data:image/jpeg;base64,') ||
+    logoData.startsWith('data:image/webp;base64,') ||
+    logoData.startsWith('https://') ||
+    logoData.startsWith('http://');
+  if (!validLogoData || (logoData && logoData.length > 2_800_000)) {
     return res.status(400).json({ error: 'Logo must be PNG, JPG, WEBP or SVG and smaller than 2 MB.' });
   }
   try {
