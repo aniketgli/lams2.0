@@ -126,6 +126,7 @@ export const MasterSettingsPage: React.FC = () => {
   }, []);
 
   const [toastMessage, setToastMessage] = useState<string>('');
+  const [machineFormError, setMachineFormError] = useState<string>('');
 
   // Department & Location Master State
   const [departments, setDepartments] = useState([
@@ -332,8 +333,9 @@ export const MasterSettingsPage: React.FC = () => {
     const shortName = newMachineModel.trim();
     const serialNumber = newMachineSR.trim();
     const ipAddress = newMachineIp.trim();
+    setMachineFormError('');
     if (!id || !fullName || !shortName || !serialNumber || !ipAddress) {
-      showToast('Please fill all five required device fields.');
+      setMachineFormError('Please fill all required fields before saving.');
       return;
     }
     const payload = { id, fullName, shortName, serialNumber, ipAddress, status: newMachineStatus, purpose: newMachinePurpose };
@@ -354,9 +356,10 @@ export const MasterSettingsPage: React.FC = () => {
         : [...prev, saved]);
       setShowAddMachineModal(false);
       setEditingMachine(null);
+      setMachineFormError('');
       showToast(editingMachine ? 'Biometric machine updated successfully.' : 'Biometric machine saved successfully.');
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Could not save biometric machine.');
+      setMachineFormError(error instanceof Error ? error.message : 'Could not save biometric machine.');
     }
   };
 
@@ -477,7 +480,7 @@ export const MasterSettingsPage: React.FC = () => {
               </h3>
               <Button variant="primary" size="sm" leftIcon={<Plus className="w-4 h-4" />}
                 onClick={() => {
-                  setEditingMachine(null); setNewMachineId(''); setNewMachineName('');
+                  setEditingMachine(null); setMachineFormError(''); setNewMachineId(''); setNewMachineName('');
                   setNewMachineSR(''); setNewMachineModel(''); setNewMachineIp('');
                   setNewMachineStatus('ACTIVE'); setNewMachinePurpose('ATTENDANCE'); setShowAddMachineModal(true);
                 }}>
@@ -487,17 +490,17 @@ export const MasterSettingsPage: React.FC = () => {
           </section>
           <section className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[900px] text-left text-xs border-collapse">
+              <table className="w-full table-fixed text-left text-xs border-collapse">
                 <thead className="bg-slate-100 text-slate-700 uppercase tracking-wide border-b border-slate-200">
                   <tr>
-                    <th className="px-4 py-3 font-bold whitespace-nowrap">Device ID</th>
-                    <th className="px-4 py-3 font-bold">Device Full Name</th>
-                    <th className="px-4 py-3 font-bold whitespace-nowrap">Short Name</th>
-                    <th className="px-4 py-3 font-bold whitespace-nowrap">Serial Number</th>
-                    <th className="px-4 py-3 font-bold whitespace-nowrap">IP Address</th>
-                    <th className="px-4 py-3 font-bold whitespace-nowrap">Purpose</th>
-                    <th className="px-4 py-3 font-bold whitespace-nowrap">Status</th>
-                    <th className="px-4 py-3 font-bold text-right whitespace-nowrap">Actions</th>
+                    <th className="w-[8%] px-3 py-3 font-bold whitespace-nowrap">Device ID</th>
+                    <th className="w-[19%] px-3 py-3 font-bold">Device Full Name</th>
+                    <th className="w-[10%] px-3 py-3 font-bold whitespace-nowrap">Short Name</th>
+                    <th className="w-[15%] px-3 py-3 font-bold whitespace-nowrap">Serial Number</th>
+                    <th className="w-[14%] px-3 py-3 font-bold whitespace-nowrap">IP Address</th>
+                    <th className="w-[12%] px-3 py-3 font-bold whitespace-nowrap">Purpose</th>
+                    <th className="w-[10%] px-3 py-3 font-bold whitespace-nowrap">Status</th>
+                    <th className="w-[12%] px-3 py-3 font-bold text-right whitespace-nowrap">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -508,10 +511,10 @@ export const MasterSettingsPage: React.FC = () => {
                   ) : filteredMachines.map((machine) => (
                     <tr key={machine.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-4 py-3"><span className="font-mono font-semibold bg-slate-100 border border-slate-200 rounded px-2 py-1">{machine.id}</span></td>
-                      <td className="px-4 py-3 font-semibold text-slate-900">{machine.name}</td>
-                      <td className="px-4 py-3 font-mono">{machine.deviceModel}</td>
-                      <td className="px-4 py-3 font-mono">{machine.deviceSR}</td>
-                      <td className="px-4 py-3 font-mono">{machine.ipOrSerial}</td>
+                      <td className="px-3 py-3 font-semibold text-slate-900">{machine.name}</td>
+                      <td className="px-3 py-3 font-mono">{machine.deviceModel}</td>
+                      <td className="px-3 py-3 font-mono">{machine.deviceSR}</td>
+                      <td className="px-3 py-3 font-mono">{machine.ipOrSerial}</td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-bold ${machine.purpose === 'ACCESS' ? 'bg-violet-50 text-violet-700 border-violet-200' : machine.purpose === 'BOTH' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
                           {machine.purpose === 'BOTH' ? 'Attendance & Access' : machine.purpose === 'ACCESS' ? 'Access' : 'Attendance'}
@@ -537,12 +540,13 @@ export const MasterSettingsPage: React.FC = () => {
           </section>
           {showAddMachineModal && (
             <div className="fixed inset-0 z-50 bg-slate-900/55 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-              <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
-                <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+              <div className="bg-white rounded-2xl max-w-xl w-full border border-slate-200 shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
+                <div className="px-5 py-4 bg-[#101c3a] text-white flex items-center justify-between">
                   <div><h3 className="font-bold text-base">{editingMachine ? `Edit Biometric Machine · ${editingMachine.id}` : 'New Biometric Machine'}</h3><p className="text-xs text-slate-300 mt-1">Configure device details, purpose and availability</p></div>
-                  <button type="button" onClick={() => { setShowAddMachineModal(false); setEditingMachine(null); }} className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10" aria-label="Close"><X className="w-5 h-5" /></button>
+                  <button type="button" onClick={() => { setShowAddMachineModal(false); setEditingMachine(null); setMachineFormError(''); }} className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10" aria-label="Close"><X className="w-5 h-5" /></button>
                 </div>
                 <form onSubmit={handleCreateOrUpdateMachine} className="p-5 space-y-4 overflow-y-auto">
+                  {machineFormError && <div role="alert" className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-800"><AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" /><div className="flex-1">{machineFormError}</div><button type="button" onClick={() => setMachineFormError('')} className="text-rose-700 hover:text-rose-900" aria-label="Dismiss error"><X className="w-4 h-4" /></button></div>}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <label className="block text-xs font-semibold text-slate-700">Device ID *
                       <input required value={newMachineId} disabled={!!editingMachine} onChange={(e) => setNewMachineId(e.target.value)} placeholder="e.g. BIO-01" className="mt-1.5 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm disabled:bg-slate-100" />
