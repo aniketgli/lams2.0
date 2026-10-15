@@ -605,7 +605,7 @@ export const MasterSettingsPage: React.FC = () => {
                   {filteredMachines.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="p-8 text-center text-slate-400 font-medium">
-                        No biometric machines found matching your filters.
+                        {isLoadingMachines ? 'Loading biometric machines…' : 'No biometric machines found matching your filters.'}
                       </td>
                     </tr>
                   ) : (
@@ -751,6 +751,7 @@ export const MasterSettingsPage: React.FC = () => {
                       <input
                         type="text"
                         placeholder="e.g. MAIN-GATE"
+                        required
                         value={newMachineModel}
                         onChange={(e) => setNewMachineModel(e.target.value)}
                         className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 text-xs font-semibold focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 focus:outline-none shadow-2xs transition-all"
@@ -762,6 +763,7 @@ export const MasterSettingsPage: React.FC = () => {
                       <input
                         type="text"
                         placeholder="e.g. 192.168.1.120"
+                        required
                         value={newMachineIp}
                         onChange={(e) => setNewMachineIp(e.target.value)}
                         className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 text-xs font-mono focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 focus:outline-none shadow-2xs transition-all"
@@ -937,13 +939,13 @@ export const MasterSettingsPage: React.FC = () => {
                         <span>Upload Logo File</span>
                         <input
                           type="file"
-                          accept="image/*"
+                          accept="image/png,image/jpeg,image/webp"
                           className="hidden"
                           onChange={(e) => {
                             const file = e.target.files?.[0];
                             if (file) {
-                              if (!['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'].includes(file.type) || file.size > 2 * 1024 * 1024) {
-                                showToast('Please choose PNG, JPG, WEBP or SVG logo under 2 MB.');
+                              if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 2 * 1024 * 1024) {
+                                showToast('Please choose PNG, JPG or WEBP logo under 2 MB.');
                                 e.currentTarget.value = '';
                                 return;
                               }
