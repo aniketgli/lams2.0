@@ -129,8 +129,7 @@ export const ProfileMasterSection: React.FC = () => {
     | 'traineeBatches'
     | 'projects'
     | 'categories'
-    | 'phdEnrollment'
-    | 'locations';
+    | 'phdEnrollment';
 
   const [activeTab, setActiveTab] = useState<MasterKey>('departments');
   const [searchQuery, setSearchQuery] = useState('');
@@ -200,72 +199,31 @@ export const ProfileMasterSection: React.FC = () => {
     status: 'Active'
   });
 
-  // Master Data State with safe localStorage persistence and fallback defaults
-  const [masterData, setMasterData] = useState<Record<MasterKey, MasterRecord[]>>(() => {
-    const defaults: Record<MasterKey, MasterRecord[]> = {
-      departments: SEED_ORGANIZATION_MASTER,
-      designations: SEED_DESIGNATION_MASTER,
-      mscStreams: SEED_STREAM_MASTER,
-      mscBatches: SEED_MSC_BATCH_MASTER,
-      courses: SEED_COURSE_MASTER,
-      traineeBatches: SEED_TRAINEE_BATCH_MASTER,
-      projects: SEED_PROJECT_MASTER,
-      categories: SEED_CATEGORY_MASTER,
-      phdEnrollment: SEED_PHD_ENROLLMENT_MASTER,
-      locations: SEED_LOCATION_MASTER
-    };
-    try {
-      const saved = localStorage.getItem('wii_profile_masters_table_v3');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === 'object') {
-          return {
-            departments: Array.isArray(parsed.departments) && parsed.departments.length ? parsed.departments : defaults.departments,
-            designations: Array.isArray(parsed.designations) && parsed.designations.length ? parsed.designations : defaults.designations,
-            mscStreams: Array.isArray(parsed.mscStreams) && parsed.mscStreams.length ? parsed.mscStreams : defaults.mscStreams,
-            mscBatches: Array.isArray(parsed.mscBatches) && parsed.mscBatches.length ? parsed.mscBatches : defaults.mscBatches,
-            courses: Array.isArray(parsed.courses) && parsed.courses.length ? parsed.courses : defaults.courses,
-            traineeBatches: Array.isArray(parsed.traineeBatches) && parsed.traineeBatches.length ? parsed.traineeBatches : defaults.traineeBatches,
-            projects: Array.isArray(parsed.projects) && parsed.projects.length
-              ? parsed.projects.map((p: any, idx: number) => ({
-                  ...p,
-                  pi: p.pi || defaults.projects[idx % defaults.projects.length]?.pi || 'Dr. Y. V. Jhala (Scientist-G, Permanent)'
-                }))
-              : defaults.projects,
-            categories: Array.isArray(parsed.categories) && parsed.categories.length ? parsed.categories : defaults.categories,
-            phdEnrollment: Array.isArray(parsed.phdEnrollment) && parsed.phdEnrollment.length ? parsed.phdEnrollment : defaults.phdEnrollment,
-            locations: Array.isArray(parsed.locations) && parsed.locations.length ? parsed.locations : defaults.locations
-          };
-        }
-      }
-    } catch (e) {
-      console.error(e);
-    }
-    return defaults;
+  // All masters are loaded from MySQL. No localStorage/seed fallback is used.
+  const [masterData, setMasterData] = useState<Record<MasterKey, MasterRecord[]>>({
+    departments: [], designations: [], mscStreams: [], mscBatches: [], courses: [],
+    traineeBatches: [], projects: [], categories: [], phdEnrollment: []
   });
-
-  // Persist to localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem('wii_profile_masters_table_v3', JSON.stringify(masterData));
-    } catch (e) {
-      console.error(e);
-    }
-  }, [masterData]);
-
-  // Organizations are shared master data: fetch them from MySQL on every load.
   useEffect(() => {
     let cancelled = false;
-    const loadOrganizations = async () => {
-      try {
-        const response = await fetch('/api/hrms/profile-masters/organizations', { credentials: 'include', cache: 'no-store' });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(payload.error || 'Failed to load organizations.');
-        if (cancelled) return;
-        setMasterData((prev) => ({ ...prev, departments: (Array.isArray(payload) ? payload : []).map((row: any) => ({ id: String(row.id), name: row.name, code: row.code, type: row.type || 'Department', status: String(row.status).toUpperCase() === 'INACTIVE' ? 'Inactive' : 'Active' })) }));
-      } catch (error) { if (!cancelled) showToast(error instanceof Error ? error.message : 'Failed to load organizations from database.'); }
+    const keys: MasterKey[] = ['departments','designations','mscStreams','mscBatches','courses','traineeBatches','projects','categories','phdEnrollment'];
+    const endpointKey: Record<MasterKey, string> = { departments: 'organizations', designations: 'designations', mscStreams: 'mscStreams', mscBatches: 'mscBatches', courses: 'courses', traineeBatches: 'traineeBatches', projects: 'projects', categories: 'categories', phdEnrollment: 'phdEnrollment' };
+    const load = async () => {
+      const loaded: Partial<Record<MasterKey, MasterRecord[]>> = {};
+      const failures: string[] = [];
+      await Promise.all(keys.map(async (key) => {
+        try {
+          const response = await fetch(`/api/hrms/profile-masters/${endpointKey[key]}`, { credentials: 'include', cache: 'no-store' });
+          const payload = await response.json().catch(() => []);
+          if (!response.ok) throw new Error(payload.error || 'Request failed');
+          loaded[key] = (Array.isArray(payload) ? payload : []).map((row: any) => ({ id: String(row.id), name: String(row.name || ''), code: String(row.code || ''), status: String(row.status).toUpperCase() === 'INACTIVE' ? 'Inactive' : 'Active', type: row.type || '', empType: row.empType || '', parentStream: row.parentStream || '', parentCourse: row.parentCourse || '', validity: row.validity || '', totalBatches: Number(row.totalBatches || 0), category: row.category || '', pi: row.pi || '', group: row.group || '' }));
+        } catch (error) { failures.push(key); console.error('Failed loading profile master ' + key, error); }
+      }));
+      if (cancelled) return;
+      setMasterData((prev) => ({ ...prev, ...loaded }));
+      if (failures.length) showToast('Could not load some masters: ' + failures.join(', ') + '. Check database migration/server logs.');
     };
-    void loadOrganizations();
+    void load();
     return () => { cancelled = true; };
   }, []);
 
@@ -376,17 +334,7 @@ export const ProfileMasterSection: React.FC = () => {
           codeHeader: 'Source Code',
           typeHeader: 'Funding Category'
         };
-      case 'locations':
-        return {
-          title: 'Locations & Field Camps Master',
-          subtitle: 'Manage headquarters, regional offices, research stations, and field camps.',
-          buttonLabel: 'Add Location',
-          categoryLabel: 'Locations Master',
-          icon: MapPin,
-          nameHeader: 'Location Name',
-          codeHeader: 'Location Code',
-          typeHeader: 'Facility Type'
-        };
+
     }
   };
 
@@ -517,7 +465,6 @@ export const ProfileMasterSection: React.FC = () => {
     { id: 'projects', label: 'Project', icon: FolderKanban },
     { id: 'categories', label: 'Category', icon: Layers },
     { id: 'phdEnrollment', label: 'PhD Enrollment', icon: School },
-    { id: 'locations', label: 'Locations', icon: MapPin }
   ];
 
   return (
@@ -985,7 +932,7 @@ export const ProfileMasterSection: React.FC = () => {
                 </div>
               )}
 
-              {activeTab === 'locations' && (
+              {false && (
                 <div>
                   <label className="block text-slate-700 font-bold mb-1 text-xs">
                     Facility / Location Type *
