@@ -2,7 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { db } from '../../src/db';
-import { biometric_machines, employee_profiles, organization_settings, organization_units, shifts, users } from '../../src/db/schema';
+import { biometric_machines, employee_profiles, organization_settings, organization_units, profile_master_records, shifts, users } from '../../src/db/schema';
 import { isAuthenticated, isAdmin } from '../middleware/auth.middleware';
 import { eq } from 'drizzle-orm';
 import { isIP } from 'node:net';
@@ -492,6 +492,77 @@ router.put('/profile-masters/organizations/:id', isAdmin, async (req, res) => {
 router.delete('/profile-masters/organizations/:id', isAdmin, async (req, res) => {
   try { const [existing] = await db.select({ id: organization_units.id }).from(organization_units).where(eq(organization_units.id, req.params.id)); if (!existing) return res.status(404).json({ error: 'Organization not found.' }); await db.delete(organization_units).where(eq(organization_units.id, req.params.id)); return res.json({ success: true }); }
   catch (error) { console.error('Failed to delete organization:', error); return res.status(500).json({ error: 'Failed to delete organization.' }); }
+});
+
+
+// Generic database-backed Profile Masters (Locations intentionally excluded).
+const PROFILE_MASTER_KEYS = ['designations', 'mscStreams', 'mscBatches', 'courses', 'traineeBatches', 'projects', 'categories', 'phdEnrollment'] as const;
+type ProfileMasterKey = typeof PROFILE_MASTER_KEYS[number];
+const isProfileMasterKey = (key: string): key is ProfileMasterKey => PROFILE_MASTER_KEYS.includes(key as ProfileMasterKey);
+const toProfileMasterResponse = (row: any) => {
+  let metadata: Record<string, unknown> = {};
+  try { metadata = row.metadata ? JSON.parse(row.metadata) : {}; } catch { metadata = {}; }
+  return { id: String(row.id), name: row.name, code: row.code, status: String(row.status).toUpperCase() === 'INACTIVE' ? 'Inactive' : 'Active', ...metadata };
+};
+router.get('/profile-masters/:masterKey', isAuthenticated, async (req, res) => {
+  const key = req.params.masterKey;
+  if (!isProfileMasterKey(key)) return res.status(404).json({ error: 'Unknown profile master.' });
+  try {
+    const rows = await db.select().from(profile_master_records).where(eq(profile_master_records.masterKey, key)).orderBy(profile_master_records.name);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json(rows.map(toProfileMasterResponse));
+  } catch (error) { console.error('Failed to fetch profile master:', error); return res.status(500).json({ error: 'Failed to fetch master records.' }); }
+});
+router.post('/profile-masters/:masterKey', isAdmin, async (req, res) => {
+  const key = req.params.masterKey;
+  if (!isProfileMasterKey(key)) return res.status(404).json({ error: 'Unknown profile master.' });
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  const code = typeof body.code === 'string' ? body.code.trim().toUpperCase() : '';
+  const status = typeof body.status === 'string' && body.status.toUpperCase() === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE';
+  if (!name || name.length > 255 || !code || code.length > 100) return res.status(400).json({ error: 'Name and code are required (maximum 255 and 100 characters).' });
+  const metadata: Record<string, unknown> = {};
+  for (const field of ['type','empType','parentStream','parentCourse','validity','totalBatches','category','pi','group']) if (body[field] !== undefined && body[field] !== null) metadata[field] = String(body[field]).slice(0, 500);
+  try {
+    const result: any = await db.insert(profile_master_records).values({ masterKey: key, name, code, status, metadata: JSON.stringify(metadata) });
+    const insertId = Number(result?.[0]?.insertId ?? result?.insertId);
+    const [row] = await db.select().from(profile_master_records).where(eq(profile_master_records.id, insertId));
+    return res.status(201).json(row ? toProfileMasterResponse(row) : { id: String(insertId), name, code, status: status === 'INACTIVE' ? 'Inactive' : 'Active', ...metadata });
+  } catch (error: any) {
+    if (error?.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'This code already exists in this master. Use a unique code.' });
+    console.error('Failed to create profile master:', error); return res.status(500).json({ error: 'Failed to create master record.' });
+  }
+});
+router.put('/profile-masters/:masterKey/:id', isAdmin, async (req, res) => {
+  const key = req.params.masterKey;
+  if (!isProfileMasterKey(key)) return res.status(404).json({ error: 'Unknown profile master.' });
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  const code = typeof body.code === 'string' ? body.code.trim().toUpperCase() : '';
+  const status = typeof body.status === 'string' && body.status.toUpperCase() === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE';
+  if (!name || name.length > 255 || !code || code.length > 100) return res.status(400).json({ error: 'Name and code are required (maximum 255 and 100 characters).' });
+  const metadata: Record<string, unknown> = {};
+  for (const field of ['type','empType','parentStream','parentCourse','validity','totalBatches','category','pi','group']) if (body[field] !== undefined && body[field] !== null) metadata[field] = String(body[field]).slice(0, 500);
+  try {
+    const [existing] = await db.select().from(profile_master_records).where(eq(profile_master_records.id, Number(req.params.id)));
+    if (!existing || existing.masterKey !== key) return res.status(404).json({ error: 'Master record not found.' });
+    await db.update(profile_master_records).set({ name, code, status, metadata: JSON.stringify(metadata) }).where(eq(profile_master_records.id, Number(req.params.id)));
+    const [row] = await db.select().from(profile_master_records).where(eq(profile_master_records.id, Number(req.params.id)));
+    return res.json(toProfileMasterResponse(row));
+  } catch (error: any) {
+    if (error?.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'This code already exists in this master. Use a unique code.' });
+    console.error('Failed to update profile master:', error); return res.status(500).json({ error: 'Failed to update master record.' });
+  }
+});
+router.delete('/profile-masters/:masterKey/:id', isAdmin, async (req, res) => {
+  const key = req.params.masterKey;
+  if (!isProfileMasterKey(key)) return res.status(404).json({ error: 'Unknown profile master.' });
+  try {
+    const [row] = await db.select().from(profile_master_records).where(eq(profile_master_records.id, Number(req.params.id)));
+    if (!row || row.masterKey !== key) return res.status(404).json({ error: 'Master record not found.' });
+    await db.delete(profile_master_records).where(eq(profile_master_records.id, Number(req.params.id)));
+    return res.json({ success: true });
+  } catch (error) { console.error('Failed to delete profile master:', error); return res.status(500).json({ error: 'Failed to delete master record.' }); }
 });
 
 export default router;
