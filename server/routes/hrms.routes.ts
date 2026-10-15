@@ -377,8 +377,12 @@ router.put('/biometric-machines/:id', isAdmin, async (req, res) => {
     }).where(eq(biometric_machines.id, req.params.id));
     return res.json({ ...normalized.value, message: 'Biometric machine updated.' });
   } catch (error) {
-    console.error('Failed to update biometric machine:', error);
-    return res.status(500).json({ error: 'Failed to update biometric machine.' });
+    const dbError = getBiometricDatabaseError(error);
+    console.error('Failed to update biometric machine:', { code: dbError.code, message: dbError.logMessage });
+    if (dbError.code === 'ER_DUP_ENTRY' || dbError.logMessage.includes('Duplicate entry')) {
+      return res.status(409).json({ error: 'Short Name or Serial Number already belongs to another device.' });
+    }
+    return res.status(500).json({ error: dbError.userMessage });
   }
 });
 
