@@ -1,4 +1,4 @@
-import { mysqlTable, varchar, text, timestamp, boolean, int, decimal } from 'drizzle-orm/mysql-core';
+import { mysqlTable, varchar, text, timestamp, boolean, int, decimal, uniqueIndex } from 'drizzle-orm/mysql-core';
 
 export const users = mysqlTable('users', {
   id: varchar('id', { length: 36 }).primaryKey(),
@@ -24,11 +24,15 @@ export const employee_profiles = mysqlTable('employee_profiles', {
   employmentType: varchar('employment_type', { length: 50 }).notNull(),
   joiningDate: varchar('joining_date', { length: 10 }).notNull(),
   phone: varchar('phone', { length: 20 }),
+  biometricId: varchar('biometric_id', { length: 100 }),
   officeLocation: varchar('office_location', { length: 255 }),
   shiftId: varchar('shift_id', { length: 36 }),
   // Preserves the full HRMS User profile (manager hierarchy, leave balances, student/research fields, module roles, etc.).
   profileData: text('profile_data'),
-});
+}, (table) => ({
+  phoneUnique: uniqueIndex('uq_employee_profiles_phone').on(table.phone),
+  biometricUnique: uniqueIndex('uq_employee_profiles_biometric_id').on(table.biometricId),
+}));
 
 export const shifts = mysqlTable('shifts', {
   id: varchar('id', { length: 36 }).primaryKey(),
