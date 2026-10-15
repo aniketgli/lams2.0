@@ -303,9 +303,9 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   // Directory View Mode: 'grid' (Category Cards Grid) or 'detail' (Single Detailed Profile View)
   const [directoryViewMode, setDirectoryViewMode] = useState<'grid' | 'detail'>('grid');
 
-  // Accessible profiles: Admin & Audit see all, Managers see reportees/under-employees + self, General Staff see self only
+  // UI mirrors server authorization; API remains the security boundary.
   const accessibleProfiles = useMemo(() => {
-    if (isAdmin || isAudit) return users;
+    if (isAdmin) return users;
     if (isManager) {
       return users.filter((u) => {
         if (u.id === currentUser.id) return true;
@@ -959,6 +959,10 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       alert('Biometric ID is mandatory. Please provide a valid Biometric ID.');
       return;
     }
+    if (!isAdmin) {
+      showToast('Only administrators can edit employee profiles.');
+      return;
+    }
     updateUserProfile(editingUser.id, editingUser);
     showToast(`Profile for ${editingUser.name} updated successfully!`);
     setEditingUser(null);
@@ -966,6 +970,10 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
   const handleCreateUserSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAdmin) {
+      showToast('Only administrators can create employee profiles.');
+      return;
+    }
 
     const missingFields: string[] = [];
     if (!newUserForm.name?.trim()) missingFields.push('Full Name');
