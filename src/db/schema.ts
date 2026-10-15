@@ -1,4 +1,4 @@
-import { mysqlTable, varchar, text, longtext, timestamp, boolean, int, decimal, bigint } from 'drizzle-orm/mysql-core';
+import { mysqlTable, varchar, text, longtext, timestamp, boolean, int, decimal, bigint, uniqueIndex } from 'drizzle-orm/mysql-core';
 
 export const users = mysqlTable('users', {
   id: varchar('id', { length: 36 }).primaryKey(),
@@ -82,3 +82,14 @@ export const organization_units = mysqlTable('organization_units', {
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });
+
+export const profile_master_records = mysqlTable('profile_master_records', {
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  masterKey: varchar('master_key', { length: 40 }).notNull(),
+  name: varchar('name', { length: 255 }).notNull(),
+  code: varchar('code', { length: 100 }).notNull(),
+  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
+  metadata: longtext('metadata'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+}, (table) => ({ masterCodeUnique: uniqueIndex('profile_master_key_code_unique').on(table.masterKey, table.code) }));

@@ -7,7 +7,6 @@ import {
   GraduationCap,
   Calendar,
   School,
-  MapPin,
   Plus,
   Trash2,
   Search,
@@ -24,7 +23,7 @@ export interface MasterRecord {
   name: string;
   code: string;
   status: 'Active' | 'Inactive';
-  type?: string;          // e.g. Department, Cell, Project (Organization) or Location Type
+  type?: string;          // e.g. Department, Cell, Project
   empType?: string;       // e.g. Permanent, Contractual, Deputation (Designation)
   parentStream?: string;  // e.g. Fresh Water Ecology (MSc Batches)
   parentCourse?: string;  // e.g. Certificate (Trainee Batches)
@@ -35,91 +34,8 @@ export interface MasterRecord {
   group?: string;         // e.g. Cadre A, Research Cadre
 }
 
-// Default Seed Data matching exact user screenshots & WII structure
-const SEED_ORGANIZATION_MASTER: MasterRecord[] = [
-  { id: '1', name: 'Wildlife Institute of India', code: 'WII', type: 'Department', status: 'Active' },
-  { id: '2', name: 'RS/GIS & AV Cell', code: 'RSGIS', type: 'Cell', status: 'Active' },
-  { id: '3', name: 'IT Cell', code: 'IT', type: 'Cell', status: 'Active' },
-  { id: '4', name: 'Project Tiger', code: 'PT', type: 'Project', status: 'Active' },
-  { id: '5', name: 'Research Laboratories Division', code: 'RLD', type: 'Department', status: 'Active' },
-  { id: '6', name: 'National Tiger Conservation Project', code: 'NTCP', type: 'Project', status: 'Active' },
-  { id: '7', name: 'Wildlife Ecology & Management', code: 'WEM', type: 'Department', status: 'Active' },
-  { id: '8', name: 'Habitat Ecology', code: 'HE', type: 'Department', status: 'Active' }
-];
-
-const SEED_DESIGNATION_MASTER: MasterRecord[] = [
-  { id: '1', name: 'Technical Assistant', code: 'TA', empType: 'Permanent', status: 'Active' },
-  { id: '2', name: 'Scientist-B', code: 'SCI-B', empType: 'Permanent', status: 'Active' },
-  { id: '3', name: 'Project Associate', code: 'PA', empType: 'Contractual', status: 'Active' },
-  { id: '4', name: 'Assistant Director', code: 'AD', empType: 'Deputation', status: 'Active' },
-  { id: '5', name: 'Scientist-C', code: 'SCI-C', empType: 'Permanent', status: 'Active' },
-  { id: '6', name: 'Scientist-E', code: 'SCI-E', empType: 'Permanent', status: 'Active' },
-  { id: '7', name: 'Senior Project Associate', code: 'SPA', empType: 'Contractual', status: 'Active' },
-  { id: '8', name: 'Junior Research Fellow', code: 'JRF', empType: 'Researcher / Project Staff', status: 'Active' },
-  { id: '9', name: 'Senior Research Fellow', code: 'SRF', empType: 'Researcher / Project Staff', status: 'Active' },
-  { id: '10', name: 'Project Fellow', code: 'PF', empType: 'Researcher / Project Staff', status: 'Active' },
-  { id: '11', name: 'MSc Scholar', code: 'MSC-SCH', empType: 'MSc Student', status: 'Active' }
-];
-
-const SEED_STREAM_MASTER: MasterRecord[] = [
-  { id: '1', name: 'Fresh Water Ecology', code: 'FWE', totalBatches: 2, status: 'Active' },
-  { id: '2', name: 'Wildlife Sciences', code: 'WS', totalBatches: 2, status: 'Active' },
-  { id: '3', name: 'Conservation Biology', code: 'CB', totalBatches: 1, status: 'Active' }
-];
-
-const SEED_MSC_BATCH_MASTER: MasterRecord[] = [
-  { id: '1', name: '21st Batch', parentStream: 'Fresh Water Ecology', code: 'FWE-21', validity: '2026–2028', status: 'Active' },
-  { id: '2', name: '22nd Batch', parentStream: 'Fresh Water Ecology', code: 'FWE-22', validity: '2027–2029', status: 'Active' },
-  { id: '3', name: '2nd Batch', parentStream: 'Wildlife Sciences', code: 'WS-02', validity: '2026–2028', status: 'Active' },
-  { id: '4', name: '3rd Batch', parentStream: 'Wildlife Sciences', code: 'WS-03', validity: '2027–2029', status: 'Active' },
-  { id: '5', name: '15th Batch', parentStream: 'Conservation Biology', code: 'CB-15', validity: '2026–2028', status: 'Active' }
-];
-
-const SEED_COURSE_MASTER: MasterRecord[] = [
-  { id: '1', name: 'Certificate', code: 'CERT', totalBatches: 2, status: 'Active' },
-  { id: '2', name: 'Diploma', code: 'DIP', totalBatches: 2, status: 'Active' },
-  { id: '3', name: 'PG Diploma in Wildlife Management', code: 'PGDWM', totalBatches: 0, status: 'Active' }
-];
-
-const SEED_TRAINEE_BATCH_MASTER: MasterRecord[] = [
-  { id: '1', name: '46th Batch', parentCourse: 'Certificate', code: 'CERT-46', validity: '2026', status: 'Active' },
-  { id: '2', name: '47th Batch', parentCourse: 'Certificate', code: 'CERT-47', validity: '2027', status: 'Active' },
-  { id: '3', name: '20th Batch', parentCourse: 'Diploma', code: 'DIP-20', validity: '2026', status: 'Active' },
-  { id: '4', name: '21st Batch', parentCourse: 'Diploma', code: 'DIP-21', validity: '2027', status: 'Active' }
-];
-
-const SEED_PROJECT_MASTER: MasterRecord[] = [
-  { id: '1', name: 'National Tiger Conservation Authority (NTCA) Project', code: 'NTCA', pi: 'Dr. Y. V. Jhala (Scientist-G, Permanent)', status: 'Active' },
-  { id: '2', name: 'CAMPA - Recovery Program for Bustard', code: 'CAMPA-GIB', pi: 'Dr. Sutirtha Dutta (Scientist-E, Permanent)', status: 'Active' },
-  { id: '3', name: 'Ganga Rejuvenation & River Biodiversity Project', code: 'NMCG-GRP', pi: 'Dr. Ruchi Badola (Scientist-G, Permanent)', status: 'Active' },
-  { id: '4', name: 'All India Synchronized Elephant Population Estimation', code: 'AISEPE', pi: 'Dr. Qamar Qureshi (Scientist-G, Permanent)', status: 'Active' },
-  { id: '5', name: 'Snow Leopard Population Assessment in India (SPAI)', code: 'SPAI', pi: 'Dr. S. Sathyakumar (Scientist-G, Permanent)', status: 'Active' }
-];
-
-const SEED_CATEGORY_MASTER: MasterRecord[] = [
-  { id: '1', name: 'Administrative', code: 'ADMIN', group: 'Cadre A', status: 'Active' },
-  { id: '2', name: 'Scientific', code: 'SCI', group: 'Research Cadre', status: 'Active' },
-  { id: '3', name: 'Technical', code: 'TECH', group: 'Technical Staff', status: 'Active' },
-  { id: '4', name: 'Academic', code: 'ACAD', group: 'Faculty / Student', status: 'Active' }
-];
-
-const SEED_PHD_ENROLLMENT_MASTER: MasterRecord[] = [
-  { id: '1', name: 'UGC-NET JRF', code: 'UGC-JRF', category: 'National Fellowship', status: 'Active' },
-  { id: '2', name: 'CSIR-NET JRF', code: 'CSIR-JRF', category: 'National Fellowship', status: 'Active' },
-  { id: '3', name: 'DST-INSPIRE Fellowship', code: 'INSPIRE', category: 'Govt Grant', status: 'Active' },
-  { id: '4', name: 'WII Institutional Fellowship', code: 'WII-FEL', category: 'Institutional', status: 'Active' },
-  { id: '5', name: 'Project Funded PhD Fellowship', code: 'PRJ-PhD', category: 'Project Grant', status: 'Active' }
-];
-
-const SEED_LOCATION_MASTER: MasterRecord[] = [
-  { id: '1', name: 'Dehradun Campus (HQ)', code: 'DDN-HQ', type: 'Headquarters', status: 'Active' },
-  { id: '2', name: 'Southern Regional Center - Bengaluru', code: 'SRC-BLR', type: 'Regional Office', status: 'Active' },
-  { id: '3', name: 'High Altitude Field Station - Leh', code: 'HAFS-LEH', type: 'Field Station', status: 'Active' },
-  { id: '4', name: 'Ganga Biodiversity Center - Rishikesh', code: 'GBC-RSK', type: 'Research Center', status: 'Active' }
-];
-
 export const ProfileMasterSection: React.FC = () => {
-  const { currentUser, users, addProfileMasterItem, deleteProfileMasterItem } = useApp();
+  const { users } = useApp();
 
   type MasterKey =
     | 'departments'
@@ -130,8 +46,7 @@ export const ProfileMasterSection: React.FC = () => {
     | 'traineeBatches'
     | 'projects'
     | 'categories'
-    | 'phdEnrollment'
-    | 'locations';
+    | 'phdEnrollment';
 
   const [activeTab, setActiveTab] = useState<MasterKey>('departments');
   const [searchQuery, setSearchQuery] = useState('');
@@ -201,72 +116,31 @@ export const ProfileMasterSection: React.FC = () => {
     status: 'Active'
   });
 
-  // Master Data State with safe localStorage persistence and fallback defaults
-  const [masterData, setMasterData] = useState<Record<MasterKey, MasterRecord[]>>(() => {
-    const defaults: Record<MasterKey, MasterRecord[]> = {
-      departments: SEED_ORGANIZATION_MASTER,
-      designations: SEED_DESIGNATION_MASTER,
-      mscStreams: SEED_STREAM_MASTER,
-      mscBatches: SEED_MSC_BATCH_MASTER,
-      courses: SEED_COURSE_MASTER,
-      traineeBatches: SEED_TRAINEE_BATCH_MASTER,
-      projects: SEED_PROJECT_MASTER,
-      categories: SEED_CATEGORY_MASTER,
-      phdEnrollment: SEED_PHD_ENROLLMENT_MASTER,
-      locations: SEED_LOCATION_MASTER
-    };
-    try {
-      const saved = localStorage.getItem('wii_profile_masters_table_v3');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === 'object') {
-          return {
-            departments: Array.isArray(parsed.departments) && parsed.departments.length ? parsed.departments : defaults.departments,
-            designations: Array.isArray(parsed.designations) && parsed.designations.length ? parsed.designations : defaults.designations,
-            mscStreams: Array.isArray(parsed.mscStreams) && parsed.mscStreams.length ? parsed.mscStreams : defaults.mscStreams,
-            mscBatches: Array.isArray(parsed.mscBatches) && parsed.mscBatches.length ? parsed.mscBatches : defaults.mscBatches,
-            courses: Array.isArray(parsed.courses) && parsed.courses.length ? parsed.courses : defaults.courses,
-            traineeBatches: Array.isArray(parsed.traineeBatches) && parsed.traineeBatches.length ? parsed.traineeBatches : defaults.traineeBatches,
-            projects: Array.isArray(parsed.projects) && parsed.projects.length
-              ? parsed.projects.map((p: any, idx: number) => ({
-                  ...p,
-                  pi: p.pi || defaults.projects[idx % defaults.projects.length]?.pi || 'Dr. Y. V. Jhala (Scientist-G, Permanent)'
-                }))
-              : defaults.projects,
-            categories: Array.isArray(parsed.categories) && parsed.categories.length ? parsed.categories : defaults.categories,
-            phdEnrollment: Array.isArray(parsed.phdEnrollment) && parsed.phdEnrollment.length ? parsed.phdEnrollment : defaults.phdEnrollment,
-            locations: Array.isArray(parsed.locations) && parsed.locations.length ? parsed.locations : defaults.locations
-          };
-        }
-      }
-    } catch (e) {
-      console.error(e);
-    }
-    return defaults;
+  // All masters are loaded from MySQL. No localStorage/seed fallback is used.
+  const [masterData, setMasterData] = useState<Record<MasterKey, MasterRecord[]>>({
+    departments: [], designations: [], mscStreams: [], mscBatches: [], courses: [],
+    traineeBatches: [], projects: [], categories: [], phdEnrollment: []
   });
-
-  // Persist to localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem('wii_profile_masters_table_v3', JSON.stringify(masterData));
-    } catch (e) {
-      console.error(e);
-    }
-  }, [masterData]);
-
-  // Organizations are shared master data: fetch them from MySQL on every load.
   useEffect(() => {
     let cancelled = false;
-    const loadOrganizations = async () => {
-      try {
-        const response = await fetch('/api/hrms/profile-masters/organizations', { credentials: 'include', cache: 'no-store' });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(payload.error || 'Failed to load organizations.');
-        if (cancelled) return;
-        setMasterData((prev) => ({ ...prev, departments: (Array.isArray(payload) ? payload : []).map((row: any) => ({ id: String(row.id), name: row.name, code: row.code, type: row.type || 'Department', status: String(row.status).toUpperCase() === 'INACTIVE' ? 'Inactive' : 'Active' })) }));
-      } catch (error) { if (!cancelled) showToast(error instanceof Error ? error.message : 'Failed to load organizations from database.'); }
+    const keys: MasterKey[] = ['departments','designations','mscStreams','mscBatches','courses','traineeBatches','projects','categories','phdEnrollment'];
+    const endpointKey: Record<MasterKey, string> = { departments: 'organizations', designations: 'designations', mscStreams: 'mscStreams', mscBatches: 'mscBatches', courses: 'courses', traineeBatches: 'traineeBatches', projects: 'projects', categories: 'categories', phdEnrollment: 'phdEnrollment' };
+    const load = async () => {
+      const loaded: Partial<Record<MasterKey, MasterRecord[]>> = {};
+      const failures: string[] = [];
+      await Promise.all(keys.map(async (key) => {
+        try {
+          const response = await fetch(`/api/hrms/profile-masters/${endpointKey[key]}`, { credentials: 'include', cache: 'no-store' });
+          const payload = await response.json().catch(() => []);
+          if (!response.ok) throw new Error(payload.error || 'Request failed');
+          loaded[key] = (Array.isArray(payload) ? payload : []).map((row: any) => ({ id: String(row.id), name: String(row.name || ''), code: String(row.code || ''), status: String(row.status).toUpperCase() === 'INACTIVE' ? 'Inactive' : 'Active', type: row.type || '', empType: row.empType || '', parentStream: row.parentStream || '', parentCourse: row.parentCourse || '', validity: row.validity || '', totalBatches: Number(row.totalBatches || 0), category: row.category || '', pi: row.pi || '', group: row.group || '' }));
+        } catch (error) { failures.push(key); console.error('Failed loading profile master ' + key, error); }
+      }));
+      if (cancelled) return;
+      setMasterData((prev) => ({ ...prev, ...loaded }));
+      if (failures.length) showToast('Could not load some masters: ' + failures.join(', ') + '. Check database migration/server logs.');
     };
-    void loadOrganizations();
+    void load();
     return () => { cancelled = true; };
   }, []);
 
@@ -377,17 +251,7 @@ export const ProfileMasterSection: React.FC = () => {
           codeHeader: 'Source Code',
           typeHeader: 'Funding Category'
         };
-      case 'locations':
-        return {
-          title: 'Locations & Field Camps Master',
-          subtitle: 'Manage headquarters, regional offices, research stations, and field camps.',
-          buttonLabel: 'Add Location',
-          categoryLabel: 'Locations Master',
-          icon: MapPin,
-          nameHeader: 'Location Name',
-          codeHeader: 'Location Code',
-          typeHeader: 'Facility Type'
-        };
+
     }
   };
 
@@ -463,103 +327,49 @@ export const ProfileMasterSection: React.FC = () => {
       return;
     }
 
-    if (editingRecord) {
-      // Update Record
-      const updatedList = currentList.map((rec) =>
-        rec.id === editingRecord.id
-          ? {
-              ...rec,
-              name: formData.name.trim(),
-              code: formData.code.trim().toUpperCase(),
-              status: formData.status,
-              type: formData.type,
-              empType: formData.empType,
-              parentStream: formData.parentStream,
-              parentCourse: formData.parentCourse,
-              validity: formData.validity,
-              category: formData.category,
-              pi: formData.pi,
-              group: formData.group
-            }
-          : rec
-      );
-      setMasterData((prev) => ({ ...prev, [activeTab]: updatedList }));
-      showToast(`Master record "${formData.name}" updated successfully!`);
-    } else {
-      // Create New Record
-      const newRec: MasterRecord = {
-        id: String(Date.now()),
-        name: formData.name.trim(),
-        code: formData.code.trim().toUpperCase(),
-        status: formData.status,
-        type: formData.type,
-        empType: formData.empType,
-        parentStream: formData.parentStream,
-        parentCourse: formData.parentCourse,
-        validity: formData.validity,
-        category: formData.category,
-        pi: formData.pi,
-        group: formData.group,
-        totalBatches: 0
-      };
-      setMasterData((prev) => ({ ...prev, [activeTab]: [...currentList, newRec] }));
-
-      // Sync with AppContext master list so dropdowns pick it up
-      const contextKeyMap: Record<MasterKey, any> = {
-        departments: 'departments',
-        designations: 'designations',
-        mscStreams: 'courses',
-        mscBatches: 'batches',
-        courses: 'courses',
-        traineeBatches: 'batches',
-        projects: 'projects',
-        categories: 'categories',
-        phdEnrollment: 'phdEnrollment',
-        locations: 'locations'
-      };
-      addProfileMasterItem(contextKeyMap[activeTab], formData.name.trim());
-
-      showToast(`New record "${formData.name}" added to ${currentMeta.title}!`);
-    }
+    try {
+      const body = { name: formData.name.trim(), code: formData.code.trim().toUpperCase(), status: formData.status.toUpperCase(), type: formData.type, empType: formData.empType, parentStream: formData.parentStream, parentCourse: formData.parentCourse, validity: formData.validity, category: formData.category, pi: formData.pi, group: formData.group, totalBatches: 0 };
+      const url = editingRecord ? `/api/hrms/profile-masters/${activeTab}/${encodeURIComponent(editingRecord.id)}` : `/api/hrms/profile-masters/${activeTab}`;
+      const response = await fetch(url, { method: editingRecord ? 'PUT' : 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Could not save master record.');
+      const saved: MasterRecord = { id: String(payload.id), name: payload.name, code: payload.code, status: String(payload.status).toUpperCase() === 'INACTIVE' ? 'Inactive' : 'Active', type: payload.type || '', empType: payload.empType || '', parentStream: payload.parentStream || '', parentCourse: payload.parentCourse || '', validity: payload.validity || '', totalBatches: Number(payload.totalBatches || 0), category: payload.category || '', pi: payload.pi || '', group: payload.group || '' };
+      setMasterData((prev) => ({ ...prev, [activeTab]: editingRecord ? prev[activeTab].map((item) => item.id === editingRecord.id ? saved : item) : [...prev[activeTab], saved] }));
+      setIsModalOpen(false);
+      showToast(editingRecord ? 'Master record updated successfully.' : 'Master record added successfully.');
+    } catch (error) { setFormError(error instanceof Error ? error.message : 'Could not save master record.'); }
+    return;
 
     setIsModalOpen(false);
   };
 
   const toggleOrganizationStatus = async (record: MasterRecord) => {
-    if (activeTab !== 'departments' || statusUpdatingId) return;
+    if (statusUpdatingId) return;
     const nextStatus = record.status === 'Active' ? 'INACTIVE' : 'ACTIVE';
     setStatusUpdatingId(record.id);
     try {
-      const response = await fetch(`/api/hrms/profile-masters/organizations/${encodeURIComponent(record.id)}`, {
-        method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: record.name, code: record.code, type: record.type || 'Department', status: nextStatus })
-      });
+      const endpointKey = activeTab === 'departments' ? 'organizations' : activeTab;
+      const body = { name: record.name, code: record.code, status: nextStatus, type: record.type || 'Department', empType: record.empType || '', parentStream: record.parentStream || '', parentCourse: record.parentCourse || '', validity: record.validity || '', totalBatches: record.totalBatches || 0, category: record.category || '', pi: record.pi || '', group: record.group || '' };
+      const response = await fetch(`/api/hrms/profile-masters/${endpointKey}/${encodeURIComponent(record.id)}`, { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || 'Could not update organization status.');
-      const row = payload.organization || payload;
-      const status: MasterRecord['status'] = String(row.status).toUpperCase() === 'INACTIVE' ? 'Inactive' : 'Active';
-      setMasterData((prev) => ({ ...prev, departments: prev.departments.map((item) => item.id === record.id ? { ...item, status } : item) }));
-      showToast('Organization marked ' + status.toLowerCase() + '.');
-    } catch (error) { showToast(error instanceof Error ? error.message : 'Could not update organization status.'); }
+      if (!response.ok) throw new Error(payload.error || 'Could not update master status.');
+      const status: MasterRecord['status'] = String(payload.status).toUpperCase() === 'INACTIVE' ? 'Inactive' : 'Active';
+      setMasterData((prev) => ({ ...prev, [activeTab]: prev[activeTab].map((item) => item.id === record.id ? { ...item, status } : item) }));
+      showToast(record.name + ' marked ' + status.toLowerCase() + '.');
+    } catch (error) { showToast(error instanceof Error ? error.message : 'Could not update master status.'); }
     finally { setStatusUpdatingId(null); }
   };
 
   const confirmDeleteRecord = async (record: MasterRecord) => {
-    if (activeTab === 'departments') {
-      try {
-        const response = await fetch(`/api/hrms/profile-masters/organizations/${encodeURIComponent(record.id)}`, { method: 'DELETE', credentials: 'include' });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(payload.error || 'Could not delete organization.');
-        setMasterData((prev) => ({ ...prev, departments: prev.departments.filter((item) => item.id !== record.id) }));
-        showToast('Organization deleted successfully.'); setDeletingRecord(null);
-      } catch (error) { showToast(error instanceof Error ? error.message : 'Could not delete organization.'); }
-      return;
-    }
-    const updatedList = currentList.filter((rec) => rec.id !== record.id);
-    setMasterData((prev) => ({ ...prev, [activeTab]: updatedList }));
-    const contextKeyMap: Record<MasterKey, any> = { departments: 'departments', designations: 'designations', mscStreams: 'courses', mscBatches: 'batches', courses: 'courses', traineeBatches: 'batches', projects: 'projects', categories: 'categories', phdEnrollment: 'phdEnrollment', locations: 'locations' };
-    deleteProfileMasterItem(contextKeyMap[activeTab], record.name);
-    showToast(`Record "${record.name}" deleted successfully.`); setDeletingRecord(null);
+    try {
+      const endpointKey = activeTab === 'departments' ? 'organizations' : activeTab;
+      const response = await fetch(`/api/hrms/profile-masters/${endpointKey}/${encodeURIComponent(record.id)}`, { method: 'DELETE', credentials: 'include' });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Could not delete master record.');
+      setMasterData((prev) => ({ ...prev, [activeTab]: prev[activeTab].filter((item) => item.id !== record.id) }));
+      showToast('Record "' + record.name + '" deleted successfully.');
+      setDeletingRecord(null);
+    } catch (error) { showToast(error instanceof Error ? error.message : 'Could not delete master record.'); }
   };
 
   const tabPillsConfig: Array<{ id: MasterKey; label: string; icon: any }> = [
@@ -572,7 +382,6 @@ export const ProfileMasterSection: React.FC = () => {
     { id: 'projects', label: 'Project', icon: FolderKanban },
     { id: 'categories', label: 'Category', icon: Layers },
     { id: 'phdEnrollment', label: 'PhD Enrollment', icon: School },
-    { id: 'locations', label: 'Locations', icon: MapPin }
   ];
 
   return (
@@ -795,7 +604,7 @@ export const ProfileMasterSection: React.FC = () => {
                           </span>
                         )}
 
-                        {activeTab === 'locations' && (
+                        {false && (
                           <span className="inline-block px-2.5 py-1 rounded-lg text-xs font-bold bg-teal-50 text-teal-800 border border-teal-200">
                             {row.type || 'Headquarters'}
                           </span>
@@ -804,18 +613,12 @@ export const ProfileMasterSection: React.FC = () => {
 
                       {/* Status */}
                       <td className="py-3.5 px-4">
-                        {activeTab === 'departments' ? (
-                          <button type="button" onClick={() => void toggleOrganizationStatus(row)} disabled={statusUpdatingId === row.id}
+                        <button type="button" onClick={() => void toggleOrganizationStatus(row)} disabled={statusUpdatingId === row.id}
                             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-colors disabled:opacity-60 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-300 ${row.status === 'Inactive' ? 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'}`}
-                            title="Click to toggle status" aria-label={`Change organization status from ${row.status}`}>
+                            title="Click to toggle status" aria-label={`Change status from ${row.status}`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${row.status === 'Inactive' ? 'bg-slate-400' : 'bg-emerald-500'}`}></span>
                             {statusUpdatingId === row.id ? 'Saving…' : row.status}
                           </button>
-                        ) : (
-                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border ${row.status === 'Inactive' ? 'bg-slate-100 text-slate-600 border-slate-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${row.status === 'Inactive' ? 'bg-slate-400' : 'bg-emerald-500'}`}></span>{row.status}
-                          </span>
-                        )}
                       </td>
 
                       {/* Actions */}
@@ -1040,96 +843,7 @@ export const ProfileMasterSection: React.FC = () => {
                 </div>
               )}
 
-              {activeTab === 'locations' && (
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1 text-xs">
-                    Facility / Location Type *
-                  </label>
-                  <select
-                    value={formData.type}
-                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 focus:outline-none transition-all"
-                  >
-                    <option value="Headquarters">Headquarters</option>
-                    <option value="Regional Office">Regional Office</option>
-                    <option value="Field Station">Field Station</option>
-                    <option value="Research Center">Research Center</option>
-                    <option value="Field Camp">Field Camp</option>
-                  </select>
-                </div>
-              )}
-
-              {activeTab === 'mscBatches' && (
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1 text-xs">
-                    Parent Stream (Relationship) *
-                  </label>
-                  <select
-                    value={formData.parentStream}
-                    onChange={(e) => setFormData({ ...formData, parentStream: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 focus:outline-none transition-all"
-                  >
-                    {(masterData.mscStreams || []).map((st) => (
-                      <option key={st.id} value={st.name}>
-                        {st.name} ({st.code})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {activeTab === 'traineeBatches' && (
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1 text-xs">
-                    Parent Course (Relationship) *
-                  </label>
-                  <select
-                    value={formData.parentCourse}
-                    onChange={(e) => setFormData({ ...formData, parentCourse: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 focus:outline-none transition-all"
-                  >
-                    {(masterData.courses || []).map((cr) => (
-                      <option key={cr.id} value={cr.name}>
-                        {cr.name} ({cr.code})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* Primary Name Field */}
-              <div>
-                <label className="block text-slate-700 font-bold mb-1 text-xs">{currentMeta.nameHeader} *</label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => {
-                    setFormData({ ...formData, name: e.target.value });
-                    if (formError) setFormError(null);
-                  }}
-                  placeholder={`e.g. ${
-                    activeTab === 'departments'
-                      ? 'Wildlife Institute of India, IT Cell, Project Tiger'
-                      : activeTab === 'designations'
-                      ? 'Technical Assistant, Scientist-B, Project Associate'
-                      : activeTab === 'mscStreams'
-                      ? 'Fresh Water Ecology, Wildlife Sciences'
-                      : activeTab === 'mscBatches'
-                      ? '21st Batch, 2nd Batch'
-                      : activeTab === 'courses'
-                      ? 'Certificate, Diploma, PG Diploma in Wildlife Management'
-                      : activeTab === 'projects'
-                      ? 'National Tiger Conservation Project'
-                      : 'New Record Title...'
-                  }`}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 focus:outline-none transition-all"
-                  required
-                />
-                {activeTab === 'mscBatches' && (
-                  <p className="text-[11px] text-slate-500 font-medium mt-1">
-                    Numbering is stream-specific (Fresh Water Ecology &rarr; 21st Batch, Wildlife Sciences &rarr; 2nd Batch).
-                  </p>
-                )}
+              
               </div>
 
               {/* Primary Code Field */}
