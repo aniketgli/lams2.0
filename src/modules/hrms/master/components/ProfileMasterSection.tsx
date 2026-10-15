@@ -7,7 +7,6 @@ import {
   GraduationCap,
   Calendar,
   School,
-  MapPin,
   Plus,
   Trash2,
   Search,
@@ -119,7 +118,7 @@ const SEED_LOCATION_MASTER: MasterRecord[] = [
 ];
 
 export const ProfileMasterSection: React.FC = () => {
-  const { currentUser, users, addProfileMasterItem, deleteProfileMasterItem } = useApp();
+  const { users } = useApp();
 
   type MasterKey =
     | 'departments'
@@ -463,103 +462,49 @@ export const ProfileMasterSection: React.FC = () => {
       return;
     }
 
-    if (editingRecord) {
-      // Update Record
-      const updatedList = currentList.map((rec) =>
-        rec.id === editingRecord.id
-          ? {
-              ...rec,
-              name: formData.name.trim(),
-              code: formData.code.trim().toUpperCase(),
-              status: formData.status,
-              type: formData.type,
-              empType: formData.empType,
-              parentStream: formData.parentStream,
-              parentCourse: formData.parentCourse,
-              validity: formData.validity,
-              category: formData.category,
-              pi: formData.pi,
-              group: formData.group
-            }
-          : rec
-      );
-      setMasterData((prev) => ({ ...prev, [activeTab]: updatedList }));
-      showToast(`Master record "${formData.name}" updated successfully!`);
-    } else {
-      // Create New Record
-      const newRec: MasterRecord = {
-        id: String(Date.now()),
-        name: formData.name.trim(),
-        code: formData.code.trim().toUpperCase(),
-        status: formData.status,
-        type: formData.type,
-        empType: formData.empType,
-        parentStream: formData.parentStream,
-        parentCourse: formData.parentCourse,
-        validity: formData.validity,
-        category: formData.category,
-        pi: formData.pi,
-        group: formData.group,
-        totalBatches: 0
-      };
-      setMasterData((prev) => ({ ...prev, [activeTab]: [...currentList, newRec] }));
-
-      // Sync with AppContext master list so dropdowns pick it up
-      const contextKeyMap: Record<MasterKey, any> = {
-        departments: 'departments',
-        designations: 'designations',
-        mscStreams: 'courses',
-        mscBatches: 'batches',
-        courses: 'courses',
-        traineeBatches: 'batches',
-        projects: 'projects',
-        categories: 'categories',
-        phdEnrollment: 'phdEnrollment',
-        locations: 'locations'
-      };
-      addProfileMasterItem(contextKeyMap[activeTab], formData.name.trim());
-
-      showToast(`New record "${formData.name}" added to ${currentMeta.title}!`);
-    }
+    try {
+      const body = { name: formData.name.trim(), code: formData.code.trim().toUpperCase(), status: formData.status.toUpperCase(), type: formData.type, empType: formData.empType, parentStream: formData.parentStream, parentCourse: formData.parentCourse, validity: formData.validity, category: formData.category, pi: formData.pi, group: formData.group, totalBatches: formData.totalBatches || 0 };
+      const url = editingRecord ? `/api/hrms/profile-masters/${activeTab}/${encodeURIComponent(editingRecord.id)}` : `/api/hrms/profile-masters/${activeTab}`;
+      const response = await fetch(url, { method: editingRecord ? 'PUT' : 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Could not save master record.');
+      const saved: MasterRecord = { id: String(payload.id), name: payload.name, code: payload.code, status: String(payload.status).toUpperCase() === 'INACTIVE' ? 'Inactive' : 'Active', type: payload.type || '', empType: payload.empType || '', parentStream: payload.parentStream || '', parentCourse: payload.parentCourse || '', validity: payload.validity || '', totalBatches: Number(payload.totalBatches || 0), category: payload.category || '', pi: payload.pi || '', group: payload.group || '' };
+      setMasterData((prev) => ({ ...prev, [activeTab]: editingRecord ? prev[activeTab].map((item) => item.id === editingRecord.id ? saved : item) : [...prev[activeTab], saved] }));
+      setIsModalOpen(false);
+      showToast(editingRecord ? 'Master record updated successfully.' : 'Master record added successfully.');
+    } catch (error) { setFormError(error instanceof Error ? error.message : 'Could not save master record.'); }
+    return;
 
     setIsModalOpen(false);
   };
 
   const toggleOrganizationStatus = async (record: MasterRecord) => {
-    if (activeTab !== 'departments' || statusUpdatingId) return;
+    if (statusUpdatingId) return;
     const nextStatus = record.status === 'Active' ? 'INACTIVE' : 'ACTIVE';
     setStatusUpdatingId(record.id);
     try {
-      const response = await fetch(`/api/hrms/profile-masters/organizations/${encodeURIComponent(record.id)}`, {
-        method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: record.name, code: record.code, type: record.type || 'Department', status: nextStatus })
-      });
+      const endpointKey = activeTab === 'departments' ? 'organizations' : activeTab;
+      const body = { name: record.name, code: record.code, status: nextStatus, type: record.type || 'Department', empType: record.empType || '', parentStream: record.parentStream || '', parentCourse: record.parentCourse || '', validity: record.validity || '', totalBatches: record.totalBatches || 0, category: record.category || '', pi: record.pi || '', group: record.group || '' };
+      const response = await fetch(`/api/hrms/profile-masters/${endpointKey}/${encodeURIComponent(record.id)}`, { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || 'Could not update organization status.');
-      const row = payload.organization || payload;
-      const status: MasterRecord['status'] = String(row.status).toUpperCase() === 'INACTIVE' ? 'Inactive' : 'Active';
-      setMasterData((prev) => ({ ...prev, departments: prev.departments.map((item) => item.id === record.id ? { ...item, status } : item) }));
-      showToast('Organization marked ' + status.toLowerCase() + '.');
-    } catch (error) { showToast(error instanceof Error ? error.message : 'Could not update organization status.'); }
+      if (!response.ok) throw new Error(payload.error || 'Could not update master status.');
+      const status: MasterRecord['status'] = String(payload.status).toUpperCase() === 'INACTIVE' ? 'Inactive' : 'Active';
+      setMasterData((prev) => ({ ...prev, [activeTab]: prev[activeTab].map((item) => item.id === record.id ? { ...item, status } : item) }));
+      showToast(record.name + ' marked ' + status.toLowerCase() + '.');
+    } catch (error) { showToast(error instanceof Error ? error.message : 'Could not update master status.'); }
     finally { setStatusUpdatingId(null); }
   };
 
   const confirmDeleteRecord = async (record: MasterRecord) => {
-    if (activeTab === 'departments') {
-      try {
-        const response = await fetch(`/api/hrms/profile-masters/organizations/${encodeURIComponent(record.id)}`, { method: 'DELETE', credentials: 'include' });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(payload.error || 'Could not delete organization.');
-        setMasterData((prev) => ({ ...prev, departments: prev.departments.filter((item) => item.id !== record.id) }));
-        showToast('Organization deleted successfully.'); setDeletingRecord(null);
-      } catch (error) { showToast(error instanceof Error ? error.message : 'Could not delete organization.'); }
-      return;
-    }
-    const updatedList = currentList.filter((rec) => rec.id !== record.id);
-    setMasterData((prev) => ({ ...prev, [activeTab]: updatedList }));
-    const contextKeyMap: Record<MasterKey, any> = { departments: 'departments', designations: 'designations', mscStreams: 'courses', mscBatches: 'batches', courses: 'courses', traineeBatches: 'batches', projects: 'projects', categories: 'categories', phdEnrollment: 'phdEnrollment', locations: 'locations' };
-    deleteProfileMasterItem(contextKeyMap[activeTab], record.name);
-    showToast(`Record "${record.name}" deleted successfully.`); setDeletingRecord(null);
+    try {
+      const endpointKey = activeTab === 'departments' ? 'organizations' : activeTab;
+      const response = await fetch(`/api/hrms/profile-masters/${endpointKey}/${encodeURIComponent(record.id)}`, { method: 'DELETE', credentials: 'include' });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Could not delete master record.');
+      setMasterData((prev) => ({ ...prev, [activeTab]: prev[activeTab].filter((item) => item.id !== record.id) }));
+      showToast('Record "' + record.name + '" deleted successfully.');
+      setDeletingRecord(null);
+    } catch (error) { showToast(error instanceof Error ? error.message : 'Could not delete master record.'); }
   };
 
   const tabPillsConfig: Array<{ id: MasterKey; label: string; icon: any }> = [
@@ -795,7 +740,7 @@ export const ProfileMasterSection: React.FC = () => {
                           </span>
                         )}
 
-                        {activeTab === 'locations' && (
+                        {false && (
                           <span className="inline-block px-2.5 py-1 rounded-lg text-xs font-bold bg-teal-50 text-teal-800 border border-teal-200">
                             {row.type || 'Headquarters'}
                           </span>
@@ -804,10 +749,10 @@ export const ProfileMasterSection: React.FC = () => {
 
                       {/* Status */}
                       <td className="py-3.5 px-4">
-                        {activeTab === 'departments' ? (
+                        {true ? (
                           <button type="button" onClick={() => void toggleOrganizationStatus(row)} disabled={statusUpdatingId === row.id}
                             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-colors disabled:opacity-60 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-300 ${row.status === 'Inactive' ? 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'}`}
-                            title="Click to toggle status" aria-label={`Change organization status from ${row.status}`}>
+                            title="Click to toggle status" aria-label={`Change status from ${row.status}`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${row.status === 'Inactive' ? 'bg-slate-400' : 'bg-emerald-500'}`}></span>
                             {statusUpdatingId === row.id ? 'Saving…' : row.status}
                           </button>
