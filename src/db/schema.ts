@@ -54,7 +54,7 @@ export const biometric_machines = mysqlTable('biometric_machines', {
   fullName: varchar('full_name', { length: 255 }).notNull(),
   shortName: varchar('short_name', { length: 80 }).notNull().unique(),
   serialNumber: varchar('serial_number', { length: 120 }).notNull().unique(),
-  ipAddress: varchar('ip_address', { length: 45 }).notNull(),
+  ipAddress: varchar('ip_address', { length: 45 }).notNull().unique(),
   status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
   purpose: varchar('purpose', { length: 24 }).notNull().default('ATTENDANCE'),
   createdAt: timestamp('created_at').defaultNow(),
