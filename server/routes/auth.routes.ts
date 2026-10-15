@@ -62,11 +62,28 @@ router.post('/logout', (req, res) => {
   });
 });
 
-router.get('/me', (req, res) => {
+router.get('/me', async (req, res) => {
   if (!req.session.userId) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
-  return res.json({ userId: req.session.userId, role: req.session.role });
+
+  try {
+    const [user] = await db
+      .select({ id: users.id, name: users.name, email: users.email, role: users.role })
+      .from(users)
+      .where(eq(users.id, req.session.userId));
+
+    if (!user) {
+      req.session.destroy(() => undefined);
+      return res.status(401).json({ message: 'Session user no longer exists.' });
+    }
+
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ userId: user.id, role: user.role, user });
+  } catch (error) {
+    console.error('Session identity lookup failed:', error instanceof Error ? error.message : error);
+    return res.status(500).json({ message: 'Unable to load the signed-in user.' });
+  }
 });
 
 export const authRoutes = router;
