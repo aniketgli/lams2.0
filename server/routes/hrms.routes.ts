@@ -25,6 +25,7 @@ router.get('/employees', isAuthenticated, async (_req, res) => {
         employmentType: employee_profiles.employmentType,
         joiningDate: employee_profiles.joiningDate,
         phone: employee_profiles.phone,
+        biometricId: employee_profiles.biometricId,
         officeLocation: employee_profiles.officeLocation,
         shiftId: employee_profiles.shiftId,
         profileData: employee_profiles.profileData
@@ -84,6 +85,31 @@ function normalizeEmployeePayload(body: any) {
   return { profile, name, email, role, employmentType };
 }
 
+async function validateUniqueEmployeeIdentifiers(
+  email: string,
+  phone: string | null,
+  biometricId: string | null,
+  excludeUserId?: string
+): Promise<string | null> {
+  const [emailOwner] = await db.select({ id: users.id }).from(users).where(eq(users.email, email));
+  if (emailOwner && emailOwner.id !== excludeUserId) return 'An account with this email already exists.';
+
+  const profiles = await db.select({
+    userId: employee_profiles.userId,
+    phone: employee_profiles.phone,
+    biometricId: employee_profiles.biometricId
+  }).from(employee_profiles);
+
+  for (const row of profiles) {
+    if (row.userId === excludeUserId) continue;
+    if (phone && row.phone?.trim() === phone) return 'This mobile number is already assigned to another employee.';
+    if (biometricId && row.biometricId?.trim().toLowerCase() === biometricId.toLowerCase()) {
+      return 'This Biometric ID is already assigned to another employee.';
+    }
+  }
+  return null;
+}
+
 function toProfileRow(userId: string, profile: Record<string, any>, role: string, employmentType: string) {
   return {
     userId,
@@ -92,7 +118,8 @@ function toProfileRow(userId: string, profile: Record<string, any>, role: string
     designation: typeof profile.designation === 'string' && profile.designation.trim() ? profile.designation.trim() : 'Staff',
     employmentType,
     joiningDate: typeof profile.joiningDate === 'string' && profile.joiningDate ? profile.joiningDate.slice(0, 10) : '1970-01-01',
-    phone: typeof profile.phone === 'string' ? profile.phone : null,
+    phone: typeof profile.phone === 'string' && profile.phone.trim() ? profile.phone.trim() : null,
+    biometricId: typeof profile.biometricId === 'string' && profile.biometricId.trim() ? profile.biometricId.trim() : null,
     officeLocation: typeof profile.officeLocation === 'string' ? profile.officeLocation : null,
     shiftId: typeof profile.shiftId === 'string' ? profile.shiftId : null,
     profileData: JSON.stringify({ ...profile, id: userId, name: profile.name, email: profile.email, role, employmentType })
@@ -109,8 +136,10 @@ router.post('/employees', isAdmin, async (req, res) => {
 
   const userId = typeof profile.id === 'string' && profile.id.length <= 36 ? profile.id : randomUUID();
   try {
-    const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, email));
-    if (existing) return res.status(409).json({ error: 'An account with this email already exists.' });
+    const phone = typeof profile.phone === 'string' && profile.phone.trim() ? profile.phone.trim() : null;
+    const biometricId = typeof profile.biometricId === 'string' && profile.biometricId.trim() ? profile.biometricId.trim() : null;
+    const identifierError = await validateUniqueEmployeeIdentifiers(email, phone, biometricId);
+    if (identifierError) return res.status(409).json({ error: identifierError });
 
     const initialSecret = randomBytes(32).toString('hex');
     const passwordHash = await bcrypt.hash(initialSecret, 12);
@@ -144,10 +173,10 @@ router.put('/employees/:userId', isAdmin, async (req, res) => {
     const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.id, userId));
     if (!existing) return res.status(404).json({ error: 'Employee account not found.' });
 
-    const [emailOwner] = await db.select({ id: users.id }).from(users).where(eq(users.email, email));
-    if (emailOwner && emailOwner.id !== userId) {
-      return res.status(409).json({ error: 'Another account already uses this email.' });
-    }
+    const phone = typeof profile.phone === 'string' && profile.phone.trim() ? profile.phone.trim() : null;
+    const biometricId = typeof profile.biometricId === 'string' && profile.biometricId.trim() ? profile.biometricId.trim() : null;
+    const identifierError = await validateUniqueEmployeeIdentifiers(email, phone, biometricId, userId);
+    if (identifierError) return res.status(409).json({ error: identifierError });
 
     const profileRow = toProfileRow(userId, { ...profile, name, email }, role, employmentType);
     await db.transaction(async (tx) => {
@@ -160,6 +189,7 @@ router.put('/employees/:userId', isAdmin, async (req, res) => {
           employmentType: profileRow.employmentType,
           joiningDate: profileRow.joiningDate,
           phone: profileRow.phone,
+          biometricId: profileRow.biometricId,
           officeLocation: profileRow.officeLocation,
           shiftId: profileRow.shiftId,
           profileData: profileRow.profileData
