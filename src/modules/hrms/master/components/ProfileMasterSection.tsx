@@ -16,10 +16,7 @@ import {
   Edit2,
   X,
   BookOpen,
-  Download,
-  FileText
 } from 'lucide-react';
-import { exportHRMSToCSV, exportHRMSToPDF, HRMSExportColumn, HRMSFilterTag } from '../../utils/hrmsExportUtils';
 
 // Master Record Types
 export interface MasterRecord {
@@ -256,6 +253,22 @@ export const ProfileMasterSection: React.FC = () => {
     }
   }, [masterData]);
 
+  // Organizations are shared master data: fetch them from MySQL on every load.
+  useEffect(() => {
+    let cancelled = false;
+    const loadOrganizations = async () => {
+      try {
+        const response = await fetch('/api/hrms/profile-masters/organizations', { credentials: 'include', cache: 'no-store' });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'Failed to load organizations.');
+        if (cancelled) return;
+        setMasterData((prev) => ({ ...prev, departments: (Array.isArray(payload) ? payload : []).map((row: any) => ({ id: String(row.id), name: row.name, code: row.code, type: row.type || 'Department', status: String(row.status).toUpperCase() === 'INACTIVE' ? 'Inactive' : 'Active' })) }));
+      } catch (error) { if (!cancelled) showToast(error instanceof Error ? error.message : 'Failed to load organizations from database.'); }
+    };
+    void loadOrganizations();
+    return () => { cancelled = true; };
+  }, []);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
@@ -266,10 +279,10 @@ export const ProfileMasterSection: React.FC = () => {
     switch (key) {
       case 'departments':
         return {
-          title: 'Organization Master',
+          title: 'Organizations',
           subtitle: 'Manage departments, divisions, cells, and project units.',
           buttonLabel: 'Add Organization Unit',
-          categoryLabel: 'Organization Master',
+          categoryLabel: 'Organizations',
           icon: Building2,
           nameHeader: 'Organization Name',
           codeHeader: 'Organization Code',
@@ -425,13 +438,29 @@ export const ProfileMasterSection: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleSaveRecord = (e: React.FormEvent) => {
+  const handleSaveRecord = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name.trim() || !formData.code.trim()) {
       setFormError('Please fill in both Name and Code fields.');
       return;
     }
     setFormError(null);
+
+    if (activeTab === 'departments') {
+      try {
+        const body = { name: formData.name.trim(), code: formData.code.trim().toUpperCase(), type: formData.type, status: formData.status.toUpperCase() };
+        const url = editingRecord ? `/api/hrms/profile-masters/organizations/${encodeURIComponent(editingRecord.id)}` : '/api/hrms/profile-masters/organizations';
+        const response = await fetch(url, { method: editingRecord ? 'PUT' : 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'Could not save organization.');
+        const row = payload.organization || payload;
+        const saved: MasterRecord = { id: String(row.id), name: row.name, code: row.code, type: row.type || 'Department', status: String(row.status).toUpperCase() === 'INACTIVE' ? 'Inactive' : 'Active' };
+        setMasterData((prev) => ({ ...prev, departments: editingRecord ? prev.departments.map((item) => item.id === editingRecord.id ? saved : item) : [...prev.departments, saved] }));
+        setIsModalOpen(false);
+        showToast(editingRecord ? 'Organization updated successfully.' : 'Organization added successfully.');
+      } catch (error) { setFormError(error instanceof Error ? error.message : 'Could not save organization.'); }
+      return;
+    }
 
     if (editingRecord) {
       // Update Record
@@ -495,109 +524,35 @@ export const ProfileMasterSection: React.FC = () => {
     setIsModalOpen(false);
   };
 
-  const confirmDeleteRecord = (record: MasterRecord) => {
+  const confirmDeleteRecord = async (record: MasterRecord) => {
+    if (activeTab === 'departments') {
+      try {
+        const response = await fetch(`/api/hrms/profile-masters/organizations/${encodeURIComponent(record.id)}`, { method: 'DELETE', credentials: 'include' });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'Could not delete organization.');
+        setMasterData((prev) => ({ ...prev, departments: prev.departments.filter((item) => item.id !== record.id) }));
+        showToast('Organization deleted successfully.'); setDeletingRecord(null);
+      } catch (error) { showToast(error instanceof Error ? error.message : 'Could not delete organization.'); }
+      return;
+    }
     const updatedList = currentList.filter((rec) => rec.id !== record.id);
     setMasterData((prev) => ({ ...prev, [activeTab]: updatedList }));
-
-    const contextKeyMap: Record<MasterKey, any> = {
-      departments: 'departments',
-      designations: 'designations',
-      mscStreams: 'courses',
-      mscBatches: 'batches',
-      courses: 'courses',
-      traineeBatches: 'batches',
-      projects: 'projects',
-      categories: 'categories',
-      phdEnrollment: 'phdEnrollment',
-      locations: 'locations'
-    };
+    const contextKeyMap: Record<MasterKey, any> = { departments: 'departments', designations: 'designations', mscStreams: 'courses', mscBatches: 'batches', courses: 'courses', traineeBatches: 'batches', projects: 'projects', categories: 'categories', phdEnrollment: 'phdEnrollment', locations: 'locations' };
     deleteProfileMasterItem(contextKeyMap[activeTab], record.name);
-
-    showToast(`Record "${record.name}" deleted successfully.`);
-    setDeletingRecord(null);
-  };
-
-  const getMasterExportConfig = () => {
-    const activeFiltersList: HRMSFilterTag[] = [
-      { label: 'Master Category', value: currentMeta.title }
-    ];
-    if (searchQuery.trim()) {
-      activeFiltersList.push({ label: 'Search Query', value: searchQuery.trim() });
-    }
-
-    const columns: HRMSExportColumn[] = [
-      { header: '#', key: 'sno', width: 12, align: 'center' },
-      { header: currentMeta.nameHeader, key: 'name', width: 55 },
-      { header: currentMeta.codeHeader, key: 'code', width: 28 },
-      { header: currentMeta.typeHeader, key: 'typeStr', width: 45 },
-      { header: 'Status', key: 'status', width: 20, align: 'center' }
-    ];
-
-    const exportData = filteredList.map((item, idx) => ({
-      sno: idx + 1,
-      name: item.name,
-      code: item.code,
-      typeStr: item.type || item.empType || item.parentStream || item.parentCourse || '-',
-      status: item.status
-    }));
-
-    return {
-      title: `${currentMeta.title} Register`,
-      subtitle: 'Official Institutional Master Records & Classification Ledger',
-      category: 'HRMS • Master Configuration Settings',
-      institution: 'WILDLIFE INSTITUTE OF INDIA (WII)',
-      generatedBy: {
-        name: currentUser.name,
-        designation: currentUser.designation,
-        department: currentUser.department,
-        email: currentUser.email
-      },
-      filters: activeFiltersList,
-      summaryItems: [
-        { label: 'Total Records', value: filteredList.length },
-        { label: 'Active', value: filteredList.filter((i) => i.status === 'Active').length },
-        { label: 'Inactive', value: filteredList.filter((i) => i.status === 'Inactive').length }
-      ],
-      columns,
-      data: exportData,
-      fileName: `WII_Master_${currentMeta.title.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}`
-    };
-  };
-
-  const handleExportCSV = () => {
-    if (filteredList.length === 0) {
-      showToast('No records available to export.');
-      return;
-    }
-    const config = getMasterExportConfig();
-    exportHRMSToCSV(config);
-    showToast(`${currentMeta.title} exported to CSV successfully.`);
-  };
-
-  const handleExportPDF = () => {
-    if (filteredList.length === 0) {
-      showToast('No records available to export.');
-      return;
-    }
-    const config = getMasterExportConfig();
-    exportHRMSToPDF({
-      ...config,
-      orientation: 'landscape'
-    });
-    showToast(`${currentMeta.title} PDF report generated successfully.`);
+    showToast(`Record "${record.name}" deleted successfully.`); setDeletingRecord(null);
   };
 
   const tabPillsConfig: Array<{ id: MasterKey; label: string; icon: any }> = [
-    { id: 'departments', label: 'Organization Master', icon: Building2 },
-    { id: 'designations', label: 'Designation Master', icon: Award },
-    { id: 'mscStreams', label: 'Stream Master (MSc)', icon: GraduationCap },
-    { id: 'mscBatches', label: 'MSc Batch Master', icon: Calendar },
-    { id: 'courses', label: 'Course Master (Training)', icon: BookOpen },
-    { id: 'traineeBatches', label: 'Trainee Batch Master', icon: Calendar },
-    { id: 'projects', label: 'Project Master', icon: FolderKanban },
-    { id: 'categories', label: 'Category Master', icon: Layers },
-    { id: 'phdEnrollment', label: 'PhD Enrollment Master', icon: School },
-    { id: 'locations', label: 'Locations Master', icon: MapPin }
+    { id: 'departments', label: 'Organizations', icon: Building2 },
+    { id: 'designations', label: 'Designation', icon: Award },
+    { id: 'mscStreams', label: 'Stream (MSc)', icon: GraduationCap },
+    { id: 'mscBatches', label: 'MSc Batch', icon: Calendar },
+    { id: 'courses', label: 'Course (Training)', icon: BookOpen },
+    { id: 'traineeBatches', label: 'Trainee Batch', icon: Calendar },
+    { id: 'projects', label: 'Project', icon: FolderKanban },
+    { id: 'categories', label: 'Category', icon: Layers },
+    { id: 'phdEnrollment', label: 'PhD Enrollment', icon: School },
+    { id: 'locations', label: 'Locations', icon: MapPin }
   ];
 
   return (
@@ -613,7 +568,7 @@ export const ProfileMasterSection: React.FC = () => {
       )}
 
       {/* Master Sub-Tab Selector Pills Container (Header & Subheading removed per user request) */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
+      <div className="bg-white border border-slate-200 rounded-2xl p-3 shadow-2xs">
         <div className="flex flex-wrap items-center gap-2">
           {tabPillsConfig.map((tab) => {
             const Icon = tab.icon;
@@ -657,26 +612,6 @@ export const ProfileMasterSection: React.FC = () => {
           </div>
 
           <div className="flex items-center space-x-2 shrink-0">
-            <button
-              type="button"
-              onClick={handleExportCSV}
-              className="bg-white hover:bg-slate-50 text-slate-700 font-bold px-3 py-2 rounded-xl text-xs border border-slate-200/90 shadow-2xs transition-all cursor-pointer flex items-center space-x-1.5"
-              title="Export as CSV"
-            >
-              <Download className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Export CSV</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleExportPDF}
-              className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-3 py-2 rounded-xl text-xs border border-slate-900 shadow-2xs transition-all cursor-pointer flex items-center space-x-1.5"
-              title="Export as PDF"
-            >
-              <FileText className="w-3.5 h-3.5 text-rose-400" />
-              <span>Export PDF</span>
-            </button>
-
             <button
               type="button"
               onClick={openAddModal}

@@ -70,3 +70,15 @@ export const organization_settings = mysqlTable('organization_settings', {
   copyrightText: varchar('copyright_text', { length: 500 }),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });
+
+
+// Shared organization units used by HRMS Profile Master.
+export const organization_units = mysqlTable('organization_units', {
+  id: varchar('id', { length: 36 }).primaryKey(),
+  name: varchar('name', { length: 255 }).notNull(),
+  code: varchar('code', { length: 80 }).notNull().unique(),
+  type: varchar('type', { length: 50 }).notNull().default('Department'),
+  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+});
