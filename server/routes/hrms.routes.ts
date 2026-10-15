@@ -354,7 +354,7 @@ router.post('/biometric-machines', isAdmin, async (req, res) => {
   } catch (error) {
     const dbError = getBiometricDatabaseError(error);
     if (dbError.code === 'ER_DUP_ENTRY' || dbError.logMessage.includes('Duplicate entry')) {
-      return res.status(409).json({ error: 'Device ID, Short Name or Serial Number already exists.' });
+      return res.status(409).json({ error: 'Device ID, Serial Number or IP Address already exists. Please use unique values.' });
     }
     console.error('Failed to create biometric machine:', { code: dbError.code, message: dbError.logMessage });
     return res.status(500).json({ error: dbError.userMessage });
@@ -369,8 +369,9 @@ router.put('/biometric-machines/:id', isAdmin, async (req, res) => {
     if (!existing) return res.status(404).json({ error: 'Biometric machine not found.' });
     const [shortNameOwner] = await db.select({ id: biometric_machines.id }).from(biometric_machines).where(eq(biometric_machines.shortName, normalized.value.shortName));
     const [serialOwner] = await db.select({ id: biometric_machines.id }).from(biometric_machines).where(eq(biometric_machines.serialNumber, normalized.value.serialNumber));
-    if ((shortNameOwner && shortNameOwner.id !== req.params.id) || (serialOwner && serialOwner.id !== req.params.id)) {
-      return res.status(409).json({ error: 'Short Name or Serial Number already belongs to another device.' });
+    const [ipOwner] = await db.select({ id: biometric_machines.id }).from(biometric_machines).where(eq(biometric_machines.ipAddress, normalized.value.ipAddress));
+    if ((shortNameOwner && shortNameOwner.id !== req.params.id) || (serialOwner && serialOwner.id !== req.params.id) || (ipOwner && ipOwner.id !== req.params.id)) {
+      return res.status(409).json({ error: 'Serial Number or IP Address already belongs to another device.' });
     }
     await db.update(biometric_machines).set({
       fullName: normalized.value.fullName,
@@ -385,7 +386,7 @@ router.put('/biometric-machines/:id', isAdmin, async (req, res) => {
     const dbError = getBiometricDatabaseError(error);
     console.error('Failed to update biometric machine:', { code: dbError.code, message: dbError.logMessage });
     if (dbError.code === 'ER_DUP_ENTRY' || dbError.logMessage.includes('Duplicate entry')) {
-      return res.status(409).json({ error: 'Short Name or Serial Number already belongs to another device.' });
+      return res.status(409).json({ error: 'Serial Number or IP Address already belongs to another device.' });
     }
     return res.status(500).json({ error: dbError.userMessage });
   }
