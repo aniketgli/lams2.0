@@ -214,12 +214,12 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const [databaseBatches, setDatabaseBatches] = useState<string[]>([]);
   useEffect(() => {
     let cancelled = false;
-    const loadAcademicMasters = async () => {
-      const requests = [
-        { endpoint: 'mscStreams', apply: setDatabaseStreams },
-        { endpoint: 'mscBatches', apply: setDatabaseBatches },
-      ] as const;
-      await Promise.all(requests.map(async ({ endpoint, apply }) => {
+    const requests = [
+      { endpoint: 'mscStreams', apply: setDatabaseStreams },
+      { endpoint: 'mscBatches', apply: setDatabaseBatches },
+    ] as const;
+    const loadAcademicMasters = () => {
+      void Promise.all(requests.map(async ({ endpoint, apply }) => {
         try {
           const response = await fetch(`/api/hrms/profile-masters/${endpoint}`, {
             credentials: 'same-origin',
@@ -240,8 +240,12 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
         }
       }));
     };
-    void loadAcademicMasters();
-    return () => { cancelled = true; };
+    loadAcademicMasters();
+    window.addEventListener('hrms:profile-masters-updated', loadAcademicMasters);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('hrms:profile-masters-updated', loadAcademicMasters);
+    };
   }, []);
 
   // Role Checks
