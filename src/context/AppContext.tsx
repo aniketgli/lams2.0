@@ -461,93 +461,63 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Version key to ensure updated rich seed data is refreshed
   const SEED_VERSION_KEY = 'la_hub_seed_v11_el_joining_test';
 
-  // Profile Masters State
-  const [departmentsMaster, setDepartmentsMaster] = useState<string[]>(() => {
-    const saved = localStorage.getItem('la_hub_departments_master');
-    return saved ? JSON.parse(saved) : DEFAULT_DEPARTMENTS_MASTER;
-  });
-
-  const [designationsMaster, setDesignationsMaster] = useState<string[]>(() => {
-    const saved = localStorage.getItem('la_hub_designations_master');
-    return saved ? JSON.parse(saved) : DEFAULT_DESIGNATIONS_MASTER;
-  });
-
-  const [categoriesMaster, setCategoriesMaster] = useState<string[]>(() => {
-    const saved = localStorage.getItem('la_hub_categories_master');
-    return saved ? JSON.parse(saved) : DEFAULT_CATEGORIES_MASTER;
-  });
-
-  const [projectsMaster, setProjectsMaster] = useState<string[]>(() => {
-    const saved = localStorage.getItem('la_hub_projects_master');
-    return saved ? JSON.parse(saved) : DEFAULT_PROJECTS_MASTER;
-  });
-
-  const [coursesMaster, setCoursesMaster] = useState<string[]>(() => {
-    const saved = localStorage.getItem('la_hub_courses_master');
-    return saved ? JSON.parse(saved) : DEFAULT_COURSES_MASTER;
-  });
-
-  const [batchesMaster, setBatchesMaster] = useState<string[]>(() => {
-    const saved = localStorage.getItem('la_hub_batches_master');
-    return saved ? JSON.parse(saved) : DEFAULT_BATCHES_MASTER;
-  });
-
-  const [phdEnrollmentMaster, setPhdEnrollmentMaster] = useState<string[]>(() => {
-    const saved = localStorage.getItem('la_hub_phd_enrollment_master');
-    return saved ? JSON.parse(saved) : DEFAULT_PHD_ENROLLMENT_MASTER;
-  });
-
+  // Profile dropdowns are hydrated from MySQL; localStorage is not an authority for master data.
+  const [departmentsMaster, setDepartmentsMaster] = useState<string[]>([]);
+  const [designationsMaster, setDesignationsMaster] = useState<string[]>([]);
+  const [categoriesMaster, setCategoriesMaster] = useState<string[]>([]);
+  const [projectsMaster, setProjectsMaster] = useState<string[]>([]);
+  const [coursesMaster, setCoursesMaster] = useState<string[]>([]);
+  const [batchesMaster, setBatchesMaster] = useState<string[]>([]);
+  const [phdEnrollmentMaster, setPhdEnrollmentMaster] = useState<string[]>([]);
   const [locationsMaster, setLocationsMaster] = useState<string[]>(() => {
     const saved = localStorage.getItem('la_hub_locations_master');
     return saved ? JSON.parse(saved) : DEFAULT_LOCATIONS_MASTER;
   });
 
-  // Load Profile Master dropdown options from the authenticated server/database.
   useEffect(() => {
+    if (!isAuthenticated) return;
     let cancelled = false;
-    const loadMaster = async (key: string): Promise<string[]> => {
-      const response = await fetch(`/api/hrms/profile-masters/${key}`, { credentials: 'same-origin', cache: 'no-store' });
-      if (!response.ok) throw new Error(`Could not load ${key} master.`);
-      const rows = await response.json();
-      return Array.isArray(rows) ? rows.filter((row: any) => String(row.status || 'ACTIVE').toUpperCase() === 'ACTIVE').map((row: any) => String(row.name || '')).filter(Boolean) : [];
-    };
-    Promise.all([
-      loadMaster('organizations'), loadMaster('designations'), loadMaster('categories'), loadMaster('projects'),
-      loadMaster('courses'), loadMaster('mscBatches'), loadMaster('traineeBatches'), loadMaster('phdEnrollment')
-    ]).then(([departments, designations, categories, projects, courses, batches, traineeBatches, phd]) => {
-      if (cancelled) return;
-      setDepartmentsMaster(departments);
-      setDesignationsMaster(designations);
-      setCategoriesMaster(categories);
-      setProjectsMaster(projects);
-      setCoursesMaster(courses);
-      setBatchesMaster([...batches, ...traineeBatches].filter((value, index, array) => array.indexOf(value) === index));
-      setPhdEnrollmentMaster(phd);
-    }).catch((error) => console.error('Profile Master dropdown loading failed:', error));
-    return () => { cancelled = true; };
-  }, []);
+    const masterEndpoints = [
+      { endpoint: 'organizations', setter: setDepartmentsMaster },
+      { endpoint: 'designations', setter: setDesignationsMaster },
+      { endpoint: 'categories', setter: setCategoriesMaster },
+      { endpoint: 'projects', setter: setProjectsMaster },
+      { endpoint: 'courses', setter: setCoursesMaster },
+      { endpoint: 'mscBatches', setter: setBatchesMaster },
+      { endpoint: 'phdEnrollment', setter: setPhdEnrollmentMaster },
+    ] as const;
 
-  useEffect(() => {
-    localStorage.setItem('la_hub_departments_master', JSON.stringify(departmentsMaster));
-  }, [departmentsMaster]);
-  useEffect(() => {
-    localStorage.setItem('la_hub_designations_master', JSON.stringify(designationsMaster));
-  }, [designationsMaster]);
-  useEffect(() => {
-    localStorage.setItem('la_hub_categories_master', JSON.stringify(categoriesMaster));
-  }, [categoriesMaster]);
-  useEffect(() => {
-    localStorage.setItem('la_hub_projects_master', JSON.stringify(projectsMaster));
-  }, [projectsMaster]);
-  useEffect(() => {
-    localStorage.setItem('la_hub_courses_master', JSON.stringify(coursesMaster));
-  }, [coursesMaster]);
-  useEffect(() => {
-    localStorage.setItem('la_hub_batches_master', JSON.stringify(batchesMaster));
-  }, [batchesMaster]);
-  useEffect(() => {
-    localStorage.setItem('la_hub_phd_enrollment_master', JSON.stringify(phdEnrollmentMaster));
-  }, [phdEnrollmentMaster]);
+    const loadProfileMasters = () => {
+      void Promise.all(masterEndpoints.map(async ({ endpoint, setter }) => {
+        try {
+          const response = await fetch(`/api/hrms/profile-masters/${endpoint}`, {
+            credentials: 'same-origin',
+            headers: { Accept: 'application/json' },
+            cache: 'no-store',
+          });
+          if (!response.ok) throw new Error(`Master request failed (${response.status})`);
+          const rows = await response.json();
+          if (!cancelled && Array.isArray(rows)) {
+            setter(rows
+              .filter((row: any) => String(row.status || 'Active').toLowerCase() !== 'inactive')
+              .map((row: any) => String(row.name || '').trim())
+              .filter(Boolean));
+          }
+        } catch (error) {
+          console.error(`Unable to load ${endpoint} master from MySQL`, error);
+          if (!cancelled) setter([]);
+        }
+      }));
+    };
+
+    loadProfileMasters();
+    window.addEventListener('hrms:profile-masters-updated', loadProfileMasters);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('hrms:profile-masters-updated', loadProfileMasters);
+    };
+  }, [isAuthenticated]);
+
   useEffect(() => {
     localStorage.setItem('la_hub_locations_master', JSON.stringify(locationsMaster));
   }, [locationsMaster]);
