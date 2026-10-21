@@ -69,25 +69,12 @@ export const ProfileMasterSection: React.FC = () => {
     return isPermOrDep && isActive;
   });
 
-  const defaultSeedPIs = [
-    'Dr. S. A. Hussain (Scientist-G, Permanent)',
-    'Dr. Ruchi Badola (Scientist-G, Permanent)',
-    'Dr. Bilal Habib (Scientist-E, Permanent)',
-    'Dr. Y. V. Jhala (Scientist-G, Permanent)',
-    'Dr. K. Sankar (Scientist-G, Deputation)',
-    'Dr. G. S. Rawat (Scientist-G, Permanent)',
-    'Dr. Dhananjai Mohan (IFS, Deputation)',
-    'Dr. B. S. Adhikari (Scientist-F, Permanent)'
-  ];
-
-  const piDropdownOptions = Array.from(
-    new Set([
-      ...activePermAndDepUsers.map(
-        (u) => `${u.name} (${u.designation || 'Scientist'}, ${u.employmentType || 'Permanent'})`
-      ),
-      ...defaultSeedPIs
-    ])
-  );
+  // PI choices come only from active employee records in the database.
+  const piDropdownOptions = Array.from(new Set(
+    activePermAndDepUsers.map(
+      (u) => `${u.name} (${u.designation || 'Scientist'}, ${u.employmentType || 'Permanent'})`
+    )
+  ));
 
   // Form Fields State
   const [formData, setFormData] = useState<{
@@ -111,7 +98,7 @@ export const ProfileMasterSection: React.FC = () => {
     parentCourse: 'Certificate',
     validity: '2026–2028',
     category: 'Conservation',
-    pi: piDropdownOptions[0] || 'Dr. Y. V. Jhala (Scientist-G, Permanent)',
+    pi: piDropdownOptions[0] || '',
     group: 'Cadre A',
     status: 'Active'
   });
@@ -321,6 +308,7 @@ export const ProfileMasterSection: React.FC = () => {
         const row = payload.organization || payload;
         const saved: MasterRecord = { id: String(row.id), name: row.name, code: row.code, type: row.type || 'Department', status: String(row.status).toUpperCase() === 'INACTIVE' ? 'Inactive' : 'Active' };
         setMasterData((prev) => ({ ...prev, departments: editingRecord ? prev.departments.map((item) => item.id === editingRecord.id ? saved : item) : [...prev.departments, saved] }));
+        window.dispatchEvent(new Event('hrms:profile-masters-updated'));
         setIsModalOpen(false);
         showToast(editingRecord ? 'Organization updated successfully.' : 'Organization added successfully.');
       } catch (error) { setFormError(error instanceof Error ? error.message : 'Could not save organization.'); }
@@ -335,6 +323,7 @@ export const ProfileMasterSection: React.FC = () => {
       if (!response.ok) throw new Error(payload.error || 'Could not save master record.');
       const saved: MasterRecord = { id: String(payload.id), name: payload.name, code: payload.code, status: String(payload.status).toUpperCase() === 'INACTIVE' ? 'Inactive' : 'Active', type: payload.type || '', empType: payload.empType || '', parentStream: payload.parentStream || '', parentCourse: payload.parentCourse || '', validity: payload.validity || '', totalBatches: Number(payload.totalBatches || 0), category: payload.category || '', pi: payload.pi || '', group: payload.group || '' };
       setMasterData((prev) => ({ ...prev, [activeTab]: editingRecord ? prev[activeTab].map((item) => item.id === editingRecord.id ? saved : item) : [...prev[activeTab], saved] }));
+      window.dispatchEvent(new Event('hrms:profile-masters-updated'));
       setIsModalOpen(false);
       showToast(editingRecord ? 'Master record updated successfully.' : 'Master record added successfully.');
     } catch (error) { setFormError(error instanceof Error ? error.message : 'Could not save master record.'); }
@@ -355,6 +344,7 @@ export const ProfileMasterSection: React.FC = () => {
       if (!response.ok) throw new Error(payload.error || 'Could not update master status.');
       const status: MasterRecord['status'] = String(payload.status).toUpperCase() === 'INACTIVE' ? 'Inactive' : 'Active';
       setMasterData((prev) => ({ ...prev, [activeTab]: prev[activeTab].map((item) => item.id === record.id ? { ...item, status } : item) }));
+      window.dispatchEvent(new Event('hrms:profile-masters-updated'));
       showToast(record.name + ' marked ' + status.toLowerCase() + '.');
     } catch (error) { showToast(error instanceof Error ? error.message : 'Could not update master status.'); }
     finally { setStatusUpdatingId(null); }
@@ -367,6 +357,7 @@ export const ProfileMasterSection: React.FC = () => {
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || 'Could not delete master record.');
       setMasterData((prev) => ({ ...prev, [activeTab]: prev[activeTab].filter((item) => item.id !== record.id) }));
+      window.dispatchEvent(new Event('hrms:profile-masters-updated'));
       showToast('Record "' + record.name + '" deleted successfully.');
       setDeletingRecord(null);
     } catch (error) { showToast(error instanceof Error ? error.message : 'Could not delete master record.'); }
