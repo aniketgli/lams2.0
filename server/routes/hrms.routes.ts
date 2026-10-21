@@ -291,6 +291,39 @@ router.delete('/employees/:userId', isAdmin, async (req, res) => {
   }
 });
 
+
+// Persist per-module role assignments in the employee profile JSON. Admin-only.
+router.put('/employees/:userId/module-roles', isAdmin, async (req, res) => {
+  const userId = String(req.params.userId || '');
+  const moduleRoles = req.body?.moduleRoles;
+  if (!moduleRoles || typeof moduleRoles !== 'object' || Array.isArray(moduleRoles)) {
+    return res.status(400).json({ error: 'A valid moduleRoles object is required.' });
+  }
+  const allowedModuleIds = new Set(['hrms', 'stock', 'finance', 'facilities', 'recruitment']);
+  const allowedModuleRoles = new Set(['administrator', 'manager', 'user', 'none', 'read', 'editor']);
+  for (const [moduleId, roleValue] of Object.entries(moduleRoles as Record<string, unknown>)) {
+    if (!allowedModuleIds.has(moduleId) || !Array.isArray(roleValue) ||
+        roleValue.some((role) => typeof role !== 'string' || !allowedModuleRoles.has(role))) {
+      return res.status(400).json({ error: 'Module role assignment contains an unsupported module or role.' });
+    }
+  }
+  try {
+    const [row] = await db.select({ userId: employee_profiles.userId, profileData: employee_profiles.profileData })
+      .from(employee_profiles).where(eq(employee_profiles.userId, userId));
+    if (!row) return res.status(404).json({ error: 'Employee profile not found.' });
+    let saved: Record<string, any> = {};
+    try { saved = row.profileData ? JSON.parse(row.profileData) : {}; } catch { saved = {}; }
+    saved.moduleRoles = moduleRoles;
+    await db.update(employee_profiles).set({ profileData: JSON.stringify(saved) })
+      .where(eq(employee_profiles.userId, userId));
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ success: true, moduleRoles });
+  } catch (error) {
+    console.error('Failed to persist module roles:', error instanceof Error ? error.message : error);
+    return res.status(500).json({ error: 'Failed to save module roles.' });
+  }
+});
+
 // Shift Master API: database is the source of truth.
 function normalizeShift(body: any) {
   const value = body && typeof body === 'object' ? body : {};
