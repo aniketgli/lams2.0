@@ -976,6 +976,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     }
 
     const missingFields: string[] = [];
+    if (!newUserForm.suffix?.trim()) missingFields.push('Suffix');
     if (!newUserForm.name?.trim()) missingFields.push('Full Name');
     if (!newUserForm.role) missingFields.push('Account Role');
     if (!newUserForm.gender?.trim()) missingFields.push('Gender');
@@ -4095,24 +4096,23 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                 {/* Unified Form Grid without Subheadings or Numbering */}
                 <div className="p-3.5 sm:p-4 bg-slate-50/70 border border-slate-200/90 rounded-2xl space-y-3.5">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                    {/* Full Name */}
+                    {/* Suffix */}
                     <div>
-                      <label className="block text-slate-700 font-bold mb-1 text-xs">Name Suffix</label>
+                      <label className="block text-slate-700 font-bold mb-1 text-xs">
+                        Suffix <span className="text-blue-600 font-bold ml-0.5">*</span>
+                      </label>
                       <AppSelect
                         value={newUserForm.suffix}
-                        onChange={(val) => setNewUserForm({ ...newUserForm, suffix: val as 'Mr.' | 'Mrs.' | 'Miss' | 'Dr.' })}
-                        options={[{ label: 'Mr.', value: 'Mr.' }, { label: 'Mrs.', value: 'Mrs.' }, { label: 'Miss', value: 'Miss' }, { label: 'Dr.', value: 'Dr.' }]}
-                      />
-                      <label className="block text-slate-700 font-bold mb-1 text-xs mt-3">
-                        Full Name <span className="text-blue-600 font-bold ml-0.5">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Enter Full Name"
-                        value={newUserForm.name}
-                        onChange={(e) => setNewUserForm({ ...newUserForm, name: e.target.value })}
-                        className="w-full px-3 py-2 border border-slate-200/90 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 text-xs bg-white text-slate-900 font-medium shadow-2xs transition-all"
+                        placeholder="Select Suffix"
+                        onChange={(val) => setNewUserForm({ ...newUserForm, suffix: val as 'Mr.' | 'Mrs.' | 'Miss' | 'Dr.' | '' })}
+                        options={[
+                          { label: 'Select Suffix', value: '' },
+                          { label: 'Mr.', value: 'Mr.' },
+                          { label: 'Mrs.', value: 'Mrs.' },
+                          { label: 'Miss', value: 'Miss' },
+                          { label: 'Dr.', value: 'Dr.' }
+                        ]}
+                        className="w-full"
                       />
                     </div>
 
@@ -4132,6 +4132,21 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                           { label: 'Other', value: 'Other' }
                         ]}
                         className="w-full"
+                      />
+                    </div>
+
+                    {/* Full Name */}
+                    <div>
+                      <label className="block text-slate-700 font-bold mb-1 text-xs">
+                        Full Name <span className="text-blue-600 font-bold ml-0.5">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Enter Full Name"
+                        value={newUserForm.name}
+                        onChange={(e) => setNewUserForm({ ...newUserForm, name: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-200/90 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 text-xs bg-white text-slate-900 font-medium shadow-2xs transition-all"
                       />
                     </div>
 
@@ -4199,10 +4214,10 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                         Employee Type <span className="text-blue-600 font-bold ml-0.5">*</span>
                       </label>
                       <AppSelect
-                        value={newUserForm.employmentType || 'permanent'}
+                        value={newUserForm.employmentType}
                         placeholder="Select Employee Type"
                         onChange={(val) => {
-                          const newCategory = (val || 'permanent') as EmploymentType;
+                          const newCategory = (val || '') as EmploymentType | '';
                           setNewUserForm({
                             ...newUserForm,
                             employmentType: newCategory,
