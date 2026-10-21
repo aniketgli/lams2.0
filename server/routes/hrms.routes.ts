@@ -293,19 +293,14 @@ router.delete('/employees/:userId', isAdmin, async (req, res) => {
 
 
 // Persist per-module role assignments in the employee profile JSON. Admin-only.
+// Persist per-module role assignments in profile_data; authorization remains server-side.
 router.put('/employees/:userId/module-roles', isAdmin, async (req, res) => {
   const userId = String(req.params.userId || '');
   const moduleRoles = req.body?.moduleRoles;
-  if (!moduleRoles || typeof moduleRoles !== 'object' || Array.isArray(moduleRoles)) {
+  if (!moduleRoles || typeof moduleRoles !== 'object' || Array.isArray(moduleRoles) ||
+      JSON.stringify(moduleRoles).length > 20000 ||
+      Object.keys(moduleRoles).some((key) => !/^[a-zA-Z0-9_-]{1,80}$/.test(key))) {
     return res.status(400).json({ error: 'A valid moduleRoles object is required.' });
-  }
-  const allowedModuleIds = new Set(['hrms', 'stock', 'finance', 'facilities', 'recruitment']);
-  const allowedModuleRoles = new Set(['administrator', 'manager', 'user', 'none', 'read', 'editor']);
-  for (const [moduleId, roleValue] of Object.entries(moduleRoles as Record<string, unknown>)) {
-    if (!allowedModuleIds.has(moduleId) || !Array.isArray(roleValue) ||
-        roleValue.some((role) => typeof role !== 'string' || !allowedModuleRoles.has(role))) {
-      return res.status(400).json({ error: 'Module role assignment contains an unsupported module or role.' });
-    }
   }
   try {
     const [row] = await db.select({ userId: employee_profiles.userId, profileData: employee_profiles.profileData })
