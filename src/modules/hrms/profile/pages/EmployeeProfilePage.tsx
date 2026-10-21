@@ -133,25 +133,6 @@ export const PROJECTS_MASTER = [
   'Bio-Resource Conservation & Community Livelihoods'
 ];
 
-export const STREAMS_MASTER = [
-  'Wildlife Sciences',
-  'Freshwater Ecology',
-  'Heritage Conservation & Management',
-  'Biodiversity Conservation',
-  'Landscape Level Planning & Management',
-  'Environmental Science'
-];
-
-export const BATCHES_MASTER = [
-  '2021-2023',
-  '2022-2024',
-  '2023-2025',
-  '2024-2026',
-  '2025-2027',
-  '2026-2028',
-  '2027-2029'
-];
-
 export const calculateStudentValidUntil = (joiningDateStr?: string): string => {
   if (!joiningDateStr) return '';
   const date = new Date(joiningDateStr);
@@ -227,6 +208,41 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     phdEnrollmentMaster,
     locationsMaster
   } = useApp();
+
+  // Stream and batch options are fetched from their dedicated MySQL masters.
+  const [databaseStreams, setDatabaseStreams] = useState<string[]>([]);
+  const [databaseBatches, setDatabaseBatches] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    const loadAcademicMasters = async () => {
+      const requests = [
+        { endpoint: 'mscStreams', apply: setDatabaseStreams },
+        { endpoint: 'mscBatches', apply: setDatabaseBatches },
+      ] as const;
+      await Promise.all(requests.map(async ({ endpoint, apply }) => {
+        try {
+          const response = await fetch(`/api/hrms/profile-masters/${endpoint}`, {
+            credentials: 'same-origin',
+            headers: { Accept: 'application/json' },
+            cache: 'no-store',
+          });
+          if (!response.ok) throw new Error(`Master request failed (${response.status})`);
+          const rows = await response.json();
+          if (!cancelled && Array.isArray(rows)) {
+            apply(rows
+              .filter((row: any) => String(row.status || 'Active').toLowerCase() !== 'inactive')
+              .map((row: any) => String(row.name || '').trim())
+              .filter(Boolean));
+          }
+        } catch (error) {
+          console.error(`Unable to load ${endpoint} master from MySQL`, error);
+          if (!cancelled) apply([]);
+        }
+      }));
+    };
+    void loadAcademicMasters();
+    return () => { cancelled = true; };
+  }, []);
 
   // Role Checks
   const isAdmin = currentUser.role === 'administrator';
@@ -3683,14 +3699,14 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                       <div>
                         <label className="block text-slate-600 font-bold mb-1">Stream *</label>
                         <select
-                          value={editingUser.courseProgram || editingUser.employeeCategory || STREAMS_MASTER[0]}
+                          value={editingUser.courseProgram || editingUser.employeeCategory || databaseStreams[0] || ''}
                           onChange={(e) => setEditingUser({ ...editingUser, courseProgram: e.target.value, employeeCategory: e.target.value })}
                           className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
                         >
-                          {STREAMS_MASTER.map((stream) => (
+                          {databaseStreams.map((stream) => (
                             <option key={stream} value={stream}>{stream}</option>
                           ))}
-                          {editingUser.courseProgram && !STREAMS_MASTER.includes(editingUser.courseProgram) && (
+                          {editingUser.courseProgram && !databaseStreams.includes(editingUser.courseProgram) && (
                             <option value={editingUser.courseProgram}>{editingUser.courseProgram}</option>
                           )}
                         </select>
@@ -3763,14 +3779,14 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                       <div>
                         <label className="block text-slate-600 font-bold mb-1">Batch *</label>
                         <select
-                          value={editingUser.courseBatch || BATCHES_MASTER[2]}
+                          value={editingUser.courseBatch || databaseBatches[0] || ''}
                           onChange={(e) => setEditingUser({ ...editingUser, courseBatch: e.target.value })}
                           className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
                         >
-                          {BATCHES_MASTER.map((batch) => (
+                          {databaseBatches.map((batch) => (
                             <option key={batch} value={batch}>{batch}</option>
                           ))}
-                          {editingUser.courseBatch && !BATCHES_MASTER.includes(editingUser.courseBatch) && (
+                          {editingUser.courseBatch && !databaseBatches.includes(editingUser.courseBatch) && (
                             <option value={editingUser.courseBatch}>{editingUser.courseBatch}</option>
                           )}
                         </select>
