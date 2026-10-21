@@ -469,6 +469,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [coursesMaster, setCoursesMaster] = useState<string[]>([]);
   const [batchesMaster, setBatchesMaster] = useState<string[]>([]);
   const [phdEnrollmentMaster, setPhdEnrollmentMaster] = useState<string[]>([]);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [locationsMaster, setLocationsMaster] = useState<string[]>(() => {
     const saved = localStorage.getItem('la_hub_locations_master');
     return saved ? JSON.parse(saved) : DEFAULT_LOCATIONS_MASTER;
@@ -611,7 +612,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [users, setUsers] = useState<User[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string>('');
 
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [sessionUser, setSessionUser] = useState<Partial<User> | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
