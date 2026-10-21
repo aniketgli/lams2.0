@@ -487,28 +487,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       { endpoint: 'phdEnrollment', setter: setPhdEnrollmentMaster },
     ] as const;
 
-    void Promise.all(masterEndpoints.map(async ({ endpoint, setter }) => {
-      try {
-        const response = await fetch(`/api/hrms/profile-masters/${endpoint}`, {
-          credentials: 'same-origin',
-          headers: { Accept: 'application/json' },
-          cache: 'no-store',
-        });
-        if (!response.ok) throw new Error(`Master request failed (${response.status})`);
-        const rows = await response.json();
-        if (!cancelled && Array.isArray(rows)) {
-          setter(rows
-            .filter((row: any) => String(row.status || 'Active').toLowerCase() !== 'inactive')
-            .map((row: any) => String(row.name || '').trim())
-            .filter(Boolean));
+    const loadProfileMasters = () => {
+      void Promise.all(masterEndpoints.map(async ({ endpoint, setter }) => {
+        try {
+          const response = await fetch(`/api/hrms/profile-masters/${endpoint}`, {
+            credentials: 'same-origin',
+            headers: { Accept: 'application/json' },
+            cache: 'no-store',
+          });
+          if (!response.ok) throw new Error(`Master request failed (${response.status})`);
+          const rows = await response.json();
+          if (!cancelled && Array.isArray(rows)) {
+            setter(rows
+              .filter((row: any) => String(row.status || 'Active').toLowerCase() !== 'inactive')
+              .map((row: any) => String(row.name || '').trim())
+              .filter(Boolean));
+          }
+        } catch (error) {
+          console.error(`Unable to load ${endpoint} master from MySQL`, error);
+          if (!cancelled) setter([]);
         }
-      } catch (error) {
-        console.error(`Unable to load ${endpoint} master from MySQL`, error);
-        if (!cancelled) setter([]);
-      }
-    }));
+      }));
+    };
 
-    return () => { cancelled = true; };
+    loadProfileMasters();
+    window.addEventListener('hrms:profile-masters-updated', loadProfileMasters);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('hrms:profile-masters-updated', loadProfileMasters);
+    };
   }, [isAuthenticated]);
 
   useEffect(() => {
