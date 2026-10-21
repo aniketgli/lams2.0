@@ -636,37 +636,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true, message: 'Master reset to defaults.' };
   };
 
-  // Load initial states from localStorage or use updated rich seed data
-  const [users, setUsers] = useState<User[]>(() => {
-    const isLatestSeed = localStorage.getItem(SEED_VERSION_KEY);
-    if (!isLatestSeed) {
-      localStorage.setItem(SEED_VERSION_KEY, 'true');
-      return INITIAL_USERS;
-    }
-    const saved = localStorage.getItem('la_hub_users');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          if (!parsed.some((u: any) => u.id === 'usr-audit')) {
-            const auditUser = INITIAL_USERS.find((u) => u.id === 'usr-audit');
-            if (auditUser) {
-              parsed.push(auditUser);
-              localStorage.setItem('la_hub_users', JSON.stringify(parsed));
-            }
-          }
-          return parsed;
-        }
-      } catch {
-        // Fall back to INITIAL_USERS
-      }
-    }
-    return INITIAL_USERS;
-  });
-
-  const [currentUserId, setCurrentUserId] = useState<string>(() => {
-    return localStorage.getItem('la_hub_current_user_id') || 'usr-1'; // Default Dr. Rajesh Sharma (Admin)
-  });
+  // Employee identities must come from the authenticated server/database only.
+  // Never hydrate the directory from browser-local seed/demo users.
+  const [users, setUsers] = useState<User[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string>('');
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [sessionUser, setSessionUser] = useState<Partial<User> | null>(null);
@@ -1442,10 +1415,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // The server session is the identity source of truth. Keep the signed-in user's
   // name and role visible immediately, even while the employee directory loads.
-  const localCurrentUser = users.find((u) => u.id === currentUserId) || users[0];
-  const currentUser = sessionUser
-    ? ({ ...(localCurrentUser || {}), ...sessionUser, id: currentUserId } as User)
-    : localCurrentUser;
+  const localCurrentUser = users.find((u) => u.id === currentUserId);
+  const currentUser = (sessionUser
+    ? ({ ...(localCurrentUser || {}), ...sessionUser, id: currentUserId || sessionUser.id } as User)
+    : localCurrentUser) as User;
 
 
 
