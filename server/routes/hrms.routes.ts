@@ -291,6 +291,34 @@ router.delete('/employees/:userId', isAdmin, async (req, res) => {
   }
 });
 
+
+// Persist per-module role assignments in the employee profile JSON. Admin-only.
+// Persist per-module role assignments in profile_data; authorization remains server-side.
+router.put('/employees/:userId/module-roles', isAdmin, async (req, res) => {
+  const userId = String(req.params.userId || '');
+  const moduleRoles = req.body?.moduleRoles;
+  if (!moduleRoles || typeof moduleRoles !== 'object' || Array.isArray(moduleRoles) ||
+      JSON.stringify(moduleRoles).length > 20000 ||
+      Object.keys(moduleRoles).some((key) => !/^[a-zA-Z0-9_-]{1,80}$/.test(key))) {
+    return res.status(400).json({ error: 'A valid moduleRoles object is required.' });
+  }
+  try {
+    const [row] = await db.select({ userId: employee_profiles.userId, profileData: employee_profiles.profileData })
+      .from(employee_profiles).where(eq(employee_profiles.userId, userId));
+    if (!row) return res.status(404).json({ error: 'Employee profile not found.' });
+    let saved: Record<string, any> = {};
+    try { saved = row.profileData ? JSON.parse(row.profileData) : {}; } catch { saved = {}; }
+    saved.moduleRoles = moduleRoles;
+    await db.update(employee_profiles).set({ profileData: JSON.stringify(saved) })
+      .where(eq(employee_profiles.userId, userId));
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ success: true, moduleRoles });
+  } catch (error) {
+    console.error('Failed to persist module roles:', error instanceof Error ? error.message : error);
+    return res.status(500).json({ error: 'Failed to save module roles.' });
+  }
+});
+
 // Shift Master API: database is the source of truth.
 function normalizeShift(body: any) {
   const value = body && typeof body === 'object' ? body : {};

@@ -4162,30 +4162,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // --- MULTI-MODULE ROLES ACTIONS ---
   const updateUserModuleRoles = (userId: string, moduleRoles: UserModuleRoles) => {
-    setUsers((prev) =>
-      prev.map((u) => {
-        if (u.id === userId) {
-          return {
-            ...u,
-            moduleRoles
-          };
-        }
-        return u;
-      })
-    );
     const target = users.find((u) => u.id === userId);
-    sendSlackNotification(
-      slackConfig,
-      {
-        channel: '#leave-and-attendance-logs',
-        sender: currentUser.name,
-        title: `🛡️ Multi-Module Roles Reconfigured`,
-        message: `Admin *${currentUser.name}* updated cross-module permissions for *${target?.name || userId}* across 5 Institutional Modules.`,
-        type: 'role_change'
-      },
-      addSlackLog
-    );
-    return { success: true, message: 'Updated cross-module roles successfully.' };
+    if (!target) return { success: false, message: 'Employee account not found.' };
+    const previousRoles = target.moduleRoles;
+    setUsers((prev) => prev.map((u) => u.id === userId ? { ...u, moduleRoles } : u));
+    // Do not report success until the server confirms the database write.
+    void fetch(`/api/hrms/employees/${encodeURIComponent(userId)}/module-roles`, {
+      method: 'PUT',
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ moduleRoles })
+    }).then(async (response) => {
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || 'Could not save module roles to the database.');
+      sendSlackNotification(
+        slackConfig,
+        {
+          channel: '#leave-and-attendance-logs',
+          sender: currentUser.name,
+          title: `🛡️ Multi-Module Roles Reconfigured`,
+          message: `Admin *${currentUser.name}* updated cross-module permissions for *${target.name}*.`,
+          type: 'role_change'
+        },
+        addSlackLog
+      );
+    }).catch((error) => {
+      setUsers((prev) => prev.map((u) => u.id === userId ? { ...u, moduleRoles: previousRoles } : u));
+      window.alert(error instanceof Error ? error.message : 'Could not save module roles.');
+    });
+    return { success: true, message: 'Role changes submitted; saving to database.' };
   };
 
   const toggleUserModuleRole = (userId: string, moduleId: EnterpriseModuleId, roleId: string) => {
