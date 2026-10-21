@@ -69,25 +69,12 @@ export const ProfileMasterSection: React.FC = () => {
     return isPermOrDep && isActive;
   });
 
-  const defaultSeedPIs = [
-    'Dr. S. A. Hussain (Scientist-G, Permanent)',
-    'Dr. Ruchi Badola (Scientist-G, Permanent)',
-    'Dr. Bilal Habib (Scientist-E, Permanent)',
-    'Dr. Y. V. Jhala (Scientist-G, Permanent)',
-    'Dr. K. Sankar (Scientist-G, Deputation)',
-    'Dr. G. S. Rawat (Scientist-G, Permanent)',
-    'Dr. Dhananjai Mohan (IFS, Deputation)',
-    'Dr. B. S. Adhikari (Scientist-F, Permanent)'
-  ];
-
-  const piDropdownOptions = Array.from(
-    new Set([
-      ...activePermAndDepUsers.map(
-        (u) => `${u.name} (${u.designation || 'Scientist'}, ${u.employmentType || 'Permanent'})`
-      ),
-      ...defaultSeedPIs
-    ])
-  );
+  // PI choices come only from active employee records in the database.
+  const piDropdownOptions = Array.from(new Set(
+    activePermAndDepUsers.map(
+      (u) => `${u.name} (${u.designation || 'Scientist'}, ${u.employmentType || 'Permanent'})`
+    )
+  ));
 
   // Form Fields State
   const [formData, setFormData] = useState<{
@@ -111,7 +98,7 @@ export const ProfileMasterSection: React.FC = () => {
     parentCourse: 'Certificate',
     validity: '2026–2028',
     category: 'Conservation',
-    pi: piDropdownOptions[0] || 'Dr. Y. V. Jhala (Scientist-G, Permanent)',
+    pi: piDropdownOptions[0] || '',
     group: 'Cadre A',
     status: 'Active'
   });
