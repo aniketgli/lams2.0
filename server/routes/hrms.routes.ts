@@ -43,8 +43,9 @@ router.get('/employees', isAuthenticated, async (_req, res) => {
           if (employee.id === sessionUserId) return true;
           let data: any = {};
           try { data = typeof employee.profileData === 'string' ? JSON.parse(employee.profileData) : employee.profileData || {}; } catch { data = {}; }
-          return data.reportingManagerId === sessionUserId || data.reviewingManagerId === sessionUserId ||
-            (sessionRole === 'reviewing_manager' && current && employee.department === current.department);
+          // Managers can only see employees explicitly assigned to them.
+          // Department-wide visibility is intentionally not inferred from a role.
+          return data.reportingManagerId === sessionUserId || data.reviewingManagerId === sessionUserId;
         });
       } else {
         visibleEmployees = current ? [current] : [];
@@ -90,8 +91,9 @@ router.get('/employees/:userId', isAuthenticated, async (req, res) => {
       let data: any = {};
       try { data = typeof employee.profileData === 'string' ? JSON.parse(employee.profileData) : employee.profileData || {}; } catch { data = {}; }
       const isManager = ['reporting_manager', 'reviewing_manager', 'manager'].includes(String(manager?.role || sessionRole).toLowerCase());
-      const managesEmployee = isManager && (data.reportingManagerId === sessionUserId || data.reviewingManagerId === sessionUserId ||
-        (String(manager?.role || sessionRole).toLowerCase() === 'reviewing_manager' && manager?.department && manager.department === employee.department));
+      // Enforce explicit manager assignment on the server; department matching alone
+      // must not grant access to another employee's personal profile.
+      const managesEmployee = isManager && (data.reportingManagerId === sessionUserId || data.reviewingManagerId === sessionUserId);
       if (!managesEmployee) return res.status(403).json({ error: 'You are not allowed to view this employee profile.' });
     }
     res.setHeader('Cache-Control', 'no-store');

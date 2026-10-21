@@ -310,9 +310,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       return users.filter((u) => {
         if (u.id === currentUser.id) return true;
         if (u.reportingManagerId === currentUser.id) return true;
-        if (u.reportingManagerName && u.reportingManagerName === currentUser.name) return true;
-        if (currentUser.role === 'reviewing_manager' && u.department === currentUser.department) return true;
-        if ((u as any).hodUserId === currentUser.id) return true;
+        if (u.reviewingManagerId === currentUser.id) return true;
         return false;
       });
     }
