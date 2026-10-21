@@ -862,12 +862,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.removeItem('la_hub_leave_policies_v3');
   };
 
-  const [shifts, setShifts] = useState<Shift[]>(() => {
-    const isLatestSeed = localStorage.getItem(SEED_VERSION_KEY);
-    if (!isLatestSeed) return INITIAL_SHIFTS;
-    const saved = localStorage.getItem('la_hub_shifts_v2');
-    try { return saved ? JSON.parse(saved) : INITIAL_SHIFTS; } catch { return INITIAL_SHIFTS; }
-  });
+  // Shift definitions come from MySQL only; no seed/localStorage fallback is used.
+  const [shifts, setShifts] = useState<Shift[]>([]);
 
   // MySQL is authoritative for shift definitions once the user is authenticated.
   // Local storage remains a cache only, so an API failure never silently overwrites server data.
