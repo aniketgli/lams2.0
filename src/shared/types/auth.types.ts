@@ -119,7 +119,7 @@ export const MODULE_ROLE_DEFINITIONS: Record<EnterpriseModuleId, ModuleRoleDef[]
       level: 'staff'
     },
     {
-      id: 'hrms_auditor',
+      id: 'auditor',
       name: 'Auditor',
       shortName: 'Auditor',
       description: 'Read-only audit access to HRMS records and reports.',
@@ -185,6 +185,17 @@ export const MODULE_ROLE_DEFINITIONS: Record<EnterpriseModuleId, ModuleRoleDef[]
       badgeBg: 'bg-slate-100 border-slate-300',
       badgeText: 'text-slate-800',
       level: 'staff'
+    },
+    {
+      id: 'auditor',
+      name: 'Auditor',
+      shortName: 'Auditor',
+      description: 'Read-only audit access to PMS records and reports.',
+      moduleId: 'pms',
+      color: 'slate',
+      badgeBg: 'bg-slate-100 border-slate-300',
+      badgeText: 'text-slate-800',
+      level: 'staff'
     }
   ],
   sims: [
@@ -226,6 +237,17 @@ export const MODULE_ROLE_DEFINITIONS: Record<EnterpriseModuleId, ModuleRoleDef[]
       name: 'Indenter / General Staff',
       shortName: 'Indenter',
       description: 'Raises stock indents, requests lab supplies and field equipment, submits return entries.',
+      moduleId: 'sims',
+      color: 'slate',
+      badgeBg: 'bg-slate-100 border-slate-300',
+      badgeText: 'text-slate-800',
+      level: 'staff'
+    },
+    {
+      id: 'auditor',
+      name: 'Auditor',
+      shortName: 'Auditor',
+      description: 'Read-only audit access to SIMS records and reports.',
       moduleId: 'sims',
       color: 'slate',
       badgeBg: 'bg-slate-100 border-slate-300',
@@ -277,6 +299,17 @@ export const MODULE_ROLE_DEFINITIONS: Record<EnterpriseModuleId, ModuleRoleDef[]
       badgeBg: 'bg-slate-100 border-slate-300',
       badgeText: 'text-slate-800',
       level: 'staff'
+    },
+    {
+      id: 'auditor',
+      name: 'Auditor',
+      shortName: 'Auditor',
+      description: 'Read-only audit access to FMS records and reports.',
+      moduleId: 'fms',
+      color: 'slate',
+      badgeBg: 'bg-slate-100 border-slate-300',
+      badgeText: 'text-slate-800',
+      level: 'staff'
     }
   ],
   finance: [
@@ -318,6 +351,17 @@ export const MODULE_ROLE_DEFINITIONS: Record<EnterpriseModuleId, ModuleRoleDef[]
       name: 'Claimant / General Staff',
       shortName: 'Claimant',
       description: 'Applies for TA/DA advances, submits travel reimbursement claims, and tracks settlement status.',
+      moduleId: 'finance',
+      color: 'slate',
+      badgeBg: 'bg-slate-100 border-slate-300',
+      badgeText: 'text-slate-800',
+      level: 'staff'
+    },
+    {
+      id: 'auditor',
+      name: 'Auditor',
+      shortName: 'Auditor',
+      description: 'Read-only audit access to FINANCE records and reports.',
       moduleId: 'finance',
       color: 'slate',
       badgeBg: 'bg-slate-100 border-slate-300',
