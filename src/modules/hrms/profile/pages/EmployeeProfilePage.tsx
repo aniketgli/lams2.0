@@ -688,6 +688,44 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       finance: u.moduleRoles?.finance ? [...u.moduleRoles.finance] : []
     };
     setEditUserModuleRolesState(modRoles);
+
+    if (u.biometricId) {
+      void fetch(`/api/access/users/${encodeURIComponent(u.biometricId)}/roles`, {
+        credentials: 'same-origin',
+        cache: 'no-store',
+        headers: { Accept: 'application/json' }
+      }).then(async (response) => {
+        if (!response.ok) throw new Error(`Role lookup failed (${response.status})`);
+        const payload = await response.json();
+        const next: Record<string, string[]> = { lams: [], pms: [], sims: [], finance: [], fms: [] };
+        const moduleKeyMap: Record<string, string> = {
+          hrms: 'lams', lams: 'lams', pms: 'pms', stock: 'sims', sims: 'sims',
+          finance: 'finance', facility: 'fms', fms: 'fms'
+        };
+        const hrmsRoleMap: Record<string, string> = {
+          user: 'hrms_staff', 'reporting manager': 'hrms_reporting', hod: 'hrms_reviewing',
+          administrator: 'hrms_admin', auditor: 'hrms_auditor',
+          hrms_staff: 'hrms_staff', hrms_reporting: 'hrms_reporting',
+          hrms_reviewing: 'hrms_reviewing', hrms_admin: 'hrms_admin', hrms_auditor: 'hrms_auditor'
+        };
+        for (const grant of (Array.isArray(payload.assignments) ? payload.assignments : [])) {
+          const moduleKey = moduleKeyMap[String(grant.moduleId || '').toLowerCase()];
+          if (!moduleKey) continue;
+          const rawRole = String(grant.roleId || '');
+          const defs = MODULE_ROLE_DEFINITIONS[moduleKey as EnterpriseModuleId] || [];
+          const match = defs.find((definition) =>
+            definition.id.toLowerCase() === rawRole.toLowerCase() ||
+            definition.name.trim().toLowerCase() === rawRole.trim().toLowerCase()
+          );
+          const roleKey = moduleKey === 'lams' ? (hrmsRoleMap[rawRole.trim().toLowerCase()] || match?.id || rawRole) : (match?.id || rawRole);
+          if (roleKey && !next[moduleKey].includes(roleKey)) next[moduleKey].push(roleKey);
+        }
+        setEditUserModuleRolesState(next);
+      }).catch((error) => {
+        console.error('Could not load active roles for user matrix:', error);
+        showToast('Could not load active role assignments from database.');
+      });
+    }
   };
 
   // Live Summary of all Assigned Roles in Matrix
