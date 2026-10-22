@@ -702,22 +702,33 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
           hrms: 'lams', lams: 'lams', pms: 'pms', stock: 'sims', sims: 'sims',
           finance: 'finance', facility: 'fms', fms: 'fms'
         };
+        const normalizeRole = (value: unknown) => String(value ?? '').trim().toLowerCase().replace(/[\\s_-]+/g, '');
         const hrmsRoleMap: Record<string, string> = {
-          user: 'hrms_staff', 'reporting manager': 'hrms_reporting', hod: 'hrms_reviewing',
-          administrator: 'hrms_admin', auditor: 'hrms_auditor',
-          hrms_staff: 'hrms_staff', hrms_reporting: 'hrms_reporting',
-          hrms_reviewing: 'hrms_reviewing', hrms_admin: 'hrms_admin', hrms_auditor: 'hrms_auditor'
+          user: 'hrms_staff', generalstaff: 'hrms_staff', hrmsstaff: 'hrms_staff',
+          reportingmanager: 'hrms_reporting', hrmsreporting: 'hrms_reporting',
+          hod: 'hrms_reviewing', reviewingmanager: 'hrms_reviewing', hrmsreviewing: 'hrms_reviewing',
+          administrator: 'hrms_admin', admin: 'hrms_admin', hrmsadmin: 'hrms_admin',
+          auditor: 'hrms_auditor', audit: 'hrms_auditor', hrmsauditor: 'hrms_auditor'
+        };
+        const matrixRoleAliases: Record<string, Record<string, string>> = {
+          lams: hrmsRoleMap,
+          pms: { admin: 'pms_admin', administrator: 'pms_admin', hod: 'pms_pi', reportingmanager: 'pms_co_pi', user: 'pms_researcher', auditor: 'pms_reviewer' },
+          sims: { admin: 'sims_admin', administrator: 'sims_admin', hod: 'sims_approver', reportingmanager: 'sims_store_keeper', user: 'sims_indenter' },
+          finance: { admin: 'fin_admin', administrator: 'fin_admin', hod: 'fin_officer', reportingmanager: 'fin_accountant', user: 'fin_claimant' },
+          fms: { admin: 'fms_admin', administrator: 'fms_admin', hod: 'fms_officer', reportingmanager: 'fms_supervisor', user: 'fms_requester' }
         };
         for (const grant of (Array.isArray(payload.assignments) ? payload.assignments : [])) {
-          const moduleKey = moduleKeyMap[String(grant.moduleId || '').toLowerCase()];
+          if (grant.status && String(grant.status).toLowerCase() !== 'active') continue;
+          const moduleKey = moduleKeyMap[String(grant.moduleId || '').trim().toLowerCase()];
           if (!moduleKey) continue;
-          const rawRole = String(grant.roleId || '');
+          const rawRole = String(grant.roleId || '').trim();
+          const normalized = normalizeRole(rawRole);
           const defs = MODULE_ROLE_DEFINITIONS[moduleKey as EnterpriseModuleId] || [];
           const match = defs.find((definition) =>
-            definition.id.toLowerCase() === rawRole.toLowerCase() ||
-            definition.name.trim().toLowerCase() === rawRole.trim().toLowerCase()
+            normalizeRole(definition.id) === normalized ||
+            normalizeRole(definition.name) === normalized
           );
-          const roleKey = moduleKey === 'lams' ? (hrmsRoleMap[rawRole.trim().toLowerCase()] || match?.id || rawRole) : (match?.id || rawRole);
+          const roleKey = match?.id || matrixRoleAliases[moduleKey]?.[normalized] || rawRole;
           if (roleKey && !next[moduleKey].includes(roleKey)) next[moduleKey].push(roleKey);
         }
         setEditUserModuleRolesState(next);
