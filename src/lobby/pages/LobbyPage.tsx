@@ -102,8 +102,8 @@ export const LobbyPage: React.FC<LobbyPageProps> = ({ onSelectModule, onLogout }
   };
 
   const isModuleAllowed = (card: LobbyCardItem) => {
-    if (currentUser.role === 'administrator') return true;
-    return card.allowedRoles.includes(currentUser.role);
+    const normalizedModule = ({ lams: 'hrms', sims: 'stock', fms: 'facility' } as Record<string, string>)[card.id] || card.id;
+    return assignedModules.includes(normalizedModule);
   };
 
   return (
