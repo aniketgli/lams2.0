@@ -924,45 +924,17 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     e.preventDefault();
     if (!userToEditRoles) return;
 
-    // Synchronize system roles based on assigned matrix tiers
-    const hasAdmin = (editUserModuleRolesState.lams || []).includes('hrms_admin') ||
-      (editUserModuleRolesState.pms || []).includes('pms_admin') ||
-      (editUserModuleRolesState.sims || []).includes('sims_admin') ||
-      (editUserModuleRolesState.finance || []).includes('fin_admin') ||
-      (editUserModuleRolesState.fms || []).includes('fms_admin');
-
-    const hasL2 = (editUserModuleRolesState.lams || []).includes('hrms_reviewing') ||
-      (editUserModuleRolesState.pms || []).includes('pms_pi') ||
-      (editUserModuleRolesState.sims || []).includes('sims_approver') ||
-      (editUserModuleRolesState.finance || []).includes('fin_officer') ||
-      (editUserModuleRolesState.fms || []).includes('fms_officer');
-
-    const hasL1 = (editUserModuleRolesState.lams || []).includes('hrms_reporting') ||
-      (editUserModuleRolesState.pms || []).includes('pms_co_pi') ||
-      (editUserModuleRolesState.pms || []).includes('pms_reviewer') ||
-      (editUserModuleRolesState.sims || []).includes('sims_store_keeper') ||
-      (editUserModuleRolesState.finance || []).includes('fin_accountant') ||
-      (editUserModuleRolesState.fms || []).includes('fms_supervisor');
-
-    const syncedRoles: UserRole[] = ['general_staff'];
-    if (hasL1) syncedRoles.push('reporting_manager');
-    if (hasL2) syncedRoles.push('reviewing_manager');
-    if (hasAdmin) syncedRoles.push('administrator');
-
-    let highestRole: UserRole = 'general_staff';
-    if (hasAdmin) highestRole = 'administrator';
-    else if (hasL2) highestRole = 'reviewing_manager';
-    else if (hasL1) highestRole = 'reporting_manager';
-
-    // Persist the module-role matrix first. The API validates administrator access and records the updater biometric ID.
+    // Role Matrix save must only update module-role assignments.
+    // Do not update employee profile, employment type, manager hierarchy, or core user role here.
     const moduleIds: Record<string, string> = { lams: 'hrms', pms: 'pms', sims: 'stock', finance: 'finance', fms: 'facility' };
     const assignments = Object.entries(editUserModuleRolesState).flatMap(([moduleKey, roleIds]) => {
-      const defs = MODULE_ROLE_DEFINITIONS[moduleKey as EnterpriseModuleId] || [];
-      return (Array.isArray(roleIds) ? roleIds : []).map((roleId) => {
+      const defs = MODULE_ROLE_DEFINITIONS[moduleKey as keyof typeof MODULE_ROLE_DEFINITIONS] || [];
+      return roleIds.map((roleId) => {
         const definition = defs.find((item) => item.id === roleId);
-        return definition ? { moduleId: moduleIds[moduleKey] || moduleKey, roleId: definition.name } : null;
+        return definition && moduleIds[moduleKey] ? { moduleId: moduleIds[moduleKey], roleId: definition.name } : null;
       }).filter((item): item is { moduleId: string; roleId: string } => Boolean(item));
     });
+
     try {
       const response = await fetch(`/api/access/users/${encodeURIComponent(userToEditRoles.biometricId || '')}/roles`, {
         method: 'PUT',
@@ -980,24 +952,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       return;
     }
 
-    // 1. Update Core Role & Hierarchy
-    updateUserRoleAndHierarchy(
-      userToEditRoles.id,
-      highestRole,
-      userToEditRoles.employmentType || editUserEmpType || 'permanent',
-      userToEditRoles.reportingManagerId,
-      userToEditRoles.reviewingManagerId,
-      syncedRoles
-    );
-
-    // 2. Update Module Roles
-    updateUserProfile(userToEditRoles.id, {
-      role: highestRole,
-      roles: syncedRoles,
-      moduleRoles: editUserModuleRolesState
-    });
-
-    showToast(`Role allocation & module permissions updated for ${userToEditRoles.name}`);
+    showToast(`Module roles and permissions updated for ${userToEditRoles.name}`);
     setUserToEditRoles(null);
   };
 
