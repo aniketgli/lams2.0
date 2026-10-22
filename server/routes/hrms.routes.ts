@@ -2,7 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { db } from '../../src/db';
-import { biometric_machines, employee_profiles, organization_settings, organization_units, profile_master_records, shifts, users, designations, msc_streams, msc_batches, training_courses, trainee_batches, projects, categories, phd_enrollments } from '../../src/db/schema';
+import { biometric_machines, employee_profiles, organization_settings, organization_units, profile_master_records, shifts, users, designations, msc_streams, msc_batches, training_courses, trainee_batches, projects, categories, phd_enrollments, user_module_roles } from '../../src/db/schema';
 import { isAuthenticated, isAdmin } from '../middleware/auth.middleware';
 import { eq } from 'drizzle-orm';
 import { isIP } from 'node:net';
@@ -51,8 +51,20 @@ router.get('/employees', isAuthenticated, async (_req, res) => {
         visibleEmployees = current ? [current] : [];
       }
     }
+    // Read role assignments from the normalized database table, never from client state/profile JSON.
+    const assignments = await db.select().from(user_module_roles);
+    const rolesByUser: Record<string, Record<string, string[]>> = {};
+    for (const assignment of assignments) {
+      rolesByUser[assignment.userId] ||= {};
+      rolesByUser[assignment.userId][assignment.moduleId] ||= [];
+      rolesByUser[assignment.userId][assignment.moduleId].push(assignment.roleId);
+    }
+    const result = visibleEmployees.map((employee: any) => ({
+      ...employee,
+      moduleRoles: rolesByUser[employee.id] || {}
+    }));
     res.setHeader('Cache-Control', 'no-store');
-    return res.json(visibleEmployees);
+    return res.json(result);
   } catch (error) {
     console.error('Failed to fetch employees:', error instanceof Error ? error.message : error);
     return res.status(500).json({ error: 'Failed to fetch employees' });
@@ -292,25 +304,35 @@ router.delete('/employees/:userId', isAdmin, async (req, res) => {
 });
 
 
-// Persist per-module role assignments in the employee profile JSON. Admin-only.
-// Persist per-module role assignments in profile_data; authorization remains server-side.
+// Persist normalized module-level role assignments in MySQL. Admin-only.
+const allowedModuleRoleIds: Record<string, Set<string>> = {
+  lams: new Set(['hrms_admin', 'hrms_reviewing', 'hrms_reporting', 'hrms_staff']),
+  pms: new Set(['pms_admin', 'pms_pi', 'pms_co_pi', 'pms_researcher', 'pms_reviewer']),
+  sims: new Set(['sims_admin', 'sims_approver', 'sims_store_keeper', 'sims_indenter']),
+  finance: new Set(['fin_admin', 'fin_officer', 'fin_accountant', 'fin_claimant']),
+  fms: new Set(['fms_admin', 'fms_officer', 'fms_supervisor', 'fms_requester'])
+};
+
 router.put('/employees/:userId/module-roles', isAdmin, async (req, res) => {
   const userId = String(req.params.userId || '');
   const moduleRoles = req.body?.moduleRoles;
   if (!moduleRoles || typeof moduleRoles !== 'object' || Array.isArray(moduleRoles) ||
       JSON.stringify(moduleRoles).length > 20000 ||
-      Object.keys(moduleRoles).some((key) => !/^[a-zA-Z0-9_-]{1,80}$/.test(key))) {
-    return res.status(400).json({ error: 'A valid moduleRoles object is required.' });
+      Object.keys(moduleRoles).some((key) => !Object.prototype.hasOwnProperty.call(allowedModuleRoleIds, key)) ||
+      Object.entries(moduleRoles).some(([moduleId, roles]) =>
+        !Array.isArray(roles) || roles.length > 30 ||
+        roles.some((role) => typeof role !== 'string' || !allowedModuleRoleIds[moduleId]?.has(role)))) {
+    return res.status(400).json({ error: 'Module roles contain an unknown module or role.' });
   }
   try {
-    const [row] = await db.select({ userId: employee_profiles.userId, profileData: employee_profiles.profileData })
-      .from(employee_profiles).where(eq(employee_profiles.userId, userId));
-    if (!row) return res.status(404).json({ error: 'Employee profile not found.' });
-    let saved: Record<string, any> = {};
-    try { saved = row.profileData ? JSON.parse(row.profileData) : {}; } catch { saved = {}; }
-    saved.moduleRoles = moduleRoles;
-    await db.update(employee_profiles).set({ profileData: JSON.stringify(saved) })
-      .where(eq(employee_profiles.userId, userId));
+    const [target] = await db.select({ id: users.id }).from(users).where(eq(users.id, userId));
+    if (!target) return res.status(404).json({ error: 'User account not found.' });
+    await db.transaction(async (tx) => {
+      await tx.delete(user_module_roles).where(eq(user_module_roles.userId, userId));
+      const assignments = Object.entries(moduleRoles).flatMap(([moduleId, roles]) =>
+        (roles as string[]).map((roleId) => ({ userId, moduleId, roleId })));
+      if (assignments.length) await tx.insert(user_module_roles).values(assignments);
+    });
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ success: true, moduleRoles });
   } catch (error) {
