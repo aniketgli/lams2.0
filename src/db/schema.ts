@@ -1,13 +1,25 @@
 import { mysqlTable, varchar, text, longtext, timestamp, boolean, int, decimal, bigint, uniqueIndex } from 'drizzle-orm/mysql-core';
 
 export const users = mysqlTable('users', {
-  id: varchar('id', { length: 36 }).primaryKey(),
+  // ORM mapping only: the existing MySQL table is not modified by this declaration.
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  biometricId: varchar('biometric_id', { length: 4 }).notNull().unique(),
   name: varchar('name', { length: 255 }).notNull(),
   email: varchar('email', { length: 255 }).notNull().unique(),
   passwordHash: varchar('password_hash', { length: 255 }).notNull(),
-  role: varchar('role', { length: 50 }).notNull(),
   createdAt: timestamp('created_at').defaultNow(),
 });
+
+export const user_module_roles = mysqlTable('user_module_roles', {
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  biometricId: varchar('biometric_id', { length: 4 }).notNull(),
+  moduleId: varchar('module_id', { length: 80 }).notNull(),
+  roleId: varchar('role_id', { length: 100 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+  lastUpdated: timestamp('last_updated').defaultNow().onUpdateNow(),
+}, (table) => ({
+  assignmentUnique: uniqueIndex('user_module_role_biometric_unique').on(table.biometricId, table.moduleId, table.roleId),
+}));
 
 export const sessions = mysqlTable('sessions', {
   id: varchar('id', { length: 255 }).primaryKey(),
