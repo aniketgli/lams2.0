@@ -869,7 +869,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     showToast('Role preset applied to matrix! Click Save to confirm.');
   };
 
-  const handleSaveRoleChangesInProfile = (e: React.FormEvent) => {
+  const handleSaveRoleChangesInProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userToEditRoles) return;
 
@@ -902,6 +902,32 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     if (hasAdmin) highestRole = 'administrator';
     else if (hasL2) highestRole = 'reviewing_manager';
     else if (hasL1) highestRole = 'reporting_manager';
+
+    // Persist the module-role matrix first. The API validates administrator access and records the updater biometric ID.
+    const moduleIds: Record<string, string> = { lams: 'hrms', pms: 'pms', sims: 'stock', finance: 'finance', fms: 'facility' };
+    const assignments = Object.entries(editUserModuleRolesState).flatMap(([moduleKey, roleIds]) => {
+      const defs = MODULE_ROLE_DEFINITIONS[moduleKey as EnterpriseModuleId] || [];
+      return (Array.isArray(roleIds) ? roleIds : []).map((roleId) => {
+        const definition = defs.find((item) => item.id === roleId);
+        return definition ? { moduleId: moduleIds[moduleKey] || moduleKey, roleId: definition.name } : null;
+      }).filter((item): item is { moduleId: string; roleId: string } => Boolean(item));
+    });
+    try {
+      const response = await fetch(`/api/access/users/${encodeURIComponent(userToEditRoles.biometricId || '')}/roles`, {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ assignments })
+      });
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.message || `Save failed (${response.status})`);
+      }
+    } catch (error) {
+      console.error('Failed to save module-role assignments:', error);
+      showToast(error instanceof Error ? error.message : 'Could not save module-role assignments.');
+      return;
+    }
 
     // 1. Update Core Role & Hierarchy
     updateUserRoleAndHierarchy(
