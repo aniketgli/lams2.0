@@ -45,7 +45,7 @@ function displayRole(roleId: string): string | null {
 router.get('/modules', isAuthenticated, async (req, res) => {
   try {
     const rows = await db.select({ moduleId: user_module_roles.moduleId, roleId: user_module_roles.roleId })
-      .from(user_module_roles).where(eq(user_module_roles.biometricId, req.session.biometricId!));
+      .from(user_module_roles).where(and(eq(user_module_roles.biometricId, req.session.biometricId!), eq(user_module_roles.status, 'active')));
     const byModule: Record<string, string[]> = {};
     for (const row of rows) {
       const moduleId = row.moduleId.toLowerCase() === 'lams' ? 'hrms' : row.moduleId.toLowerCase();
@@ -71,7 +71,7 @@ router.get('/roles', isAuthenticated, async (req, res) => {
   try {
     const rows = await db.select({ roleId: user_module_roles.roleId })
       .from(user_module_roles)
-      .where(and(eq(user_module_roles.biometricId, req.session.biometricId!), eq(user_module_roles.moduleId, moduleId)));
+      .where(and(eq(user_module_roles.biometricId, req.session.biometricId!), eq(user_module_roles.moduleId, moduleId), eq(user_module_roles.status, 'active')));
     const roles = [...new Set(rows.map((row) => displayRole(row.roleId)).filter((role): role is string => Boolean(role) && APPROVED_ROLES.has(role)))];
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ roles });
