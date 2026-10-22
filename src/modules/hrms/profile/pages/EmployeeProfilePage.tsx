@@ -667,17 +667,49 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const [editUserShift, setEditUserShift] = useState<string>('shift-gen-01');
   const [editUserEmpType, setEditUserEmpType] = useState<EmploymentType>('permanent');
 
-  const handleOpenEditRoles = (u: UserType) => {
+  const handleOpenEditRoles = async (u: UserType) => {
     if (u.id === currentUser.id) {
       showToast('Administrators cannot edit their own roles.');
       return;
     }
 
-    // Employee records may use either API naming convention. Normalize once so
-    // the role lookup, modal badge, and subsequent save all use the same ID.
-    const biometricId = String(
+    // AppContext can provide users with an internal numeric ID but without the
+    // canonical biometric ID. Resolve the employee row before querying grants.
+    let biometricId = String(
       u.biometricId ?? (u as UserType & { biometric_id?: string }).biometric_id ?? ''
     ).trim();
+
+    if (!biometricId) {
+      try {
+        const employeeResponse = await fetch('/api/employees', {
+          credentials: 'same-origin',
+          cache: 'no-store',
+          headers: { Accept: 'application/json' }
+        });
+        if (employeeResponse.ok) {
+          const employeePayload = await employeeResponse.json();
+          const employeeRows = Array.isArray(employeePayload)
+            ? employeePayload
+            : Array.isArray(employeePayload?.employees)
+              ? employeePayload.employees
+              : [];
+          const canonicalEmployee = employeeRows.find((employee: any) =>
+            String(employee?.id ?? '') === String(u.id ?? '') ||
+            (u.email && String(employee?.email ?? '').trim().toLowerCase() === String(u.email).trim().toLowerCase()) ||
+            (u.name && String(employee?.name ?? '').trim().toLowerCase() === String(u.name).trim().toLowerCase())
+          );
+          biometricId = String(canonicalEmployee?.biometricId ?? canonicalEmployee?.biometric_id ?? '').trim();
+        }
+      } catch (error) {
+        console.error('Could not resolve employee biometric ID for role matrix:', error);
+      }
+    }
+
+    if (!biometricId) {
+      showToast('Cannot open role matrix: employee biometric ID was not found in the database.');
+      return;
+    }
+
     const userForRoleEditor = { ...u, biometricId } as UserType;
 
     setUserToEditRoles(userForRoleEditor);
