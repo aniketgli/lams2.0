@@ -5,7 +5,8 @@ import { user_module_roles, users } from '../../src/db/schema';
 import { isAuthenticated } from '../middleware/auth.middleware';
 
 const router = Router();
-const DEFAULT_MODULE = 'hrms';
+const HRMS_MODULE = 'hrms';
+const ACTIVE_STATUS = 'active';
 const DISPLAY_ROLES: Record<string, string> = {
   hrms_staff: 'User',
   hrms_reporting: 'Reporting Manager',
@@ -22,30 +23,23 @@ const APPROVED_ROLES = new Set(['User', 'Reporting Manager', 'HoD', 'Administrat
 
 function displayRole(roleId: string): string | null {
   const raw = String(roleId || '').trim();
-  const normalized = raw.toLowerCase().replace(/[ -]+/g, '_');
+  if (DISPLAY_ROLES[raw]) return DISPLAY_ROLES[raw];
+  const normalized = raw.toLowerCase().replace(/[\\s_-]+/g, '');
   const aliases: Record<string, string> = {
-    hrms_staff: 'User',
-    user: 'User',
-    general_staff: 'User',
-    hrms_reporting: 'Reporting Manager',
-    reporting_manager: 'Reporting Manager',
-    hrms_reviewing: 'HoD',
-    hod: 'HoD',
-    reviewing_manager: 'HoD',
-    hrms_admin: 'Administrator',
-    administrator: 'Administrator',
-    hrms_auditor: 'Auditor',
-    auditor: 'Auditor',
-    audit: 'Auditor'
+    user: 'User', generalstaff: 'User', hrmsstaff: 'User', staff: 'User',
+    reportingmanager: 'Reporting Manager', hrmsreporting: 'Reporting Manager',
+    hod: 'HoD', reviewingmanager: 'HoD', hrmsreviewing: 'HoD',
+    administrator: 'Administrator', admin: 'Administrator', hrmsadmin: 'Administrator',
+    auditor: 'Auditor', audit: 'Auditor', hrmsauditor: 'Auditor'
   };
-  return DISPLAY_ROLES[raw] || aliases[normalized] || null;
+  return aliases[normalized] || null;
 }
 
 // Lobby modules are derived exclusively from user_module_roles.
 router.get('/modules', isAuthenticated, async (req, res) => {
   try {
     const rows = await db.select({ moduleId: user_module_roles.moduleId, roleId: user_module_roles.roleId })
-      .from(user_module_roles).where(and(eq(user_module_roles.biometricId, req.session.biometricId!), eq(user_module_roles.status, 'active')));
+      .from(user_module_roles).where(and(eq(user_module_roles.biometricId, req.session.biometricId!), eq(user_module_roles.status, ACTIVE_STATUS)));
     const byModule: Record<string, string[]> = {};
     for (const row of rows) {
       const moduleId = row.moduleId.toLowerCase() === 'lams' ? 'hrms' : row.moduleId.toLowerCase();
@@ -60,6 +54,65 @@ router.get('/modules', isAuthenticated, async (req, res) => {
   }
 });
 
+// Return active grants for the selected user. Only an administrator with an active grant can view the matrix.
+router.get('/users/:biometricId/roles', isAuthenticated, async (req, res) => {
+  try {
+    const caller = await db.select({ roleId: user_module_roles.roleId }).from(user_module_roles)
+      .where(and(eq(user_module_roles.biometricId, req.session.biometricId!), eq(user_module_roles.status, ACTIVE_STATUS)));
+    if (!caller.some((row) => (displayRole(row.roleId) || row.roleId).toLowerCase() === 'administrator')) {
+      return res.status(403).json({ message: 'Administrator access required.' });
+    }
+    const target = String(req.params.biometricId || '').trim();
+    if (!/^\\d{4}$/.test(target)) return res.status(400).json({ message: 'Invalid biometric ID.' });
+    const assignments = await db.select({ moduleId: user_module_roles.moduleId, roleId: user_module_roles.roleId, status: user_module_roles.status })
+      .from(user_module_roles).where(and(eq(user_module_roles.biometricId, target), eq(user_module_roles.status, ACTIVE_STATUS)));
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ assignments });
+  } catch (error) {
+    console.error('User module-role lookup failed:', error instanceof Error ? error.message : error);
+    return res.status(500).json({ message: 'Unable to load user module-role assignments.' });
+  }
+});
+
+// Save the complete module-role matrix. Existing grants are toggled active/inactive; missing grants are inserted active.
+router.put('/users/:biometricId/roles', isAuthenticated, async (req, res) => {
+  try {
+    const caller = await db.select({ roleId: user_module_roles.roleId }).from(user_module_roles)
+      .where(and(eq(user_module_roles.biometricId, req.session.biometricId!), eq(user_module_roles.status, ACTIVE_STATUS)));
+    if (!caller.some((row) => (displayRole(row.roleId) || row.roleId).toLowerCase() === 'administrator')) {
+      return res.status(403).json({ message: 'Administrator access required.' });
+    }
+    const target = String(req.params.biometricId || '').trim();
+    if (!/^\\d{4}$/.test(target)) return res.status(400).json({ message: 'Invalid biometric ID.' });
+    const requested = Array.isArray(req.body?.assignments) ? req.body.assignments : null;
+    if (!requested) return res.status(400).json({ message: 'Assignments must be an array.' });
+    const moduleMap: Record<string, string> = { hrms: 'hrms', lams: 'hrms', pms: 'pms', stock: 'stock', sims: 'stock', finance: 'finance', facility: 'facility', fms: 'facility' };
+    const canonical = new Set<string>();
+    for (const item of requested) {
+      const moduleId = moduleMap[String(item?.moduleId || '').toLowerCase()];
+      const roleId = typeof item?.roleId === 'string' ? item.roleId.trim() : '';
+      if (!moduleId || !roleId || roleId.length > 100) return res.status(400).json({ message: 'Invalid module-role assignment.' });
+      canonical.add(`${moduleId}::${roleId}`);
+    }
+    const existing = await db.select({ id: user_module_roles.id, moduleId: user_module_roles.moduleId, roleId: user_module_roles.roleId })
+      .from(user_module_roles).where(eq(user_module_roles.biometricId, target));
+    for (const row of existing) {
+      const key = `${moduleMap[row.moduleId.toLowerCase()] || row.moduleId.toLowerCase()}::${row.roleId}`;
+      const nextStatus = canonical.has(key) ? 'active' : 'inactive';
+      await db.update(user_module_roles).set({ status: nextStatus, lastUpdatedBy: req.session.biometricId!, lastUpdated: new Date() }).where(eq(user_module_roles.id, row.id));
+      canonical.delete(key);
+    }
+    for (const key of canonical) {
+      const [moduleId, roleId] = key.split('::');
+      await db.insert(user_module_roles).values({ biometricId: target, moduleId, roleId, status: 'active', lastUpdatedBy: req.session.biometricId! });
+    }
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Saving user module-role assignments failed:', error instanceof Error ? error.message : error);
+    return res.status(500).json({ message: 'Unable to save module-role assignments.' });
+  }
+});
+
 // HRMS role choices must come from the signed-in user's existing assignments.
 router.get('/roles', isAuthenticated, async (req, res) => {
   const requestedModule = typeof req.query.moduleId === 'string' ? req.query.moduleId.trim().toLowerCase() : DEFAULT_MODULE;
@@ -71,7 +124,7 @@ router.get('/roles', isAuthenticated, async (req, res) => {
   try {
     const rows = await db.select({ roleId: user_module_roles.roleId })
       .from(user_module_roles)
-      .where(and(eq(user_module_roles.biometricId, req.session.biometricId!), eq(user_module_roles.moduleId, moduleId), eq(user_module_roles.status, 'active')));
+      .where(and(eq(user_module_roles.biometricId, req.session.biometricId!), eq(user_module_roles.moduleId, HRMS_MODULE), eq(user_module_roles.status, ACTIVE_STATUS)));
     const roles = [...new Set(rows.map((row) => displayRole(row.roleId)).filter((role): role is string => Boolean(role) && APPROVED_ROLES.has(role)))];
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ roles });

@@ -18,7 +18,7 @@ export const user_module_roles = mysqlTable('user_module_roles', {
   createdAt: timestamp('created_at').defaultNow(),
   lastUpdated: timestamp('last_updated').defaultNow().onUpdateNow(),
   lastUpdatedBy: varchar('last_updated_by', { length: 4 }),
-  status: varchar('status', { length: 10 }).notNull().default('active'),
+  status: varchar('status', { length: 16 }).notNull().default('active'),
 }, (table) => ({
   assignmentUnique: uniqueIndex('user_module_role_biometric_unique').on(table.biometricId, table.moduleId, table.roleId),
 }));

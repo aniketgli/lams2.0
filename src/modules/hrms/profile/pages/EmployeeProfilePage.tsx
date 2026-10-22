@@ -688,6 +688,55 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       finance: u.moduleRoles?.finance ? [...u.moduleRoles.finance] : []
     };
     setEditUserModuleRolesState(modRoles);
+
+    if (u.biometricId) {
+      void fetch(`/api/access/users/${encodeURIComponent(u.biometricId)}/roles`, {
+        credentials: 'same-origin',
+        cache: 'no-store',
+        headers: { Accept: 'application/json' }
+      }).then(async (response) => {
+        if (!response.ok) throw new Error(`Role lookup failed (${response.status})`);
+        const payload = await response.json();
+        const next: Record<string, string[]> = { lams: [], pms: [], sims: [], finance: [], fms: [] };
+        const moduleKeyMap: Record<string, string> = {
+          hrms: 'lams', lams: 'lams', pms: 'pms', stock: 'sims', sims: 'sims',
+          finance: 'finance', facility: 'fms', fms: 'fms'
+        };
+        const normalizeRole = (value: unknown) => String(value ?? '').trim().toLowerCase().replace(/[\\s_-]+/g, '');
+        const hrmsRoleMap: Record<string, string> = {
+          user: 'hrms_staff', generalstaff: 'hrms_staff', hrmsstaff: 'hrms_staff',
+          reportingmanager: 'hrms_reporting', hrmsreporting: 'hrms_reporting',
+          hod: 'hrms_reviewing', reviewingmanager: 'hrms_reviewing', hrmsreviewing: 'hrms_reviewing',
+          administrator: 'hrms_admin', admin: 'hrms_admin', hrmsadmin: 'hrms_admin',
+          auditor: 'hrms_auditor', audit: 'hrms_auditor', hrmsauditor: 'hrms_auditor'
+        };
+        const matrixRoleAliases: Record<string, Record<string, string>> = {
+          lams: hrmsRoleMap,
+          pms: { admin: 'pms_admin', administrator: 'pms_admin', hod: 'pms_pi', reportingmanager: 'pms_co_pi', user: 'pms_researcher', auditor: 'pms_reviewer' },
+          sims: { admin: 'sims_admin', administrator: 'sims_admin', hod: 'sims_approver', reportingmanager: 'sims_store_keeper', user: 'sims_indenter' },
+          finance: { admin: 'fin_admin', administrator: 'fin_admin', hod: 'fin_officer', reportingmanager: 'fin_accountant', user: 'fin_claimant' },
+          fms: { admin: 'fms_admin', administrator: 'fms_admin', hod: 'fms_officer', reportingmanager: 'fms_supervisor', user: 'fms_requester' }
+        };
+        for (const grant of (Array.isArray(payload.assignments) ? payload.assignments : [])) {
+          if (grant.status && String(grant.status).toLowerCase() !== 'active') continue;
+          const moduleKey = moduleKeyMap[String(grant.moduleId || '').trim().toLowerCase()];
+          if (!moduleKey) continue;
+          const rawRole = String(grant.roleId || '').trim();
+          const normalized = normalizeRole(rawRole);
+          const defs = MODULE_ROLE_DEFINITIONS[moduleKey as EnterpriseModuleId] || [];
+          const match = defs.find((definition) =>
+            normalizeRole(definition.id) === normalized ||
+            normalizeRole(definition.name) === normalized
+          );
+          const roleKey = match?.id || matrixRoleAliases[moduleKey]?.[normalized] || rawRole;
+          if (roleKey && !next[moduleKey].includes(roleKey)) next[moduleKey].push(roleKey);
+        }
+        setEditUserModuleRolesState(next);
+      }).catch((error) => {
+        console.error('Could not load active roles for user matrix:', error);
+        showToast('Could not load active role assignments from database.');
+      });
+    }
   };
 
   // Live Summary of all Assigned Roles in Matrix
@@ -831,7 +880,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     showToast('Role preset applied to matrix! Click Save to confirm.');
   };
 
-  const handleSaveRoleChangesInProfile = (e: React.FormEvent) => {
+  const handleSaveRoleChangesInProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userToEditRoles) return;
 
@@ -864,6 +913,32 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     if (hasAdmin) highestRole = 'administrator';
     else if (hasL2) highestRole = 'reviewing_manager';
     else if (hasL1) highestRole = 'reporting_manager';
+
+    // Persist the module-role matrix first. The API validates administrator access and records the updater biometric ID.
+    const moduleIds: Record<string, string> = { lams: 'hrms', pms: 'pms', sims: 'stock', finance: 'finance', fms: 'facility' };
+    const assignments = Object.entries(editUserModuleRolesState).flatMap(([moduleKey, roleIds]) => {
+      const defs = MODULE_ROLE_DEFINITIONS[moduleKey as EnterpriseModuleId] || [];
+      return (Array.isArray(roleIds) ? roleIds : []).map((roleId) => {
+        const definition = defs.find((item) => item.id === roleId);
+        return definition ? { moduleId: moduleIds[moduleKey] || moduleKey, roleId: definition.name } : null;
+      }).filter((item): item is { moduleId: string; roleId: string } => Boolean(item));
+    });
+    try {
+      const response = await fetch(`/api/access/users/${encodeURIComponent(userToEditRoles.biometricId || '')}/roles`, {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ assignments })
+      });
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.message || `Save failed (${response.status})`);
+      }
+    } catch (error) {
+      console.error('Failed to save module-role assignments:', error);
+      showToast(error instanceof Error ? error.message : 'Could not save module-role assignments.');
+      return;
+    }
 
     // 1. Update Core Role & Hierarchy
     updateUserRoleAndHierarchy(
@@ -5998,10 +6073,9 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                     <h3 className="font-bold text-base text-white tracking-tight truncate">
                       {userToEditRoles.name}
                     </h3>
-                    <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-950/80 text-blue-200 border border-blue-800/60">
-                      Biometric ID: {userToEditRoles.biometricId || userToEditRoles.id}
-                    </span>
+                    {userToEditRoles.biometricId && <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-950/80 text-blue-200 border border-blue-800/60">Biometric ID: {userToEditRoles.biometricId}</span>}
                   </div>
+                  
                 </div>
               </div>
 
@@ -6032,11 +6106,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
               {/* PINNED FIXED FOOTER */}
               <div className="px-4 sm:px-5 py-2.5 border-t border-slate-200 flex items-center justify-between shrink-0 bg-slate-50 z-30">
-                <div className="text-[11px] text-slate-500 font-medium flex items-center space-x-2 min-w-0">
-                  <span className="truncate">
-                    Configuring permissions for <strong className="text-slate-800">{userToEditRoles.name}</strong>
-                  </span>
-                </div>
+                <div className="text-[11px] text-slate-500 font-medium min-w-0">Configuring permissions for <strong className="text-slate-800">{userToEditRoles.name}</strong></div>
                 <div className="flex items-center space-x-2 shrink-0">
                   <button
                     type="button"
