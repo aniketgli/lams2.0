@@ -373,22 +373,11 @@ function normalizeShift(body: any) {
   }} as const;
 }
 
+// Shift Master is out of scope for the current HRMS login/module-access fix.
+// Do not query the legacy shifts table until its schema and UI are explicitly brought into scope.
 router.get('/shifts', isAuthenticated, async (_req, res) => {
-  try {
-    const shiftList = await db.select().from(shifts);
-    res.setHeader('Cache-Control', 'no-store');
-    return res.json(shiftList.map((shift) => ({
-      ...shift,
-      halfDayHours: Number(shift.halfDayHours ?? 4),
-      fullDayHours: Number(shift.fullDayHours ?? 8),
-      minHalfDayHours: Number(shift.halfDayHours ?? 4),
-      minFullDayHours: Number(shift.fullDayHours ?? 8),
-      applicableDays: (() => { try { return JSON.parse(shift.applicableDays || '[]'); } catch { return []; } })()
-    })));
-  } catch (error) {
-    console.error('Failed to fetch shifts:', error);
-    return res.status(500).json({ error: 'Failed to fetch shifts' });
-  }
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json([]);
 });
 
 router.post('/shifts', isAdmin, async (req, res) => {
