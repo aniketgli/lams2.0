@@ -23,16 +23,10 @@ router.get('/employees', isAuthenticated, async (_req, res) => {
       createdAt: users.createdAt,
     }).from(users);
 
-    let profileByBiometric: Record<string, Record<string, unknown>> = {};
-    try {
-      const profiles = await db.select().from(employee_profiles);
-      for (const profile of profiles as Array<Record<string, unknown>>) {
-        const key = String(profile.biometricId || '');
-        if (key) profileByBiometric[key] = profile;
-      }
-    } catch (profileError) {
-      console.warn('Employee profile enrichment unavailable:', profileError instanceof Error ? profileError.message : profileError);
-    }
+    // Employee profile columns differ in the current production database.
+    // Do not query the profile table from the landing-page employee list until its
+    // actual schema is mapped; this endpoint must not fail just because enrichment is absent.
+    const profileByBiometric: Record<string, Record<string, unknown>> = {};
 
     let rolesByBiometric: Record<string, Record<string, string[]>> = {};
     try {
