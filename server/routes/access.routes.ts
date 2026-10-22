@@ -21,7 +21,24 @@ const DISPLAY_ROLES: Record<string, string> = {
 const APPROVED_ROLES = new Set(['User', 'Reporting Manager', 'HoD', 'Administrator', 'Auditor']);
 
 function displayRole(roleId: string): string | null {
-  return DISPLAY_ROLES[roleId] || null;
+  const raw = String(roleId || '').trim();
+  const normalized = raw.toLowerCase().replace(/[ -]+/g, '_');
+  const aliases: Record<string, string> = {
+    hrms_staff: 'User',
+    user: 'User',
+    general_staff: 'User',
+    hrms_reporting: 'Reporting Manager',
+    reporting_manager: 'Reporting Manager',
+    hrms_reviewing: 'HoD',
+    hod: 'HoD',
+    reviewing_manager: 'HoD',
+    hrms_admin: 'Administrator',
+    administrator: 'Administrator',
+    hrms_auditor: 'Auditor',
+    auditor: 'Auditor',
+    audit: 'Auditor'
+  };
+  return DISPLAY_ROLES[raw] || aliases[normalized] || null;
 }
 
 // Lobby modules are derived exclusively from user_module_roles.
