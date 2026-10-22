@@ -702,7 +702,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
           hrms: 'lams', lams: 'lams', pms: 'pms', stock: 'sims', sims: 'sims',
           finance: 'finance', facility: 'fms', fms: 'fms'
         };
-        const normalizeRole = (value: unknown) => String(value ?? '').trim().toLowerCase().replace(/[\\s_-]+/g, '');
+        const normalizeRole = (value: unknown) => String(value ?? '').trim().toLowerCase().replace(/[\s_-]+/g, '');
         const hrmsRoleMap: Record<string, string> = {
           user: 'hrms_staff', generalstaff: 'hrms_staff', hrmsstaff: 'hrms_staff',
           reportingmanager: 'hrms_reporting', hrmsreporting: 'hrms_reporting',
