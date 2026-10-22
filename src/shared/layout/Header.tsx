@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { UserRole, getUserRoles } from '../../types';
 import { WIILogo } from '../components/WIILogo';
@@ -34,6 +34,48 @@ export const Header: React.FC<HeaderProps> = ({
   } = useApp();
 
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [assignedRoleLabels, setAssignedRoleLabels] = useState<string[]>([]);
+  const [roleSwitchBusy, setRoleSwitchBusy] = useState(false);
+  const [roleSwitchError, setRoleSwitchError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    fetch('/api/access/roles', { credentials: 'same-origin', cache: 'no-store' })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Unable to load assigned roles');
+        return response.json();
+      })
+      .then((data) => { if (active) setAssignedRoleLabels(Array.isArray(data.roles) ? data.roles : []); })
+      .catch(() => { if (active) setAssignedRoleLabels([]); });
+    return () => { active = false; };
+  }, []);
+
+  const roleToLabel: Record<string, string> = {
+    administrator: 'Administrator', audit: 'Auditor', reporting_manager: 'Reporting Manager',
+    reviewing_manager: 'HoD', general_staff: 'User'
+  };
+  const labelToRole: Record<string, UserRole> = {
+    Administrator: 'administrator', Auditor: 'audit', 'Reporting Manager': 'reporting_manager',
+    HoD: 'reviewing_manager', User: 'general_staff'
+  };
+  const handleRoleSwitch = async (label: string) => {
+    setRoleSwitchError('');
+    setRoleSwitchBusy(true);
+    try {
+      const response = await fetch('/api/access/active-role', {
+        method: 'POST', credentials: 'same-origin', cache: 'no-store',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ role: label })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.message || 'Role switch was rejected.');
+      window.location.reload();
+    } catch (error) {
+      setRoleSwitchError(error instanceof Error ? error.message : 'Unable to switch role.');
+    } finally {
+      setRoleSwitchBusy(false);
+    }
+  };
 
   const getRoleLabel = (role: UserRole) => {
     switch (role) {
@@ -76,10 +118,7 @@ export const Header: React.FC<HeaderProps> = ({
     { role: 'general_staff', label: 'User' }
   ];
 
-  const rolesList = allRolesList.filter((item) => {
-    if (isAdminUser) return true;
-    return userRoles.includes(item.role);
-  });
+  const rolesList = allRolesList.filter((item) => assignedRoleLabels.includes(item.label));
 
 
 
@@ -156,6 +195,23 @@ export const Header: React.FC<HeaderProps> = ({
                     </span>
                   </div>
                 </div>
+
+                {rolesList.length > 1 && (
+                  <div className="p-3 border-b border-slate-100">
+                    <p className="text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-2">Switch HRMS Role</p>
+                    <div className="space-y-1">
+                      {rolesList.map((item) => (
+                        <button key={item.role} type="button" disabled={roleSwitchBusy || getRoleLabel(item.role) === getRoleLabel(currentUser.role)}
+                          onClick={() => handleRoleSwitch(item.label)}
+                          className={`w-full flex items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold transition-colors ${getRoleLabel(item.role) === getRoleLabel(currentUser.role) ? 'bg-blue-50 text-blue-800 cursor-default' : 'text-slate-700 hover:bg-slate-50 disabled:opacity-50'}`}>
+                          <span>{item.label}</span>
+                          {getRoleLabel(item.role) === getRoleLabel(currentUser.role) && <Check className="w-3.5 h-3.5" />}
+                        </button>
+                      ))}
+                    </div>
+                    {roleSwitchError && <p role="alert" className="text-[11px] text-rose-600 mt-2">{roleSwitchError}</p>}
+                  </div>
+                )}
 
                 {/* Logout / Exit Module */}
                 <div className="p-2 space-y-1">
