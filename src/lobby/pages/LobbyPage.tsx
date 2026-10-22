@@ -147,7 +147,10 @@ export const LobbyPage: React.FC<LobbyPageProps> = ({ onSelectModule, onLogout }
             return (
               <div
                 key={mod.id}
-                onClick={() => allowed && onSelectModule(mod.id)}\n                role="button"\n                tabIndex={allowed ? 0 : -1}\n                aria-disabled={!allowed}
+                onClick={() => allowed && onSelectModule(mod.id)}
+                role="button"
+                tabIndex={allowed ? 0 : -1}
+                aria-disabled={!allowed}
                 className={`group relative bg-white border rounded-2xl p-6 sm:p-7 flex flex-col items-center text-center transition-all duration-200 select-none w-full max-w-[340px] sm:max-w-none sm:w-[calc(33.333%-14px)] md:w-[calc(33.333%-18px)] lg:w-[calc(20%-16px)] xl:w-[calc(20%-20px)] shrink-0 ${
                   allowed
                     ? 'border-slate-200/90 hover:border-slate-300 hover:shadow-lg hover:-translate-y-1 cursor-pointer'
