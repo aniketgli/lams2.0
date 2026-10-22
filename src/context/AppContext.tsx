@@ -71,6 +71,7 @@ interface AppContextType {
   login: (email: string, password?: string) => Promise<{ success: boolean; message: string }>;
   logout: () => void;
   setCurrentUserId: (id: string) => void;
+  applyActiveSessionRole: (roleLabel: string) => void;
   attendanceRecords: AttendanceRecord[];
   manualAttendanceRequests: ManualAttendanceRegularizationRequest[];
   odRequests: OutdoorDutyRequest[];
@@ -469,6 +470,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [coursesMaster, setCoursesMaster] = useState<string[]>([]);
   const [batchesMaster, setBatchesMaster] = useState<string[]>([]);
   const [phdEnrollmentMaster, setPhdEnrollmentMaster] = useState<string[]>([]);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [locationsMaster, setLocationsMaster] = useState<string[]>(() => {
     const saved = localStorage.getItem('la_hub_locations_master');
     return saved ? JSON.parse(saved) : DEFAULT_LOCATIONS_MASTER;
@@ -611,7 +613,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [users, setUsers] = useState<User[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string>('');
 
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [sessionUser, setSessionUser] = useState<Partial<User> | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
@@ -677,6 +678,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           officeLocation: string | null;
           shiftId: string | null;
           profileData: string | null;
+          moduleRoles?: UserModuleRoles;
         }> = await response.json();
 
         if (cancelled || !Array.isArray(rows)) return;
@@ -733,6 +735,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             phone: row.phone || savedProfile.phone,
             officeLocation: row.officeLocation || savedProfile.officeLocation,
             shiftId: row.shiftId || savedProfile.shiftId,
+            // Module roles are supplied by the server from the normalized user_module_roles table.
+            moduleRoles: row.moduleRoles || {},
             avatar: savedProfile.avatar || '',
             status: savedProfile.status || 'active',
             leaveBalances: savedProfile.leaveBalances || {
@@ -1346,6 +1350,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (err: any) {
       return { success: false, message: 'Network error during login' };
     }
+  };
+
+  const applyActiveSessionRole = (roleLabel: string) => {
+    const roleMap: Record<string, string> = {
+      Administrator: 'administrator',
+      Auditor: 'audit',
+      'Reporting Manager': 'reporting_manager',
+      HoD: 'reviewing_manager',
+      User: 'general_staff'
+    };
+    const role = roleMap[roleLabel];
+    if (!role) return;
+    setSessionUser((previous) => previous ? { ...previous, role } : previous);
   };
 
   const logout = async () => {
@@ -4927,6 +4944,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         logout,
         setCurrentUserId,
+        applyActiveSessionRole,
 
         attendanceRecords,
         manualAttendanceRequests,

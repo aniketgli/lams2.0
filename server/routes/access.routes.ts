@@ -115,6 +115,12 @@ router.put('/users/:biometricId/roles', isAuthenticated, async (req, res) => {
 
 // HRMS role choices must come from the signed-in user's existing assignments.
 router.get('/roles', isAuthenticated, async (req, res) => {
+  const requestedModule = typeof req.query.moduleId === 'string' ? req.query.moduleId.trim().toLowerCase() : DEFAULT_MODULE;
+  const moduleAliases: Record<string, string> = { lams: 'hrms', sims: 'stock', fms: 'facility' };
+  const moduleId = moduleAliases[requestedModule] || requestedModule;
+  if (!['hrms', 'pms', 'stock', 'facility', 'finance'].includes(moduleId)) {
+    return res.status(400).json({ message: 'Unsupported module.' });
+  }
   try {
     const rows = await db.select({ roleId: user_module_roles.roleId })
       .from(user_module_roles)
@@ -131,17 +137,22 @@ router.get('/roles', isAuthenticated, async (req, res) => {
 // Role switching changes only the active session context; it never edits user_module_roles.
 router.post('/active-role', isAuthenticated, async (req, res) => {
   const requested = typeof req.body?.role === 'string' ? req.body.role.trim() : '';
-  if (!APPROVED_ROLES.has(requested)) return res.status(400).json({ message: 'Unsupported HRMS role.' });
+  const requestedModule = typeof req.body?.moduleId === 'string' ? req.body.moduleId.trim().toLowerCase() : DEFAULT_MODULE;
+  const moduleAliases: Record<string, string> = { lams: 'hrms', sims: 'stock', fms: 'facility' };
+  const moduleId = moduleAliases[requestedModule] || requestedModule;
+  if (!['hrms', 'pms', 'stock', 'facility', 'finance'].includes(moduleId)) return res.status(400).json({ message: 'Unsupported module.' });
+  const normalizedRole = displayRole(requested);
+  if (!normalizedRole) return res.status(400).json({ message: 'Unsupported role.' });
   try {
     const rows = await db.select({ roleId: user_module_roles.roleId })
       .from(user_module_roles)
-      .where(and(eq(user_module_roles.biometricId, req.session.biometricId!), eq(user_module_roles.moduleId, HRMS_MODULE)));
-    const assigned = rows.map((row) => displayRole(row.roleId)).filter((role): role is string => Boolean(role));
-    if (!assigned.includes(requested)) return res.status(403).json({ message: 'This role is not assigned to your account.' });
-    req.session.activeModule = HRMS_MODULE;
-    req.session.activeRole = requested;
+      .where(and(eq(user_module_roles.biometricId, req.session.biometricId!), eq(user_module_roles.moduleId, moduleId)));
+    const assigned = rows.map((row) => displayRole(row.roleId) || row.roleId).filter(Boolean);
+    if (!assigned.includes(normalizedRole) && !rows.some((row) => row.roleId === requested)) return res.status(403).json({ message: 'This role is not assigned to your account for this module.' });
+    req.session.activeModule = moduleId;
+    req.session.activeRole = normalizedRole;
     await new Promise<void>((resolve, reject) => req.session.save((error) => error ? reject(error) : resolve()));
-    return res.json({ activeModule: HRMS_MODULE, activeRole: requested });
+    return res.json({ activeModule: moduleId, activeRole: normalizedRole });
   } catch (error) {
     console.error('Active role validation failed:', error instanceof Error ? error.message : error);
     return res.status(500).json({ message: 'Unable to change active role.' });

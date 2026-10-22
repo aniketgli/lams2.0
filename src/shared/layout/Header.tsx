@@ -24,23 +24,26 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   activeTab,
   setActiveTab,
+  activeModule,
   setActiveModule,
   setIsOpenMobile,
   onRoleChangedGoDashboard
 }) => {
   const {
     currentUser,
-    logout
+    logout,
+    applyActiveSessionRole
   } = useApp();
 
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [assignedRoleLabels, setAssignedRoleLabels] = useState<string[]>([]);
   const [roleSwitchBusy, setRoleSwitchBusy] = useState(false);
   const [roleSwitchError, setRoleSwitchError] = useState('');
+  const [currentRoleLabel, setCurrentRoleLabel] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
-    fetch('/api/access/roles', { credentials: 'same-origin', cache: 'no-store' })
+    fetch(`/api/access/roles?moduleId=${encodeURIComponent(({ lams: 'hrms', pms: 'pms', sims: 'stock', fms: 'facility', finance: 'finance' } as Record<string, string>)[activeModule] || activeModule)}`, { credentials: 'same-origin', cache: 'no-store' })
       .then(async (response) => {
         if (!response.ok) throw new Error('Unable to load assigned roles');
         return response.json();
@@ -48,7 +51,7 @@ export const Header: React.FC<HeaderProps> = ({
       .then((data) => { if (active) setAssignedRoleLabels(Array.isArray(data.roles) ? data.roles : []); })
       .catch(() => { if (active) setAssignedRoleLabels([]); });
     return () => { active = false; };
-  }, []);
+  }, [activeModule]);
 
   const roleToLabel: Record<string, string> = {
     administrator: 'Administrator', audit: 'Auditor', reporting_manager: 'Reporting Manager',
@@ -65,11 +68,13 @@ export const Header: React.FC<HeaderProps> = ({
       const response = await fetch('/api/access/active-role', {
         method: 'POST', credentials: 'same-origin', cache: 'no-store',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ role: label })
+        body: JSON.stringify({ role: label, moduleId: ({ lams: 'hrms', pms: 'pms', sims: 'stock', fms: 'facility', finance: 'finance' } as Record<string, string>)[activeModule] || activeModule })
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.message || 'Role switch was rejected.');
-      window.location.reload();
+      applyActiveSessionRole(label);
+      setCurrentRoleLabel(label);
+      onRoleChangedGoDashboard();
     } catch (error) {
       setRoleSwitchError(error instanceof Error ? error.message : 'Unable to switch role.');
     } finally {
@@ -112,13 +117,14 @@ export const Header: React.FC<HeaderProps> = ({
 
   const allRolesList: { role: UserRole; label: string }[] = [
     { role: 'administrator', label: 'Administrator' },
-    ...(currentUser.id === 'usr-audit' || userRoles.includes('audit') ? [{ role: 'audit' as UserRole, label: 'Auditor' }] : []),
+    { role: 'audit', label: 'Auditor' },
     { role: 'reporting_manager', label: 'Reporting Manager' },
     { role: 'reviewing_manager', label: 'HoD' },
     { role: 'general_staff', label: 'User' }
   ];
 
   const rolesList = allRolesList.filter((item) => assignedRoleLabels.includes(item.label));
+  const activeRoleLabel = currentRoleLabel || getRoleLabel(currentUser.role);
 
 
 
@@ -165,7 +171,7 @@ export const Header: React.FC<HeaderProps> = ({
                   {currentUser.name}
                 </span>
                 <span className="text-[10px] text-slate-500 block leading-tight font-medium">
-                  {getRoleLabel(currentUser.role)}
+                  {activeRoleLabel}
                 </span>
               </div>
               <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
@@ -188,22 +194,16 @@ export const Header: React.FC<HeaderProps> = ({
                       <p className="text-[10px] text-[#2563eb] font-mono truncate mt-0.5">{currentUser.email}</p>
                     </div>
                   </div>
-                  <div className="mt-2.5 pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px] text-slate-600">
-                    <span className="font-medium text-slate-500">{currentUser.department}</span>
-                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${getRoleBadgeStyle(currentUser.role)}`}>
-                      {getRoleLabel(currentUser.role)}
-                    </span>
-                  </div>
                 </div>
 
                 {rolesList.length > 1 && (
                   <div className="p-3 border-b border-slate-100">
-                    <p className="text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-2">Switch HRMS Role</p>
+                    
                     <div className="space-y-1">
                       {rolesList.map((item) => (
-                        <button key={item.role} type="button" disabled={roleSwitchBusy || getRoleLabel(item.role) === getRoleLabel(currentUser.role)}
+                        <button key={item.role} type="button" disabled={roleSwitchBusy || item.label === activeRoleLabel}
                           onClick={() => handleRoleSwitch(item.label)}
-                          className={`w-full flex items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold transition-colors ${getRoleLabel(item.role) === getRoleLabel(currentUser.role) ? 'bg-blue-50 text-blue-800 cursor-default' : 'text-slate-700 hover:bg-slate-50 disabled:opacity-50'}`}>
+                          className={`w-full flex items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold transition-colors ${item.label === activeRoleLabel ? 'bg-blue-50 text-blue-800 cursor-default' : 'text-slate-700 hover:bg-slate-50 disabled:opacity-50'}`}>
                           <span>{item.label}</span>
                           {getRoleLabel(item.role) === getRoleLabel(currentUser.role) && <Check className="w-3.5 h-3.5" />}
                         </button>

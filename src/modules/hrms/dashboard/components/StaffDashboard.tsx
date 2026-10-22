@@ -250,7 +250,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onNavigate }) =>
 
         {/* Card Grid View - Always shown on Mobile, shown on Desktop when selected */}
         <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 ${leaveViewMode === 'table' ? 'block sm:hidden' : 'block'}`}>
-          {Object.entries(currentUser.leaveBalances).map(([typeKey, balObj]) => {
+          {Object.entries(currentUser.leaveBalances ?? {}).map(([typeKey, balObj]) => {
             const bal = balObj as { total: number; used: number; pending: number };
             const available = bal.total - bal.used;
             const percentUsed = Math.round((bal.used / bal.total) * 100) || 0;

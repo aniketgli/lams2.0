@@ -1083,7 +1083,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     if (!newUserForm.joiningDate?.trim()) missingFields.push('Date of Joining');
 
     if (newUserForm.employmentType === 'permanent') {
-      if (!newUserForm.permanentEmploymentType?.trim()) missingFields.push('Employment Type (Direct / Deputation)');
+      if (!newUserForm.permanentEmploymentType?.trim()) missingFields.push('Category (Direct / Deputation)');
       if (!newUserForm.employeeCategory?.trim()) missingFields.push('Category (Administrative / Scientific / Technical)');
       if (!newUserForm.designation?.trim()) missingFields.push('Designation');
       if (!newUserForm.department?.trim()) missingFields.push('Department / Section / Cell');
@@ -4335,17 +4335,17 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                     {/* PERMANENT */}
                     {newUserForm.employmentType === 'permanent' && (
                       <>
-                        {/* Employment Type: Direct / Deputation */}
+                        {/* Category: Direct / Deputation */}
                         <div>
                           <label className="block text-slate-700 font-bold mb-1 text-xs">
-                            Employment Type <span className="text-blue-600 font-bold ml-0.5">*</span>
+                            Category <span className="text-blue-600 font-bold ml-0.5">*</span>
                           </label>
                           <AppSelect
                             value={newUserForm.permanentEmploymentType}
-                            placeholder="Select Employment Type"
+                            placeholder="Select Category"
                             onChange={(val) => setNewUserForm({ ...newUserForm, permanentEmploymentType: val as any })}
                             options={[
-                              { label: 'Select Employment Type', value: '' },
+                              { label: 'Select Category', value: '' },
                               { label: 'Direct', value: 'Direct' },
                               { label: 'Deputation', value: 'Deputation' }
                             ]}
@@ -4353,17 +4353,17 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                           />
                         </div>
 
-                        {/* Category: Administrative / Scientific / Technical */}
+                        {/* Staff Category: Administrative / Scientific / Technical */}
                         <div>
                           <label className="block text-slate-700 font-bold mb-1 text-xs">
-                            Category <span className="text-blue-600 font-bold ml-0.5">*</span>
+                            Staff Category <span className="text-blue-600 font-bold ml-0.5">*</span>
                           </label>
                           <AppSelect
                             value={newUserForm.employeeCategory}
-                            placeholder="Select Category"
+                            placeholder="Select Staff Category"
                             onChange={(val) => setNewUserForm({ ...newUserForm, employeeCategory: val })}
                             options={[
-                              { label: 'Select Category', value: '' },
+                              { label: 'Select Staff Category', value: '' },
                               ...categoriesMaster.map((c) => ({ label: c, value: c }))
                             ]}
                             className="w-full"

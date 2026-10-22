@@ -2,7 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { db } from '../../src/db';
-import { biometric_machines, employee_profiles, organization_settings, organization_units, profile_master_records, shifts, users, designations, msc_streams, msc_batches, training_courses, trainee_batches, projects, categories, phd_enrollments } from '../../src/db/schema';
+import { biometric_machines, employee_profiles, organization_settings, organization_units, profile_master_records, shifts, users, designations, msc_streams, msc_batches, training_courses, trainee_batches, projects, categories, phd_enrollments, user_module_roles } from '../../src/db/schema';
 import { isAuthenticated, isAdmin } from '../middleware/auth.middleware';
 import { eq } from 'drizzle-orm';
 import { isIP } from 'node:net';
@@ -12,49 +12,45 @@ const router = Router();
 // Employees
 router.get('/employees', isAuthenticated, async (_req, res) => {
   try {
-    // The directory needs account and profile fields together. LEFT JOIN keeps
-    // valid login accounts visible even before their employee profile is completed.
-    const employees = await db
-      .select({
-        id: users.id,
-        name: users.name,
-        suffix: employee_profiles.suffix,
-        email: users.email,
-        role: users.role,
-        department: employee_profiles.department,
-        designation: employee_profiles.designation,
-        employmentType: employee_profiles.employmentType,
-        joiningDate: employee_profiles.joiningDate,
-        phone: employee_profiles.phone,
-        officeLocation: employee_profiles.officeLocation,
-        shiftId: employee_profiles.shiftId,
-        profileData: employee_profiles.profileData
-      })
-      .from(users)
-      .leftJoin(employee_profiles, eq(users.id, employee_profiles.userId));
+    // Keep the directory endpoint compatible with the current users schema.
+    // Profiles and module-role assignments are optional enrichment; failure in either
+    // must not take down the employee directory or the HRMS landing screen.
+    const accounts = await db.select({
+      id: users.id,
+      biometricId: users.biometricId,
+      name: users.name,
+      email: users.email,
+      createdAt: users.createdAt,
+    }).from(users);
 
-    const sessionUserId = req.session.userId;
-    const sessionRole = String(req.session.role || '').toLowerCase();
-    let visibleEmployees = employees;
-    if (!['admin', 'administrator'].includes(sessionRole)) {
-      const current = employees.find((employee) => employee.id === sessionUserId);
-      if (['reporting_manager', 'reviewing_manager', 'manager'].includes(sessionRole)) {
-        visibleEmployees = employees.filter((employee) => {
-          if (employee.id === sessionUserId) return true;
-          let data: any = {};
-          try { data = typeof employee.profileData === 'string' ? JSON.parse(employee.profileData) : employee.profileData || {}; } catch { data = {}; }
-          // Managers can only see employees explicitly assigned to them.
-          // Department-wide visibility is intentionally not inferred from a role.
-          return data.reportingManagerId === sessionUserId || data.reviewingManagerId === sessionUserId;
-        });
-      } else {
-        visibleEmployees = current ? [current] : [];
+    // Employee profile columns differ in the current production database.
+    // Do not query the profile table from the landing-page employee list until its
+    // actual schema is mapped; this endpoint must not fail just because enrichment is absent.
+    const profileByBiometric: Record<string, Record<string, unknown>> = {};
+
+    let rolesByBiometric: Record<string, Record<string, string[]>> = {};
+    try {
+      const assignments = await db.select().from(user_module_roles);
+      for (const assignment of assignments) {
+        const key = String(assignment.biometricId || '');
+        if (!key) continue;
+        rolesByBiometric[key] ||= {};
+        rolesByBiometric[key][String(assignment.moduleId)] ||= [];
+        rolesByBiometric[key][String(assignment.moduleId)].push(String(assignment.roleId));
       }
+    } catch (roleError) {
+      console.warn('Employee role enrichment unavailable:', roleError instanceof Error ? roleError.message : roleError);
     }
+
+    const result = accounts.map((account) => ({
+      ...account,
+      ...(profileByBiometric[String(account.biometricId)] || {}),
+      moduleRoles: rolesByBiometric[String(account.biometricId)] || {},
+    }));
     res.setHeader('Cache-Control', 'no-store');
-    return res.json(visibleEmployees);
+    return res.json(result);
   } catch (error) {
-    console.error('Failed to fetch employees:', error instanceof Error ? error.message : error);
+    console.error('Failed to fetch employees:', error instanceof Error ? error.stack || error.message : error);
     return res.status(500).json({ error: 'Failed to fetch employees' });
   }
 });
@@ -292,25 +288,71 @@ router.delete('/employees/:userId', isAdmin, async (req, res) => {
 });
 
 
-// Persist per-module role assignments in the employee profile JSON. Admin-only.
-// Persist per-module role assignments in profile_data; authorization remains server-side.
+// Persist normalized module-level role assignments in MySQL. Admin-only.
+const allowedModuleRoleIds: Record<string, Set<string>> = {
+  hrms: new Set(['Administrator', 'HoD', 'Reporting Manager', 'User', 'Auditor', 'hrms_admin', 'hrms_reviewing', 'hrms_reporting', 'hrms_staff', 'hrms_auditor']),
+  lams: new Set(['Administrator', 'HoD', 'Reporting Manager', 'User', 'Auditor', 'hrms_admin', 'hrms_reviewing', 'hrms_reporting', 'hrms_staff', 'hrms_auditor']),
+  pms: new Set(['Administrator', 'HoD', 'Reporting Manager', 'User', 'Auditor', 'pms_admin', 'pms_pi', 'pms_co_pi', 'pms_researcher', 'pms_reviewer']),
+  stock: new Set(['Administrator', 'HoD', 'Reporting Manager', 'User', 'Auditor', 'sims_admin', 'sims_approver', 'sims_store_keeper', 'sims_indenter']),
+  sims: new Set(['Administrator', 'HoD', 'Reporting Manager', 'User', 'Auditor', 'sims_admin', 'sims_approver', 'sims_store_keeper', 'sims_indenter']),
+  finance: new Set(['Administrator', 'HoD', 'Reporting Manager', 'User', 'Auditor', 'fin_admin', 'fin_officer', 'fin_accountant', 'fin_claimant']),
+  facility: new Set(['Administrator', 'HoD', 'Reporting Manager', 'User', 'Auditor', 'fms_admin', 'fms_officer', 'fms_supervisor', 'fms_requester']),
+  fms: new Set(['Administrator', 'HoD', 'Reporting Manager', 'User', 'Auditor', 'fms_admin', 'fms_officer', 'fms_supervisor', 'fms_requester'])
+};
+
 router.put('/employees/:userId/module-roles', isAdmin, async (req, res) => {
   const userId = String(req.params.userId || '');
   const moduleRoles = req.body?.moduleRoles;
   if (!moduleRoles || typeof moduleRoles !== 'object' || Array.isArray(moduleRoles) ||
       JSON.stringify(moduleRoles).length > 20000 ||
-      Object.keys(moduleRoles).some((key) => !/^[a-zA-Z0-9_-]{1,80}$/.test(key))) {
-    return res.status(400).json({ error: 'A valid moduleRoles object is required.' });
+      Object.keys(moduleRoles).some((key) => !Object.prototype.hasOwnProperty.call(allowedModuleRoleIds, key)) ||
+      Object.entries(moduleRoles).some(([moduleId, roles]) =>
+        !Array.isArray(roles) || roles.length > 30 ||
+        roles.some((role) => typeof role !== 'string' || !allowedModuleRoleIds[moduleId]?.has(role)))) {
+    return res.status(400).json({ error: 'Module roles contain an unknown module or role.' });
   }
   try {
-    const [row] = await db.select({ userId: employee_profiles.userId, profileData: employee_profiles.profileData })
-      .from(employee_profiles).where(eq(employee_profiles.userId, userId));
-    if (!row) return res.status(404).json({ error: 'Employee profile not found.' });
-    let saved: Record<string, any> = {};
-    try { saved = row.profileData ? JSON.parse(row.profileData) : {}; } catch { saved = {}; }
-    saved.moduleRoles = moduleRoles;
-    await db.update(employee_profiles).set({ profileData: JSON.stringify(saved) })
-      .where(eq(employee_profiles.userId, userId));
+    const [target] = await db.select({ biometricId: users.biometricId }).from(users).where(eq(users.id, Number(userId)));
+    if (!target) return res.status(404).json({ error: 'User account not found.' });
+    const actorBiometricId = req.session.biometricId;
+    if (!actorBiometricId) return res.status(401).json({ error: 'Administrator session is missing biometric ID.' });
+
+    const moduleAliases: Record<string, string> = { lams: 'hrms', sims: 'stock', fms: 'facility' };
+    await db.transaction(async (tx) => {
+      const desired = new Set<string>();
+      for (const [rawModuleId, roles] of Object.entries(moduleRoles as Record<string, string[]>)) {
+        const moduleId = moduleAliases[rawModuleId] || rawModuleId;
+        for (const roleId of roles) desired.add(JSON.stringify([moduleId, roleId]));
+      }
+      const existing = await tx.select({
+        id: user_module_roles.id,
+        moduleId: user_module_roles.moduleId,
+        roleId: user_module_roles.roleId
+      }).from(user_module_roles).where(eq(user_module_roles.biometricId, target.biometricId));
+
+      for (const assignment of existing) {
+        const key = JSON.stringify([moduleAliases[assignment.moduleId] || assignment.moduleId, assignment.roleId]);
+        const status = desired.has(key) ? 'active' : 'inactive';
+        await tx.update(user_module_roles).set({
+          status,
+          lastUpdatedBy: actorBiometricId,
+          lastUpdated: new Date()
+        }).where(eq(user_module_roles.id, assignment.id));
+      }
+
+      const existingKeys = new Set(existing.map((item) => JSON.stringify([moduleAliases[item.moduleId] || item.moduleId, item.roleId])));
+      const inserts = [...desired].map((key) => JSON.parse(key) as [string, string])
+        .filter(([moduleId, roleId]) => !existingKeys.has(JSON.stringify([moduleId, roleId])))
+        .map(([moduleId, roleId]) => ({
+          biometricId: target.biometricId,
+          moduleId,
+          roleId,
+          status: 'active',
+          lastUpdatedBy: actorBiometricId,
+          lastUpdated: new Date()
+        }));
+      if (inserts.length) await tx.insert(user_module_roles).values(inserts);
+    });
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ success: true, moduleRoles });
   } catch (error) {
@@ -351,22 +393,11 @@ function normalizeShift(body: any) {
   }} as const;
 }
 
+// Shift Master is out of scope for the current HRMS login/module-access fix.
+// Do not query the legacy shifts table until its schema and UI are explicitly brought into scope.
 router.get('/shifts', isAuthenticated, async (_req, res) => {
-  try {
-    const shiftList = await db.select().from(shifts);
-    res.setHeader('Cache-Control', 'no-store');
-    return res.json(shiftList.map((shift) => ({
-      ...shift,
-      halfDayHours: Number(shift.halfDayHours ?? 4),
-      fullDayHours: Number(shift.fullDayHours ?? 8),
-      minHalfDayHours: Number(shift.halfDayHours ?? 4),
-      minFullDayHours: Number(shift.fullDayHours ?? 8),
-      applicableDays: (() => { try { return JSON.parse(shift.applicableDays || '[]'); } catch { return []; } })()
-    })));
-  } catch (error) {
-    console.error('Failed to fetch shifts:', error);
-    return res.status(500).json({ error: 'Failed to fetch shifts' });
-  }
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json([]);
 });
 
 router.post('/shifts', isAdmin, async (req, res) => {

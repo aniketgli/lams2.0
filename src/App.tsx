@@ -40,8 +40,22 @@ const AppContent: React.FC = () => {
   };
 
   const handleSelectModuleFromLobby = (modId: EnterpriseModuleId) => {
-    setActiveModule(modId);
-    if (modId === 'lams') {
+    // Lobby uses current module IDs; AppContent still renders legacy internal IDs.
+    // Translate at the boundary so clicking HRMS never leaves the app with no page.
+    const moduleMap: Record<string, 'lams' | 'pms' | 'sims' | 'fms' | 'finance'> = {
+      hrms: 'lams',
+      lams: 'lams',
+      pms: 'pms',
+      stock: 'sims',
+      sims: 'sims',
+      facility: 'fms',
+      fms: 'fms',
+      finance: 'finance',
+    };
+    const targetModule = moduleMap[String(modId)];
+    if (!targetModule) return;
+    setActiveModule(targetModule);
+    if (targetModule === 'lams') {
       setActiveTab('dashboard');
     }
   };
