@@ -748,14 +748,14 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
           reportingmanager: 'hrms_reporting', hrmsreporting: 'hrms_reporting',
           hod: 'hrms_reviewing', reviewingmanager: 'hrms_reviewing', hrmsreviewing: 'hrms_reviewing',
           administrator: 'hrms_admin', admin: 'hrms_admin', hrmsadmin: 'hrms_admin',
-          auditor: 'hrms_auditor', audit: 'hrms_auditor', hrmsauditor: 'hrms_auditor'
+          auditor: 'auditor', audit: 'auditor'
         };
         const matrixRoleAliases: Record<string, Record<string, string>> = {
           lams: hrmsRoleMap,
-          pms: { admin: 'pms_admin', administrator: 'pms_admin', hod: 'pms_pi', reportingmanager: 'pms_co_pi', user: 'pms_researcher', auditor: 'pms_reviewer' },
-          sims: { admin: 'sims_admin', administrator: 'sims_admin', hod: 'sims_approver', reportingmanager: 'sims_store_keeper', user: 'sims_indenter' },
-          finance: { admin: 'fin_admin', administrator: 'fin_admin', hod: 'fin_officer', reportingmanager: 'fin_accountant', user: 'fin_claimant' },
-          fms: { admin: 'fms_admin', administrator: 'fms_admin', hod: 'fms_officer', reportingmanager: 'fms_supervisor', user: 'fms_requester' }
+          pms: { admin: 'pms_admin', administrator: 'pms_admin', hod: 'pms_pi', reportingmanager: 'pms_co_pi', user: 'pms_researcher', auditor: 'auditor' },
+          sims: { admin: 'sims_admin', administrator: 'sims_admin', hod: 'sims_approver', reportingmanager: 'sims_store_keeper', user: 'sims_indenter', auditor: 'auditor' },
+          finance: { admin: 'fin_admin', administrator: 'fin_admin', hod: 'fin_officer', reportingmanager: 'fin_accountant', user: 'fin_claimant', auditor: 'auditor' },
+          fms: { admin: 'fms_admin', administrator: 'fms_admin', hod: 'fms_officer', reportingmanager: 'fms_supervisor', user: 'fms_requester', auditor: 'auditor' }
         };
         for (const grant of (Array.isArray(payload.assignments) ? payload.assignments : [])) {
           if (grant.status && String(grant.status).toLowerCase() !== 'active') continue;
