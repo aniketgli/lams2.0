@@ -156,12 +156,3 @@ export const phd_enrollments = mysqlTable('phd_enrollments', {
   createdAt: timestamp('created_at').defaultNow(), updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });
 
-
-/** Normalized module-level role assignments; MySQL is the source of truth. */
-export const user_module_roles = mysqlTable('user_module_roles', {
-  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
-  userId: varchar('user_id', { length: 36 }).notNull(),
-  moduleId: varchar('module_id', { length: 80 }).notNull(),
-  roleId: varchar('role_id', { length: 100 }).notNull(),
-  createdAt: timestamp('created_at').defaultNow(),
-}, (table) => ({ assignmentUnique: uniqueIndex('user_module_role_unique').on(table.userId, table.moduleId, table.roleId) }));
