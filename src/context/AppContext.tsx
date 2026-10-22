@@ -469,6 +469,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [coursesMaster, setCoursesMaster] = useState<string[]>([]);
   const [batchesMaster, setBatchesMaster] = useState<string[]>([]);
   const [phdEnrollmentMaster, setPhdEnrollmentMaster] = useState<string[]>([]);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [locationsMaster, setLocationsMaster] = useState<string[]>(() => {
     const saved = localStorage.getItem('la_hub_locations_master');
     return saved ? JSON.parse(saved) : DEFAULT_LOCATIONS_MASTER;
@@ -611,7 +612,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [users, setUsers] = useState<User[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string>('');
 
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [sessionUser, setSessionUser] = useState<Partial<User> | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
@@ -670,6 +670,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           officeLocation: string | null;
           shiftId: string | null;
           profileData: string | null;
+          moduleRoles?: UserModuleRoles;
         }> = await response.json();
 
         if (cancelled || !Array.isArray(rows)) return;
@@ -726,6 +727,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             phone: row.phone || savedProfile.phone,
             officeLocation: row.officeLocation || savedProfile.officeLocation,
             shiftId: row.shiftId || savedProfile.shiftId,
+            // Module roles are supplied by the server from the normalized user_module_roles table.
+            moduleRoles: row.moduleRoles || {},
             avatar: savedProfile.avatar || '',
             status: savedProfile.status || 'active',
             leaveBalances: savedProfile.leaveBalances || {
