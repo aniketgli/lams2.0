@@ -24,7 +24,7 @@ const APPROVED_ROLES = new Set(['User', 'Reporting Manager', 'HoD', 'Administrat
 function displayRole(roleId: string): string | null {
   const raw = String(roleId || '').trim();
   if (DISPLAY_ROLES[raw]) return DISPLAY_ROLES[raw];
-  const normalized = raw.toLowerCase().replace(/[\\s_-]+/g, '');
+  const normalized = raw.toLowerCase().replace(/[\s_-]+/g, '');
   const aliases: Record<string, string> = {
     user: 'User', generalstaff: 'User', hrmsstaff: 'User', staff: 'User',
     reportingmanager: 'Reporting Manager', hrmsreporting: 'Reporting Manager',
@@ -63,7 +63,7 @@ router.get('/users/:biometricId/roles', isAuthenticated, async (req, res) => {
       return res.status(403).json({ message: 'Administrator access required.' });
     }
     const target = String(req.params.biometricId || '').trim();
-    if (!/^\\d{4}$/.test(target)) return res.status(400).json({ message: 'Invalid biometric ID.' });
+    if (!/^\d{4}$/.test(target)) return res.status(400).json({ message: 'Invalid biometric ID.' });
     const assignments = await db.select({ moduleId: user_module_roles.moduleId, roleId: user_module_roles.roleId, status: user_module_roles.status })
       .from(user_module_roles).where(and(eq(user_module_roles.biometricId, target), eq(user_module_roles.status, ACTIVE_STATUS)));
     res.setHeader('Cache-Control', 'no-store');
@@ -83,7 +83,7 @@ router.put('/users/:biometricId/roles', isAuthenticated, async (req, res) => {
       return res.status(403).json({ message: 'Administrator access required.' });
     }
     const target = String(req.params.biometricId || '').trim();
-    if (!/^\\d{4}$/.test(target)) return res.status(400).json({ message: 'Invalid biometric ID.' });
+    if (!/^\d{4}$/.test(target)) return res.status(400).json({ message: 'Invalid biometric ID.' });
     const requested = Array.isArray(req.body?.assignments) ? req.body.assignments : null;
     if (!requested) return res.status(400).json({ message: 'Assignments must be an array.' });
     const moduleMap: Record<string, string> = { hrms: 'hrms', lams: 'hrms', pms: 'pms', stock: 'stock', sims: 'stock', finance: 'finance', facility: 'facility', fms: 'facility' };
@@ -124,7 +124,7 @@ router.get('/roles', isAuthenticated, async (req, res) => {
   try {
     const rows = await db.select({ roleId: user_module_roles.roleId })
       .from(user_module_roles)
-      .where(and(eq(user_module_roles.biometricId, req.session.biometricId!), eq(user_module_roles.moduleId, HRMS_MODULE), eq(user_module_roles.status, ACTIVE_STATUS)));
+      .where(and(eq(user_module_roles.biometricId, req.session.biometricId!), eq(user_module_roles.moduleId, moduleId), eq(user_module_roles.status, ACTIVE_STATUS)));
     const roles = [...new Set(rows.map((row) => displayRole(row.roleId)).filter((role): role is string => Boolean(role) && APPROVED_ROLES.has(role)))];
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ roles });
