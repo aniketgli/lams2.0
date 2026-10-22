@@ -290,11 +290,14 @@ router.delete('/employees/:userId', isAdmin, async (req, res) => {
 
 // Persist normalized module-level role assignments in MySQL. Admin-only.
 const allowedModuleRoleIds: Record<string, Set<string>> = {
-  lams: new Set(['hrms_admin', 'hrms_reviewing', 'hrms_reporting', 'hrms_staff']),
-  pms: new Set(['pms_admin', 'pms_pi', 'pms_co_pi', 'pms_researcher', 'pms_reviewer']),
-  sims: new Set(['sims_admin', 'sims_approver', 'sims_store_keeper', 'sims_indenter']),
-  finance: new Set(['fin_admin', 'fin_officer', 'fin_accountant', 'fin_claimant']),
-  fms: new Set(['fms_admin', 'fms_officer', 'fms_supervisor', 'fms_requester'])
+  hrms: new Set(['Administrator', 'HoD', 'Reporting Manager', 'User', 'Auditor', 'hrms_admin', 'hrms_reviewing', 'hrms_reporting', 'hrms_staff', 'hrms_auditor']),
+  lams: new Set(['Administrator', 'HoD', 'Reporting Manager', 'User', 'Auditor', 'hrms_admin', 'hrms_reviewing', 'hrms_reporting', 'hrms_staff', 'hrms_auditor']),
+  pms: new Set(['Administrator', 'HoD', 'Reporting Manager', 'User', 'Auditor', 'pms_admin', 'pms_pi', 'pms_co_pi', 'pms_researcher', 'pms_reviewer']),
+  stock: new Set(['Administrator', 'HoD', 'Reporting Manager', 'User', 'Auditor', 'sims_admin', 'sims_approver', 'sims_store_keeper', 'sims_indenter']),
+  sims: new Set(['Administrator', 'HoD', 'Reporting Manager', 'User', 'Auditor', 'sims_admin', 'sims_approver', 'sims_store_keeper', 'sims_indenter']),
+  finance: new Set(['Administrator', 'HoD', 'Reporting Manager', 'User', 'Auditor', 'fin_admin', 'fin_officer', 'fin_accountant', 'fin_claimant']),
+  facility: new Set(['Administrator', 'HoD', 'Reporting Manager', 'User', 'Auditor', 'fms_admin', 'fms_officer', 'fms_supervisor', 'fms_requester']),
+  fms: new Set(['Administrator', 'HoD', 'Reporting Manager', 'User', 'Auditor', 'fms_admin', 'fms_officer', 'fms_supervisor', 'fms_requester'])
 };
 
 router.put('/employees/:userId/module-roles', isAdmin, async (req, res) => {
@@ -309,13 +312,46 @@ router.put('/employees/:userId/module-roles', isAdmin, async (req, res) => {
     return res.status(400).json({ error: 'Module roles contain an unknown module or role.' });
   }
   try {
-    const [target] = await db.select({ id: users.id }).from(users).where(eq(users.id, userId));
+    const [target] = await db.select({ biometricId: users.biometricId }).from(users).where(eq(users.id, Number(userId)));
     if (!target) return res.status(404).json({ error: 'User account not found.' });
+    const actorBiometricId = req.session.biometricId;
+    if (!actorBiometricId) return res.status(401).json({ error: 'Administrator session is missing biometric ID.' });
+
+    const moduleAliases: Record<string, string> = { lams: 'hrms', sims: 'stock', fms: 'facility' };
     await db.transaction(async (tx) => {
-      await tx.delete(user_module_roles).where(eq(user_module_roles.userId, userId));
-      const assignments = Object.entries(moduleRoles).flatMap(([moduleId, roles]) =>
-        (roles as string[]).map((roleId) => ({ userId, moduleId, roleId })));
-      if (assignments.length) await tx.insert(user_module_roles).values(assignments);
+      const desired = new Set<string>();
+      for (const [rawModuleId, roles] of Object.entries(moduleRoles as Record<string, string[]>)) {
+        const moduleId = moduleAliases[rawModuleId] || rawModuleId;
+        for (const roleId of roles) desired.add(JSON.stringify([moduleId, roleId]));
+      }
+      const existing = await tx.select({
+        id: user_module_roles.id,
+        moduleId: user_module_roles.moduleId,
+        roleId: user_module_roles.roleId
+      }).from(user_module_roles).where(eq(user_module_roles.biometricId, target.biometricId));
+
+      for (const assignment of existing) {
+        const key = JSON.stringify([moduleAliases[assignment.moduleId] || assignment.moduleId, assignment.roleId]);
+        const status = desired.has(key) ? 'active' : 'inactive';
+        await tx.update(user_module_roles).set({
+          status,
+          lastUpdatedBy: actorBiometricId,
+          lastUpdated: new Date()
+        }).where(eq(user_module_roles.id, assignment.id));
+      }
+
+      const existingKeys = new Set(existing.map((item) => JSON.stringify([moduleAliases[item.moduleId] || item.moduleId, item.roleId])));
+      const inserts = [...desired].map((key) => JSON.parse(key) as [string, string])
+        .filter(([moduleId, roleId]) => !existingKeys.has(JSON.stringify([moduleId, roleId])))
+        .map(([moduleId, roleId]) => ({
+          biometricId: target.biometricId,
+          moduleId,
+          roleId,
+          status: 'active',
+          lastUpdatedBy: actorBiometricId,
+          lastUpdated: new Date()
+        }));
+      if (inserts.length) await tx.insert(user_module_roles).values(inserts);
     });
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ success: true, moduleRoles });
