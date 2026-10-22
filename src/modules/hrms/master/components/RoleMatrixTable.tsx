@@ -92,11 +92,11 @@ export const ROLE_MATRIX_CELL_MAP: Record<'admin' | 'l2' | 'l1' | 'staff' | 'aud
     fms: 'fms_requester'
   },
   audit: {
-    lams: 'hrms_auditor', // Dedicated HRMS auditor role
-    pms: 'pms_reviewer', // Using the existing pms_reviewer role
-    sims: 'sims_indenter', // Placeholder
-    finance: 'fin_accountant', // Placeholder
-    fms: 'fms_requester' // Placeholder
+    lams: 'auditor',
+    pms: 'auditor',
+    sims: 'auditor',
+    finance: 'auditor',
+    fms: 'auditor'
   }
 };
 
