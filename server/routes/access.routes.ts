@@ -65,7 +65,7 @@ router.post('/active-role', isAuthenticated, async (req, res) => {
   try {
     const rows = await db.select({ roleId: user_module_roles.roleId })
       .from(user_module_roles)
-      .where(and(eq(user_module_roles.userId, req.session.userId!), eq(user_module_roles.moduleId, HRMS_MODULE)));
+      .where(and(eq(user_module_roles.biometricId, req.session.biometricId!), eq(user_module_roles.moduleId, HRMS_MODULE)));
     const assigned = rows.map((row) => displayRole(row.roleId)).filter((role): role is string => Boolean(role));
     if (!assigned.includes(requested)) return res.status(403).json({ message: 'This role is not assigned to your account.' });
     req.session.activeModule = HRMS_MODULE;
