@@ -681,12 +681,16 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
     if (!biometricId) {
       try {
-        const employeeResponse = await fetch('/api/employees', {
-          credentials: 'same-origin',
-          cache: 'no-store',
-          headers: { Accept: 'application/json' }
-        });
-        if (employeeResponse.ok) {
+        // The employee directory is mounted under /api/hrms in this app.
+        // Keep /api/employees as a compatibility fallback for older builds.
+        const employeeEndpoints = ['/api/hrms/employees', '/api/employees'];
+        for (const endpoint of employeeEndpoints) {
+          const employeeResponse = await fetch(endpoint, {
+            credentials: 'same-origin',
+            cache: 'no-store',
+            headers: { Accept: 'application/json' }
+          });
+          if (!employeeResponse.ok) continue;
           const employeePayload = await employeeResponse.json();
           const employeeRows = Array.isArray(employeePayload)
             ? employeePayload
@@ -694,11 +698,12 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
               ? employeePayload.employees
               : [];
           const canonicalEmployee = employeeRows.find((employee: any) =>
-            String(employee?.id ?? '') === String(u.id ?? '') ||
             (u.email && String(employee?.email ?? '').trim().toLowerCase() === String(u.email).trim().toLowerCase()) ||
-            (u.name && String(employee?.name ?? '').trim().toLowerCase() === String(u.name).trim().toLowerCase())
+            (u.name && String(employee?.name ?? '').trim().toLowerCase() === String(u.name).trim().toLowerCase()) ||
+            String(employee?.id ?? '') === String(u.id ?? '')
           );
           biometricId = String(canonicalEmployee?.biometricId ?? canonicalEmployee?.biometric_id ?? '').trim();
+          if (biometricId) break;
         }
       } catch (error) {
         console.error('Could not resolve employee biometric ID for role matrix:', error);
