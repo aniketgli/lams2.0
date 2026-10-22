@@ -6073,7 +6073,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                     <h3 className="font-bold text-base text-white tracking-tight truncate">
                       {userToEditRoles.name}
                     </h3>
-                    {userToEditRoles.biometricId && <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-950/80 text-blue-200 border border-blue-800/60">Biometric ID: {userToEditRoles.biometricId}</span>}
+                    {(userToEditRoles.biometricId || (userToEditRoles as any).biometric_id) && <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-950/80 text-blue-200 border border-blue-800/60">Biometric ID: {userToEditRoles.biometricId || (userToEditRoles as any).biometric_id}</span>}
                   </div>
                   
                 </div>
