@@ -6,6 +6,7 @@ import { createServer as createViteServer } from 'vite';
 import { emailRoutes } from './integrations/email/email.routes';
 import { slackRoutes } from './integrations/slack/slack.routes';
 import { authRoutes } from './routes/auth.routes';
+import accessRoutes from './routes/access.routes';
 import hrmsRoutes from './routes/hrms.routes';
 import { errorHandler } from './middleware/errorHandler';
 import session from 'express-session';
@@ -51,6 +52,7 @@ export async function createApp(httpServer?: HttpServer) {
   });
 
   app.use('/api/auth', authRoutes);
+  app.use('/api/access', accessRoutes);
   app.use('/api/email', emailRoutes);
   app.use('/api/slack', slackRoutes);
   app.use('/api/hrms', hrmsRoutes);
