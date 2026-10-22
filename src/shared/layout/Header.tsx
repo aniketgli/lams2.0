@@ -30,7 +30,8 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const {
     currentUser,
-    logout
+    logout,
+    applyActiveSessionRole
   } = useApp();
 
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -70,6 +71,7 @@ export const Header: React.FC<HeaderProps> = ({
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.message || 'Role switch was rejected.');
+      applyActiveSessionRole(label);
       setCurrentRoleLabel(label);
       onRoleChangedGoDashboard();
     } catch (error) {
@@ -114,7 +116,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   const allRolesList: { role: UserRole; label: string }[] = [
     { role: 'administrator', label: 'Administrator' },
-    ...(currentUser.id === 'usr-audit' || userRoles.includes('audit') ? [{ role: 'audit' as UserRole, label: 'Auditor' }] : []),
+    { role: 'audit', label: 'Auditor' },
     { role: 'reporting_manager', label: 'Reporting Manager' },
     { role: 'reviewing_manager', label: 'HoD' },
     { role: 'general_staff', label: 'User' }
