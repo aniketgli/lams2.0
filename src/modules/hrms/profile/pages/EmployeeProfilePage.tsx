@@ -5999,10 +5999,9 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                       {userToEditRoles.name}
                     </h3>
                     <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-950/80 text-blue-200 border border-blue-800/60">
-                      ID: {userToEditRoles.biometricId || userToEditRoles.id}
+                      Biometric ID: {userToEditRoles.biometricId || userToEditRoles.id}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400 mt-0.5 truncate">Edit System &amp; Enterprise Module Roles</p>
                 </div>
               </div>
 
@@ -6036,10 +6035,6 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                 <div className="text-[11px] text-slate-500 font-medium flex items-center space-x-2 min-w-0">
                   <span className="truncate">
                     Configuring permissions for <strong className="text-slate-800">{userToEditRoles.name}</strong>
-                  </span>
-                  <span className="text-slate-300">•</span>
-                  <span className="text-blue-700 font-bold bg-blue-50 border border-blue-200 px-2 py-0.2 rounded text-[10px] shrink-0">
-                    {activeAssignedRolesSummary.length} Active Grants
                   </span>
                 </div>
                 <div className="flex items-center space-x-2 shrink-0">
