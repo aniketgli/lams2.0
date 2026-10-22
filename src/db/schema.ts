@@ -1,9 +1,13 @@
 import { mysqlTable, varchar, text, longtext, timestamp, boolean, int, decimal, bigint, uniqueIndex } from 'drizzle-orm/mysql-core';
 
 export const users = mysqlTable('users', {
+  // Keep the UUID/string key: sessions and existing API routes depend on it.
   id: varchar('id', { length: 36 }).primaryKey(),
   name: varchar('name', { length: 255 }).notNull(),
   email: varchar('email', { length: 255 }).notNull().unique(),
+  // Stored only once on the account; nullable during migration for existing accounts
+  // that have not yet had a mobile number entered.
+  phone: varchar('phone', { length: 20 }).unique(),
   passwordHash: varchar('password_hash', { length: 255 }).notNull(),
   role: varchar('role', { length: 50 }).notNull(),
   createdAt: timestamp('created_at').defaultNow(),
@@ -17,16 +21,18 @@ export const sessions = mysqlTable('sessions', {
 });
 
 export const employee_profiles = mysqlTable('employee_profiles', {
-  userId: varchar('user_id', { length: 36 }).primaryKey(),
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  userId: varchar('user_id', { length: 36 }).notNull().unique().references(() => users.id, { onDelete: 'cascade', onUpdate: 'cascade' }),
+  // Four-character string so values such as 0007 retain leading zeroes.
+  biometricId: varchar('biometric_id', { length: 4 }).notNull().unique(),
   suffix: varchar('suffix', { length: 10 }),
   department: varchar('department', { length: 255 }).notNull(),
   designation: varchar('designation', { length: 255 }).notNull(),
   employmentType: varchar('employment_type', { length: 50 }).notNull(),
   joiningDate: varchar('joining_date', { length: 10 }).notNull(),
-  phone: varchar('phone', { length: 20 }),
   officeLocation: varchar('office_location', { length: 255 }),
   shiftId: varchar('shift_id', { length: 36 }),
-  // Preserves the full HRMS User profile (manager hierarchy, leave balances, student/research fields, module roles, etc.).
+  // Preserves the full HRMS User profile (manager hierarchy, leave balances, student/research fields, etc.).
   profileData: text('profile_data'),
 });
 
@@ -148,7 +154,7 @@ export const phd_enrollments = mysqlTable('phd_enrollments', {
 /** Normalized module-level role assignments; MySQL is the source of truth. */
 export const user_module_roles = mysqlTable('user_module_roles', {
   id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
-  userId: varchar('user_id', { length: 36 }).notNull(),
+  userId: varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade', onUpdate: 'cascade' }),
   moduleId: varchar('module_id', { length: 80 }).notNull(),
   roleId: varchar('role_id', { length: 100 }).notNull(),
   createdAt: timestamp('created_at').defaultNow(),
