@@ -117,6 +117,17 @@ export const MODULE_ROLE_DEFINITIONS: Record<EnterpriseModuleId, ModuleRoleDef[]
       badgeBg: 'bg-emerald-100 border-emerald-300',
       badgeText: 'text-emerald-800',
       level: 'staff'
+    },
+    {
+      id: 'hrms_auditor',
+      name: 'Auditor',
+      shortName: 'Auditor',
+      description: 'Read-only audit access to HRMS records and reports.',
+      moduleId: 'lams',
+      color: 'slate',
+      badgeBg: 'bg-slate-100 border-slate-300',
+      badgeText: 'text-slate-800',
+      level: 'staff'
     }
   ],
   pms: [
