@@ -21,7 +21,8 @@ router.post('/login', async (req, res) => {
       id: users.id,
       name: users.name,
       email: users.email,
-      passwordHash: users.passwordHash
+      passwordHash: users.passwordHash,
+      biometricId: users.biometricId
     }).from(users).where(eq(users.email, email));
 
     // Use one generic response for unknown users and wrong passwords.
@@ -32,7 +33,7 @@ router.post('/login', async (req, res) => {
     const assignments = await db.select({
       moduleId: user_module_roles.moduleId,
       roleId: user_module_roles.roleId
-    }).from(user_module_roles).where(eq(user_module_roles.userId, user.id));
+    }).from(user_module_roles).where(eq(user_module_roles.biometricId, user.biometricId));
 
     const modules: Record<string, string[]> = {};
     for (const assignment of assignments) {
@@ -46,7 +47,8 @@ router.post('/login', async (req, res) => {
         console.error('Session regeneration failed:', regenerateError);
         return res.status(500).json({ message: 'Unable to start a secure session.' });
       }
-      req.session.userId = user.id;
+      req.session.userId = String(user.id);
+      req.session.biometricId = user.biometricId;
       req.session.activeModule = null;
       req.session.activeRole = null;
       req.session.save((saveError) => {
@@ -55,7 +57,7 @@ router.post('/login', async (req, res) => {
           return res.status(500).json({ message: 'Unable to start a secure session.' });
         }
         res.setHeader('Cache-Control', 'no-store');
-        return res.json({ user: { id: user.id, name: user.name, email: user.email }, modules });
+        return res.json({ user: { id: String(user.id), biometricId: user.biometricId, name: user.name, email: user.email }, modules });
       });
     });
   } catch (error) {
@@ -83,14 +85,14 @@ router.post('/logout', (req, res) => {
 router.get('/me', async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ message: 'Unauthorized' });
   try {
-    const [user] = await db.select({ id: users.id, name: users.name, email: users.email })
-      .from(users).where(eq(users.id, req.session.userId));
+    const [user] = await db.select({ id: users.id, biometricId: users.biometricId, name: users.name, email: users.email })
+      .from(users).where(eq(users.id, Number(req.session.userId)));
     if (!user) {
       req.session.destroy(() => undefined);
       return res.status(401).json({ message: 'Session user no longer exists.' });
     }
     const assignments = await db.select({ moduleId: user_module_roles.moduleId, roleId: user_module_roles.roleId })
-      .from(user_module_roles).where(eq(user_module_roles.userId, user.id));
+      .from(user_module_roles).where(eq(user_module_roles.biometricId, user.biometricId));
     const modules: Record<string, string[]> = {};
     for (const assignment of assignments) {
       const moduleId = assignment.moduleId.toLowerCase() === 'lams' ? 'hrms' : assignment.moduleId.toLowerCase();
@@ -98,7 +100,7 @@ router.get('/me', async (req, res) => {
       if (!modules[moduleId].includes(assignment.roleId)) modules[moduleId].push(assignment.roleId);
     }
     res.setHeader('Cache-Control', 'no-store');
-    return res.json({ userId: user.id, user, modules, activeModule: req.session.activeModule || null, activeRole: req.session.activeRole || null });
+    return res.json({ userId: String(user.id), user: { ...user, id: String(user.id) }, modules, activeModule: req.session.activeModule || null, activeRole: req.session.activeRole || null });
   } catch (error) {
     console.error('Session identity lookup failed:', error instanceof Error ? error.message : error);
     return res.status(500).json({ message: 'Unable to load the signed-in user.' });
