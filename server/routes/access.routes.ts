@@ -64,6 +64,45 @@ router.get('/users/:biometricId/roles', isAuthenticated, async (req, res) => {
   }
 });
 
+// Save the complete module-role matrix. Existing grants are toggled active/inactive; missing grants are inserted active.
+router.put('/users/:biometricId/roles', isAuthenticated, async (req, res) => {
+  try {
+    const caller = await db.select({ roleId: user_module_roles.roleId }).from(user_module_roles)
+      .where(and(eq(user_module_roles.biometricId, req.session.biometricId!), eq(user_module_roles.status, ACTIVE_STATUS)));
+    if (!caller.some((row) => (displayRole(row.roleId) || row.roleId).toLowerCase() === 'administrator')) {
+      return res.status(403).json({ message: 'Administrator access required.' });
+    }
+    const target = String(req.params.biometricId || '').trim();
+    if (!/^\\d{4}$/.test(target)) return res.status(400).json({ message: 'Invalid biometric ID.' });
+    const requested = Array.isArray(req.body?.assignments) ? req.body.assignments : null;
+    if (!requested) return res.status(400).json({ message: 'Assignments must be an array.' });
+    const moduleMap: Record<string, string> = { hrms: 'hrms', lams: 'hrms', pms: 'pms', stock: 'stock', sims: 'stock', finance: 'finance', facility: 'facility', fms: 'facility' };
+    const canonical = new Set<string>();
+    for (const item of requested) {
+      const moduleId = moduleMap[String(item?.moduleId || '').toLowerCase()];
+      const roleId = typeof item?.roleId === 'string' ? item.roleId.trim() : '';
+      if (!moduleId || !roleId || roleId.length > 100) return res.status(400).json({ message: 'Invalid module-role assignment.' });
+      canonical.add(`${moduleId}::${roleId}`);
+    }
+    const existing = await db.select({ id: user_module_roles.id, moduleId: user_module_roles.moduleId, roleId: user_module_roles.roleId })
+      .from(user_module_roles).where(eq(user_module_roles.biometricId, target));
+    for (const row of existing) {
+      const key = `${moduleMap[row.moduleId.toLowerCase()] || row.moduleId.toLowerCase()}::${row.roleId}`;
+      const nextStatus = canonical.has(key) ? 'active' : 'inactive';
+      await db.update(user_module_roles).set({ status: nextStatus, lastUpdatedBy: req.session.biometricId!, lastUpdated: new Date() }).where(eq(user_module_roles.id, row.id));
+      canonical.delete(key);
+    }
+    for (const key of canonical) {
+      const [moduleId, roleId] = key.split('::');
+      await db.insert(user_module_roles).values({ biometricId: target, moduleId, roleId, status: 'active', lastUpdatedBy: req.session.biometricId! });
+    }
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Saving user module-role assignments failed:', error instanceof Error ? error.message : error);
+    return res.status(500).json({ message: 'Unable to save module-role assignments.' });
+  }
+});
+
 // HRMS role choices must come from the signed-in user's existing assignments.
 router.get('/roles', isAuthenticated, async (req, res) => {
   try {
