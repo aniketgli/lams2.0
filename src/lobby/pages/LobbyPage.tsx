@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { EnterpriseModuleId, UserRole, formatOrgAddress } from '../../types';
 import { WIILogo } from '../../shared/components/WIILogo';
@@ -75,6 +75,23 @@ const LOBBY_MODULES: LobbyCardItem[] = [
 
 export const LobbyPage: React.FC<LobbyPageProps> = ({ onSelectModule, onLogout }) => {
   const { currentUser, logout, orgBranding } = useApp();
+  const [assignedModules, setAssignedModules] = useState<string[]>([]);
+  const [accessLoaded, setAccessLoaded] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    fetch('/api/access/modules', { credentials: 'include', headers: { Accept: 'application/json' } })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Unable to load module assignments');
+        return response.json();
+      })
+      .then((data) => {
+        if (active) setAssignedModules(Array.isArray(data.modules) ? data.modules.map((item: { moduleId: string }) => item.moduleId) : []);
+      })
+      .catch(() => { if (active) setAssignedModules([]); })
+      .finally(() => { if (active) setAccessLoaded(true); });
+    return () => { active = false; };
+  }, []);
 
   const handleLogout = () => {
     if (onLogout) {
@@ -125,12 +142,12 @@ export const LobbyPage: React.FC<LobbyPageProps> = ({ onSelectModule, onLogout }
         <div className="flex flex-wrap items-stretch justify-center gap-4 sm:gap-5 lg:gap-5 xl:gap-6 w-full max-w-7xl mx-auto">
           {LOBBY_MODULES.map((mod) => {
             const Icon = mod.icon;
-            const allowed = isModuleAllowed(mod);
+            const allowed = accessLoaded && isModuleAllowed(mod);
 
             return (
               <div
                 key={mod.id}
-                onClick={() => allowed && onSelectModule(mod.id)}
+                onClick={() => allowed && onSelectModule(mod.id)}\n                role="button"\n                tabIndex={allowed ? 0 : -1}\n                aria-disabled={!allowed}
                 className={`group relative bg-white border rounded-2xl p-6 sm:p-7 flex flex-col items-center text-center transition-all duration-200 select-none w-full max-w-[340px] sm:max-w-none sm:w-[calc(33.333%-14px)] md:w-[calc(33.333%-18px)] lg:w-[calc(20%-16px)] xl:w-[calc(20%-20px)] shrink-0 ${
                   allowed
                     ? 'border-slate-200/90 hover:border-slate-300 hover:shadow-lg hover:-translate-y-1 cursor-pointer'
