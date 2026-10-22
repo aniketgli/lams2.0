@@ -21,7 +21,3 @@ JOIN user_module_roles AS older
  AND older.module_id = newer.module_id
  AND older.role_id = newer.role_id
  AND older.id < newer.id;
-
--- Keep the assignment uniqueness constraint and make user/module lookup efficient.
-CREATE INDEX user_module_roles_user_module_idx
-  ON user_module_roles (user_id, module_id);
