@@ -670,6 +670,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           officeLocation: string | null;
           shiftId: string | null;
           profileData: string | null;
+          moduleRoles?: UserModuleRoles;
         }> = await response.json();
 
         if (cancelled || !Array.isArray(rows)) return;
@@ -726,20 +727,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             phone: row.phone || savedProfile.phone,
             officeLocation: row.officeLocation || savedProfile.officeLocation,
             shiftId: row.shiftId || savedProfile.shiftId,
-            // Temporary hardcoded HRMS role override requested for Aniket only.
-            // Keep any existing assignments in other modules unchanged.
-            moduleRoles: row.email.trim().toLowerCase() === 'aniket@wii.gov.in'
-              ? {
-                  ...(savedProfile.moduleRoles || {}),
-                  lams: Array.from(new Set([
-                    ...((savedProfile.moduleRoles?.lams || []) as string[]),
-                    'hrms_admin',
-                    'hrms_reviewing',
-                    'hrms_reporting',
-                    'hrms_staff'
-                  ]))
-                }
-              : savedProfile.moduleRoles,
+            // Module roles are supplied by the server from the normalized user_module_roles table.
+            moduleRoles: row.moduleRoles || {},
             avatar: savedProfile.avatar || '',
             status: savedProfile.status || 'active',
             leaveBalances: savedProfile.leaveBalances || {
