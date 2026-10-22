@@ -17,10 +17,10 @@ router.get('/employees', isAuthenticated, async (_req, res) => {
     const employees = await db
       .select({
         id: users.id,
+        biometricId: users.biometricId,
         name: users.name,
         suffix: employee_profiles.suffix,
         email: users.email,
-        role: users.role,
         department: employee_profiles.department,
         designation: employee_profiles.designation,
         employmentType: employee_profiles.employmentType,
@@ -31,21 +31,21 @@ router.get('/employees', isAuthenticated, async (_req, res) => {
         profileData: employee_profiles.profileData
       })
       .from(users)
-      .leftJoin(employee_profiles, eq(users.id, employee_profiles.userId));
+      .leftJoin(employee_profiles, eq(users.biometricId, employee_profiles.biometricId));
 
     const sessionUserId = req.session.userId;
     const sessionRole = String(req.session.role || '').toLowerCase();
     let visibleEmployees = employees;
     if (!['admin', 'administrator'].includes(sessionRole)) {
-      const current = employees.find((employee) => employee.id === sessionUserId);
+      const current = employees.find((employee) => String(employee.id) === String(sessionUserId) || String(employee.biometricId) === String(req.session.biometricId));
       if (['reporting_manager', 'reviewing_manager', 'manager'].includes(sessionRole)) {
         visibleEmployees = employees.filter((employee) => {
-          if (employee.id === sessionUserId) return true;
+          if (String(employee.id) === String(sessionUserId) || String(employee.biometricId) === String(req.session.biometricId)) return true;
           let data: any = {};
           try { data = typeof employee.profileData === 'string' ? JSON.parse(employee.profileData) : employee.profileData || {}; } catch { data = {}; }
           // Managers can only see employees explicitly assigned to them.
           // Department-wide visibility is intentionally not inferred from a role.
-          return data.reportingManagerId === sessionUserId || data.reviewingManagerId === sessionUserId;
+          return String(data.reportingManagerId || '') === String(sessionUserId) || String(data.reviewingManagerId || '') === String(sessionUserId);
         });
       } else {
         visibleEmployees = current ? [current] : [];
@@ -55,13 +55,15 @@ router.get('/employees', isAuthenticated, async (_req, res) => {
     const assignments = await db.select().from(user_module_roles);
     const rolesByUser: Record<string, Record<string, string[]>> = {};
     for (const assignment of assignments) {
-      rolesByUser[assignment.userId] ||= {};
-      rolesByUser[assignment.userId][assignment.moduleId] ||= [];
-      rolesByUser[assignment.userId][assignment.moduleId].push(assignment.roleId);
+      const assignmentKey = String(assignment.biometricId || '');
+      if (!assignmentKey) continue;
+      rolesByUser[assignmentKey] ||= {};
+      rolesByUser[assignmentKey][assignment.moduleId] ||= [];
+      rolesByUser[assignmentKey][assignment.moduleId].push(assignment.roleId);
     }
     const result = visibleEmployees.map((employee: any) => ({
       ...employee,
-      moduleRoles: rolesByUser[employee.id] || {}
+      moduleRoles: rolesByUser[String(employee.biometricId || '')] || {}
     }));
     res.setHeader('Cache-Control', 'no-store');
     return res.json(result);
