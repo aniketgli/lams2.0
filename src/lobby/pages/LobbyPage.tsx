@@ -140,7 +140,7 @@ export const LobbyPage: React.FC<LobbyPageProps> = ({ onSelectModule, onLogout }
 
         {/* 5 Cards Row - Responsive */}
         <div className="flex flex-wrap items-stretch justify-center gap-4 sm:gap-5 lg:gap-5 xl:gap-6 w-full max-w-7xl mx-auto">
-          {LOBBY_MODULES.map((mod) => {
+          {LOBBY_MODULES.filter((mod) => accessLoaded && isModuleAllowed(mod)).map((mod) => {
             const Icon = mod.icon;
             const allowed = accessLoaded && isModuleAllowed(mod);
 
