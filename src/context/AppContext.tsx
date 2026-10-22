@@ -71,6 +71,7 @@ interface AppContextType {
   login: (email: string, password?: string) => Promise<{ success: boolean; message: string }>;
   logout: () => void;
   setCurrentUserId: (id: string) => void;
+  applyActiveSessionRole: (roleLabel: string) => void;
   attendanceRecords: AttendanceRecord[];
   manualAttendanceRequests: ManualAttendanceRegularizationRequest[];
   odRequests: OutdoorDutyRequest[];
@@ -1349,6 +1350,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (err: any) {
       return { success: false, message: 'Network error during login' };
     }
+  };
+
+  const applyActiveSessionRole = (roleLabel: string) => {
+    const roleMap: Record<string, string> = {
+      Administrator: 'administrator',
+      Auditor: 'audit',
+      'Reporting Manager': 'reporting_manager',
+      HoD: 'reviewing_manager',
+      User: 'general_staff'
+    };
+    const role = roleMap[roleLabel];
+    if (!role) return;
+    setSessionUser((previous) => previous ? { ...previous, role } : previous);
   };
 
   const logout = async () => {
@@ -4930,6 +4944,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         logout,
         setCurrentUserId,
+        applyActiveSessionRole,
 
         attendanceRecords,
         manualAttendanceRequests,
