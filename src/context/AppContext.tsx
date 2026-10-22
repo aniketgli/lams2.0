@@ -625,7 +625,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const authenticatedUser = data.user && typeof data.user === 'object' ? data.user : null;
         const userId = authenticatedUser?.id || data.userId;
         if (userId) setCurrentUserId(userId);
-        if (authenticatedUser) setSessionUser(authenticatedUser);
+        if (authenticatedUser) {
+          const activeRoleMap: Record<string, string> = {
+            Administrator: 'administrator', Auditor: 'audit', 'Reporting Manager': 'reporting_manager',
+            HoD: 'reviewing_manager', User: 'general_staff'
+          };
+          const activeRole = typeof data.activeRole === 'string' ? activeRoleMap[data.activeRole] : undefined;
+          setSessionUser({ ...authenticatedUser, ...(activeRole ? { role: activeRole, baseRole: authenticatedUser.role || activeRole } : {}) });
+        }
         setIsAuthenticated(true);
       })
       .catch(() => {
