@@ -672,7 +672,15 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       showToast('Administrators cannot edit their own roles.');
       return;
     }
-    setUserToEditRoles(u);
+
+    // Employee records may use either API naming convention. Normalize once so
+    // the role lookup, modal badge, and subsequent save all use the same ID.
+    const biometricId = String(
+      u.biometricId ?? (u as UserType & { biometric_id?: string }).biometric_id ?? ''
+    ).trim();
+    const userForRoleEditor = { ...u, biometricId } as UserType;
+
+    setUserToEditRoles(userForRoleEditor);
     setEditUserBaseRole(u.role);
     setEditUserRolesState(getUserRoles(u));
     setEditUserL1(u.reportingManagerId || '');
@@ -689,8 +697,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     };
     setEditUserModuleRolesState(modRoles);
 
-    if (u.biometricId) {
-      void fetch(`/api/access/users/${encodeURIComponent(u.biometricId)}/roles`, {
+    if (biometricId) {
+      void fetch(`/api/access/users/${encodeURIComponent(biometricId)}/roles`, {
         credentials: 'same-origin',
         cache: 'no-store',
         headers: { Accept: 'application/json' }
