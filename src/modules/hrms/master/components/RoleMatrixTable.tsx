@@ -53,7 +53,7 @@ const ROLE_ROWS: RoleRowDef[] = [
   },
   {
     tierId: 'staff',
-    title: 'user'
+    title: 'User'
   },
   {
     tierId: 'audit',
@@ -92,7 +92,7 @@ export const ROLE_MATRIX_CELL_MAP: Record<'admin' | 'l2' | 'l1' | 'staff' | 'aud
     fms: 'fms_requester'
   },
   audit: {
-    lams: 'hrms_staff', // Assuming auditor needs staff view access for now
+    lams: 'hrms_auditor', // Dedicated HRMS auditor role
     pms: 'pms_reviewer', // Using the existing pms_reviewer role
     sims: 'sims_indenter', // Placeholder
     finance: 'fin_accountant', // Placeholder
