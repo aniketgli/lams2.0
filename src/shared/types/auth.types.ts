@@ -119,17 +119,15 @@ export const MODULE_ROLE_DEFINITIONS: Record<EnterpriseModuleId, ModuleRoleDef[]
       level: 'staff'
     },
     {
-      {
       id: 'auditor',
       name: 'Auditor',
       shortName: 'Auditor',
-      description: 'Read-only audit access to LAMS records and reports.',
+      description: 'Read-only audit access to HRMS records and reports.',
       moduleId: 'lams',
       color: 'slate',
       badgeBg: 'bg-slate-100 border-slate-300',
       badgeText: 'text-slate-800',
       level: 'staff'
-      }
     }
   ],
   pms: [
