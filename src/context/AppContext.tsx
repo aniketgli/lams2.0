@@ -726,6 +726,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             phone: row.phone || savedProfile.phone,
             officeLocation: row.officeLocation || savedProfile.officeLocation,
             shiftId: row.shiftId || savedProfile.shiftId,
+            // Temporary hardcoded HRMS role override requested for Aniket only.
+            // Keep any existing assignments in other modules unchanged.
+            moduleRoles: row.email.trim().toLowerCase() === 'aniket@wii.gov.in'
+              ? {
+                  ...(savedProfile.moduleRoles || {}),
+                  lams: Array.from(new Set([
+                    ...((savedProfile.moduleRoles?.lams || []) as string[]),
+                    'hrms_admin',
+                    'hrms_reviewing',
+                    'hrms_reporting',
+                    'hrms_staff'
+                  ]))
+                }
+              : savedProfile.moduleRoles,
             avatar: savedProfile.avatar || '',
             status: savedProfile.status || 'active',
             leaveBalances: savedProfile.leaveBalances || {
