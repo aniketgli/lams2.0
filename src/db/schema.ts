@@ -29,16 +29,17 @@ export const sessions = mysqlTable('sessions', {
 });
 
 export const employee_profiles = mysqlTable('employee_profiles', {
-  userId: varchar('user_id', { length: 36 }).primaryKey(),
+  // ORM mapping only; uses the existing biometric_id key, not a user_id relationship.
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  biometricId: varchar('biometric_id', { length: 4 }).notNull().unique(),
   suffix: varchar('suffix', { length: 10 }),
-  department: varchar('department', { length: 255 }).notNull(),
-  designation: varchar('designation', { length: 255 }).notNull(),
-  employmentType: varchar('employment_type', { length: 50 }).notNull(),
-  joiningDate: varchar('joining_date', { length: 10 }).notNull(),
+  department: varchar('department', { length: 255 }),
+  designation: varchar('designation', { length: 255 }),
+  employmentType: varchar('employment_type', { length: 50 }),
+  joiningDate: varchar('joining_date', { length: 10 }),
   phone: varchar('phone', { length: 20 }),
   officeLocation: varchar('office_location', { length: 255 }),
   shiftId: varchar('shift_id', { length: 36 }),
-  // Preserves the full HRMS User profile (manager hierarchy, leave balances, student/research fields, module roles, etc.).
   profileData: text('profile_data'),
 });
 
