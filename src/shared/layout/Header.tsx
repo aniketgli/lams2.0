@@ -68,7 +68,7 @@ export const Header: React.FC<HeaderProps> = ({
       const response = await fetch('/api/access/active-role', {
         method: 'POST', credentials: 'same-origin', cache: 'no-store',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ role: label })
+        body: JSON.stringify({ role: label, moduleId: ({ lams: 'hrms', pms: 'pms', sims: 'stock', fms: 'facility', finance: 'finance' } as Record<string, string>)[activeModule] || activeModule })
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.message || 'Role switch was rejected.');
