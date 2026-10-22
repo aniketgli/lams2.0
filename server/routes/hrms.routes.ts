@@ -12,63 +12,51 @@ const router = Router();
 // Employees
 router.get('/employees', isAuthenticated, async (_req, res) => {
   try {
-    // The directory needs account and profile fields together. LEFT JOIN keeps
-    // valid login accounts visible even before their employee profile is completed.
-    const employees = await db
-      .select({
-        id: users.id,
-        biometricId: users.biometricId,
-        name: users.name,
-        suffix: employee_profiles.suffix,
-        email: users.email,
-        department: employee_profiles.department,
-        designation: employee_profiles.designation,
-        employmentType: employee_profiles.employmentType,
-        joiningDate: employee_profiles.joiningDate,
-        phone: employee_profiles.phone,
-        officeLocation: employee_profiles.officeLocation,
-        shiftId: employee_profiles.shiftId,
-        profileData: employee_profiles.profileData
-      })
-      .from(users)
-      .leftJoin(employee_profiles, eq(users.biometricId, employee_profiles.biometricId));
+    // Keep the directory endpoint compatible with the current users schema.
+    // Profiles and module-role assignments are optional enrichment; failure in either
+    // must not take down the employee directory or the HRMS landing screen.
+    const accounts = await db.select({
+      id: users.id,
+      biometricId: users.biometricId,
+      name: users.name,
+      email: users.email,
+      createdAt: users.createdAt,
+    }).from(users);
 
-    const sessionUserId = req.session.userId;
-    const sessionRole = String(req.session.role || '').toLowerCase();
-    let visibleEmployees = employees;
-    if (!['admin', 'administrator'].includes(sessionRole)) {
-      const current = employees.find((employee) => String(employee.id) === String(sessionUserId) || String(employee.biometricId) === String(req.session.biometricId));
-      if (['reporting_manager', 'reviewing_manager', 'manager'].includes(sessionRole)) {
-        visibleEmployees = employees.filter((employee) => {
-          if (String(employee.id) === String(sessionUserId) || String(employee.biometricId) === String(req.session.biometricId)) return true;
-          let data: any = {};
-          try { data = typeof employee.profileData === 'string' ? JSON.parse(employee.profileData) : employee.profileData || {}; } catch { data = {}; }
-          // Managers can only see employees explicitly assigned to them.
-          // Department-wide visibility is intentionally not inferred from a role.
-          return String(data.reportingManagerId || '') === String(sessionUserId) || String(data.reviewingManagerId || '') === String(sessionUserId);
-        });
-      } else {
-        visibleEmployees = current ? [current] : [];
+    let profileByBiometric: Record<string, Record<string, unknown>> = {};
+    try {
+      const profiles = await db.select().from(employee_profiles);
+      for (const profile of profiles as Array<Record<string, unknown>>) {
+        const key = String(profile.biometricId || '');
+        if (key) profileByBiometric[key] = profile;
       }
+    } catch (profileError) {
+      console.warn('Employee profile enrichment unavailable:', profileError instanceof Error ? profileError.message : profileError);
     }
-    // Read role assignments from the normalized database table, never from client state/profile JSON.
-    const assignments = await db.select().from(user_module_roles);
-    const rolesByUser: Record<string, Record<string, string[]>> = {};
-    for (const assignment of assignments) {
-      const assignmentKey = String(assignment.biometricId || '');
-      if (!assignmentKey) continue;
-      rolesByUser[assignmentKey] ||= {};
-      rolesByUser[assignmentKey][assignment.moduleId] ||= [];
-      rolesByUser[assignmentKey][assignment.moduleId].push(assignment.roleId);
+
+    let rolesByBiometric: Record<string, Record<string, string[]>> = {};
+    try {
+      const assignments = await db.select().from(user_module_roles);
+      for (const assignment of assignments) {
+        const key = String(assignment.biometricId || '');
+        if (!key) continue;
+        rolesByBiometric[key] ||= {};
+        rolesByBiometric[key][String(assignment.moduleId)] ||= [];
+        rolesByBiometric[key][String(assignment.moduleId)].push(String(assignment.roleId));
+      }
+    } catch (roleError) {
+      console.warn('Employee role enrichment unavailable:', roleError instanceof Error ? roleError.message : roleError);
     }
-    const result = visibleEmployees.map((employee: any) => ({
-      ...employee,
-      moduleRoles: rolesByUser[String(employee.biometricId || '')] || {}
+
+    const result = accounts.map((account) => ({
+      ...account,
+      ...(profileByBiometric[String(account.biometricId)] || {}),
+      moduleRoles: rolesByBiometric[String(account.biometricId)] || {},
     }));
     res.setHeader('Cache-Control', 'no-store');
     return res.json(result);
   } catch (error) {
-    console.error('Failed to fetch employees:', error instanceof Error ? error.message : error);
+    console.error('Failed to fetch employees:', error instanceof Error ? error.stack || error.message : error);
     return res.status(500).json({ error: 'Failed to fetch employees' });
   }
 });
