@@ -14,16 +14,18 @@ const normalize = (role: string) => roleMap[role.toLowerCase()] || role.toLowerC
 
 export const isAuthenticated = async (req: Request, res: Response, next: NextFunction) => {
   const userId = req.session?.userId;
+  const biometricId = req.session?.biometricId;
+  const biometricId = req.session?.biometricId;
   if (!userId) return res.status(401).json({ message: 'Unauthorized' });
   try {
-    const [user] = await db.select({ id: users.id }).from(users).where(eq(users.id, userId));
+    const [user] = await db.select({ id: users.id }).from(users).where(eq(users.id, Number(userId)));
     if (!user) {
       req.session.destroy(() => undefined);
       return res.status(401).json({ message: 'Session user no longer exists.' });
     }
     if (req.session.activeRole) {
       const assignments = await db.select({ roleId: user_module_roles.roleId }).from(user_module_roles)
-        .where(and(eq(user_module_roles.userId, userId), eq(user_module_roles.moduleId, 'hrms')));
+        .where(and(eq(user_module_roles.biometricId, biometricId!), eq(user_module_roles.moduleId, 'hrms')));
       const active = normalize(req.session.activeRole);
       if (!assignments.some((item) => normalize(item.roleId) === active)) {
         req.session.activeRole = null;
