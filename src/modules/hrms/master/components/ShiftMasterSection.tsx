@@ -122,7 +122,7 @@ export const ShiftMasterSection: React.FC = () => {
         minHalfDayHours: Number(formMinHalfDayHours) || 4.0,
         description: formDescription.trim(),
         isDefault: formIsDefault,
-        isActive: formIsActive
+        applicableDays: formApplicableDays
       });
       showToast(res.message);
       if (!res.success) return;
@@ -305,6 +305,23 @@ export const ShiftMasterSection: React.FC = () => {
                       </span>
                     </div>
 
+                    <div className="flex items-center justify-between gap-1 pt-2 border-t border-slate-200/60">
+                      {[
+                        { label: 'S', day: 'Sun' }, { label: 'M', day: 'Mon' },
+                        { label: 'T', day: 'Tue' }, { label: 'W', day: 'Wed' },
+                        { label: 'T', day: 'Thu' }, { label: 'F', day: 'Fri' },
+                        { label: 'S', day: 'Sat' }
+                      ].map(({ label, day }) => {
+                        const isWorkingDay = Array.isArray(shift.applicableDays) && shift.applicableDays.includes(day);
+                        return (
+                          <div key={day} className="flex flex-col items-center gap-1 min-w-0">
+                            <span className="text-[9px] font-bold text-slate-500">{label}</span>
+                            <span title={`${day}: ${isWorkingDay ? 'Working day' : 'Weekend / non-working day'}`} className={`h-2.5 w-2.5 rounded-full ${isWorkingDay ? 'bg-blue-600' : 'bg-slate-300'}`} />
+                          </div>
+                        );
+                      })}
+                    </div>
+
                     <div className="grid grid-cols-2 gap-2 text-[11px] pt-2 border-t border-slate-200/60">
                       <div>
                         <span className="text-slate-400 block font-medium">Late Grace:</span>
@@ -353,7 +370,7 @@ export const ShiftMasterSection: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="font-bold text-base leading-tight text-white tracking-tight">
-                    {editingShiftId ? `Edit Shift: ${formCode}` : 'Design New Work Shift'}
+                    {editingShiftId ? `Edit Shift: ${formCode}` : 'Create New Shift'}
                   </h3>
                 </div>
               </div>
@@ -380,7 +397,6 @@ export const ShiftMasterSection: React.FC = () => {
                     onChange={(e) => setFormCode(e.target.value.toUpperCase())}
                     className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 font-mono font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 shadow-2xs transition-all text-xs"
                   />
-                  <span className="text-[10px] text-slate-400 block">Short alphanumeric identifier</span>
                 </div>
 
                 <div className="space-y-1.5">
@@ -395,7 +411,6 @@ export const ShiftMasterSection: React.FC = () => {
                     onChange={(e) => setFormName(e.target.value)}
                     className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 shadow-2xs transition-all text-xs"
                   />
-                  <span className="text-[10px] text-slate-400 block">Descriptive shift title</span>
                 </div>
 
                 <div className="sm:col-span-2 space-y-2">
@@ -419,7 +434,6 @@ export const ShiftMasterSection: React.FC = () => {
                       </label>
                     ))}
                   </div>
-                  <p className="text-[10px] text-slate-400">Select working days; unchecked days are weekends/non-working days.</p>
                 </div>
 
                 <div className="space-y-1.5">
@@ -430,7 +444,6 @@ export const ShiftMasterSection: React.FC = () => {
                     onChange={(val) => setFormStartTime(val)}
                     presets={['08:00', '08:30', '09:00', '09:30', '10:00']}
                   />
-                  <span className="text-[10px] text-slate-400 block">e.g. 09:30 (24-hr)</span>
                 </div>
 
                 <div className="space-y-1.5">
@@ -441,7 +454,6 @@ export const ShiftMasterSection: React.FC = () => {
                     onChange={(val) => setFormEndTime(val)}
                     presets={['17:00', '17:30', '18:00', '18:30', '19:00']}
                   />
-                  <span className="text-[10px] text-slate-400 block">e.g. 17:30 (24-hr)</span>
                 </div>
 
                 <div className="space-y-1.5">
@@ -454,7 +466,6 @@ export const ShiftMasterSection: React.FC = () => {
                     onChange={(e) => setFormGracePeriod(Number(e.target.value))}
                     className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 shadow-2xs transition-all text-xs"
                   />
-                  <span className="text-[10px] text-slate-400 block">Punches within this window marked on-time</span>
                 </div>
 
                 <div className="space-y-1.5">
@@ -464,7 +475,6 @@ export const ShiftMasterSection: React.FC = () => {
                     onChange={(val) => setFormHalfDayCutoff(val)}
                     presets={['12:00', '13:00', '13:30', '14:00']}
                   />
-                  <span className="text-[10px] text-slate-400 block">Punch-in after this triggers half-day</span>
                 </div>
 
                 <div className="space-y-1.5">
@@ -478,7 +488,6 @@ export const ShiftMasterSection: React.FC = () => {
                     onChange={(e) => setFormMinFullDayHours(Number(e.target.value))}
                     className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 shadow-2xs transition-all text-xs"
                   />
-                  <span className="text-[10px] text-slate-400 block">Normally 7.5 to 8.0 hours</span>
                 </div>
 
                 <div className="space-y-1.5">
@@ -492,7 +501,6 @@ export const ShiftMasterSection: React.FC = () => {
                     onChange={(e) => setFormMinHalfDayHours(Number(e.target.value))}
                     className="h-9 w-full bg-slate-50 border border-slate-200/90 rounded-xl px-3 font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 shadow-2xs transition-all text-xs"
                   />
-                  <span className="text-[10px] text-slate-400 block">Normally 3.5 to 4.0 hours</span>
                 </div>
               </div>
 
