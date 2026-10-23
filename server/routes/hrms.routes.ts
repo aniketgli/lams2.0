@@ -476,6 +476,44 @@ router.delete('/employees/:userId', isAdmin, async (req, res) => {
     if (String(target.biometricId) === String(req.session.biometricId)) {
       return res.status(409).json({ error: 'You cannot delete your own account.' });
     }
+
+    // Permanent deletion follows the same eligibility rule as deactivation:
+    // every active allocated module must have only the explicit User role.
+    const assignments = await db.select({
+      moduleId: user_module_roles.moduleId,
+      roleId: user_module_roles.roleId,
+      status: user_module_roles.status
+    }).from(user_module_roles).where(eq(user_module_roles.biometricId, target.biometricId));
+    const activeAssignments = assignments.filter((item) => String(item.status || '').toLowerCase() === 'active');
+    if (activeAssignments.length === 0) {
+      return res.status(409).json({ error: 'Deletion blocked: no active module assignments were found. Only users with the User role in every allocated module can be deleted.' });
+    }
+    const normalizeDeletionRole = (roleId: string) => {
+      const raw = String(roleId || '').trim().toLowerCase().replace(/[\\s_-]+/g, '');
+      if (['user', 'generalstaff', 'staff', 'hrmsstaff'].includes(raw)) return 'user';
+      if (['reportingmanager', 'hrmsreporting'].includes(raw)) return 'reporting_manager';
+      if (['hod', 'reviewingmanager', 'hrmsreviewing'].includes(raw)) return 'hod';
+      if (['administrator', 'admin', 'hrmsadmin', 'pmsadmin', 'simsadmin', 'finadmin', 'fmsadmin'].includes(raw)) return 'administrator';
+      if (['auditor', 'audit', 'hrmsauditor', 'pmsreviewer', 'simsauditor', 'finauditor', 'fmsauditor'].includes(raw)) return 'auditor';
+      return 'other';
+    };
+    const moduleRoles = new Map<string, string[]>();
+    for (const assignment of activeAssignments) {
+      const moduleId = String(assignment.moduleId || '').trim().toLowerCase();
+      if (!moduleId) return res.status(409).json({ error: 'Deletion blocked: an assigned module could not be identified.' });
+      const roles = moduleRoles.get(moduleId) || [];
+      roles.push(normalizeDeletionRole(assignment.roleId));
+      moduleRoles.set(moduleId, roles);
+    }
+    const eligibleForDeletion = moduleRoles.size > 0 && [...moduleRoles.values()].every((roles) =>
+      roles.length > 0 && roles.every((role) => role === 'user')
+    );
+    if (!eligibleForDeletion) {
+      return res.status(409).json({
+        error: 'Deletion blocked: every allocated module must have only the User role. Administrator, Auditor, Reporting Manager, HoD, or any other role is not eligible.'
+      });
+    }
+
     const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 2000) : '';
     const reference = typeof req.body?.reference === 'string' ? req.body.reference.trim().slice(0, 255) : '';
     if (!reason) return res.status(400).json({ error: 'A deletion reason is required for the audit log.' });
