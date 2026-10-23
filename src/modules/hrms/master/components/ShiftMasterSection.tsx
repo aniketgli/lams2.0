@@ -46,7 +46,7 @@ export const ShiftMasterSection: React.FC = () => {
   const [formMinHalfDayHours, setFormMinHalfDayHours] = useState(4.0);
   const [formDescription, setFormDescription] = useState('');
   const [formIsDefault, setFormIsDefault] = useState(false);
-  const [formIsActive, setFormIsActive] = useState(true);
+  const [formApplicableDays, setFormApplicableDays] = useState<string[]>(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
 
   // Open Create Modal
   const handleOpenCreateModal = () => {
@@ -61,7 +61,7 @@ export const ShiftMasterSection: React.FC = () => {
     setFormMinHalfDayHours(4.0);
     setFormDescription('');
     setFormIsDefault(false);
-    setFormIsActive(true);
+    setFormApplicableDays(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
     setShowShiftModal(true);
   };
 
@@ -78,7 +78,7 @@ export const ShiftMasterSection: React.FC = () => {
     setFormMinHalfDayHours(shift.halfDayHours ?? shift.minHalfDayHours ?? 4.0);
     setFormDescription(shift.description || '');
     setFormIsDefault(Boolean(shift.isDefault));
-    setFormIsActive(shift.isActive ?? true);
+    setFormApplicableDays(Array.isArray(shift.applicableDays) ? shift.applicableDays : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
     setShowShiftModal(true);
   };
 
@@ -104,7 +104,7 @@ export const ShiftMasterSection: React.FC = () => {
         minHalfDayHours: Number(formMinHalfDayHours) || 4.0,
         description: formDescription.trim(),
         isDefault: formIsDefault,
-        isActive: formIsActive
+        applicableDays: formApplicableDays
       });
       showToast(res.message);
       if (!res.success) return;
@@ -398,6 +398,30 @@ export const ShiftMasterSection: React.FC = () => {
                   <span className="text-[10px] text-slate-400 block">Descriptive shift title</span>
                 </div>
 
+                <div className="sm:col-span-2 space-y-2">
+                  <label className="block text-xs font-bold text-slate-700">Working Days</label>
+                  <div className="grid grid-cols-7 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    {[
+                      { label: 'S', day: 'Sun' }, { label: 'M', day: 'Mon' },
+                      { label: 'T', day: 'Tue' }, { label: 'W', day: 'Wed' },
+                      { label: 'T', day: 'Thu' }, { label: 'F', day: 'Fri' },
+                      { label: 'S', day: 'Sat' }
+                    ].map(({ label, day }) => (
+                      <label key={day} className="flex flex-col items-center gap-1.5 cursor-pointer">
+                        <span className="text-[10px] font-bold text-slate-500">{label}</span>
+                        <input
+                          type="checkbox"
+                          checked={formApplicableDays.includes(day)}
+                          onChange={(e) => setFormApplicableDays((current) => e.target.checked ? [...current, day] : current.filter((value) => value !== day))}
+                          aria-label={day}
+                          className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-slate-400">Select working days; unchecked days are weekends/non-working days.</p>
+                </div>
+
                 <div className="space-y-1.5">
                   <AppTimePicker
                     label="Start Time"
@@ -484,19 +508,6 @@ export const ShiftMasterSection: React.FC = () => {
               </div>
 
               <div className="space-y-2 pt-2 border-t border-slate-100">
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="shiftIsActive"
-                    checked={formIsActive}
-                    onChange={(e) => setFormIsActive(e.target.checked)}
-                    className="rounded-xs border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                  />
-                  <label htmlFor="shiftIsActive" className="text-xs font-bold text-slate-800 cursor-pointer">
-                    Shift Active (Available for staff assignment &amp; attendance evaluation)
-                  </label>
-                </div>
-
                 <div className="flex items-center space-x-2">
                   <input
                     type="checkbox"
