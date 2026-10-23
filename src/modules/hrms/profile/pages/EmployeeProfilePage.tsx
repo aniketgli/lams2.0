@@ -6426,7 +6426,6 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                   <h3 className="font-bold text-base leading-tight text-white tracking-tight">
                     {userToToggleStatusModal.status === 'active' ? 'Deactivate Account' : 'Reactivate Account'}
                   </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">Update employee portal access and account status</p>
                 </div>
               </div>
               <button
@@ -6447,7 +6446,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                 />
                 <div className="min-w-0 flex-1">
                   <p className="font-extrabold text-slate-900 text-sm truncate">{userToToggleStatusModal.name}</p>
-                  <p className="text-[11px] text-slate-500 truncate">{userToToggleStatusModal.designation} &bull; {userToToggleStatusModal.department}</p>
+                  <p className="text-[11px] text-slate-500 truncate">{userToToggleStatusModal.email} <span className="mx-1">&bull;</span> Biometric ID: {userToToggleStatusModal.biometricId || 'Not available'}</p>
                   <div className="flex items-center space-x-2 mt-0.5">
                     <span className="text-[10px] text-slate-500">Current Status:</span>
                     <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-md border whitespace-nowrap ${
@@ -6471,18 +6470,17 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                   options={
                     userToToggleStatusModal.status === 'active'
                       ? [
-                          'End of Contract / Tenure',
-                          'Resignation / Retirement',
-                          'Departmental Transfer / Relocation',
-                          'Administrative Suspension / Investigation',
-                          'Unsanctioned Absence',
-                          'Other Administrative Reason'
+                          'Tenure End',
+                          'Resignation',
+                          'Return to Parent Organization',
+                          'Termination',
+                          'Retirement',
+                          'Other'
                         ]
                       : [
-                          'Re-instated by Administration',
-                          'Contract Extension / Renewal',
-                          'Returned from Deputation / Long Leave',
-                          'Other Administrative Reason'
+                          'Tenure Extend',
+                          'Rejoin',
+                          'Other'
                         ]
                   }
                   className="w-full"
@@ -6512,28 +6510,6 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                   className="w-full px-3 py-2 border border-slate-200/90 rounded-xl text-xs bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 shadow-2xs transition-all"
                 />
               </div>
-
-              {userToToggleStatusModal.status === 'active' ? (
-                <div className="p-3 bg-rose-50 border border-rose-200/90 rounded-xl text-rose-800 text-[11px] leading-relaxed flex items-start space-x-2">
-                  <UserX className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-bold">Access Revocation Notice</p>
-                    <p className="text-rose-700 text-[10.5px]">
-                      Deactivating this account will immediately revoke portal sign-in credentials and stop biometric attendance sync.
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="p-3 bg-emerald-50 border border-emerald-200/90 rounded-xl text-emerald-800 text-[11px] leading-relaxed flex items-start space-x-2">
-                  <UserCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-bold">Access Restoration Notice</p>
-                    <p className="text-emerald-700 text-[10.5px]">
-                      Reactivating this account will restore active portal sign-in privileges and re-enable biometric attendance tracking.
-                    </p>
-                  </div>
-                </div>
-              )}
 
               <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
                 <button
