@@ -936,7 +936,18 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       const defs = MODULE_ROLE_DEFINITIONS[moduleKey as keyof typeof MODULE_ROLE_DEFINITIONS] || [];
       return roleIds.map((roleId) => {
         const definition = defs.find((item) => item.id === roleId);
-        return definition && moduleIds[moduleKey] ? { moduleId: moduleIds[moduleKey], roleId: definition.name } : null;
+        if (!moduleIds[moduleKey]) return null;
+
+        // Auditor is a shared cross-module role and may not exist in each module's
+        // legacy MODULE_ROLE_DEFINITIONS list. Never silently drop a selected matrix cell.
+        const normalizedRoleId = String(roleId || '').trim().toLowerCase().replace(/[\\s_-]+/g, '');
+        const canonicalRoleName = normalizedRoleId === 'auditor' || normalizedRoleId === 'audit'
+          ? 'Auditor'
+          : definition?.name || roleId;
+
+        return canonicalRoleName
+          ? { moduleId: moduleIds[moduleKey], roleId: canonicalRoleName }
+          : null;
       }).filter((item): item is { moduleId: string; roleId: string } => Boolean(item));
     });
 
