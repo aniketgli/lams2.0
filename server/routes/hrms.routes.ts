@@ -477,46 +477,51 @@ router.delete('/employees/:userId', isAdmin, async (req, res) => {
       return res.status(409).json({ error: 'You cannot delete your own account.' });
     }
 
-    // Permanent deletion follows the same eligibility rule as deactivation:
-    // every active allocated module must have only the explicit User role.
+    // Evaluate EVERY active module-role grant for this biometric ID. Do not infer
+    // eligibility from the HRMS table chip or from only one module.
     const assignments = await db.select({
       moduleId: user_module_roles.moduleId,
       roleId: user_module_roles.roleId,
       status: user_module_roles.status
     }).from(user_module_roles).where(eq(user_module_roles.biometricId, target.biometricId));
-    const activeAssignments = assignments.filter((item) => String(item.status || '').trim().toLowerCase() === 'active');
-    if (activeAssignments.length === 0) {
-      return res.status(409).json({ error: 'Deletion blocked: no active module assignments were found. Only users with the User role in every allocated module can be deleted.' });
-    }
-    const normalizeDeletionRole = (roleId: string) => {
-      const raw = String(roleId || '').trim().toLowerCase().replace(/[\\s_-]+/g, '');
-      if (['user'].includes(raw)) return 'user';
-      if (['generalstaff', 'staff', 'hrmsstaff', 'hrmsuser'].includes(raw)) return 'other';
-      if (['reportingmanager', 'hrmsreporting'].includes(raw)) return 'reporting_manager';
-      if (['hod', 'reviewingmanager', 'hrmsreviewing'].includes(raw)) return 'hod';
-      if (['administrator', 'admin', 'hrmsadmin', 'pmsadmin', 'simsadmin', 'finadmin', 'fmsadmin'].includes(raw)) return 'administrator';
-      if (['auditor', 'audit', 'hrmsauditor', 'pmsreviewer', 'simsauditor', 'finauditor', 'fmsauditor'].includes(raw)) return 'auditor';
-      return 'other';
-    };
-    const moduleRoles = new Map<string, string[]>();
-    for (const assignment of activeAssignments) {
-      const moduleId = String(assignment.moduleId || '').trim().toLowerCase();
-      if (!moduleId) return res.status(409).json({ error: 'Deletion blocked: an assigned module could not be identified.' });
-      const roles = moduleRoles.get(moduleId) || [];
-      roles.push(normalizeDeletionRole(assignment.roleId));
-      moduleRoles.set(moduleId, roles);
-    }
-    const eligibleForDeletion = moduleRoles.size > 0 && [...moduleRoles.values()].every((roles) =>
-      roles.length > 0 && roles.every((role) => role === 'user')
+    const activeAssignments = assignments.filter(
+      (item) => String(item.status || '').trim().toLowerCase() === 'active'
     );
-    if (!eligibleForDeletion) {
-      const assignedRoles = activeAssignments
-        .map((item) => `${item.moduleId}: ${item.roleId}`)
+    if (activeAssignments.length === 0) {
+      return res.status(409).json({
+        error: 'Deletion blocked: no active module assignments were found. Assign the User role in each allocated module first.'
+      });
+    }
+
+    const normalizeModule = (moduleId: unknown) => {
+      const raw = String(moduleId || '').trim().toLowerCase();
+      const aliases: Record<string, string> = {
+        lams: 'hrms', hrms: 'hrms',
+        sims: 'stock', stock: 'stock',
+        fms: 'facility', facility: 'facility',
+        pms: 'pms', finance: 'finance'
+      };
+      return aliases[raw] || raw;
+    };
+    const normalizedAssignments = activeAssignments.map((assignment) => ({
+      moduleId: normalizeModule(assignment.moduleId),
+      roleId: String(assignment.roleId || '').trim().toLowerCase(),
+    }));
+    const invalidAssignment = normalizedAssignments.find((assignment) =>
+      !assignment.moduleId || assignment.roleId !== 'user'
+    );
+    if (invalidAssignment) {
+      const assignedRoles = normalizedAssignments
+        .map((item) => `${item.moduleId || 'unknown module'}: ${item.roleId || 'unknown role'}`)
         .join(', ');
       return res.status(409).json({
         error: `Deletion blocked: every allocated module must have only the exact User role. Active assignments found: ${assignedRoles || 'none'}.`
       });
     }
+
+    // The user is eligible only if all active grants across all allocated modules
+    // are User; duplicates are harmless, but any non-User grant blocks deletion.
+
 
     const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 2000) : '';
     const reference = typeof req.body?.reference === 'string' ? req.body.reference.trim().slice(0, 255) : '';
