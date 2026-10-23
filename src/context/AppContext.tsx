@@ -667,6 +667,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         const rows: Array<{
           id: string;
+          biometricId: string | null;
           name: string;
           email: string;
           role: string;
@@ -724,6 +725,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return {
             ...savedProfile,
             id: row.id,
+            biometricId: row.biometricId || savedProfile.biometricId || (savedProfile as any).biometric_id || '',
             name: row.name,
             email: row.email,
             role,
