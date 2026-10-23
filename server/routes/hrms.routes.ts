@@ -375,7 +375,7 @@ router.patch('/employees/:userId/status', isAdmin, async (req, res) => {
 
       const normalizeRole = (roleId: string) => {
         const raw = String(roleId || '').trim().toLowerCase().replace(/[\s_-]+/g, '');
-        if (['user', 'generalstaff', 'staff', 'hrmsstaff', 'pmspi', 'pmscopi', 'pmsresearcher', 'simsstorekeeper', 'simsindenter'].includes(raw)) return 'user';
+        if (['user', 'generalstaff', 'staff', 'hrmsstaff'].includes(raw)) return 'user';
         if (['reportingmanager', 'hrmsreporting'].includes(raw)) return 'reporting_manager';
         if (['hod', 'reviewingmanager', 'hrmsreviewing'].includes(raw)) return 'hod';
         if (['administrator', 'admin', 'hrmsadmin', 'pmsadmin', 'simsadmin', 'finadmin', 'fmsadmin'].includes(raw)) return 'administrator';
