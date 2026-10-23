@@ -682,7 +682,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
     if (!biometricId) {
       try {
-        const employeeResponse = await fetch('/api/employees', {
+        const employeeResponse = await fetch('/api/hrms/employees', {
           credentials: 'same-origin',
           cache: 'no-store',
           headers: { Accept: 'application/json' }
