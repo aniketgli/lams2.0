@@ -656,6 +656,10 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
   // Delete user confirmation
   const [userToDelete, setUserToDelete] = useState<UserType | null>(null);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deleteReference, setDeleteReference] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   // Active module-role assignments loaded from the access API for the table.
   const [databaseModuleRoles, setDatabaseModuleRoles] = useState<Record<string, Partial<Record<EnterpriseModuleId, string[]>>>>({});
@@ -1396,11 +1400,20 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     setUserToToggleStatusModal(null);
   };
 
-  const handleConfirmDeleteUser = () => {
-    if (!userToDelete) return;
-    deleteUser(userToDelete.id);
-    showToast(`User ${userToDelete.name} deleted successfully.`);
+  const handleConfirmDeleteUser = async () => {
+    if (!userToDelete || deleteBusy) return;
+    if (!deleteReason.trim()) { setDeleteError('Deletion reason is required for the audit log.'); return; }
+    setDeleteBusy(true);
+    setDeleteError('');
+    const target = userToDelete;
+    const result = await deleteUser(target.id, deleteReason.trim(), deleteReference.trim());
+    setDeleteBusy(false);
+    if (!result.success) { setDeleteError(result.message || 'User could not be deleted.'); return; }
+    showToast(`User ${target.name} deleted successfully. Audit log recorded.`);
     setUserToDelete(null);
+    setDeleteReason('');
+    setDeleteReference('');
+    setDeleteError('');
   };
 
   // Memoized active employees (excluding deactivated)
@@ -3002,7 +3015,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             {/* Delete User */}
                             {isAdmin && !isSelf && (
                               <button
-                                onClick={() => setUserToDelete(u)}
+                                onClick={() => { setDeleteError(''); setDeleteReason(''); setDeleteReference(''); setUserToDelete(u); }}
                                 title="Delete User"
                                 className="w-7 h-7 min-w-[28px] min-h-[28px] max-w-[28px] max-h-[28px] aspect-square p-0 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold cursor-pointer inline-flex items-center justify-center border border-rose-200 transition-all shrink-0 active:scale-95 shadow-2xs"
                               >
@@ -5598,7 +5611,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                 </div>
               </div>
               <button
-                onClick={() => setUserToDelete(null)}
+                onClick={() => { if (!deleteBusy) setUserToDelete(null); }}
                 className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
                 aria-label="Close dialog"
               >
@@ -5612,6 +5625,15 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                 <strong className="text-slate-900">{userToDelete.name}</strong> ({userToDelete.email})?
               </p>
 
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Reason for deletion <span className="text-rose-600">*</span></label>
+                <textarea value={deleteReason} onChange={(e) => setDeleteReason(e.target.value)} rows={3} maxLength={2000} required placeholder="Enter approved reason for permanently deleting this account..." className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-200 focus:border-rose-400" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Reference / Order No. (optional)</label>
+                <input value={deleteReference} onChange={(e) => setDeleteReference(e.target.value)} maxLength={255} placeholder="Office order, file number, etc." className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400" />
+              </div>
+              {deleteError && <div role="alert" aria-live="assertive" className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-800">{deleteError}</div>}
               <div className="flex items-center justify-end space-x-2 pt-2">
                 <button
                   onClick={() => setUserToDelete(null)}
@@ -5621,9 +5643,10 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                 </button>
                 <button
                   onClick={handleConfirmDeleteUser}
-                  className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-colors cursor-pointer"
+                  disabled={deleteBusy || !deleteReason.trim()}
+                  className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Delete Account
+                  {deleteBusy ? 'Deleting…' : 'Delete Account'}
                 </button>
               </div>
             </div>

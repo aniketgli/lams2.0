@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { UserRole, getUserRoles } from '../../types';
 import { WIILogo } from '../components/WIILogo';
@@ -36,10 +36,22 @@ export const Header: React.FC<HeaderProps> = ({
   } = useApp();
 
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const [assignedRoleLabels, setAssignedRoleLabels] = useState<string[]>([]);
   const [roleSwitchBusy, setRoleSwitchBusy] = useState(false);
   const [roleSwitchError, setRoleSwitchError] = useState('');
   const [currentRoleLabel, setCurrentRoleLabel] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isUserMenuOpen) return;
+    const closeMenu = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) setIsUserMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setIsUserMenuOpen(false); };
+    document.addEventListener('click', closeMenu, true);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => { document.removeEventListener('click', closeMenu, true); document.removeEventListener('keydown', closeOnEscape); };
+  }, [isUserMenuOpen]);
 
   useEffect(() => {
     let active = true;
@@ -74,6 +86,7 @@ export const Header: React.FC<HeaderProps> = ({
       if (!response.ok) throw new Error(result.message || 'Role switch was rejected.');
       applyActiveSessionRole(label);
       setCurrentRoleLabel(label);
+      setIsUserMenuOpen(false);
       onRoleChangedGoDashboard();
     } catch (error) {
       setRoleSwitchError(error instanceof Error ? error.message : 'Unable to switch role.');
@@ -156,7 +169,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Right Side: User Profile */}
         <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
           {/* User Profile Dropdown */}
-          <div className="relative">
+          <div className="relative" ref={userMenuRef}>
             <button
               onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
               className="flex items-center space-x-2 p-1 sm:p-1.5 rounded-xl hover:bg-slate-100 border border-transparent hover:border-slate-300 transition-all text-left focus:outline-none cursor-pointer"

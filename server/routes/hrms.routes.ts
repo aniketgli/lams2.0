@@ -2,7 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { db } from '../../src/db';
-import { biometric_machines, employee_profiles, organization_settings, organization_units, profile_master_records, shifts, users, designations, msc_streams, msc_batches, training_courses, trainee_batches, projects, categories, phd_enrollments, user_module_roles } from '../../src/db/schema';
+import { biometric_machines, employee_profiles, user_account_audit_logs, organization_settings, organization_units, profile_master_records, shifts, users, designations, msc_streams, msc_batches, training_courses, trainee_batches, projects, categories, phd_enrollments, user_module_roles } from '../../src/db/schema';
 import { isAuthenticated, isAdmin } from '../middleware/auth.middleware';
 import { eq, and } from 'drizzle-orm';
 import { randomInt } from 'node:crypto';
@@ -469,13 +469,35 @@ router.patch('/employees/:userId/status', isAdmin, async (req, res) => {
 router.delete('/employees/:userId', isAdmin, async (req, res) => {
   const userId = req.params.userId;
   try {
-    const [target] = await db.select({ id: users.id }).from(users).where(eq(users.id, userId));
+    const [target] = await db.select({
+      id: users.id, biometricId: users.biometricId, name: users.name, email: users.email
+    }).from(users).where(eq(users.id, Number(userId)));
     if (!target) return res.status(404).json({ error: 'Employee account not found.' });
+    if (String(target.biometricId) === String(req.session.biometricId)) {
+      return res.status(409).json({ error: 'You cannot delete your own account.' });
+    }
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 2000) : '';
+    const reference = typeof req.body?.reference === 'string' ? req.body.reference.trim().slice(0, 255) : '';
+    if (!reason) return res.status(400).json({ error: 'A deletion reason is required for the audit log.' });
+
     await db.transaction(async (tx) => {
-      await tx.delete(employee_profiles).where(eq(employee_profiles.userId, userId));
-      await tx.delete(users).where(eq(users.id, userId));
+      // Write the immutable audit record before deleting account-related rows.
+      await tx.insert(user_account_audit_logs).values({
+        targetUserId: String(target.id),
+        targetBiometricId: target.biometricId,
+        targetName: target.name,
+        targetEmail: target.email,
+        action: 'DELETE',
+        reason,
+        reference: reference || null,
+        deletedBy: String(req.session.biometricId || ''),
+        deletedAt: new Date()
+      });
+      await tx.delete(employee_profiles).where(eq(employee_profiles.biometricId, target.biometricId));
+      await tx.delete(user_module_roles).where(eq(user_module_roles.biometricId, target.biometricId));
+      await tx.delete(users).where(eq(users.id, target.id));
     });
-    return res.json({ message: 'Employee account and profile deleted.' });
+    return res.json({ message: 'Employee account permanently deleted and audit log recorded.' });
   } catch (error) {
     console.error('Failed to delete employee:', error instanceof Error ? error.message : error);
     return res.status(500).json({ error: 'Failed to delete employee.' });
