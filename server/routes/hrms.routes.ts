@@ -148,8 +148,8 @@ async function validateEmployeeProfile(profile: Record<string, any>, employmentT
       Number.isNaN(Date.parse(String(profile.dob)))) return 'Select a valid date of birth.';
   if (String(profile.phone).trim().length < 7 || String(profile.phone).trim().length > 20) return 'Enter a valid mobile number.';
   if (profile.shiftId) {
-    const [shift] = await db.select({ id: shifts.id, isActive: shifts.isActive }).from(shifts).where(eq(shifts.id, String(profile.shiftId)));
-    if (!shift || shift.isActive === false) return 'Shift must be selected from an active Shift Master.';
+    const [shift] = await db.select({ id: shifts.id, status: shifts.status }).from(shifts).where(eq(shifts.id, Number(profile.shiftId)));
+    if (!shift || String(shift.status).toLowerCase() !== 'active') return 'Shift must be selected from an active Shift Master.';
   }
   for (const managerId of [profile.reportingManagerId, profile.reviewingManagerId].filter(Boolean)) {
     const [manager] = await db.select({ id: users.id, role: users.role }).from(users).where(eq(users.id, String(managerId)));
@@ -671,10 +671,9 @@ function normalizeShift(body: any) {
     gracePeriodMins: grace, halfDayHours: String(halfDay), fullDayHours: String(fullDay),
     halfDayCutoffTime: typeof value.halfDayCutoffTime === 'string' && timePattern.test(value.halfDayCutoffTime) ? value.halfDayCutoffTime : null,
     description: typeof value.description === 'string' ? value.description.trim().slice(0, 5000) : null,
-    color: typeof value.color === 'string' ? value.color.slice(0, 30) : null,
     applicableDays: Array.isArray(value.applicableDays) ? JSON.stringify(value.applicableDays.filter((d: unknown) => typeof d === 'string').slice(0, 7)) : null,
     isDefault: Boolean(value.isDefault),
-    isActive: value.isActive !== false
+    status: String(value.status || (value.isActive === false ? 'inactive' : 'active')).toLowerCase() === 'inactive' ? 'inactive' : 'active'
   }} as const;
 }
 
@@ -701,9 +700,9 @@ router.get('/shifts', isAuthenticated, async (_req, res) => {
     return res.json(rows.map((row: any) => ({
       ...row, id: String(row.id), gracePeriodMins: Number(row.gracePeriodMins ?? 0),
       halfDayHours: Number(row.halfDayHours ?? 4), fullDayHours: Number(row.fullDayHours ?? 8),
-      isDefault: Boolean(row.isDefault), isActive: row.status ? row.status === 'active' : row.isActive !== false,
-      status: row.status || (row.isActive === false ? 'inactive' : 'active'),
-      applicableDays: typeof row.applicableDays === 'string' ? (() => { try { return JSON.parse(row.applicableDays); } catch { return []; } })() : row.applicableDays || [],
+      isDefault: Boolean(row.isDefault), isActive: String(row.status).toLowerCase() === 'active',
+      status: String(row.status || 'active').toLowerCase(),
+      applicableDays: Array.isArray(row.applicableDays) ? row.applicableDays : [],
     })));
   } catch (error) {
     console.error('Failed to load Shift Master:', error);
@@ -728,16 +727,15 @@ router.post('/shifts', isAdmin, async (req, res) => {
   try {
     const [duplicate] = await db.select({ id: shifts.id }).from(shifts).where(eq(shifts.code, normalized.value.code));
     if (duplicate) return res.status(409).json({ error: 'A shift with this code already exists.' });
-    const id = undefined;
-    if (normalized.value.isDefault) {
+        if (normalized.value.isDefault) {
       await db.transaction(async (tx) => {
         await tx.update(shifts).set({ isDefault: false });
-        const [inserted] = await tx.insert(shifts).values({ ...normalized.value, status: normalized.value.isActive ? 'active' : 'inactive' });
-        await writeShiftAudit(req, { id: inserted.insertId, code: normalized.value.code }, 'CREATE', null, { ...normalized.value, status: normalized.value.isActive ? 'active' : 'inactive' });
+        const [inserted] = await tx.insert(shifts).values(normalized.value);
+        await writeShiftAudit(req, { id: inserted.insertId, code: normalized.value.code }, 'CREATE', null, normalized.value);
       });
     } else {
-      const [inserted] = await db.insert(shifts).values({ ...normalized.value, status: normalized.value.isActive ? 'active' : 'inactive' });
-      await writeShiftAudit(req, { id: inserted.insertId, code: normalized.value.code }, 'CREATE', null, { ...normalized.value, status: normalized.value.isActive ? 'active' : 'inactive' });
+      const [inserted] = await db.insert(shifts).values(normalized.value);
+      await writeShiftAudit(req, { id: inserted.insertId, code: normalized.value.code }, 'CREATE', null, normalized.value);
     }
     return res.status(201).json({ id: String((await db.select({ id: shifts.id }).from(shifts).where(eq(shifts.code, normalized.value.code)))[0]?.id), message: 'Shift created in database.' });
   } catch (error) {
@@ -757,12 +755,12 @@ router.put('/shifts/:id', isAdmin, async (req, res) => {
     if (normalized.value.isDefault) {
       await db.transaction(async (tx) => {
         await tx.update(shifts).set({ isDefault: false });
-        await tx.update(shifts).set({ ...normalized.value, status: normalized.value.isActive ? 'active' : 'inactive' }).where(eq(shifts.id, Number(req.params.id)));
+        await tx.update(shifts).set(normalized.value).where(eq(shifts.id, Number(req.params.id)));
       });
     } else {
-      await db.update(shifts).set({ ...normalized.value, status: normalized.value.isActive ? 'active' : 'inactive' }).where(eq(shifts.id, Number(req.params.id)));
+      await db.update(shifts).set(normalized.value).where(eq(shifts.id, Number(req.params.id)));
     }
-    await writeShiftAudit(req, existing, normalized.value.isActive ? (existing.isActive !== normalized.value.isActive ? 'STATUS_CHANGE' : 'UPDATE') : 'STATUS_CHANGE', existing, { ...normalized.value, status: normalized.value.isActive ? 'active' : 'inactive' });
+    await writeShiftAudit(req, existing, String(existing.status).toLowerCase() !== normalized.value.status ? 'STATUS_CHANGE' : 'UPDATE', existing, normalized.value);
     return res.json({ message: 'Shift updated in database.' });
   } catch (error) {
     console.error('Failed to update shift:', error);
