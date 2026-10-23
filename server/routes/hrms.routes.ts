@@ -671,7 +671,7 @@ function normalizeShift(body: any) {
     gracePeriodMins: grace, halfDayHours: String(halfDay), fullDayHours: String(fullDay),
     halfDayCutoffTime: typeof value.halfDayCutoffTime === 'string' && timePattern.test(value.halfDayCutoffTime) ? value.halfDayCutoffTime : null,
     description: typeof value.description === 'string' ? value.description.trim().slice(0, 5000) : null,
-    applicableDays: Array.isArray(value.applicableDays) ? JSON.stringify(value.applicableDays.filter((d: unknown) => typeof d === 'string').slice(0, 7)) : null,
+    applicableDays: Array.isArray(value.applicableDays) ? value.applicableDays.filter((d: unknown) => typeof d === 'string' && ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].includes(d)).slice(0, 7) : null,
     isDefault: Boolean(value.isDefault),
     status: String(value.status || (value.isActive === false ? 'inactive' : 'active')).toLowerCase() === 'inactive' ? 'inactive' : 'active'
   }} as const;
