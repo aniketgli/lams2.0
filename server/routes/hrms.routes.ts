@@ -338,6 +338,133 @@ router.put('/employees/:userId', isAdmin, async (req, res) => {
   }
 });
 
+
+// Account status is persisted server-side. Deactivation is denied unless every active
+// module assignment is User and the employee is not assigned as a Reporting Manager / HoD
+// and is not referenced as another employee's reporting manager or HoD.
+router.patch('/employees/:userId/status', isAdmin, async (req, res) => {
+  const userId = String(req.params.userId || '').trim();
+  if (!/^\d+$/.test(userId)) return res.status(400).json({ error: 'Invalid employee account ID.' });
+  const requestedStatus = String(req.body?.status || '').trim().toLowerCase();
+  if (!['active', 'inactive'].includes(requestedStatus)) {
+    return res.status(400).json({ error: 'Status must be active or inactive.' });
+  }
+
+  try {
+    const [target] = await db.select({
+      id: users.id,
+      biometricId: users.biometricId,
+      status: users.status,
+      lastUpdatedBy: users.lastUpdatedBy
+    }).from(users).where(eq(users.id, Number(userId)));
+    if (!target) return res.status(404).json({ error: 'Employee account not found.' });
+    if (String(target.biometricId) === String(req.session.biometricId)) {
+      return res.status(400).json({ error: 'You cannot change your own account status.' });
+    }
+
+    if (requestedStatus === 'inactive') {
+      const assignments = await db.select({
+        moduleId: user_module_roles.moduleId,
+        roleId: user_module_roles.roleId,
+        status: user_module_roles.status
+      }).from(user_module_roles).where(eq(user_module_roles.biometricId, target.biometricId));
+      const activeAssignments = assignments.filter((item) => String(item.status || '').toLowerCase() === 'active');
+      if (activeAssignments.length === 0) {
+        return res.status(409).json({ error: 'Deactivation blocked: no active module assignments were found.' });
+      }
+
+      const normalizeRole = (roleId: string) => {
+        const raw = String(roleId || '').trim().toLowerCase().replace(/[\s_-]+/g, '');
+        if (['user', 'generalstaff', 'staff', 'hrmsstaff', 'pmspi', 'pmscopi', 'pmsresearcher', 'simsstorekeeper', 'simsindenter'].includes(raw)) return 'user';
+        if (['reportingmanager', 'hrmsreporting'].includes(raw)) return 'reporting_manager';
+        if (['hod', 'reviewingmanager', 'hrmsreviewing'].includes(raw)) return 'hod';
+        if (['administrator', 'admin', 'hrmsadmin', 'pmsadmin', 'simsadmin', 'finadmin', 'fmsadmin'].includes(raw)) return 'administrator';
+        if (['auditor', 'audit', 'hrmsauditor', 'pmsreviewer', 'simsauditor', 'finauditor', 'fmsauditor'].includes(raw)) return 'auditor';
+        return 'other';
+      };
+
+      const modules = new Map<string, string[]>();
+      for (const assignment of activeAssignments) {
+        const moduleId = String(assignment.moduleId || '').trim().toLowerCase();
+        if (!moduleId) return res.status(409).json({ error: 'Deactivation blocked: an assigned module could not be identified.' });
+        const roles = modules.get(moduleId) || [];
+        roles.push(normalizeRole(assignment.roleId));
+        modules.set(moduleId, roles);
+      }
+      const everyModuleIsUser = modules.size > 0 && [...modules.values()].every((roles) =>
+        roles.length > 0 && roles.every((role) => role === 'user')
+      );
+      if (!everyModuleIsUser) {
+        return res.status(409).json({
+          error: 'Deactivation blocked: every allocated module must have only the User role. Administrator, Auditor, Reporting Manager, HoD, or any other role is not eligible.'
+        });
+      }
+
+      // Also protect hierarchy assignments even if a module-role grant is missing or stale.
+      const profileRows = await db.select({
+        biometricId: employee_profiles.biometricId,
+        profileData: employee_profiles.profileData
+      }).from(employee_profiles);
+      const targetIds = new Set([String(target.id), String(target.biometricId)]);
+      const managesSomeone = profileRows.some((row) => {
+        if (String(row.biometricId) === String(target.biometricId) || !row.profileData) return false;
+        try {
+          const data = typeof row.profileData === 'string' ? JSON.parse(row.profileData) : row.profileData;
+          if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+          const managerReferences = [
+            data.reportingManagerId, data.reviewingManagerId, data.hodId, data.hodUserId,
+            data.reportingManagerBiometricId, data.reviewingManagerBiometricId, data.hodBiometricId
+          ];
+          return managerReferences.some((value) => value != null && targetIds.has(String(value)));
+        } catch {
+          return false;
+        }
+      });
+      if (managesSomeone) {
+        return res.status(409).json({ error: 'Deactivation blocked: this employee is assigned as a Reporting Manager or HoD to another employee.' });
+      }
+    }
+
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 1000) : '';
+    const effectiveDate = typeof req.body?.effectiveDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.body.effectiveDate)
+      ? req.body.effectiveDate : new Date().toISOString().slice(0, 10);
+    const nextStatus = requestedStatus === 'inactive' ? 'inactive' : 'active';
+    const actor = String(req.session.biometricId || '');
+    await db.transaction(async (tx) => {
+      await tx.update(users).set({
+        status: nextStatus,
+        lastUpdatedBy: actor,
+        lastUpdatedAt: new Date(),
+        lastUpdateSummary: `${requestedStatus === 'inactive' ? 'Deactivated' : 'Reactivated'} effective ${effectiveDate}${reason ? ': ' + reason : ''}`
+      }).where(eq(users.id, Number(userId)));
+
+      const [profile] = await tx.select({
+        biometricId: employee_profiles.biometricId,
+        profileData: employee_profiles.profileData
+      }).from(employee_profiles).where(eq(employee_profiles.biometricId, target.biometricId));
+      if (profile) {
+        let data: Record<string, any> = {};
+        try {
+          const parsed = typeof profile.profileData === 'string' ? JSON.parse(profile.profileData) : profile.profileData;
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) data = parsed;
+        } catch { /* preserve status by writing a safe JSON object if legacy data is invalid */ }
+        data.status = requestedStatus === 'inactive' ? 'deactivated' : 'active';
+        data.statusChangeReason = reason;
+        data.statusEffectiveDate = effectiveDate;
+        data.statusChangedBy = actor;
+        await tx.update(employee_profiles).set({ profileData: JSON.stringify(data) })
+          .where(eq(employee_profiles.biometricId, target.biometricId));
+      }
+    });
+
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ success: true, status: requestedStatus, effectiveDate, message: requestedStatus === 'inactive' ? 'Account deactivated.' : 'Account reactivated.' });
+  } catch (error) {
+    console.error('Employee status update failed:', error instanceof Error ? error.message : error);
+    return res.status(500).json({ error: 'Unable to update employee account status.' });
+  }
+});
+
 // Only administrators may permanently delete employee accounts and their profile rows.
 router.delete('/employees/:userId', isAdmin, async (req, res) => {
   const userId = req.params.userId;
