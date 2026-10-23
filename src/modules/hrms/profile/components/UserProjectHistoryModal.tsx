@@ -25,22 +25,45 @@ export const UserProjectHistoryModal: React.FC<UserProjectHistoryModalProps> = (
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
 
+  const [resolvedBiometricId, setResolvedBiometricId] = useState('');
   const biometricId = String((user as any)?.biometricId ?? (user as any)?.biometric_id ?? '').trim();
 
   useEffect(() => {
     if (!isOpen || !user) return;
-    if (!biometricId) {
-      setUserHistories([]);
-      setLoadError('Biometric ID is missing for this employee.');
-      return;
-    }
     const controller = new AbortController();
     setLoading(true);
     setLoadError('');
-    fetch(`/api/hrms/employees/${encodeURIComponent(biometricId)}/project-history`, {
-      credentials: 'include',
-      signal: controller.signal
-    })
+    setResolvedBiometricId('');
+    const resolveBiometricId = async (): Promise<string> => {
+      if (/^\\d{1,4}$/.test(biometricId)) return biometricId;
+      // The profile list can contain a user without the canonical biometric field.
+      // Resolve it from the server's employee directory using the stable account ID/email.
+      const response = await fetch('/api/hrms/employees', {
+        credentials: 'include',
+        cache: 'no-store',
+        signal: controller.signal
+      });
+      const payload = await response.json().catch(() => []);
+      if (!response.ok) throw new Error(payload.error || 'Could not resolve employee biometric ID.');
+      const employees = Array.isArray(payload) ? payload : (Array.isArray(payload.employees) ? payload.employees : []);
+      const match = employees.find((employee: any) =>
+        String(employee.id) === String(user.id) ||
+        (user.email && String(employee.email || '').toLowerCase() === String(user.email).toLowerCase())
+      );
+      const resolved = String(match?.biometricId ?? match?.biometric_id ?? '').trim();
+      if (!/^\\d{1,4}$/.test(resolved)) {
+        throw new Error('A valid biometric ID could not be found for this employee. Check the employee account record.');
+      }
+      return resolved;
+    };
+    resolveBiometricId()
+      .then((resolvedId) => {
+        setResolvedBiometricId(resolvedId);
+        return fetch(`/api/hrms/employees/${encodeURIComponent(resolvedId)}/project-history`, {
+          credentials: 'include',
+          signal: controller.signal
+        });
+      })
       .then(async (response) => {
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(payload.error || 'Failed to load project history.');
@@ -65,7 +88,7 @@ export const UserProjectHistoryModal: React.FC<UserProjectHistoryModalProps> = (
       })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [isOpen, user?.id, biometricId]);
+  }, [isOpen, user?.id, user?.email, biometricId]);
 
   const calculateDuration = (start: string, end?: string, ongoing?: boolean) => {
     const s = new Date(start);
