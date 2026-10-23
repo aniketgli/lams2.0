@@ -1309,7 +1309,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     });
   };
 
-  const handleExecuteResetPassword = (e: React.FormEvent) => {
+  const handleExecuteResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userToResetPasswordForm) return;
 
@@ -1324,16 +1324,39 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       }
     }
 
-    const tempPass = resetUserPassword(
-      userToResetPasswordForm.id,
-      resetPassForm.mode === 'custom' ? resetPassForm.customPassword : undefined,
-      resetPassForm.reason
-    );
+    const biometricId = String((userToResetPasswordForm as UserType & { biometricId?: string; biometric_id?: string }).biometricId ??
+      (userToResetPasswordForm as UserType & { biometric_id?: string }).biometric_id ?? '').trim();
+    if (!/^\\d{4}$/.test(biometricId)) {
+      showToast('Cannot reset password: this user has no valid biometric ID.');
+      return;
+    }
 
-    const target = userToResetPasswordForm;
-    setUserToResetPasswordForm(null);
-    setPasswordResetModal({ user: target, tempPass });
-    showToast(`Password successfully reset for ${target.name}`);
+    try {
+      const response = await fetch(`/api/hrms/employees/${encodeURIComponent(biometricId)}/reset-password`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          mode: resetPassForm.mode,
+          password: resetPassForm.mode === 'custom' ? resetPassForm.customPassword : undefined,
+          reason: resetPassForm.reason
+        })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.success) {
+        showToast(result?.error || 'Password reset failed.');
+        return;
+      }
+      const target = userToResetPasswordForm;
+      setUserToResetPasswordForm(null);
+      setPasswordResetModal({ user: target, tempPass: resetPassForm.mode === 'auto'
+        ? 'Temporary password sent to the employee email. The password hash has been updated in the database.'
+        : 'Password updated in the database successfully.' });
+      showToast(result.message || `Password successfully reset for ${target.name}`);
+    } catch (error) {
+      console.error('Password reset request failed:', error);
+      showToast('Unable to reach the server. Password was not confirmed as reset.');
+    }
   };
 
   const handleOpenStatusToggleModal = (u: UserType) => {
