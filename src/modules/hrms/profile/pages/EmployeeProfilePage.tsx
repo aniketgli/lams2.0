@@ -1050,6 +1050,23 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       return;
     }
 
+    // Refresh the table's role chips immediately from the exact assignments just saved.
+    const moduleKeyMap: Record<string, EnterpriseModuleId> = {
+      hrms: 'lams', lams: 'lams', pms: 'pms',
+      stock: 'sims', sims: 'sims', finance: 'finance',
+      facility: 'fms', fms: 'fms'
+    };
+    const refreshedRoles: Partial<Record<EnterpriseModuleId, string[]>> = {};
+    for (const assignment of assignments) {
+      const moduleKey = moduleKeyMap[String(assignment.moduleId).toLowerCase()];
+      if (!moduleKey) continue;
+      if (!refreshedRoles[moduleKey]) refreshedRoles[moduleKey] = [];
+      if (!refreshedRoles[moduleKey]!.includes(assignment.roleId)) refreshedRoles[moduleKey]!.push(assignment.roleId);
+    }
+    setDatabaseModuleRoles((previous) => ({
+      ...previous,
+      [String(userToEditRoles.id)]: refreshedRoles
+    }));
     showToast(`Module roles and permissions updated for ${userToEditRoles.name}`);
     setUserToEditRoles(null);
   };

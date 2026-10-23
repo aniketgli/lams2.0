@@ -484,13 +484,14 @@ router.delete('/employees/:userId', isAdmin, async (req, res) => {
       roleId: user_module_roles.roleId,
       status: user_module_roles.status
     }).from(user_module_roles).where(eq(user_module_roles.biometricId, target.biometricId));
-    const activeAssignments = assignments.filter((item) => String(item.status || '').toLowerCase() === 'active');
+    const activeAssignments = assignments.filter((item) => String(item.status || '').trim().toLowerCase() === 'active');
     if (activeAssignments.length === 0) {
       return res.status(409).json({ error: 'Deletion blocked: no active module assignments were found. Only users with the User role in every allocated module can be deleted.' });
     }
     const normalizeDeletionRole = (roleId: string) => {
       const raw = String(roleId || '').trim().toLowerCase().replace(/[\\s_-]+/g, '');
-      if (['user', 'generalstaff', 'staff', 'hrmsstaff'].includes(raw)) return 'user';
+      if (['user'].includes(raw)) return 'user';
+      if (['generalstaff', 'staff', 'hrmsstaff', 'hrmsuser'].includes(raw)) return 'other';
       if (['reportingmanager', 'hrmsreporting'].includes(raw)) return 'reporting_manager';
       if (['hod', 'reviewingmanager', 'hrmsreviewing'].includes(raw)) return 'hod';
       if (['administrator', 'admin', 'hrmsadmin', 'pmsadmin', 'simsadmin', 'finadmin', 'fmsadmin'].includes(raw)) return 'administrator';
@@ -509,8 +510,11 @@ router.delete('/employees/:userId', isAdmin, async (req, res) => {
       roles.length > 0 && roles.every((role) => role === 'user')
     );
     if (!eligibleForDeletion) {
+      const assignedRoles = activeAssignments
+        .map((item) => `${item.moduleId}: ${item.roleId}`)
+        .join(', ');
       return res.status(409).json({
-        error: 'Deletion blocked: every allocated module must have only the User role. Administrator, Auditor, Reporting Manager, HoD, or any other role is not eligible.'
+        error: `Deletion blocked: every allocated module must have only the exact User role. Active assignments found: ${assignedRoles || 'none'}.`
       });
     }
 
