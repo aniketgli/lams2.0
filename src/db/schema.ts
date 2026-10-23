@@ -28,6 +28,23 @@ export const user_module_roles = mysqlTable('user_module_roles', {
   assignmentUnique: uniqueIndex('user_module_role_biometric_unique').on(table.biometricId, table.moduleId, table.roleId),
 }));
 
+
+
+// Immutable audit trail for permanent user-account deletion. Kept separate from users
+// so the deletion event survives after the account row is removed.
+export const user_account_audit_logs = mysqlTable('user_account_audit_logs', {
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  targetUserId: varchar('target_user_id', { length: 36 }).notNull(),
+  targetBiometricId: varchar('target_biometric_id', { length: 4 }).notNull(),
+  targetName: varchar('target_name', { length: 255 }).notNull(),
+  targetEmail: varchar('target_email', { length: 255 }).notNull(),
+  action: varchar('action', { length: 32 }).notNull(),
+  reason: text('reason'),
+  reference: varchar('reference', { length: 255 }),
+  deletedBy: varchar('deleted_by', { length: 4 }).notNull(),
+  deletedAt: timestamp('deleted_at').defaultNow().notNull(),
+});
+
 export const sessions = mysqlTable('sessions', {
   id: varchar('id', { length: 255 }).primaryKey(),
   userId: varchar('user_id', { length: 36 }).notNull(),
