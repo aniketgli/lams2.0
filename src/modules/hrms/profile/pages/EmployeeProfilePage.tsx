@@ -1373,15 +1373,20 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     });
   };
 
-  const handleExecuteStatusChange = (e: React.FormEvent) => {
+  const handleExecuteStatusChange = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userToToggleStatusModal) return;
 
+    const target = userToToggleStatusModal;
     const fullReason = `${statusChangeForm.reasonCategory}${statusChangeForm.customNotes ? ` (${statusChangeForm.customNotes})` : ''}`;
-    toggleUserStatus(userToToggleStatusModal.id, fullReason, statusChangeForm.effectiveDate);
+    const result = await toggleUserStatus(target.id, fullReason, statusChangeForm.effectiveDate);
+    if (!result.success) {
+      showToast(result.message || 'Account status could not be changed.');
+      return;
+    }
 
-    const isActivating = userToToggleStatusModal.status === 'deactivated';
-    showToast(`Account status for ${userToToggleStatusModal.name} changed to ${isActivating ? 'Active' : 'Deactivated'}`);
+    const isActivating = target.status === 'deactivated';
+    showToast(`Account status for ${target.name} changed to ${isActivating ? 'Active' : 'Deactivated'}`);
     setUserToToggleStatusModal(null);
   };
 
