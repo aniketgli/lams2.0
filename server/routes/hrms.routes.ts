@@ -750,7 +750,7 @@ router.put('/shifts/:id', isAdmin, async (req, res) => {
   try {
     const [existing] = await db.select().from(shifts).where(eq(shifts.id, Number(req.params.id)));
     if (!existing) return res.status(404).json({ error: 'Shift not found.' });
-    const [assignedForStatus] = await db.select({ id: employee_profiles.userId }).from(employee_profiles)
+    const [assignedForStatus] = await db.select({ biometricId: employee_profiles.biometricId }).from(employee_profiles)
       .where(eq(employee_profiles.shiftId, String(req.params.id))).limit(1);
     const currentStatus = String(existing.status || 'active').toLowerCase();
     const nextStatus = String(normalized.value.status || 'active').toLowerCase();
@@ -783,7 +783,7 @@ router.delete('/shifts/:id', isAdmin, async (req, res) => {
     if (String(target.status || 'active').toLowerCase() !== 'inactive') {
       return res.status(409).json({ error: 'Only inactive shifts can be deleted. Deactivate this shift first.' });
     }
-    const [assigned] = await db.select({ id: employee_profiles.userId }).from(employee_profiles)
+    const [assigned] = await db.select({ biometricId: employee_profiles.biometricId }).from(employee_profiles)
       .where(eq(employee_profiles.shiftId, String(req.params.id))).limit(1);
     if (assigned) return res.status(409).json({ error: 'This shift is assigned to an employee. Reassign the employee before deleting this shift.' });
     await writeShiftAudit(req, target, 'DELETE', target, null);
