@@ -2,7 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { db } from '../../src/db';
-import { biometric_machines, employee_profiles, user_account_audit_logs, organization_settings, organization_units, profile_master_records, shifts, users, designations, msc_streams, msc_batches, training_courses, trainee_batches, projects, categories, phd_enrollments, user_module_roles } from '../../src/db/schema';
+import { biometric_machines, employee_profiles, user_account_audit_logs, user_project_histories, organization_settings, organization_units, profile_master_records, shifts, users, designations, msc_streams, msc_batches, training_courses, trainee_batches, projects, categories, phd_enrollments, user_module_roles } from '../../src/db/schema';
 import { isAuthenticated, isAdmin } from '../middleware/auth.middleware';
 import { eq, and } from 'drizzle-orm';
 import { randomInt } from 'node:crypto';
@@ -10,6 +10,27 @@ import { EmailService } from '../integrations/email/email.service';
 import { isIP } from 'node:net';
 
 const router = Router();
+
+/**
+ * Project & Posting History — database-backed records keyed by biometric ID.
+ */
+router.get('/employees/:biometricId/project-history', isAuthenticated, async (req, res) => {
+  try {
+    const biometricId = String(req.params.biometricId || '').trim();
+    if (!/^\\d{1,4}$/.test(biometricId)) {
+      return res.status(400).json({ error: 'A valid biometric ID is required.' });
+    }
+    const rows = await db.select().from(user_project_histories)
+      .where(eq(user_project_histories.biometricId, biometricId))
+      .orderBy(user_project_histories.startDate);
+    return res.json({ records: rows });
+  } catch (error) {
+    console.error('[HRMS] Failed to load project history:', error);
+    return res.status(500).json({ error: 'Failed to load project history records.' });
+  }
+});
+
+
 
 // Employees
 router.get('/employees', isAuthenticated, async (_req, res) => {
