@@ -2863,11 +2863,11 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             />
                             <div className="min-w-0 flex-1">
                               <span className="font-bold text-slate-900 truncate text-xs block">{u.name}</span>
-                              <span className="text-[11px] text-slate-500 font-medium block truncate mt-0.5">
-                                {u.designation || 'Staff'}
+                              <span className="text-[10px] text-slate-500 block truncate mt-0.5" title={u.email || ''}>
+                                {u.email || 'Email not available'}
                               </span>
                               <span className="text-[10px] text-slate-400 font-mono tracking-tight block truncate mt-0.5">
-                                {u.biometricId ? `Bio ID: ${u.biometricId}` : (u.id ? `Bio ID: ${u.id}` : 'Bio ID: N/A')}
+                                Bio ID: {u.biometricId || 'Not available'}
                               </span>
                             </div>
                           </div>
@@ -6463,7 +6463,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                 />
                 <div className="min-w-0 flex-1">
                   <p className="font-extrabold text-slate-900 text-sm truncate">{userToToggleStatusModal.name}</p>
-                  <p className="text-[11px] text-slate-500 truncate">{userToToggleStatusModal.email} <span className="mx-1">&bull;</span> Biometric ID: {userToToggleStatusModal.biometricId || 'Not available'}</p>
+                  <p className="text-[11px] text-slate-500 truncate" title={userToToggleStatusModal.email}>{userToToggleStatusModal.email || 'Email not available'}</p>
+                  <p className="text-[10px] text-slate-500 font-mono truncate">Biometric ID: {userToToggleStatusModal.biometricId || 'Not available'}</p>
                   <div className="flex items-center space-x-2 mt-0.5">
                     <span className="text-[10px] text-slate-500">Current Status:</span>
                     <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-md border whitespace-nowrap ${
