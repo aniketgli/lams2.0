@@ -2,7 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { db } from '../../src/db';
-import { biometric_machines, employee_profiles, user_account_audit_logs, user_project_histories, organization_settings, organization_units, profile_master_records, shifts, users, designations, msc_streams, msc_batches, training_courses, trainee_batches, projects, categories, phd_enrollments, user_module_roles } from '../../src/db/schema';
+import { biometric_machines, employee_profiles, user_account_audit_logs, user_project_histories, shift_master_audit_logs, organization_settings, organization_units, profile_master_records, shifts, users, designations, msc_streams, msc_batches, training_courses, trainee_batches, projects, categories, phd_enrollments, user_module_roles } from '../../src/db/schema';
 import { isAuthenticated, isAdmin } from '../middleware/auth.middleware';
 import { eq, and } from 'drizzle-orm';
 import { randomInt } from 'node:crypto';
@@ -678,11 +678,37 @@ function normalizeShift(body: any) {
   }} as const;
 }
 
-// Shift Master is out of scope for the current HRMS login/module-access fix.
-// Do not query the legacy shifts table until its schema and UI are explicitly brought into scope.
+// Shift Master is persisted in MySQL; audit events are written with each mutation.
+async function writeShiftAudit(req: any, shift: any, action: string, beforeData: unknown, afterData: unknown, reason?: string) {
+  const biometricId = String(req.session?.biometricId || '');
+  let actorName: string | null = null;
+  if (biometricId) {
+    const [actor] = await db.select({ name: users.name }).from(users).where(eq(users.biometricId, biometricId));
+    actorName = actor?.name || null;
+  }
+  await db.insert(shift_master_audit_logs).values({
+    shiftId: Number(shift.id), shiftCode: String(shift.code || ''),
+    action, changedByBiometricId: biometricId || null, changedByName: actorName,
+    reason: reason || null,
+    beforeData: beforeData == null ? null : JSON.stringify(beforeData),
+    afterData: afterData == null ? null : JSON.stringify(afterData),
+  });
+}
 router.get('/shifts', isAuthenticated, async (_req, res) => {
   res.setHeader('Cache-Control', 'no-store');
-  return res.json([]);
+  try {
+    const rows = await db.select().from(shifts);
+    return res.json(rows.map((row: any) => ({
+      ...row, id: String(row.id), gracePeriodMins: Number(row.gracePeriodMins ?? 0),
+      halfDayHours: Number(row.halfDayHours ?? 4), fullDayHours: Number(row.fullDayHours ?? 8),
+      isDefault: Boolean(row.isDefault), isActive: row.status ? row.status === 'active' : row.isActive !== false,
+      status: row.status || (row.isActive === false ? 'inactive' : 'active'),
+      applicableDays: typeof row.applicableDays === 'string' ? (() => { try { return JSON.parse(row.applicableDays); } catch { return []; } })() : row.applicableDays || [],
+    })));
+  } catch (error) {
+    console.error('Failed to load Shift Master:', error);
+    return res.status(500).json({ error: 'Failed to load shifts from database.' });
+  }
 });
 
 router.post('/shifts', isAdmin, async (req, res) => {
@@ -691,16 +717,18 @@ router.post('/shifts', isAdmin, async (req, res) => {
   try {
     const [duplicate] = await db.select({ id: shifts.id }).from(shifts).where(eq(shifts.code, normalized.value.code));
     if (duplicate) return res.status(409).json({ error: 'A shift with this code already exists.' });
-    const id = typeof req.body.id === 'string' && req.body.id.length <= 36 ? req.body.id : randomUUID();
+    const id = undefined;
     if (normalized.value.isDefault) {
       await db.transaction(async (tx) => {
         await tx.update(shifts).set({ isDefault: false });
-        await tx.insert(shifts).values({ id, ...normalized.value });
+        const [inserted] = await tx.insert(shifts).values({ ...normalized.value, status: normalized.value.isActive ? 'active' : 'inactive' });
+        await writeShiftAudit(req, { id: inserted.insertId, code: normalized.value.code }, 'CREATE', null, { ...normalized.value, status: normalized.value.isActive ? 'active' : 'inactive' });
       });
     } else {
-      await db.insert(shifts).values({ id, ...normalized.value });
+      const [inserted] = await db.insert(shifts).values({ ...normalized.value, status: normalized.value.isActive ? 'active' : 'inactive' });
+      await writeShiftAudit(req, { id: inserted.insertId, code: normalized.value.code }, 'CREATE', null, { ...normalized.value, status: normalized.value.isActive ? 'active' : 'inactive' });
     }
-    return res.status(201).json({ id, message: 'Shift created in database.' });
+    return res.status(201).json({ id: String((await db.select({ id: shifts.id }).from(shifts).where(eq(shifts.code, normalized.value.code)))[0]?.id), message: 'Shift created in database.' });
   } catch (error) {
     console.error('Failed to create shift:', error);
     return res.status(500).json({ error: 'Failed to create shift' });
@@ -711,18 +739,19 @@ router.put('/shifts/:id', isAdmin, async (req, res) => {
   const normalized = normalizeShift(req.body);
   if ('error' in normalized) return res.status(400).json({ error: normalized.error });
   try {
-    const [existing] = await db.select({ id: shifts.id }).from(shifts).where(eq(shifts.id, req.params.id));
+    const [existing] = await db.select().from(shifts).where(eq(shifts.id, Number(req.params.id)));
     if (!existing) return res.status(404).json({ error: 'Shift not found.' });
     const [duplicate] = await db.select({ id: shifts.id }).from(shifts).where(eq(shifts.code, normalized.value.code));
-    if (duplicate && duplicate.id !== req.params.id) return res.status(409).json({ error: 'A shift with this code already exists.' });
+    if (duplicate && String(duplicate.id) !== req.params.id) return res.status(409).json({ error: 'A shift with this code already exists.' });
     if (normalized.value.isDefault) {
       await db.transaction(async (tx) => {
         await tx.update(shifts).set({ isDefault: false });
-        await tx.update(shifts).set(normalized.value).where(eq(shifts.id, req.params.id));
+        await tx.update(shifts).set({ ...normalized.value, status: normalized.value.isActive ? 'active' : 'inactive' }).where(eq(shifts.id, Number(req.params.id)));
       });
     } else {
-      await db.update(shifts).set(normalized.value).where(eq(shifts.id, req.params.id));
+      await db.update(shifts).set({ ...normalized.value, status: normalized.value.isActive ? 'active' : 'inactive' }).where(eq(shifts.id, Number(req.params.id)));
     }
+    await writeShiftAudit(req, existing, normalized.value.isActive ? (existing.isActive !== normalized.value.isActive ? 'STATUS_CHANGE' : 'UPDATE') : 'STATUS_CHANGE', existing, { ...normalized.value, status: normalized.value.isActive ? 'active' : 'inactive' });
     return res.json({ message: 'Shift updated in database.' });
   } catch (error) {
     console.error('Failed to update shift:', error);
@@ -732,12 +761,13 @@ router.put('/shifts/:id', isAdmin, async (req, res) => {
 
 router.delete('/shifts/:id', isAdmin, async (req, res) => {
   try {
-    const [target] = await db.select().from(shifts).where(eq(shifts.id, req.params.id));
+    const [target] = await db.select().from(shifts).where(eq(shifts.id, Number(req.params.id)));
     if (!target) return res.status(404).json({ error: 'Shift not found.' });
     if (target.isDefault) return res.status(409).json({ error: 'Set another shift as default before deleting this shift.' });
-    const [assigned] = await db.select({ id: employee_profiles.userId }).from(employee_profiles).where(eq(employee_profiles.shiftId, req.params.id));
+    const [assigned] = await db.select({ id: employee_profiles.userId }).from(employee_profiles).where(eq(employee_profiles.shiftId, Number(req.params.id)));
     if (assigned) return res.status(409).json({ error: 'This shift is assigned to employees. Deactivate it instead of deleting.' });
-    await db.delete(shifts).where(eq(shifts.id, req.params.id));
+    await writeShiftAudit(req, target, 'DELETE', target, null);
+    await db.delete(shifts).where(eq(shifts.id, Number(req.params.id)));
     return res.json({ message: 'Shift deleted from database.' });
   } catch (error) {
     console.error('Failed to delete shift:', error);
