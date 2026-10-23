@@ -180,3 +180,24 @@ export const phd_enrollments = mysqlTable('phd_enrollments', {
   createdAt: timestamp('created_at').defaultNow(), updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });
 
+
+export const user_project_histories = mysqlTable('user_histories', {
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  biometricId: varchar('biometric_id', { length: 4 }).notNull(),
+  projectName: varchar('project_name', { length: 255 }).notNull(),
+  projectCode: varchar('project_code', { length: 100 }),
+  piName: varchar('pi_name', { length: 255 }),
+  piEmail: varchar('pi_email', { length: 255 }),
+  roleInProject: varchar('role_in_project', { length: 255 }),
+  pay: varchar('pay', { length: 255 }),
+  startDate: date('start_date', { mode: 'string' }).notNull(),
+  endDate: date('end_date', { mode: 'string' }),
+  isOngoing: boolean('is_ongoing').notNull().default(false),
+  department: varchar('department', { length: 255 }),
+  fundingAgency: varchar('funding_agency', { length: 255 }),
+  grantAmount: varchar('grant_amount', { length: 255 }),
+  responsibilities: longtext('responsibilities'),
+  remarks: longtext('remarks'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+});

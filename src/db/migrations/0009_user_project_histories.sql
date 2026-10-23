@@ -1,0 +1,23 @@
+CREATE TABLE IF NOT EXISTS user_histories (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  biometric_id VARCHAR(4) NOT NULL,
+  project_name VARCHAR(255) NOT NULL,
+  project_code VARCHAR(100) NULL,
+  pi_name VARCHAR(255) NULL,
+  pi_email VARCHAR(255) NULL,
+  role_in_project VARCHAR(255) NULL,
+  pay VARCHAR(255) NULL,
+  start_date DATE NOT NULL,
+  end_date DATE NULL,
+  is_ongoing TINYINT(1) NOT NULL DEFAULT 0,
+  department VARCHAR(255) NULL,
+  funding_agency VARCHAR(255) NULL,
+  grant_amount VARCHAR(255) NULL,
+  responsibilities LONGTEXT NULL,
+  remarks LONGTEXT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_user_histories_biometric_id (biometric_id),
+  KEY idx_user_histories_start_date (start_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
