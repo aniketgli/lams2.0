@@ -17,7 +17,7 @@ const router = Router();
 router.get('/employees/:biometricId/project-history', isAuthenticated, async (req, res) => {
   try {
     const biometricId = String(req.params.biometricId || '').trim();
-    if (!/^\\d{1,4}$/.test(biometricId)) {
+    if (!/^\d{1,4}$/.test(biometricId)) {
       return res.status(400).json({ error: 'A valid biometric ID is required.' });
     }
     const rows = await db.select().from(user_project_histories)
