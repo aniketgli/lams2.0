@@ -35,7 +35,7 @@ export const UserProjectHistoryModal: React.FC<UserProjectHistoryModalProps> = (
     setLoadError('');
     setResolvedBiometricId('');
     const resolveBiometricId = async (): Promise<string> => {
-      if (/^\\d{1,4}$/.test(biometricId)) return biometricId;
+      if (/^\d{1,4}$/.test(biometricId)) return biometricId;
       // The profile list can contain a user without the canonical biometric field.
       // Resolve it from the server's employee directory using the stable account ID/email.
       const response = await fetch('/api/hrms/employees', {
@@ -51,7 +51,7 @@ export const UserProjectHistoryModal: React.FC<UserProjectHistoryModalProps> = (
         (user.email && String(employee.email || '').toLowerCase() === String(user.email).toLowerCase())
       );
       const resolved = String(match?.biometricId ?? match?.biometric_id ?? '').trim();
-      if (!/^\\d{1,4}$/.test(resolved)) {
+      if (!/^\d{1,4}$/.test(resolved)) {
         throw new Error('A valid biometric ID could not be found for this employee. Check the employee account record.');
       }
       return resolved;
