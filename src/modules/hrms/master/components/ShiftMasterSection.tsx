@@ -138,8 +138,13 @@ export const ShiftMasterSection: React.FC = () => {
       showToast('Institutional default shift cannot be set to inactive. Set another shift as default first.');
       return;
     }
+    const assignedCount = shiftStaffCountMap.get(shift.id) || 0;
+    if (isCurrentlyActive && assignedCount > 0) {
+      showToast('This shift is assigned to staff. Reassign the staff before deactivating it.');
+      return;
+    }
     const nextState = !isCurrentlyActive;
-    const res = await updateShift(shift.id, { isActive: nextState });
+    const res = await updateShift(shift.id, { isActive: nextState, status: nextState ? 'active' : 'inactive' });
     showToast(res.success ? `Shift ${shift.code} is now ${nextState ? 'Active' : 'Inactive'}.` : res.message);
   };
 
@@ -270,7 +275,7 @@ export const ShiftMasterSection: React.FC = () => {
                           <Star className="w-3.5 h-3.5" />
                         </button>
                       )}
-                      {!shift.isDefault && (
+                      {!shift.isDefault && shift.isActive === false && (shiftStaffCountMap.get(shift.id) || 0) === 0 && (
                         <button
                           onClick={() => {
                             if (shifts.length <= 1) {
@@ -280,7 +285,7 @@ export const ShiftMasterSection: React.FC = () => {
                             setDeleteTargetShift(shift);
                           }}
                           className="p-1 text-slate-500 hover:text-rose-600 rounded hover:bg-rose-50 transition-colors cursor-pointer"
-                          title="Delete Shift"
+                          title="Delete inactive, unassigned shift"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>

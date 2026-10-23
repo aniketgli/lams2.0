@@ -750,6 +750,13 @@ router.put('/shifts/:id', isAdmin, async (req, res) => {
   try {
     const [existing] = await db.select().from(shifts).where(eq(shifts.id, Number(req.params.id)));
     if (!existing) return res.status(404).json({ error: 'Shift not found.' });
+    const [assignedForStatus] = await db.select({ id: employee_profiles.userId }).from(employee_profiles)
+      .where(eq(employee_profiles.shiftId, String(req.params.id))).limit(1);
+    const currentStatus = String(existing.status || 'active').toLowerCase();
+    const nextStatus = String(normalized.value.status || 'active').toLowerCase();
+    if (currentStatus !== nextStatus && nextStatus === 'inactive' && assignedForStatus) {
+      return res.status(409).json({ error: 'This shift is assigned to an employee. Reassign the employee before deactivating this shift.' });
+    }
     const [duplicate] = await db.select({ id: shifts.id }).from(shifts).where(eq(shifts.code, normalized.value.code));
     if (duplicate && String(duplicate.id) !== req.params.id) return res.status(409).json({ error: 'A shift with this code already exists.' });
     if (normalized.value.isDefault) {
@@ -772,9 +779,13 @@ router.delete('/shifts/:id', isAdmin, async (req, res) => {
   try {
     const [target] = await db.select().from(shifts).where(eq(shifts.id, Number(req.params.id)));
     if (!target) return res.status(404).json({ error: 'Shift not found.' });
-    if (target.isDefault) return res.status(409).json({ error: 'Set another shift as default before deleting this shift.' });
-    const [assigned] = await db.select({ id: employee_profiles.userId }).from(employee_profiles).where(eq(employee_profiles.shiftId, String(req.params.id)));
-    if (assigned) return res.status(409).json({ error: 'This shift is assigned to employees. Deactivate it instead of deleting.' });
+    if (target.isDefault) return res.status(409).json({ error: 'The institutional default shift cannot be deleted. Set another shift as default first.' });
+    if (String(target.status || 'active').toLowerCase() !== 'inactive') {
+      return res.status(409).json({ error: 'Only inactive shifts can be deleted. Deactivate this shift first.' });
+    }
+    const [assigned] = await db.select({ id: employee_profiles.userId }).from(employee_profiles)
+      .where(eq(employee_profiles.shiftId, String(req.params.id))).limit(1);
+    if (assigned) return res.status(409).json({ error: 'This shift is assigned to an employee. Reassign the employee before deleting this shift.' });
     await writeShiftAudit(req, target, 'DELETE', target, null);
     await db.delete(shifts).where(eq(shifts.id, Number(req.params.id)));
     return res.json({ message: 'Shift deleted from database.' });
