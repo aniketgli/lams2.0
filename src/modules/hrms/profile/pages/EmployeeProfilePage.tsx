@@ -657,6 +657,75 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   // Delete user confirmation
   const [userToDelete, setUserToDelete] = useState<UserType | null>(null);
 
+  // Active module-role assignments loaded from the access API for the table.
+  const [databaseModuleRoles, setDatabaseModuleRoles] = useState<Record<string, Partial<Record<EnterpriseModuleId, string[]>>>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadActiveModuleRoles = async () => {
+      try {
+        const employeeResponse = await fetch('/api/hrms/employees', {
+          credentials: 'same-origin',
+          cache: 'no-store',
+          headers: { Accept: 'application/json' }
+        });
+        if (!employeeResponse.ok) return;
+        const payload = await employeeResponse.json();
+        const employeeRows = Array.isArray(payload) ? payload : Array.isArray(payload?.employees) ? payload.employees : [];
+        const next: Record<string, Partial<Record<EnterpriseModuleId, string[]>>> = {};
+
+        await Promise.all(users.map(async (user) => {
+          const employee = employeeRows.find((row: any) =>
+            String(row?.id ?? '') === String(user.id ?? '') ||
+            (user.email && String(row?.email ?? '').trim().toLowerCase() === String(user.email).trim().toLowerCase()) ||
+            (user.name && String(row?.name ?? '').trim().toLowerCase() === String(user.name).trim().toLowerCase())
+          );
+          const biometricId = String(
+            user.biometricId ?? (user as UserType & { biometric_id?: string }).biometric_id ??
+            employee?.biometricId ?? employee?.biometric_id ?? ''
+          ).trim();
+          if (!biometricId) return;
+
+          try {
+            const response = await fetch(`/api/access/users/${encodeURIComponent(biometricId)}/roles`, {
+              credentials: 'same-origin',
+              cache: 'no-store',
+              headers: { Accept: 'application/json' }
+            });
+            if (!response.ok) return;
+            const rolePayload = await response.json();
+            const assignments = Array.isArray(rolePayload?.assignments) ? rolePayload.assignments : [];
+            const moduleRoles: Partial<Record<EnterpriseModuleId, string[]>> = {};
+            assignments.filter((a: any) => String(a?.status ?? 'active').toLowerCase() === 'active')
+              .forEach((assignment: any) => {
+                const rawModule = String(assignment?.moduleId ?? '').toLowerCase();
+                const moduleKey: EnterpriseModuleId | undefined = ({
+                  hrms: 'lams', lams: 'lams', pms: 'pms',
+                  stock: 'sims', sims: 'sims', finance: 'finance',
+                  facility: 'fms', fms: 'fms'
+                } as Record<string, EnterpriseModuleId>)[rawModule];
+                if (!moduleKey) return;
+                const rawRole = String(assignment?.roleId ?? '').trim();
+                const normalizedRole = /^(auditor|audit|hrms_auditor|pms_reviewer|sims_auditor|fin_auditor|fms_auditor)$/i.test(rawRole)
+                  ? 'Auditor'
+                  : rawRole;
+                if (!moduleRoles[moduleKey]) moduleRoles[moduleKey] = [];
+                if (normalizedRole && !moduleRoles[moduleKey]!.includes(normalizedRole)) moduleRoles[moduleKey]!.push(normalizedRole);
+              });
+            next[String(user.id)] = moduleRoles;
+          } catch (error) {
+            console.error('Could not load active module roles for employee:', error);
+          }
+        }));
+        if (!cancelled) setDatabaseModuleRoles(next);
+      } catch (error) {
+        console.error('Could not load active module roles for table:', error);
+      }
+    };
+    void loadActiveModuleRoles();
+    return () => { cancelled = true; };
+  }, [users]);
+
   // Role Edit Modal State
   const [userToEditRoles, setUserToEditRoles] = useState<UserType | null>(null);
   const [editUserBaseRole, setEditUserBaseRole] = useState<UserRole>('general_staff');
@@ -2787,11 +2856,13 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                               ];
 
                               const assignedModules = ALL_MODULES.map((m) => {
-                                const roleIds = u.moduleRoles?.[m.id] || [];
+                                const roleIds = databaseModuleRoles[String(u.id)]?.[m.id] ??
+                                  u.moduleRoles?.[m.id] ?? [];
                                 const defs = MODULE_ROLE_DEFINITIONS[m.id] || [];
 
                                 const roles = roleIds.map((rId) => {
-                                  const found = defs.find((d) => d.id === rId);
+                                  if (/^(auditor|audit|hrms_auditor|pms_reviewer|sims_auditor|fin_auditor|fms_auditor)$/i.test(rId)) return 'Auditor';
+                                  const found = defs.find((d) => d.id === rId || d.name === rId || d.shortName === rId);
                                   return found ? (found.shortName || found.name) : rId;
                                 });
 
