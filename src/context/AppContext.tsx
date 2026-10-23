@@ -257,7 +257,7 @@ interface AppContextType {
     reviewingManagerId?: string,
     roles?: UserRole[]
   ) => void;
-  toggleUserStatus: (userId: string, reason?: string, effectiveDate?: string) => void;
+  toggleUserStatus: (userId: string, reason?: string, effectiveDate?: string) => Promise<{ success: boolean; message?: string }>;
   deleteUser: (userId: string) => void;
   resetUserPassword: (userId: string, customPass?: string, reason?: string) => string;
   transferUser: (
@@ -4055,81 +4055,79 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  const toggleUserStatus = (userId: string, reason?: string, effectiveDate?: string) => {
-    let targetUser: User | undefined;
-    setUsers((prev) =>
-      prev.map((u) => {
-        if (u.id === userId) {
-          targetUser = u;
-          const newStatus = u.status === 'deactivated' ? 'active' : 'deactivated';
-          return { ...u, status: newStatus };
-        }
-        return u;
-      })
-    );
+  const toggleUserStatus = async (userId: string, reason?: string, effectiveDate?: string): Promise<{ success: boolean; message?: string }> => {
+    const targetUser = users.find((u) => u.id === userId);
+    if (!targetUser) return { success: false, message: 'Employee account not found.' };
 
-    if (targetUser) {
-      const isActivating = targetUser.status === 'deactivated';
-      const eventDate = effectiveDate || new Date().toISOString().split('T')[0];
-
-      // Auto-update project & posting history timeline on active / deactive / reactive
-      if (!isActivating) {
-        // User was active, now deactivated -> close ongoing posting record
-        setProjectHistories((prev) =>
-          prev.map((item) => {
-            if (item.userId === userId && item.isOngoing) {
-              return {
-                ...item,
-                isOngoing: false,
-                endDate: eventDate,
-                remarks: reason ? `Posting concluded: ${reason}` : 'Tenure completed / Deactivated'
-              };
-            }
-            return item;
-          })
-        );
-      } else {
-        // User was deactivated, now reactivated -> auto create / resume active posting
-        setProjectHistories((prev) => {
-          const hasOngoing = prev.some((item) => item.userId === userId && item.isOngoing);
-          if (!hasOngoing) {
-            const lastPast = prev.find((item) => item.userId === userId);
-            const newHistory: UserProjectHistory = {
-              id: `proj-hist-${Date.now()}`,
-              userId: targetUser!.id,
-              userName: targetUser!.name,
-              projectName: lastPast?.projectName || (targetUser!.department ? `${targetUser!.department} Core Research & Project Assignment` : 'Core Institutional Project'),
-              projectCode: lastPast?.projectCode,
-              piName: targetUser!.piName || lastPast?.piName || 'Designated PI / HoD',
-              piEmail: lastPast?.piEmail,
-              roleInProject: targetUser!.designation || lastPast?.roleInProject || 'Project Staff',
-              pay: lastPast?.pay || 'As per Project Norms',
-              startDate: eventDate,
-              isOngoing: true,
-              department: targetUser!.department || lastPast?.department || 'Wildlife Sciences',
-              addedBy: currentUser ? currentUser.name : 'Administrator',
-              addedAt: eventDate,
-              remarks: reason ? `Reactivated: ${reason}` : 'Account & active project posting reactivated'
-            };
-            return [newHistory, ...prev];
-          }
-          return prev;
-        });
+    const isActivating = targetUser.status === 'deactivated';
+    try {
+      const response = await fetch(`/api/hrms/employees/${encodeURIComponent(userId)}/status`, {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          status: isActivating ? 'active' : 'inactive',
+          reason: reason || '',
+          effectiveDate: effectiveDate || new Date().toISOString().slice(0, 10)
+        })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return { success: false, message: payload.error || payload.message || 'Account status could not be updated.' };
       }
-
-      const actionTitle = isActivating ? '🟢 User Account Reactivated' : '🔴 User Account Deactivated';
-      sendSlackNotification(
-        slackConfig,
-        {
-          channel: '#leave-and-attendance-logs',
-          sender: currentUser.name,
-          title: actionTitle,
-          message: `Admin *${currentUser.name}* ${isActivating ? 'reactivated' : 'deactivated'} account for *${targetUser.name}* (${targetUser.email}).${reason ? `\n*Reason/Remarks:* ${reason}` : ''}${effectiveDate ? ` | *Effective:* ${effectiveDate}` : ''}`,
-          type: 'system'
-        },
-        addSlackLog
-      );
+    } catch (error) {
+      console.error('Employee account status update failed:', error);
+      return { success: false, message: 'Unable to reach the server. Account status was not changed.' };
     }
+
+    // Update local state only after the server has confirmed the database change.
+    setUsers((prev) => prev.map((u) => u.id === userId ? { ...u, status: isActivating ? 'active' : 'deactivated' } : u));
+    const eventDate = effectiveDate || new Date().toISOString().split('T')[0];
+
+    if (!isActivating) {
+      setProjectHistories((prev) => prev.map((item) => item.userId === userId && item.isOngoing
+        ? { ...item, isOngoing: false, endDate: eventDate, remarks: reason ? `Posting concluded: ${reason}` : 'Tenure completed / Deactivated' }
+        : item));
+    } else {
+      setProjectHistories((prev) => {
+        const hasOngoing = prev.some((item) => item.userId === userId && item.isOngoing);
+        if (hasOngoing) return prev;
+        const lastPast = prev.find((item) => item.userId === userId);
+        const newHistory: UserProjectHistory = {
+          id: `proj-hist-${Date.now()}`,
+          userId: targetUser.id,
+          userName: targetUser.name,
+          projectName: lastPast?.projectName || (targetUser.department ? `${targetUser.department} Core Research & Project Assignment` : 'Core Institutional Project'),
+          projectCode: lastPast?.projectCode,
+          piName: targetUser.piName || lastPast?.piName || 'Designated PI / HoD',
+          piEmail: lastPast?.piEmail,
+          roleInProject: targetUser.designation || lastPast?.roleInProject || 'Project Staff',
+          pay: lastPast?.pay || 'As per Project Norms',
+          startDate: eventDate,
+          isOngoing: true,
+          department: targetUser.department || lastPast?.department || 'Wildlife Sciences',
+          addedBy: currentUser ? currentUser.name : 'Administrator',
+          addedAt: eventDate,
+          remarks: reason ? `Reactivated: ${reason}` : 'Account & active project posting reactivated'
+        };
+        return [newHistory, ...prev];
+      });
+    }
+
+    const actionTitle = isActivating ? '🟢 User Account Reactivated' : '🔴 User Account Deactivated';
+    sendSlackNotification(
+      slackConfig,
+      {
+        channel: '#leave-and-attendance-logs',
+        sender: currentUser.name,
+        title: actionTitle,
+        message: `Admin *${currentUser.name}* ${isActivating ? 'reactivated' : 'deactivated'} account for *${targetUser.name}* (${targetUser.email}).${reason ? `\n*Reason/Remarks:* ${reason}` : ''}${effectiveDate ? ` | *Effective:* ${effectiveDate}` : ''}`,
+        type: 'system'
+      },
+      addSlackLog
+    );
+    return { success: true };
   };
 
   const deleteUser = (userId: string) => {
