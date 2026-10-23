@@ -500,7 +500,7 @@ export const MasterSettingsPage: React.FC = () => {
                     <th className="w-[14%] px-3 py-3 font-bold whitespace-nowrap">IP Address</th>
                     <th className="w-[12%] px-3 py-3 font-bold whitespace-nowrap">Purpose</th>
                     <th className="w-[10%] px-3 py-3 font-bold whitespace-nowrap">Status</th>
-                    <th className="w-[13%] px-3 py-3 font-bold text-center whitespace-nowrap">Actions</th>
+                    <th className="w-[12%] px-3 py-3 font-bold text-right whitespace-nowrap">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -527,7 +527,7 @@ export const MasterSettingsPage: React.FC = () => {
                         </button>
                       </td>
                       <td className="px-3 py-3 text-center">
-                        <div className="flex items-center justify-center gap-2">
+                        <div className="flex items-center justify-end gap-2">
                           <button type="button" onClick={() => { handleOpenEditMachineModal(machine); setShowAddMachineModal(true); }} className="h-8 w-8 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 inline-flex items-center justify-center" title="Edit machine"><Pencil className="w-3.5 h-3.5" /></button>
                           <button type="button" onClick={() => handleDeleteMachine(machine.id)} className="h-8 w-8 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 inline-flex items-center justify-center" title="Delete machine"><Trash2 className="w-3.5 h-3.5" /></button>
                         </div>
