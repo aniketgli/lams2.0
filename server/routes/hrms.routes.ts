@@ -4,7 +4,9 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { db } from '../../src/db';
 import { biometric_machines, employee_profiles, organization_settings, organization_units, profile_master_records, shifts, users, designations, msc_streams, msc_batches, training_courses, trainee_batches, projects, categories, phd_enrollments, user_module_roles } from '../../src/db/schema';
 import { isAuthenticated, isAdmin } from '../middleware/auth.middleware';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
+import { randomInt } from 'node:crypto';
+import { EmailService } from '../integrations/email/email.service';
 import { isIP } from 'node:net';
 
 const router = Router();
@@ -183,6 +185,72 @@ function toProfileRow(userId: string, profile: Record<string, any>, role: string
     profileData: JSON.stringify({ ...profile, id: userId, name: profile.name, email: profile.email, role, employmentType })
   };
 }
+
+// Administrator-triggered portal password reset. Only the password hash is persisted.
+router.post('/employees/:biometricId/reset-password', isAuthenticated, isAdmin, async (req, res) => {
+  const biometricId = String(req.params.biometricId || '').trim();
+  const mode = req.body?.mode === 'custom' ? 'custom' : 'auto';
+  const reason = String(req.body?.reason || '').trim().slice(0, 500);
+  const customPassword = typeof req.body?.password === 'string' ? req.body.password : '';
+
+  if (!/^\\d{4}$/.test(biometricId)) {
+    return res.status(400).json({ error: 'A valid 4-digit biometric ID is required.' });
+  }
+  if (mode === 'custom' && customPassword.length < 6) {
+    return res.status(400).json({ error: 'Custom password must be at least 6 characters long.' });
+  }
+
+  try {
+    const [target] = await db.select({
+      id: users.id, name: users.name, email: users.email, biometricId: users.biometricId
+    }).from(users).where(eq(users.biometricId, biometricId)).limit(1);
+    if (!target) return res.status(404).json({ error: 'User account not found.' });
+    if (String(req.session?.biometricId || '') === biometricId) {
+      return res.status(400).json({ error: 'You cannot reset your own password from User Controls.' });
+    }
+
+    const temporaryPassword = mode === 'auto' ? String(randomInt(100000, 1000000)) : customPassword;
+    const passwordHash = await bcrypt.hash(temporaryPassword, 12);
+    await db.update(users).set({ passwordHash }).where(eq(users.biometricId, biometricId));
+
+    let emailStatus: 'delivered' | 'simulated' | 'not_required' = 'not_required';
+    if (mode === 'auto') {
+      const emailResult = await EmailService.sendEmail({
+        to: target.email,
+        toName: target.name,
+        subject: 'Your WII Portal temporary password',
+        text: `Dear ${target.name},\\n\\nAn administrator has reset your WII Portal password. Your temporary password is: ${temporaryPassword}\\n\\nPlease sign in and change it immediately.\\n\\nReference: ${reason || 'Official Reset Request'}\\n\\nIf you did not request this, contact the IT Cell.`,
+        html: `<p>Dear ${target.name},</p><p>An administrator has reset your WII Portal password.</p><p>Your temporary password is: <strong>${temporaryPassword}</strong></p><p>Please sign in and change it immediately.</p><p>Reference: ${reason || 'Official Reset Request'}</p><p>If you did not request this, contact the IT Cell.</p>`,
+        category: 'SECURITY',
+        eventType: 'PASSWORD_RESET',
+        referenceId: biometricId
+      });
+      emailStatus = emailResult.status === 'delivered' ? 'delivered' : 'simulated';
+      if (emailStatus !== 'delivered') {
+        return res.status(502).json({
+          success: false,
+          passwordUpdated: true,
+          emailStatus,
+          error: 'Password was updated in the database, but email delivery could not be confirmed. Verify SMTP configuration before retrying.'
+        });
+      }
+    }
+
+    console.info('[PASSWORD_RESET]', JSON.stringify({
+      targetBiometricId: biometricId,
+      actorBiometricId: req.session?.biometricId || null,
+      mode,
+      reason,
+      timestamp: new Date().toISOString()
+    }));
+    return res.json({ success: true, passwordUpdated: true, emailStatus, message: mode === 'auto'
+      ? 'Password reset and temporary credential emailed successfully.'
+      : 'Password updated successfully.' });
+  } catch (error) {
+    console.error('Portal password reset failed:', error instanceof Error ? error.message : error);
+    return res.status(500).json({ error: 'Unable to reset the portal password.' });
+  }
+});
 
 // Create account and employee profile together. A random unknown initial password prevents
 // accidentally issuing a predictable credential; use the approved password-reset flow to activate login.
