@@ -2,7 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { db } from '../../src/db';
-import { biometric_machines, employee_profiles, user_account_audit_logs, user_project_histories, shift_master_audit_logs, organization_settings, organization_units, profile_master_records, shifts, users, designations, msc_streams, msc_batches, training_courses, trainee_batches, projects, categories, phd_enrollments, user_module_roles } from '../../src/db/schema';
+import { biometric_machines, biometric_machine_audit_logs, employee_profiles, user_account_audit_logs, user_project_histories, shift_master_audit_logs, organization_settings, organization_units, profile_master_records, shifts, users, designations, msc_streams, msc_batches, training_courses, trainee_batches, projects, categories, phd_enrollments, user_module_roles } from '../../src/db/schema';
 import { isAuthenticated, isAdmin } from '../middleware/auth.middleware';
 import { eq, and } from 'drizzle-orm';
 import { randomInt } from 'node:crypto';
@@ -855,6 +855,7 @@ router.post('/biometric-machines', isAdmin, async (req, res) => {
   if ('error' in normalized) return res.status(400).json({ error: normalized.error });
   try {
     await db.insert(biometric_machines).values(normalized.value);
+    await db.insert(biometric_machine_audit_logs).values({ machineId: normalized.value.id, action: 'CREATE', changedByBiometricId: req.session?.biometricId || null, changedByName: null, afterData: JSON.stringify(normalized.value), reason: 'Created from Biometric Machine Master' });
     return res.status(201).json({ ...normalized.value, message: 'Biometric machine saved.' });
   } catch (error) {
     const dbError = getBiometricDatabaseError(error);
@@ -878,6 +879,7 @@ router.put('/biometric-machines/:id', isAdmin, async (req, res) => {
     if ((shortNameOwner && shortNameOwner.id !== req.params.id) || (serialOwner && serialOwner.id !== req.params.id) || (ipOwner && ipOwner.id !== req.params.id)) {
       return res.status(409).json({ error: 'Serial Number or IP Address already belongs to another device.' });
     }
+    const [before] = await db.select().from(biometric_machines).where(eq(biometric_machines.id, req.params.id));
     await db.update(biometric_machines).set({
       fullName: normalized.value.fullName,
       shortName: normalized.value.shortName,
@@ -886,6 +888,7 @@ router.put('/biometric-machines/:id', isAdmin, async (req, res) => {
       status: normalized.value.status,
       purpose: normalized.value.purpose
     }).where(eq(biometric_machines.id, req.params.id));
+    await db.insert(biometric_machine_audit_logs).values({ machineId: req.params.id, action: 'UPDATE', changedByBiometricId: req.session?.biometricId || null, changedByName: null, beforeData: JSON.stringify(before || {}), afterData: JSON.stringify(normalized.value), reason: 'Updated from Biometric Machine Master' });
     return res.json({ ...normalized.value, message: 'Biometric machine updated.' });
   } catch (error) {
     const dbError = getBiometricDatabaseError(error);
@@ -901,9 +904,10 @@ router.patch('/biometric-machines/:id/status', isAdmin, async (req, res) => {
   const status = req.body?.status === 'INACTIVE' ? 'INACTIVE' : req.body?.status === 'ACTIVE' ? 'ACTIVE' : null;
   if (!status) return res.status(400).json({ error: 'Status must be ACTIVE or INACTIVE.' });
   try {
-    const [existing] = await db.select({ id: biometric_machines.id }).from(biometric_machines).where(eq(biometric_machines.id, req.params.id));
+    const [existing] = await db.select().from(biometric_machines).where(eq(biometric_machines.id, req.params.id));
     if (!existing) return res.status(404).json({ error: 'Biometric machine not found.' });
     await db.update(biometric_machines).set({ status }).where(eq(biometric_machines.id, req.params.id));
+    await db.insert(biometric_machine_audit_logs).values({ machineId: req.params.id, action: 'UPDATE', changedByBiometricId: req.session?.biometricId || null, beforeData: JSON.stringify(existing), afterData: JSON.stringify({ ...existing, status }), reason: 'Status changed' });
     return res.json({ id: req.params.id, status, message: 'Biometric machine status updated.' });
   } catch (error) {
     const dbError = getBiometricDatabaseError(error);
@@ -914,8 +918,9 @@ router.patch('/biometric-machines/:id/status', isAdmin, async (req, res) => {
 
 router.delete('/biometric-machines/:id', isAdmin, async (req, res) => {
   try {
-    const [existing] = await db.select({ id: biometric_machines.id }).from(biometric_machines).where(eq(biometric_machines.id, req.params.id));
+    const [existing] = await db.select().from(biometric_machines).where(eq(biometric_machines.id, req.params.id));
     if (!existing) return res.status(404).json({ error: 'Biometric machine not found.' });
+    await db.insert(biometric_machine_audit_logs).values({ machineId: req.params.id, action: 'DELETE', changedByBiometricId: req.session?.biometricId || null, beforeData: JSON.stringify(existing), reason: 'Deleted from Biometric Machine Master' });
     await db.delete(biometric_machines).where(eq(biometric_machines.id, req.params.id));
     return res.json({ message: 'Biometric machine deleted.' });
   } catch (error) {
