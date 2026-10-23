@@ -662,6 +662,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const [editUserBaseRole, setEditUserBaseRole] = useState<UserRole>('general_staff');
   const [editUserRolesState, setEditUserRolesState] = useState<UserRole[]>(['general_staff']);
   const [editUserModuleRolesState, setEditUserModuleRolesState] = useState<Record<string, string[]>>({});
+  const [isRoleMatrixLoading, setIsRoleMatrixLoading] = useState(false);
   const [editUserL1, setEditUserL1] = useState<string>('');
   const [editUserL2, setEditUserL2] = useState<string>('');
   const [editUserShift, setEditUserShift] = useState<string>('shift-gen-01');
@@ -728,6 +729,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       finance: u.moduleRoles?.finance ? [...u.moduleRoles.finance] : []
     };
     setEditUserModuleRolesState(modRoles);
+    // Prevent edits while the authoritative DB grants are loading; otherwise a late GET can overwrite a checkbox click.
+    setIsRoleMatrixLoading(true);
 
     if (biometricId) {
       void fetch(`/api/access/users/${encodeURIComponent(biometricId)}/roles`, {
@@ -775,6 +778,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       }).catch((error) => {
         console.error('Could not load active roles for user matrix:', error);
         showToast('Could not load active role assignments from database.');
+      }).finally(() => {
+        setIsRoleMatrixLoading(false);
       });
     }
   };
@@ -934,6 +939,15 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
         return definition && moduleIds[moduleKey] ? { moduleId: moduleIds[moduleKey], roleId: definition.name } : null;
       }).filter((item): item is { moduleId: string; roleId: string } => Boolean(item));
     });
+
+    if (isRoleMatrixLoading) {
+      showToast('Role assignments are still loading. Please wait a moment and try Save again.');
+      return;
+    }
+    if (assignments.length === 0) {
+      showToast('No role assignments selected. Select at least one role before saving.');
+      return;
+    }
 
     try {
       const response = await fetch(`/api/access/users/${encodeURIComponent(userToEditRoles.biometricId || '')}/roles`, {
@@ -6091,7 +6105,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
               <div className="p-3.5 sm:p-4 space-y-3 text-xs overflow-y-auto bg-slate-50/50">
                 {/* 2D ROLE MATRIX TABLE (Columns: Modules, Rows: Roles) */}
                 <RoleMatrixTable
-                  mode="edit"
+                  mode={isRoleMatrixLoading ? 'view' : 'edit'}
                   systemRoles={editUserRolesState}
                   moduleRoles={editUserModuleRolesState}
                   onToggleSystemRole={handleToggleSystemRoleInMatrix}
@@ -6112,7 +6126,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                   </button>
                   <button
                     type="submit"
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer flex items-center space-x-1.5 shadow-2xs"
+                    disabled={isRoleMatrixLoading}
+                    className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold px-5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer flex items-center space-x-1.5 shadow-2xs"
                   >
                     <span>Save</span>
                   </button>
