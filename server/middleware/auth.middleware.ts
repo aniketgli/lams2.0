@@ -3,6 +3,14 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '../../src/db';
 import { users, user_module_roles } from '../../src/db/schema';
 
+function isValidityCurrent(validUpto: string | null | undefined): boolean {
+  if (!validUpto) return false;
+  const today = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+  return validUpto >= today;
+}
+
 const roleMap: Record<string, string> = {
   'hrms_admin': 'administrator', 'administrator': 'administrator',
   'hrms_reporting': 'reporting_manager', 'reporting manager': 'reporting_manager',
@@ -17,10 +25,15 @@ export const isAuthenticated = async (req: Request, res: Response, next: NextFun
   const biometricId = req.session?.biometricId;
   if (!userId) return res.status(401).json({ message: 'Unauthorized' });
   try {
-    const [user] = await db.select({ id: users.id }).from(users).where(eq(users.id, Number(userId)));
+    const [user] = await db.select({ id: users.id, status: users.status, validUpto: users.validUpto }).from(users).where(eq(users.id, Number(userId)));
     if (!user) {
       req.session.destroy(() => undefined);
       return res.status(401).json({ message: 'Session user no longer exists.' });
+    }
+    if (user.status !== 'active' || !isValidityCurrent(user.validUpto)) {
+      req.session.destroy(() => undefined);
+      res.clearCookie('connect.sid', { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', path: '/' });
+      return res.status(403).json({ message: user.status === 'inactive' ? 'Account is inactive. Please contact administrator.' : user.status === 'expired' || !isValidityCurrent(user.validUpto) ? 'Account validity has expired or is not configured. Please contact administrator.' : 'Account is not active.' });
     }
     if (req.session.activeRole) {
       const assignments = await db.select({ roleId: user_module_roles.roleId }).from(user_module_roles)
