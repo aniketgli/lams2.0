@@ -1,4 +1,4 @@
-import { mysqlTable, varchar, text, longtext, timestamp, boolean, int, decimal, bigint, uniqueIndex } from 'drizzle-orm/mysql-core';
+import { mysqlTable, varchar, text, longtext, timestamp, boolean, int, decimal, bigint, uniqueIndex, date } from 'drizzle-orm/mysql-core';
 
 export const users = mysqlTable('users', {
   // ORM mapping only: the existing MySQL table is not modified by this declaration.
@@ -8,6 +8,11 @@ export const users = mysqlTable('users', {
   email: varchar('email', { length: 255 }).notNull().unique(),
   passwordHash: varchar('password_hash', { length: 255 }).notNull(),
   createdAt: timestamp('created_at').defaultNow(),
+  status: varchar('status', { length: 16 }).notNull().default('active'),
+  validUpto: date('valid_upto', { mode: 'string' }),
+  lastUpdatedBy: varchar('last_updated_by', { length: 20 }),
+  lastUpdatedAt: timestamp('last_updated_at'),
+  lastUpdateSummary: text('last_update_summary'),
 });
 
 export const user_module_roles = mysqlTable('user_module_roles', {
