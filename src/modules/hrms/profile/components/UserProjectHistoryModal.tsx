@@ -1,7 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Briefcase } from 'lucide-react';
 import { User } from '../../../../types';
-import { useApp } from '../../../../context/AppContext';
 import {
   Modal,
   ModalHeader,
@@ -22,11 +21,51 @@ export const UserProjectHistoryModal: React.FC<UserProjectHistoryModalProps> = (
   isOpen,
   onClose
 }) => {
-  const { getUserProjectHistories } = useApp();
+  const [userHistories, setUserHistories] = useState<UserProjectHistory[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
 
-  if (!isOpen || !user) return null;
+  const biometricId = String((user as any)?.biometricId ?? (user as any)?.biometric_id ?? '').trim();
 
-  const userHistories = getUserProjectHistories(user.id);
+  useEffect(() => {
+    if (!isOpen || !user) return;
+    if (!biometricId) {
+      setUserHistories([]);
+      setLoadError('Biometric ID is missing for this employee.');
+      return;
+    }
+    const controller = new AbortController();
+    setLoading(true);
+    setLoadError('');
+    fetch(`/api/hrms/employees/${encodeURIComponent(biometricId)}/project-history`, {
+      credentials: 'include',
+      signal: controller.signal
+    })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'Failed to load project history.');
+        return Array.isArray(payload.records) ? payload.records : [];
+      })
+      .then((records) => {
+        setUserHistories(records.map((item: any) => ({
+          ...item,
+          id: String(item.id),
+          userId: user.id,
+          userName: user.name,
+          startDate: String(item.startDate || '').slice(0, 10),
+          endDate: item.endDate ? String(item.endDate).slice(0, 10) : undefined,
+          isOngoing: Boolean(item.isOngoing)
+        })));
+      })
+      .catch((error) => {
+        if (error.name !== 'AbortError') {
+          setLoadError(error.message || 'Failed to load project history.');
+          setUserHistories([]);
+        }
+      })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [isOpen, user?.id, biometricId]);
 
   const calculateDuration = (start: string, end?: string, ongoing?: boolean) => {
     const s = new Date(start);
@@ -63,7 +102,11 @@ export const UserProjectHistoryModal: React.FC<UserProjectHistoryModalProps> = (
       />
 
       <ModalBody className="max-h-[65vh] overflow-y-auto space-y-3">
-        {userHistories.length === 0 ? (
+        {loading ? (
+          <div className="text-center py-10 text-xs text-slate-500">Loading project history from database…</div>
+        ) : loadError ? (
+          <div role="alert" className="text-center py-6 px-4 rounded-xl border border-red-200 bg-red-50 text-xs text-red-700">{loadError}</div>
+        ) : userHistories.length === 0 ? (
           <div className="text-center py-10 bg-slate-50 rounded-xl border border-dashed border-slate-200 p-6">
             <Briefcase className="w-8 h-8 text-slate-300 mx-auto mb-2" />
             <h4 className="text-xs font-bold text-slate-800">No Project Records Found</h4>
