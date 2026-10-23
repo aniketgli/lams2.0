@@ -493,7 +493,6 @@ export const MasterSettingsPage: React.FC = () => {
               <table className="w-full min-w-0 table-fixed text-left text-xs border-collapse">
                 <thead className="bg-slate-100 text-slate-700 uppercase tracking-wide border-b border-slate-200">
                   <tr>
-                    <th className="w-[5%] px-3 py-3 font-bold whitespace-nowrap">ID</th>
                     <th className="w-[8%] px-3 py-3 font-bold whitespace-nowrap">Machine ID</th>
                     <th className="w-[18%] px-3 py-3 font-bold">Device Full Name</th>
                     <th className="w-[10%] px-3 py-3 font-bold whitespace-nowrap">Short Name</th>
@@ -501,7 +500,7 @@ export const MasterSettingsPage: React.FC = () => {
                     <th className="w-[14%] px-3 py-3 font-bold whitespace-nowrap">IP Address</th>
                     <th className="w-[12%] px-3 py-3 font-bold whitespace-nowrap">Purpose</th>
                     <th className="w-[10%] px-3 py-3 font-bold whitespace-nowrap">Status</th>
-                    <th className="w-[13%] px-3 py-3 font-bold text-right whitespace-nowrap">Actions</th>
+                    <th className="w-[13%] px-3 py-3 font-bold text-center whitespace-nowrap">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -511,7 +510,6 @@ export const MasterSettingsPage: React.FC = () => {
                     <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-500">No biometric machines found. Use “New Biometric Machine” to add one.</td></tr>
                   ) : filteredMachines.map((machine) => (
                     <tr key={machine.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-3 py-3 font-mono">{(machine as any).rowId ?? "—"}</td>
                       <td className="px-3 py-3"><span className="font-mono font-semibold bg-slate-100 border border-slate-200 rounded px-2 py-1">{machine.id}</span></td>
                       <td className="px-3 py-3 font-semibold text-slate-900">{machine.name}</td>
                       <td className="px-3 py-3 font-mono">{machine.deviceModel}</td>
@@ -528,8 +526,8 @@ export const MasterSettingsPage: React.FC = () => {
                           {machine.status === 'ACTIVE' ? 'Active' : 'Inactive'}
                         </button>
                       </td>
-                      <td className="px-3 py-3">
-                        <div className="flex items-center justify-end gap-2">
+                      <td className="px-3 py-3 text-center">
+                        <div className="flex items-center justify-center gap-2">
                           <button type="button" onClick={() => { handleOpenEditMachineModal(machine); setShowAddMachineModal(true); }} className="h-8 w-8 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 inline-flex items-center justify-center" title="Edit machine"><Pencil className="w-3.5 h-3.5" /></button>
                           <button type="button" onClick={() => handleDeleteMachine(machine.id)} className="h-8 w-8 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 inline-flex items-center justify-center" title="Delete machine"><Trash2 className="w-3.5 h-3.5" /></button>
                         </div>
