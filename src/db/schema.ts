@@ -1,4 +1,4 @@
-import { mysqlTable, varchar, text, longtext, timestamp, boolean, int, decimal, bigint, uniqueIndex, date } from 'drizzle-orm/mysql-core';
+import { mysqlTable, varchar, text, longtext, timestamp, boolean, int, decimal, bigint, uniqueIndex, date, json } from 'drizzle-orm/mysql-core';
 
 export const users = mysqlTable('users', {
   // ORM mapping only: the existing MySQL table is not modified by this declaration.
@@ -76,12 +76,10 @@ export const shifts = mysqlTable('shifts', {
   halfDayHours: decimal('half_day_hours', { precision: 3, scale: 1 }),
   fullDayHours: decimal('full_day_hours', { precision: 3, scale: 1 }),
   isDefault: boolean('is_default').default(false),
-  isActive: boolean('is_active').default(true),
   status: varchar('status', { length: 16 }).notNull().default('active'),
   halfDayCutoffTime: varchar('half_day_cutoff_time', { length: 10 }),
   description: text('description'),
-  color: varchar('color', { length: 30 }),
-  applicableDays: text('applicable_days'),
+  applicableDays: json('applicable_days').$type<string[]>(),
 });
 
 
@@ -207,7 +205,7 @@ export const user_project_histories = mysqlTable('user_histories', {
 /** Audit trail for Shift Master create/update/status/default/delete actions. */
 export const shift_master_audit_logs = mysqlTable('shift_master_audit_logs', {
   id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
-  shiftId: varchar('shift_id', { length: 36 }).notNull(),
+  shiftId: bigint('shift_id', { mode: 'number', unsigned: true }).notNull(),
   shiftCode: varchar('shift_code', { length: 50 }).notNull(),
   action: varchar('action', { length: 24 }).notNull(),
   changedByBiometricId: varchar('changed_by_biometric_id', { length: 4 }),
