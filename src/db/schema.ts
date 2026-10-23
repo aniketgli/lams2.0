@@ -181,7 +181,7 @@ export const phd_enrollments = mysqlTable('phd_enrollments', {
 });
 
 
-export const user_project_histories = mysqlTable('user_project_histories', {
+export const user_project_histories = mysqlTable('user_histories', {
   id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
   biometricId: varchar('biometric_id', { length: 4 }).notNull(),
   projectName: varchar('project_name', { length: 255 }).notNull(),
