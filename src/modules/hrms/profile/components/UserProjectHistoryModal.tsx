@@ -92,11 +92,13 @@ export const UserProjectHistoryModal: React.FC<UserProjectHistoryModalProps> = (
     }
   };
 
+  if (!isOpen || !user) return null;
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="lg">
       <ModalHeader
         title="Project & Posting History"
-        subtitle={`Chronological research project postings for ${user.name}`}
+        subtitle={`Chronological research project postings for ${user?.name || 'employee'}`}
         icon={Briefcase}
         onClose={onClose}
       />
