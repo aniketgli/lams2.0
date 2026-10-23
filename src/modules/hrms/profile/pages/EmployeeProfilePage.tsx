@@ -1364,10 +1364,41 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       showToast('Administrators cannot change their own account status.');
       return;
     }
+
     const isDeactivating = u.status === 'active';
+    if (isDeactivating) {
+      // Use authoritative module-role assignments loaded from the access API.
+      // Do not allow deactivation while assignments are still loading/missing.
+      const assignedByModule = databaseModuleRoles[String(u.id)];
+      if (!assignedByModule) {
+        showToast('Module-role assignments are not loaded for this employee. Refresh and try again.');
+        return;
+      }
+
+      const allAssignedRoles = Object.values(assignedByModule).flatMap((roles) =>
+        Array.isArray(roles) ? roles.map((role) => String(role).trim().toLowerCase()) : []
+      );
+      const hasUserRole = allAssignedRoles.some((role) =>
+        role === 'user' || /(^|[_\s-])user$/.test(role)
+      );
+      const hasProtectedRole = allAssignedRoles.some((role) =>
+        role === 'administrator' || role === 'admin' || role === 'auditor' ||
+        /(^|[_\s-])(administrator|admin|auditor)$/.test(role)
+      );
+
+      if (!hasUserRole) {
+        showToast('This account cannot be deactivated because no allowed module has the User role assigned.');
+        return;
+      }
+      if (hasProtectedRole) {
+        showToast('This account cannot be deactivated because an Administrator or Auditor role is assigned in at least one module.');
+        return;
+      }
+    }
+
     setUserToToggleStatusModal(u);
     setStatusChangeForm({
-      reasonCategory: isDeactivating ? 'End of Contract / Tenure' : 'Re-instated by Administration',
+      reasonCategory: isDeactivating ? 'Tenure End' : 'Tenure Extend',
       customNotes: '',
       effectiveDate: new Date().toISOString().split('T')[0]
     });
