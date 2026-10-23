@@ -98,7 +98,7 @@ export const MasterSettingsPage: React.FC = () => {
       .then((rows: any[]) => {
         if (cancelled) return;
         setBiometricMachines(rows.map((row) => ({
-          id: row.id, name: row.fullName, deviceSR: row.serialNumber, deviceModel: row.shortName,
+          id: row.id, rowId: row.rowId, name: row.fullName, deviceSR: row.serialNumber, deviceModel: row.shortName,
           ipOrSerial: row.ipAddress, location: '', punchMode: 'BOTH' as const,
           countForAttendance: row.purpose !== 'ACCESS', status: (row.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE') as 'ACTIVE' | 'INACTIVE', purpose: (row.purpose || 'ATTENDANCE') as 'ATTENDANCE' | 'ACCESS' | 'BOTH', lastSync: '—'
         })));
@@ -493,7 +493,8 @@ export const MasterSettingsPage: React.FC = () => {
               <table className="w-full min-w-0 table-fixed text-left text-xs border-collapse">
                 <thead className="bg-slate-100 text-slate-700 uppercase tracking-wide border-b border-slate-200">
                   <tr>
-                    <th className="w-[8%] px-3 py-3 font-bold whitespace-nowrap">Device ID</th>
+                    <th className="w-[5%] px-3 py-3 font-bold whitespace-nowrap">ID</th>
+                    <th className="w-[8%] px-3 py-3 font-bold whitespace-nowrap">Machine ID</th>
                     <th className="w-[18%] px-3 py-3 font-bold">Device Full Name</th>
                     <th className="w-[10%] px-3 py-3 font-bold whitespace-nowrap">Short Name</th>
                     <th className="w-[15%] px-3 py-3 font-bold whitespace-nowrap">Serial Number</th>
@@ -510,6 +511,7 @@ export const MasterSettingsPage: React.FC = () => {
                     <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-500">No biometric machines found. Use “New Biometric Machine” to add one.</td></tr>
                   ) : filteredMachines.map((machine) => (
                     <tr key={machine.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-3 py-3 font-mono">{(machine as any).rowId ?? "—"}</td>
                       <td className="px-3 py-3"><span className="font-mono font-semibold bg-slate-100 border border-slate-200 rounded px-2 py-1">{machine.id}</span></td>
                       <td className="px-3 py-3 font-semibold text-slate-900">{machine.name}</td>
                       <td className="px-3 py-3 font-mono">{machine.deviceModel}</td>
@@ -542,7 +544,7 @@ export const MasterSettingsPage: React.FC = () => {
             <div className="fixed inset-0 z-50 bg-slate-900/55 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
               <div className="bg-white rounded-2xl max-w-xl w-full border border-slate-200 shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
                 <div className="px-5 py-4 bg-[#101c3a] text-white flex items-center justify-between">
-                  <div><h3 className="font-bold text-base">{editingMachine ? `Edit Biometric Machine · ${editingMachine.id}` : 'New Biometric Machine'}</h3><p className="text-xs text-slate-300 mt-1">Configure device details, purpose and availability</p></div>
+                  <div><h3 className="font-bold text-base">{editingMachine ? `Edit Biometric Machine · ${editingMachine.id}` : 'New Biometric Machine'}</h3></div>
                   <button type="button" onClick={() => { setShowAddMachineModal(false); setEditingMachine(null); }} className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10" aria-label="Close"><X className="w-5 h-5" /></button>
                 </div>
                 <form onSubmit={handleCreateOrUpdateMachine} className="p-5 space-y-4 overflow-y-auto">
