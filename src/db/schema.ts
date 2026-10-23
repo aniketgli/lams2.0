@@ -62,7 +62,7 @@ export const employee_profiles = mysqlTable('employee_profiles', {
   joiningDate: varchar('joining_date', { length: 10 }),
   phone: varchar('phone', { length: 20 }),
   officeLocation: varchar('office_location', { length: 255 }),
-  shiftId: varchar('shift_id', { length: 36 }),
+  shiftId: bigint('shift_id', { mode: 'number', unsigned: true }),
   profileData: text('profile_data'),
 });
 
