@@ -258,7 +258,7 @@ interface AppContextType {
     roles?: UserRole[]
   ) => void;
   toggleUserStatus: (userId: string, reason?: string, effectiveDate?: string) => Promise<{ success: boolean; message?: string }>;
-  deleteUser: (userId: string) => void;
+  deleteUser: (userId: string, reason: string, reference?: string) => Promise<{ success: boolean; message?: string }>;
   resetUserPassword: (userId: string, customPass?: string, reason?: string) => string;
   transferUser: (
     userId: string,
@@ -4132,22 +4132,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true };
   };
 
-  const deleteUser = (userId: string) => {
+  const deleteUser = async (userId: string, reason: string, reference?: string): Promise<{ success: boolean; message?: string }> => {
     const existing = users.find((user) => user.id === userId);
-    if (!existing) return;
-    setUsers((prev) => prev.filter((user) => user.id !== userId));
-    void fetch(`/api/hrms/employees/${encodeURIComponent(userId)}`, {
-      method: 'DELETE', credentials: 'same-origin', headers: { Accept: 'application/json' }, cache: 'no-store'
-    }).then(async (response) => {
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.error || 'Could not delete employee.');
-      }
-    }).catch((error) => {
+    if (!existing) return { success: false, message: 'Employee account not found.' };
+    try {
+      const response = await fetch(`/api/hrms/employees/${encodeURIComponent(userId)}`, {
+        method: 'DELETE',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ reason, reference: reference || '' })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) return { success: false, message: payload.error || 'Could not delete employee.' };
+      setUsers((prev) => prev.filter((user) => user.id !== userId));
+      return { success: true };
+    } catch (error) {
       console.error('Employee deletion failed:', error);
-      setUsers((prev) => prev.some((user) => user.id === existing.id) ? prev : [...prev, existing]);
-      window.alert(error instanceof Error ? error.message : 'Could not delete employee.');
-    });
+      return { success: false, message: 'Unable to reach server. Employee account was not deleted.' };
+    }
   };
 
   // --- MULTI-MODULE ROLES ACTIONS ---
