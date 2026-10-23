@@ -711,6 +711,17 @@ router.get('/shifts', isAuthenticated, async (_req, res) => {
   }
 });
 
+router.get('/shifts/:id/audit', isAdmin, async (req, res) => {
+  try {
+    const logs = await db.select().from(shift_master_audit_logs)
+      .where(eq(shift_master_audit_logs.shiftId, Number(req.params.id)));
+    return res.json(logs);
+  } catch (error) {
+    console.error('Failed to load Shift Master audit logs:', error);
+    return res.status(500).json({ error: 'Failed to load shift audit logs.' });
+  }
+});
+
 router.post('/shifts', isAdmin, async (req, res) => {
   const normalized = normalizeShift(req.body);
   if ('error' in normalized) return res.status(400).json({ error: normalized.error });
@@ -764,7 +775,7 @@ router.delete('/shifts/:id', isAdmin, async (req, res) => {
     const [target] = await db.select().from(shifts).where(eq(shifts.id, Number(req.params.id)));
     if (!target) return res.status(404).json({ error: 'Shift not found.' });
     if (target.isDefault) return res.status(409).json({ error: 'Set another shift as default before deleting this shift.' });
-    const [assigned] = await db.select({ id: employee_profiles.userId }).from(employee_profiles).where(eq(employee_profiles.shiftId, Number(req.params.id)));
+    const [assigned] = await db.select({ id: employee_profiles.userId }).from(employee_profiles).where(eq(employee_profiles.shiftId, String(req.params.id)));
     if (assigned) return res.status(409).json({ error: 'This shift is assigned to employees. Deactivate it instead of deleting.' });
     await writeShiftAudit(req, target, 'DELETE', target, null);
     await db.delete(shifts).where(eq(shifts.id, Number(req.params.id)));
