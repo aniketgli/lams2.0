@@ -67,7 +67,7 @@ export const employee_profiles = mysqlTable('employee_profiles', {
 });
 
 export const shifts = mysqlTable('shifts', {
-  id: varchar('id', { length: 36 }).primaryKey(),
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
   code: varchar('code', { length: 50 }).notNull(),
   name: varchar('name', { length: 255 }).notNull(),
   startTime: varchar('start_time', { length: 10 }).notNull(),
@@ -77,6 +77,7 @@ export const shifts = mysqlTable('shifts', {
   fullDayHours: decimal('full_day_hours', { precision: 3, scale: 1 }),
   isDefault: boolean('is_default').default(false),
   isActive: boolean('is_active').default(true),
+  status: varchar('status', { length: 16 }).notNull().default('active'),
   halfDayCutoffTime: varchar('half_day_cutoff_time', { length: 10 }),
   description: text('description'),
   color: varchar('color', { length: 30 }),
@@ -200,4 +201,19 @@ export const user_project_histories = mysqlTable('user_histories', {
   remarks: longtext('remarks'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+});
+
+
+/** Audit trail for Shift Master create/update/status/default/delete actions. */
+export const shift_master_audit_logs = mysqlTable('shift_master_audit_logs', {
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  shiftId: varchar('shift_id', { length: 36 }).notNull(),
+  shiftCode: varchar('shift_code', { length: 50 }).notNull(),
+  action: varchar('action', { length: 24 }).notNull(),
+  changedByBiometricId: varchar('changed_by_biometric_id', { length: 4 }),
+  changedByName: varchar('changed_by_name', { length: 255 }),
+  changedAt: timestamp('changed_at').defaultNow(),
+  reason: text('reason'),
+  beforeData: longtext('before_data'),
+  afterData: longtext('after_data'),
 });
