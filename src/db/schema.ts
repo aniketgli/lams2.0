@@ -85,7 +85,8 @@ export const shifts = mysqlTable('shifts', {
 
 // Biometric device registry. Device ID, short name and serial number are unique.
 export const biometric_machines = mysqlTable('biometric_machines', {
-  id: varchar('id', { length: 64 }).primaryKey(),
+  rowId: bigint('row_id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  id: varchar('machine_id', { length: 64 }).notNull().unique(),
   fullName: varchar('full_name', { length: 255 }).notNull(),
   shortName: varchar('short_name', { length: 80 }).notNull().unique(),
   serialNumber: varchar('serial_number', { length: 120 }).notNull().unique(),
@@ -94,6 +95,21 @@ export const biometric_machines = mysqlTable('biometric_machines', {
   purpose: varchar('purpose', { length: 24 }).notNull().default('ATTENDANCE'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+});
+
+
+
+// Immutable audit trail for biometric machine master changes.
+export const biometric_machine_audit_logs = mysqlTable('biometric_machine_audit_logs', {
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  machineId: varchar('machine_id', { length: 64 }).notNull(),
+  action: varchar('action', { length: 16 }).notNull(),
+  changedByBiometricId: varchar('changed_by_biometric_id', { length: 4 }),
+  changedByName: varchar('changed_by_name', { length: 255 }),
+  changedAt: timestamp('changed_at').defaultNow().notNull(),
+  beforeData: longtext('before_data'),
+  afterData: longtext('after_data'),
+  reason: text('reason'),
 });
 
 // One active organization record (id = 'default'). Logo is stored as a validated data URL.
