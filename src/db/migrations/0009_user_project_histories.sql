@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS user_project_histories (
+CREATE TABLE IF NOT EXISTS user_histories (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   biometric_id VARCHAR(4) NOT NULL,
   project_name VARCHAR(255) NOT NULL,
@@ -18,6 +18,6 @@ CREATE TABLE IF NOT EXISTS user_project_histories (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  KEY idx_user_project_histories_biometric_id (biometric_id),
-  KEY idx_user_project_histories_start_date (start_date)
+  KEY idx_user_histories_biometric_id (biometric_id),
+  KEY idx_user_histories_start_date (start_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
