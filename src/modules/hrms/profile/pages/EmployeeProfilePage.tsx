@@ -1106,6 +1106,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
   // Toast State
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [statusChangeError, setStatusChangeError] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -1365,6 +1366,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       return;
     }
     const isDeactivating = u.status === 'active';
+    setStatusChangeError(null);
     setUserToToggleStatusModal(u);
     setStatusChangeForm({
       reasonCategory: isDeactivating ? 'End of Contract / Tenure' : 'Re-instated by Administration',
@@ -1378,15 +1380,19 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     if (!userToToggleStatusModal) return;
 
     const target = userToToggleStatusModal;
+    setStatusChangeError(null);
     const fullReason = `${statusChangeForm.reasonCategory}${statusChangeForm.customNotes ? ` (${statusChangeForm.customNotes})` : ''}`;
     const result = await toggleUserStatus(target.id, fullReason, statusChangeForm.effectiveDate);
     if (!result.success) {
-      showToast(result.message || 'Account status could not be changed.');
+      const message = result.message || 'Account status could not be changed.';
+      setStatusChangeError(message);
+      showToast(message);
       return;
     }
 
     const isActivating = target.status === 'deactivated';
     showToast(`Account status for ${target.name} changed to ${isActivating ? 'Active' : 'Deactivated'}`);
+    setStatusChangeError(null);
     setUserToToggleStatusModal(null);
   };
 
@@ -1918,7 +1924,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-5 right-5 z-50 bg-slate-900 text-white px-4 py-3 rounded-lg shadow-xl text-xs font-semibold flex items-center space-x-2 animate-in fade-in slide-in-from-bottom-2 border border-slate-700">
+        <div className="fixed bottom-5 right-5 z-[100] bg-slate-900 text-white px-4 py-3 rounded-lg shadow-xl text-xs font-semibold flex items-center space-x-2 animate-in fade-in slide-in-from-bottom-2 border border-slate-700">
           <Check className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>{toastMessage}</span>
         </div>
@@ -6443,6 +6449,12 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
             </div>
 
             <form onSubmit={handleExecuteStatusChange} className="p-5 space-y-4 text-xs">
+              {statusChangeError && (
+                <div role="alert" aria-live="assertive" className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2.5 text-rose-800 text-xs font-semibold flex items-start gap-2">
+                  <span className="mt-0.5 shrink-0" aria-hidden="true">⚠</span>
+                  <span>{statusChangeError}</span>
+                </div>
+              )}
               <div className="flex items-center space-x-3 p-3 bg-slate-50 border border-slate-200/90 rounded-xl">
                 <img
                   src={userToToggleStatusModal.avatar}
