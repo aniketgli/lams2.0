@@ -134,6 +134,20 @@ export const organization_units = mysqlTable('organization_units', {
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });
 
+// Audit history for Organization Profile Master create, update and delete actions.
+export const organization_unit_audit_logs = mysqlTable('organization_unit_audit_logs', {
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint('organization_id', { mode: 'number', unsigned: true }).notNull(),
+  organizationName: varchar('organization_name', { length: 255 }).notNull(),
+  organizationCode: varchar('organization_code', { length: 80 }),
+  action: varchar('action', { length: 16 }).notNull(),
+  changedByBiometricId: varchar('changed_by_biometric_id', { length: 4 }),
+  changedByName: varchar('changed_by_name', { length: 255 }),
+  changedAt: timestamp('changed_at').defaultNow().notNull(),
+  beforeData: longtext('before_data'),
+  afterData: longtext('after_data'),
+});
+
 export const profile_master_records = mysqlTable('profile_master_records', {
   id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
   masterKey: varchar('master_key', { length: 40 }).notNull(),

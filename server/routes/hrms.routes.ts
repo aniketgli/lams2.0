@@ -2,7 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { db } from '../../src/db';
-import { biometric_machines, biometric_machine_audit_logs, employee_profiles, user_account_audit_logs, user_project_histories, shift_master_audit_logs, organization_settings, organization_units, profile_master_records, shifts, users, designations, msc_streams, msc_batches, training_courses, trainee_batches, projects, categories, phd_enrollments, user_module_roles } from '../../src/db/schema';
+import { biometric_machines, biometric_machine_audit_logs, employee_profiles, user_account_audit_logs, user_project_histories, shift_master_audit_logs, organization_settings, organization_units, organization_unit_audit_logs, profile_master_records, shifts, users, designations, msc_streams, msc_batches, training_courses, trainee_batches, projects, categories, phd_enrollments, user_module_roles } from '../../src/db/schema';
 import { isAuthenticated, isAdmin } from '../middleware/auth.middleware';
 import { eq, and } from 'drizzle-orm';
 import { randomInt } from 'node:crypto';
@@ -985,7 +985,7 @@ router.post('/profile-masters/organizations', isAdmin, async (req, res) => {
   const status = typeof body.status === 'string' && body.status.toUpperCase() === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE';
   if (!name || name.length > 255 || !code || code.length > 80) return res.status(400).json({ error: 'Organization name and code are required (maximum 255 and 80 characters).' });
   if (!['Department', 'Cell', 'Project', 'Division', 'Unit', 'Other'].includes(type)) return res.status(400).json({ error: 'Select a valid organization type.' });
-  try { await db.insert(organization_units).values({ name, code, type, status }); const [organization] = await db.select().from(organization_units).where(eq(organization_units.code, code)); return res.status(201).json(organization); }
+  try { await db.insert(organization_units).values({ name, code, type, status }); const [organization] = await db.select().from(organization_units).where(eq(organization_units.code, code)); if (organization) await db.insert(organization_unit_audit_logs).values({ organizationId: organization.id, organizationName: organization.name, organizationCode: organization.code, action: 'CREATE', changedByBiometricId: req.session?.biometricId || null, changedByName: req.session?.name || null, afterData: JSON.stringify(organization) }); return res.status(201).json(organization); }
   catch (error: any) { if (error?.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Organization code already exists. Use a unique code.' }); console.error('Failed to create organization:', error); return res.status(500).json({ error: 'Failed to create organization.' }); }
 });
 router.put('/profile-masters/organizations/:id', isAdmin, async (req, res) => {
@@ -996,11 +996,11 @@ router.put('/profile-masters/organizations/:id', isAdmin, async (req, res) => {
   const status = typeof body.status === 'string' && body.status.toUpperCase() === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE';
   if (!name || name.length > 255 || !code || code.length > 80) return res.status(400).json({ error: 'Organization name and code are required.' });
   if (!['Department', 'Cell', 'Project', 'Division', 'Unit', 'Other'].includes(type)) return res.status(400).json({ error: 'Select a valid organization type.' });
-  try { await db.update(organization_units).set({ name, code, type, status }).where(eq(organization_units.id, Number(req.params.id))); const [organization] = await db.select().from(organization_units).where(eq(organization_units.id, req.params.id)); if (!organization) return res.status(404).json({ error: 'Organization not found.' }); return res.json(organization); }
+  try { const [before] = await db.select().from(organization_units).where(eq(organization_units.id, Number(req.params.id))); if (!before) return res.status(404).json({ error: 'Organization not found.' }); await db.update(organization_units).set({ name, code, type, status }).where(eq(organization_units.id, Number(req.params.id))); const [organization] = await db.select().from(organization_units).where(eq(organization_units.id, Number(req.params.id))); if (!organization) return res.status(404).json({ error: 'Organization not found.' }); await db.insert(organization_unit_audit_logs).values({ organizationId: organization.id, organizationName: organization.name, organizationCode: organization.code, action: 'UPDATE', changedByBiometricId: req.session?.biometricId || null, changedByName: req.session?.name || null, beforeData: JSON.stringify(before), afterData: JSON.stringify(organization) }); return res.json(organization); }
   catch (error: any) { if (error?.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Organization code already exists. Use a unique code.' }); console.error('Failed to update organization:', error); return res.status(500).json({ error: 'Failed to update organization.' }); }
 });
 router.delete('/profile-masters/organizations/:id', isAdmin, async (req, res) => {
-  try { const [existing] = await db.select({ id: organization_units.id }).from(organization_units).where(eq(organization_units.id, req.params.id)); if (!existing) return res.status(404).json({ error: 'Organization not found.' }); await db.delete(organization_units).where(eq(organization_units.id, req.params.id)); return res.json({ success: true }); }
+  try { const [existing] = await db.select().from(organization_units).where(eq(organization_units.id, Number(req.params.id))); if (!existing) return res.status(404).json({ error: 'Organization not found.' }); await db.insert(organization_unit_audit_logs).values({ organizationId: existing.id, organizationName: existing.name, organizationCode: existing.code, action: 'DELETE', changedByBiometricId: req.session?.biometricId || null, changedByName: req.session?.name || null, beforeData: JSON.stringify(existing) }); await db.delete(organization_units).where(eq(organization_units.id, Number(req.params.id))); return res.json({ success: true }); }
   catch (error) { console.error('Failed to delete organization:', error); return res.status(500).json({ error: 'Failed to delete organization.' }); }
 });
 
