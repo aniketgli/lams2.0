@@ -147,7 +147,7 @@ export const ProfileMasterSection: React.FC = () => {
           categoryLabel: 'Organizations',
           icon: Building2,
           nameHeader: 'Organization Unit Name',
-          codeHeader: 'Organization Code',
+          codeHeader: 'Organization Unit Code',
           typeHeader: 'Type'
         };
       case 'designations':
