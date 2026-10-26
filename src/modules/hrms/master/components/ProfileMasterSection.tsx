@@ -703,7 +703,7 @@ export const ProfileMasterSection: React.FC = () => {
                 </div>
                 <div className="min-w-0">
                   <h3 className="text-base font-bold text-white tracking-tight truncate">
-                    {editingRecord ? 'Edit Master Record' : 'Add New Master Record'}
+                    {editingRecord ? (activeTab === 'departments' ? 'Edit Organization Unit' : 'Edit Master Record') : (activeTab === 'departments' ? 'Add New Organization Units' : 'Add New Master Record')}
                   </h3>
                   <p className="text-xs text-slate-400 font-medium mt-0.5 truncate">
                     Category: <span className="text-white font-bold">{currentMeta.categoryLabel}</span>
@@ -743,8 +743,7 @@ export const ProfileMasterSection: React.FC = () => {
                   >
                     <option value="Department">Department</option>
                     <option value="Cell">Cell</option>
-                    <option value="Project">Project</option>
-                    <option value="Division">Division</option>
+                                        <option value="Division">Division</option>
                   </select>
                 </div>
               )}
@@ -835,6 +834,22 @@ export const ProfileMasterSection: React.FC = () => {
               )}
 
               
+              {/* Primary Name Field */}
+              <div>
+                <label className="block text-slate-700 font-bold mb-1 text-xs">{currentMeta.nameHeader} *</label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => {
+                    setFormData({ ...formData, name: e.target.value });
+                    if (formError) setFormError(null);
+                  }}
+                  placeholder={activeTab === 'departments' ? 'e.g. IT, RS / GIS and AV Cell' : 'Enter name'}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 focus:outline-none transition-all"
+                  required
+                />
+              </div>
+
               {/* Primary Code Field */}
               <div>
                 <label className="block text-slate-700 font-bold mb-1 text-xs">{currentMeta.codeHeader} *</label>
@@ -893,7 +908,7 @@ export const ProfileMasterSection: React.FC = () => {
                   type="submit"
                   className="px-5 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-xl text-xs shadow-sm transition-all cursor-pointer"
                 >
-                  {editingRecord ? 'Update Master Record' : 'Create Master Record'}
+                  {editingRecord ? (activeTab === 'departments' ? 'Update Organization Unit' : 'Update Master Record') : (activeTab === 'departments' ? 'Create Organization Unit' : 'Create Master Record')}
                 </button>
               </div>
             </form>
