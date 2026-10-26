@@ -146,8 +146,8 @@ export const ProfileMasterSection: React.FC = () => {
           buttonLabel: 'Add Organization Unit',
           categoryLabel: 'Organizations',
           icon: Building2,
-          nameHeader: 'Organization Name',
-          codeHeader: 'Organization Code',
+          nameHeader: 'Organization Unit Name',
+          codeHeader: 'Organization Unit Code',
           typeHeader: 'Type'
         };
       case 'designations':
@@ -705,9 +705,11 @@ export const ProfileMasterSection: React.FC = () => {
                   <h3 className="text-base font-bold text-white tracking-tight truncate">
                     {editingRecord ? (activeTab === 'departments' ? 'Edit Organization Unit' : 'Edit Master Record') : (activeTab === 'departments' ? 'Add New Organization Units' : 'Add New Master Record')}
                   </h3>
-                  <p className="text-xs text-slate-400 font-medium mt-0.5 truncate">
-                    Category: <span className="text-white font-bold">{currentMeta.categoryLabel}</span>
-                  </p>
+                  {activeTab !== 'departments' && (
+                    <p className="text-xs text-slate-400 font-medium mt-0.5 truncate">
+                      Category: <span className="text-white font-bold">{currentMeta.categoryLabel}</span>
+                    </p>
+                  )}
                 </div>
               </div>
 
