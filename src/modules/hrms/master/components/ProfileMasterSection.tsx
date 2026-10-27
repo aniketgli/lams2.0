@@ -371,7 +371,6 @@ export const ProfileMasterSection: React.FC = () => {
     { id: 'courses', label: 'Course (Training)', icon: BookOpen },
     { id: 'traineeBatches', label: 'Trainee Batch', icon: Calendar },
     { id: 'projects', label: 'Project', icon: FolderKanban },
-    { id: 'categories', label: 'Category', icon: Layers },
     { id: 'phdEnrollment', label: 'PhD Enrollment', icon: School },
   ];
 
