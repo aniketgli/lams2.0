@@ -12,6 +12,8 @@ import {
 import { PageHeader } from '../../../../shared/components/PageHeader';
 import { TablePagination } from '../../../../shared/components/TablePagination';
 import { UserProjectHistoryModal } from '../components/UserProjectHistoryModal';
+import { MyProfileView } from '../components/MyProfileView';
+import { useSession } from '../../../../auth/SessionContext';
 import { MultiSelectFilter, matchesMultiSelect } from '../../../../shared/components/MultiSelectFilter';
 import { AppSelect } from '../../../../shared/components/AppSelect';
 import { AppDatePicker } from '../../../../shared/components/AppDatePicker';
@@ -209,7 +211,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     batchesMaster,
     phdEnrollmentMaster,
     locationsMaster,
-    masterOptions
+    masterOptions,
+    reloadEmployees
   } = useApp();
 
   // Every dropdown on the employee form comes from the database masters
@@ -229,6 +232,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const isAudit = currentUser.role === 'audit';
   const isManager = currentUser.role === 'reporting_manager' || currentUser.role === 'reviewing_manager';
   const canAccessAdminSubTabs = isAdmin || isAudit;
+  const showMyProfile = !isAdmin && !isAudit && !isManager;
+  const { refresh: refreshSession } = useSession();
 
   // Sub-tabs State
   const [activeTab, setActiveTab] = useState<'profile' | 'user_controls' | 'transfers'>(initialTab);
@@ -2033,7 +2038,16 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       {/* ==================================================================== */}
       {/* TAB 1: EMPLOYEE PROFILE DETAILS */}
       {/* ==================================================================== */}
-      {(activeTab === 'profile' || (!isAdmin && !isAudit)) && (
+      {/* User role: the employee's own profile, laid out by the server for their employee type. */}
+      {showMyProfile && (
+        <MyProfileView
+          onPhotoChanged={async () => {
+            await Promise.all([refreshSession(), reloadEmployees()]);
+          }}
+        />
+      )}
+
+      {!showMyProfile && (activeTab === 'profile' || (!isAdmin && !isAudit)) && (
         <div className="space-y-5">
           {/* Category Filter & Directory View Mode Switcher Console (Admin, Audit & Managers) */}
           {(isAdmin || isAudit || isManager) && (

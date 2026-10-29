@@ -22,6 +22,7 @@ export interface EmployeeRow {
   moduleRoles: Record<string, string[]>;
   role: User['role'];
   roles: User['role'][];
+  photoUrl: string | null;
 }
 
 /** Result of a save, ready for the form: a message and, on failure, field-level errors. */
@@ -105,4 +106,32 @@ export const employeeApi = {
     }),
   remove: (id: string, reason: string, reference: string) =>
     api<{ message: string }>(`/hrms/employees/${encodeURIComponent(id)}`, { method: 'DELETE', body: { reason, reference } }),
+};
+
+/** The signed-in employee's own profile, laid out by the server for their employee type. */
+export interface ProfileField { key: string; label: string; value: string | null; kind?: 'text' | 'date' | 'email' | 'phone' }
+export interface ProfileSection { id: string; title: string; fields: ProfileField[] }
+export interface MyProfile {
+  biometricId: string;
+  salutation: string | null;
+  name: string;
+  headline: string | null;
+  subline: string | null;
+  employeeType: { code: string | null; label: string | null; layout: string | null };
+  status: 'active' | 'inactive';
+  joiningDate: string | null;
+  photoUrl: string | null;
+  roles: string[];
+  sections: ProfileSection[];
+  history: {
+    id: string; title: string; department: string | null; projectName: string | null; piName: string | null;
+    startDate: string; endDate: string | null; isOngoing: boolean; remarks: string | null;
+  }[];
+}
+
+export const myProfileApi = {
+  get: () => api<MyProfile>('/hrms/me/profile'),
+  /** `image` is a data: URL (JPEG / PNG / WebP, at most 512 KB). */
+  savePhoto: (image: string) => api<{ photoUrl: string; message: string }>('/hrms/me/photo', { method: 'PUT', body: { image } }),
+  deletePhoto: () => api<{ photoUrl: null; message: string }>('/hrms/me/photo', { method: 'DELETE' }),
 };

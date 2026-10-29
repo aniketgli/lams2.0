@@ -7,6 +7,7 @@ import { inTransaction } from '../lib/tx';
 import { todayInIndia } from '../lib/validate';
 import { changedFields, writeMasterAuditSql } from '../masters/audit';
 import { defaultPasswordHash } from '../masters/accountSettings';
+import { photoUrls } from './photos';
 import {
   EmployeeInput, FormLayout, PROFILE_DATA_FORBIDDEN, PROFILE_DATA_KEYS, accountValidUpto, parseEmployeeInput, retirementDate,
 } from './fields';
@@ -83,6 +84,8 @@ export interface EmployeeRecord {
   /** Highest HRMS role and all HRMS roles, in canonical form. */
   role: RoleId;
   roles: RoleId[];
+  /** Versioned address of the profile photo, or null for initials. */
+  photoUrl: string | null;
 }
 
 const SELECT_EMPLOYEES = `
@@ -138,6 +141,7 @@ function toRecord(row: RowDataPacket, grants: { moduleId: string; roleId: string
     moduleRoles,
     role: hrmsRoles[0] ?? 'general_staff',
     roles: hrmsRoles,
+    photoUrl: null,
   };
 }
 
@@ -165,8 +169,9 @@ export function canSeeFullProfile(viewer: Viewer, record: EmployeeRecord): boole
 export async function listEmployees(viewer: Viewer): Promise<EmployeeRecord[]> {
   const found = await rows(pool, `${SELECT_EMPLOYEES} ORDER BY u.name`);
   const grants = await loadGrants(pool, null);
+  const photos = await photoUrls(null);
   return found
-    .map((row) => toRecord(row, grants.get(String(row.biometric_id)) ?? []))
+    .map((row) => ({ ...toRecord(row, grants.get(String(row.biometric_id)) ?? []), photoUrl: photos.get(String(row.biometric_id)) ?? null }))
     .map((record) => (canSeeFullProfile(viewer, record) ? record : publicView(record)));
 }
 
@@ -184,7 +189,8 @@ export async function getEmployee(viewer: Viewer, id: number): Promise<EmployeeR
   const found = await findEmployee(pool, id);
   if (!found) throw notFound('Employee not found.');
   if (!canSeeFullProfile(viewer, found.record)) throw new HttpError(403, 'You are not allowed to view this employee profile.', 'FORBIDDEN');
-  return found.record;
+  const photos = await photoUrls([found.record.biometricId]);
+  return { ...found.record, photoUrl: photos.get(found.record.biometricId) ?? null };
 }
 
 // ---------------------------------------------------------------------------

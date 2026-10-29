@@ -77,7 +77,8 @@ export const requireAuth: RequestHandler = asyncHandler(async (req: Request, res
   if ((req.session.role ?? null) !== activeRole) req.session.role = activeRole ?? undefined;
 
   // Background status checks (marked passive) must not keep an idle user signed in.
-  const passive = req.get(PASSIVE_REQUEST_HEADER) === '1';
+  // Photo loads (<img> tags cannot send the header) are not activity either.
+  const passive = req.get(PASSIVE_REQUEST_HEADER) === '1' || (req.method === 'GET' && requestPath(req).startsWith('/api/hrms/photos/'));
   if (!passive && now - lastActivityAt > sessionConfig.activityWriteIntervalMs) {
     req.session.lastActivityAt = now;
   }

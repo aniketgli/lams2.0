@@ -229,6 +229,7 @@ export function auditMasterLabels(): Record<string, string> {
     user_roles: 'Module Roles',
     employee_password: 'Passwords',
     default_password: 'Default Password',
+    employee_photo: 'Profile Photos',
   };
   for (const def of MASTERS) labels[auditKey(def)] = def.label;
   return labels;

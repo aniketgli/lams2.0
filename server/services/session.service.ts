@@ -2,10 +2,11 @@ import type { Request } from 'express';
 import { MODULE_IDS, ModuleId, RoleId } from '../lib/roles';
 import { sessionConfig } from '../config/session.config';
 import { loadSalutation } from './access.service';
+import { photoUrls } from '../employees/photos';
 
 export interface SessionPayload {
   /** salutation: Mr./Mrs./Ms./Miss/Dr./Prof. from the employee profile, or null if none saved. */
-  user: { id: string; biometricId: string; name: string; email: string; salutation: string | null };
+  user: { id: string; biometricId: string; name: string; email: string; salutation: string | null; photoUrl: string | null };
   /** True until the user replaces the default / temporary password. The server blocks everything else meanwhile. */
   mustChangePassword: boolean;
   modules: { moduleId: ModuleId; roles: RoleId[] }[];
@@ -29,6 +30,7 @@ export async function buildSessionPayload(req: Request): Promise<SessionPayload>
       name: auth.account.name,
       email: auth.account.email,
       salutation: await loadSalutation(auth.account.biometricId),
+      photoUrl: (await photoUrls([auth.account.biometricId])).get(auth.account.biometricId) ?? null,
     },
     mustChangePassword: Boolean(auth.account.mustChangePassword),
     modules: MODULE_IDS

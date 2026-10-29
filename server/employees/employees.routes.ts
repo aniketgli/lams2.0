@@ -16,6 +16,8 @@ import {
   Grant, Viewer, auditPasswordReset, createEmployee, deleteEmployee, getEmployee, listEmployees,
   replaceRoleGrants, setEmployeeStatus, updateEmployee,
 } from './store';
+import { deleteOwnPhoto, loadPhoto, saveOwnPhoto } from './photos';
+import { getMyProfile } from './myProfile';
 
 /**
  * Employee accounts and profiles (/api/hrms/employees). Reading is open to
@@ -31,6 +33,40 @@ function accountId(raw: unknown): number {
   if (!/^\d{1,20}$/.test(value)) throw badRequest('Invalid employee account ID.');
   return Number(value);
 }
+
+// ---------------------------------------------------------------------------
+// The signed-in employee's own profile and photo (any role).
+// ---------------------------------------------------------------------------
+router.get('/me/profile', isAuthenticated, asyncHandler(async (req, res) => {
+  res.json(await getMyProfile(viewerOf(req)));
+}));
+
+router.put('/me/photo', isAuthenticated, asyncHandler(async (req, res) => {
+  const photoUrl = await saveOwnPhoto(req, req.body);
+  res.json({ photoUrl, message: 'Profile photo saved.' });
+}));
+
+router.delete('/me/photo', isAuthenticated, asyncHandler(async (req, res) => {
+  const removed = await deleteOwnPhoto(req);
+  res.json({ photoUrl: null, message: removed ? 'Profile photo removed.' : 'There was no photo to remove.' });
+}));
+
+/** A photo, for any signed-in user (avatars appear across the portal). */
+router.get('/photos/:biometricId', isAuthenticated, asyncHandler(async (req, res) => {
+  const biometricId = String(req.params.biometricId || '').trim();
+  if (!PATTERNS.biometricId.test(biometricId)) throw badRequest('A valid biometric ID is required.');
+  const photo = await loadPhoto(biometricId);
+  if (!photo) throw notFound('No photo.');
+  const etag = `"${biometricId}-${photo.updatedAt}"`;
+  // The address carries a version (?v=), so a cached copy is replaced as soon as the photo changes.
+  res.removeHeader('Pragma');
+  res.setHeader('Cache-Control', 'private, max-age=86400');
+  res.setHeader('ETag', etag);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+  if (req.get('if-none-match') === etag) return res.status(304).end();
+  res.type(photo.mime).send(photo.data);
+}));
 
 router.get('/employees', isAuthenticated, asyncHandler(async (req, res) => {
   res.json(await listEmployees(viewerOf(req)));
