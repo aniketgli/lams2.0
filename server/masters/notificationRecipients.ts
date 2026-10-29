@@ -9,14 +9,15 @@ import { notification_recipients } from '../../src/db/schema';
 
 export type RecipientType = 'CC' | 'BCC';
 
-export interface NotificationRecipient {
+// A type alias (not an interface) so it can be passed to the audit log as a plain record.
+export type NotificationRecipient = {
   id: string;
   type: RecipientType;
   email: string;
   name: string;
   status: 'ACTIVE' | 'INACTIVE';
   updatedAt: string | null;
-}
+};
 
 export function toRecipient(row: typeof notification_recipients.$inferSelect): NotificationRecipient {
   return {

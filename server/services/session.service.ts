@@ -6,6 +6,8 @@ import { loadSalutation } from './access.service';
 export interface SessionPayload {
   /** salutation: Mr./Mrs./Ms./Miss/Dr./Prof. from the employee profile, or null if none saved. */
   user: { id: string; biometricId: string; name: string; email: string; salutation: string | null };
+  /** True until the user replaces the default / temporary password. The server blocks everything else meanwhile. */
+  mustChangePassword: boolean;
   modules: { moduleId: ModuleId; roles: RoleId[] }[];
   activeModule: ModuleId | null;
   activeRole: RoleId | null;
@@ -28,6 +30,7 @@ export async function buildSessionPayload(req: Request): Promise<SessionPayload>
       email: auth.account.email,
       salutation: await loadSalutation(auth.account.biometricId),
     },
+    mustChangePassword: Boolean(auth.account.mustChangePassword),
     modules: MODULE_IDS
       .filter((moduleId) => auth.grants[moduleId] !== undefined)
       .map((moduleId) => ({ moduleId, roles: [...(auth.grants[moduleId] ?? [])] })),

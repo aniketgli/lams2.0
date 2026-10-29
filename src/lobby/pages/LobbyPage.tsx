@@ -6,7 +6,8 @@ import { ApiError } from '../../shared/services/api';
 import { formatOrgAddress } from '../../types';
 import { WIILogo } from '../../shared/components/WIILogo';
 import { Alert } from '../../shared/components';
-import { Users, Package, IndianRupee, Building2, FolderKanban, LogOut, MapPin, Loader2 } from 'lucide-react';
+import { navigate } from '../../shared/router';
+import { Users, Package, IndianRupee, Building2, FolderKanban, LogOut, MapPin, Loader2, KeyRound } from 'lucide-react';
 
 interface ModuleCard {
   title: string;
@@ -51,6 +52,15 @@ export const LobbyPage: React.FC = () => {
         <div className="min-w-0">
           <WIILogo variant="horizontal" size="md" />
         </div>
+        <div className="shrink-0 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => navigate('/change-password')}
+          className="shrink-0 whitespace-nowrap inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-white border border-slate-200 hover:border-primary/40 hover:bg-primary/5 text-slate-700 hover:text-primary text-xs font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        >
+          <KeyRound className="w-4 h-4 shrink-0" aria-hidden="true" />
+          <span className="hidden sm:inline">Change password</span>
+        </button>
         <button
           type="button"
           onClick={() => void logout()}
@@ -59,6 +69,7 @@ export const LobbyPage: React.FC = () => {
           <LogOut className="w-4 h-4 shrink-0" aria-hidden="true" />
           <span>Sign out</span>
         </button>
+        </div>
       </header>
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-6 sm:px-10 lg:px-12 py-10 lg:py-16 flex flex-col justify-center">

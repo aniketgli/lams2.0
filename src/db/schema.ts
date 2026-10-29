@@ -13,6 +13,9 @@ export const users = mysqlTable('users', {
   lastUpdatedBy: varchar('last_updated_by', { length: 20 }),
   lastUpdatedAt: timestamp('last_updated_at'),
   lastUpdateSummary: text('last_update_summary'),
+  /** 1 = must set their own password before using the portal (new account or admin reset). */
+  mustChangePassword: boolean('must_change_password').notNull().default(false),
+  passwordChangedAt: timestamp('password_changed_at'),
 });
 
 export const user_module_roles = mysqlTable('user_module_roles', {
@@ -302,4 +305,12 @@ export const email_settings = mysqlTable('email_settings', {
   smtpUser: varchar('smtp_user', { length: 255 }),
   smtpPasswordEnc: text('smtp_password_enc'),
   updatedAt: timestamp('updated_at', { fsp: 3, mode: 'string' }).defaultNow().onUpdateNow(),
+});
+
+/** Default password for new employees (bcrypt hash only). One row, id = 'default'. */
+export const account_settings = mysqlTable('account_settings', {
+  id: varchar('id', { length: 32 }).primaryKey(),
+  defaultPasswordHash: varchar('default_password_hash', { length: 255 }),
+  updatedBy: varchar('updated_by', { length: 4 }),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });

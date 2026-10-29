@@ -9,6 +9,7 @@ import { MasterRegistryPanel } from '../components/MasterRegistryPanel';
 import { OrganizationPanel } from '../components/OrganizationPanel';
 import { NotificationRecipientsCard } from '../components/NotificationRecipientsCard';
 import { EmailSettingsCard } from '../components/EmailSettingsCard';
+import { DefaultPasswordCard } from '../components/DefaultPasswordCard';
 import { ReadOnlyNotice, TabStrip } from '../components/masterUi';
 import { MasterCatalog, masterApi } from '../masterApi';
 
@@ -64,6 +65,7 @@ export const MasterSettingsPage: React.FC = () => {
         <>
           <OrganizationPanel readOnly={readOnly} />
           <EmailSettingsCard readOnly={readOnly} />
+          <DefaultPasswordCard readOnly={readOnly} />
           <NotificationRecipientsCard readOnly={readOnly} />
         </>
       )}

@@ -43,6 +43,8 @@ interface SessionContextValue {
   switchRole: (role: UserRole) => Promise<void>;
   exitModule: () => Promise<void>;
   refresh: () => Promise<void>;
+  /** Sets the user's own password; the server checks every rule. Throws ApiError with field details. */
+  changePassword: (currentPassword: string, newPassword: string, confirmPassword: string) => Promise<void>;
   /** Last user activity in any tab (epoch ms). */
   getLastActivity: () => number;
   /** Milliseconds of inactivity after which this browser signs out. */
@@ -232,6 +234,12 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const switchRole = useCallback((role: UserRole) => changeContext('/access/active-role', { role }), [changeContext]);
   const exitModule = useCallback(() => changeContext('/access/exit-module'), [changeContext]);
 
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string, confirmPassword: string) => {
+    applySession(await api<SessionPayload>('/auth/change-password', { method: 'POST', body: { currentPassword, newPassword, confirmPassword } }));
+    // Other devices were signed out by the server; other tabs here re-check.
+    tell({ type: 'session-changed' });
+  }, [applySession, tell]);
+
   const stayActive = useCallback(async () => {
     lastActivityRef.current = Date.now();
     tell({ type: 'activity', at: lastActivityRef.current });
@@ -243,10 +251,10 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const value = useMemo<SessionContextValue>(
     () => ({
-      status, session, notice, login, logout, enterModule, switchRole, exitModule, refresh,
+      status, session, notice, login, logout, enterModule, switchRole, exitModule, refresh, changePassword,
       getLastActivity, idleLimitMs, stayActive,
     }),
-    [status, session, notice, login, logout, enterModule, switchRole, exitModule, refresh, getLastActivity, idleLimitMs, stayActive],
+    [status, session, notice, login, logout, enterModule, switchRole, exitModule, refresh, changePassword, getLastActivity, idleLimitMs, stayActive],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

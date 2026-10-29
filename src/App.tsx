@@ -18,6 +18,7 @@ import { EmailToast } from './shared/components/EmailToast';
 import { LogoViewerModal } from './shared/modals/LogoViewerModal';
 import { LoginPage } from './auth/pages/LoginPage';
 import { LobbyPage } from './lobby/pages/LobbyPage';
+import { ChangePasswordPage } from './auth/pages/ChangePasswordPage';
 import { PMSView } from './modules/pms/PMSView';
 import { InventoryView } from './modules/inventory/InventoryView';
 import { FMSView } from './modules/fms/FMSView';
@@ -54,6 +55,14 @@ const AppContent: React.FC = () => {
 
   if (screen.kind === 'loading') return <LoadingScreen />;
   if (screen.kind === 'login' || !currentUser) return <LoginPage />;
+  if (screen.kind === 'changePassword') {
+    return (
+      <>
+        <ChangePasswordPage forced={screen.forced} />
+        <SessionTimeoutGuard />
+      </>
+    );
+  }
 
   const setActiveModule = (module: 'lobby' | EnterpriseModuleId) => {
     const current = session?.activeModule ? toUiModule(session.activeModule) : 'lobby';

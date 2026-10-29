@@ -1,5 +1,3 @@
-import bcrypt from 'bcrypt';
-import { randomBytes } from 'node:crypto';
 import type { Request } from 'express';
 import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
 import { pool } from '../../src/db';
@@ -8,6 +6,7 @@ import { ModuleId, RoleId, normalizeModule, normalizeRole } from '../lib/roles';
 import { inTransaction } from '../lib/tx';
 import { todayInIndia } from '../lib/validate';
 import { changedFields, writeMasterAuditSql } from '../masters/audit';
+import { defaultPasswordHash } from '../masters/accountSettings';
 import {
   EmployeeInput, FormLayout, PROFILE_DATA_FORBIDDEN, PROFILE_DATA_KEYS, accountValidUpto, parseEmployeeInput, retirementDate,
 } from './fields';
@@ -19,7 +18,7 @@ import { ResolvedReferences, checkReferences, layoutOfEmployeeType } from './ref
  *
  *   users               name, email, validity, status
  *   employee_profiles   salutation, department, designation, type, joining date, phone, shift, profile_data
- *   user_module_roles   the HRMS "User" role for a new employee
+ *   user_module_roles   the HRMS "User" role for a new employee (and nothing else)
  *   master_audit_logs   who changed what (before / after)
  */
 
@@ -289,8 +288,12 @@ function isDuplicateKey(error: unknown): boolean {
 
 export async function createEmployee(req: Request, body: unknown): Promise<EmployeeRecord> {
   const actor = req.auth!.account.biometricId;
-  // A random secret nobody knows: the account is activated with "Reset password".
-  const passwordHash = await bcrypt.hash(randomBytes(32).toString('hex'), 12);
+  // Every new account starts with the default password (a copy of its hash)
+  // and must choose its own password at first sign-in.
+  const passwordHash = await defaultPasswordHash();
+  if (!passwordHash) {
+    throw new HttpError(409, 'Set the default password for new employees first (Master Settings → Organization).', 'DEFAULT_PASSWORD_MISSING');
+  }
 
   try {
     const id = await inTransaction(async (conn) => {
@@ -298,8 +301,8 @@ export async function createEmployee(req: Request, body: unknown): Promise<Emplo
       await assertUnique(conn, input, null);
 
       const [result] = await conn.query(
-        `INSERT INTO users (biometric_id, name, email, password_hash, status, valid_upto, last_updated_by, last_updated_at, last_update_summary)
-         VALUES (?, ?, ?, ?, 'active', ?, ?, NOW(), ?)`,
+        `INSERT INTO users (biometric_id, name, email, password_hash, must_change_password, status, valid_upto, last_updated_by, last_updated_at, last_update_summary)
+         VALUES (?, ?, ?, ?, 1, 'active', ?, ?, NOW(), ?)`,
         [input.biometricId, input.name, input.email, passwordHash, accountValidUpto(input, layout), actor, 'Employee profile created'],
       );
       const userId = Number((result as { insertId: number }).insertId);
@@ -310,6 +313,13 @@ export async function createEmployee(req: Request, body: unknown): Promise<Emplo
         [input.biometricId, ...Object.values(columns)],
       );
 
+      // A new employee holds exactly one role: HRMS User. Rows left behind for this
+      // biometric ID (e.g. imported data) are switched off, never reused.
+      await conn.query(
+        `UPDATE user_module_roles SET status = 'inactive', last_updated_by = ?
+          WHERE biometric_id = ? AND LOWER(status) = 'active' AND NOT (module_id = ? AND role_id = ?)`,
+        [actor, input.biometricId, NEW_EMPLOYEE_GRANT.moduleId, NEW_EMPLOYEE_GRANT.roleId],
+      );
       const [existingGrant] = await rows(conn,
         'SELECT id FROM user_module_roles WHERE biometric_id = ? AND module_id = ? AND role_id = ? LIMIT 1',
         [input.biometricId, NEW_EMPLOYEE_GRANT.moduleId, NEW_EMPLOYEE_GRANT.roleId]);
@@ -323,7 +333,7 @@ export async function createEmployee(req: Request, body: unknown): Promise<Emplo
       }
 
       const created = (await findEmployee(conn, userId))!.record;
-      await writeMasterAuditSql(conn, req, { masterKey: AUDIT_EMPLOYEE, recordId: input.biometricId, recordLabel: input.name, action: 'CREATE', after: auditView(created) });
+      await writeMasterAuditSql(conn, req, { masterKey: AUDIT_EMPLOYEE, recordId: input.biometricId, recordLabel: input.name, action: 'CREATE', after: { ...auditView(created), password: 'default (must be changed at first sign-in)' } });
       await writeMasterAuditSql(conn, req, { masterKey: AUDIT_ROLES, recordId: input.biometricId, recordLabel: input.name, action: 'CREATE', after: grantsView([NEW_EMPLOYEE_GRANT]) });
       return userId;
     });

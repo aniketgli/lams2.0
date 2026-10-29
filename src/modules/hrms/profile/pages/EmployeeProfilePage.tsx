@@ -613,7 +613,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   // Password Reset Form Modal State
   const [userToResetPasswordForm, setUserToResetPasswordForm] = useState<UserType | null>(null);
   const [resetPassForm, setResetPassForm] = useState({
-    mode: 'auto' as 'auto' | 'custom',
+    mode: 'default' as 'default' | 'auto' | 'custom',
     customPassword: '',
     confirmPassword: '',
     reason: 'Official Reset Request',
@@ -1321,7 +1321,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     }
     setUserToResetPasswordForm(u);
     setResetPassForm({
-      mode: 'auto',
+      mode: 'default',
       customPassword: '',
       confirmPassword: '',
       reason: 'Official Reset Request',
@@ -1334,8 +1334,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     if (!userToResetPasswordForm) return;
 
     if (resetPassForm.mode === 'custom') {
-      if (!resetPassForm.customPassword || resetPassForm.customPassword.length < 6) {
-        showToast('Custom password must be at least 6 characters long.');
+      if (!resetPassForm.customPassword || resetPassForm.customPassword.length < 8) {
+        showToast('Custom password must be at least 8 characters, with a letter and a number.');
         return;
       }
       if (resetPassForm.customPassword !== resetPassForm.confirmPassword) {
@@ -1364,14 +1364,16 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result?.success) {
-        showToast(result?.error || 'Password reset failed.');
+        showToast(result?.message || result?.error || 'Password reset failed.');
         return;
       }
       const target = userToResetPasswordForm;
       setUserToResetPasswordForm(null);
       setPasswordResetModal({ user: target, tempPass: resetPassForm.mode === 'auto'
-        ? 'Temporary password sent to the employee email. The password hash has been updated in the database.'
-        : 'Password updated in the database successfully.' });
+        ? 'Temporary password sent to the employee email. They must choose a new password at sign-in.'
+        : resetPassForm.mode === 'default'
+          ? 'Password reset to the default password. They must choose a new password at sign-in.'
+          : 'Temporary password set. They must choose a new password at sign-in.' });
       showToast(result.message || `Password successfully reset for ${target.name}`);
     } catch (error) {
       console.error('Password reset request failed:', error);
@@ -5375,7 +5377,24 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                 <label className="block text-slate-800 font-extrabold text-xs mb-1.5">
                   Password Generation Method
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <label
+                    className={`flex items-center space-x-2 p-2.5 rounded-xl border cursor-pointer transition-all ${
+                      resetPassForm.mode === 'default'
+                        ? 'bg-blue-50 border-blue-300 text-blue-950 font-bold shadow-2xs'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="passMode"
+                      checked={resetPassForm.mode === 'default'}
+                      onChange={() => setResetPassForm({ ...resetPassForm, mode: 'default' })}
+                      className="text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <span className="text-[11px]">Default Password</span>
+                  </label>
+
                   <label
                     className={`flex items-center space-x-2 p-2.5 rounded-xl border cursor-pointer transition-all ${
                       resetPassForm.mode === 'auto'
@@ -5424,7 +5443,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                         required
                         value={resetPassForm.customPassword}
                         onChange={(e) => setResetPassForm({ ...resetPassForm, customPassword: e.target.value })}
-                        placeholder="Min 6 characters"
+                        placeholder="Min 8 characters, a letter and a number"
                         className="h-9 w-full pl-3 pr-9 border border-slate-200/90 rounded-xl text-xs font-mono bg-white focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 shadow-2xs transition-all"
                       />
                       <button
@@ -5451,11 +5470,18 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                     />
                   </div>
                 </div>
+              ) : resetPassForm.mode === 'default' ? (
+                <div className="p-3 bg-blue-50 border border-blue-200/90 rounded-xl text-blue-900 text-[11px] leading-relaxed">
+                  <p className="font-bold">Reset to the default password</p>
+                  <p className="text-blue-800 mt-0.5">
+                    The account goes back to the default password set in Master Settings → Organization. The employee must choose a new password at the next sign-in.
+                  </p>
+                </div>
               ) : (
                 <div className="p-3 bg-amber-50 border border-amber-200/90 rounded-xl text-amber-800 text-[11px] leading-relaxed">
-                  <p className="font-bold">✨ System Auto-Generated Temporary Credential</p>
+                  <p className="font-bold">Auto-generated temporary password</p>
                   <p className="text-amber-700 mt-0.5">
-                    A secure 6-digit temporary key will be generated and dispatched to the user's email.
+                    A random 12-character temporary password is emailed to the employee. They must choose a new password at the next sign-in.
                   </p>
                 </div>
               )}

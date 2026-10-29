@@ -16,9 +16,12 @@ mysql lams_db < migrations/20261029_employee_profile_salutation.sql
 mysql lams_db < migrations/20261029_master_settings.sql
 mysql lams_db < migrations/20261029_notification_recipients.sql
 mysql lams_db < migrations/20261029_email_settings.sql
+mysql lams_db < migrations/20261029_password_policy.sql   # required: sign-in reads users.must_change_password
 npm run dev                   # http://localhost:3000
 npm run lint                  # type-check
 ```
+
+New employees get the HRMS "User" role only and the default password (set it in Master Settings → Organization; stored as a hash). They must choose their own password at first sign-in, and again after any administrator reset.
 
 Production: `NODE_ENV=production`, `SESSION_SECRET` of 32+ characters, `npm run build`, then `npm start`. The server refuses to start in production without the secret or the `web_sessions` table.
 

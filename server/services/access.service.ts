@@ -11,6 +11,8 @@ export interface AccountRow {
   email: string;
   status: string;
   validUpto: string | null;
+  /** The user must set their own password before using anything else. */
+  mustChangePassword: boolean;
 }
 
 /** Canonical, de-duplicated grants: { hrms: ['general_staff', 'administrator'], ... } */
@@ -23,11 +25,12 @@ const accountColumns = {
   email: users.email,
   status: users.status,
   validUpto: users.validUpto,
+  mustChangePassword: users.mustChangePassword,
 };
 
 export async function findAccountById(id: number): Promise<AccountRow | null> {
   const [row] = await db.select(accountColumns).from(users).where(eq(users.id, id)).limit(1);
-  return row ?? null;
+  return row ? { ...row, mustChangePassword: Boolean(row.mustChangePassword) } : null;
 }
 
 /**
