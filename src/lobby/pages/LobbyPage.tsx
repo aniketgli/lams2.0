@@ -47,14 +47,16 @@ export const LobbyPage: React.FC = () => {
 
   return (
     <div className="min-h-screen w-full bg-slate-50 text-slate-900 flex flex-col justify-between">
-      <header className="w-full px-6 sm:px-10 lg:px-12 py-5 flex items-center justify-between">
-        <WIILogo variant="horizontal" size="md" />
+      <header className="w-full px-6 sm:px-10 lg:px-12 py-5 flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <WIILogo variant="horizontal" size="md" />
+        </div>
         <button
           type="button"
           onClick={() => void logout()}
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 hover:text-slate-900 text-xs font-semibold transition-colors cursor-pointer"
+          className="shrink-0 whitespace-nowrap inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-white border border-slate-200 hover:border-[#701618]/40 hover:bg-[#701618]/5 text-slate-700 hover:text-[#701618] text-xs font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#701618]"
         >
-          <LogOut className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
+          <LogOut className="w-4 h-4 shrink-0" aria-hidden="true" />
           <span>Sign out</span>
         </button>
       </header>
