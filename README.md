@@ -26,7 +26,7 @@ Login ──► Lobby ──► Module (HRMS) ──► Dashboard for the active
            └── back ────┘
 ```
 
-1. **Login** (`POST /api/auth/login`) accepts a biometric ID or email. Only accounts with `status = 'active'` and `valid_upto` today or later get a session. Repeated failures are rate-limited (10 per user ID and 30 per IP per 15 minutes).
+1. **Login** (`POST /api/auth/login`) accepts only an institute email on an allowed domain (`LOGIN_EMAIL_DOMAINS`, default `@wii.gov.in` and `@edu.wii.gov.in`, exact match). Only accounts with `status = 'active'` and `valid_upto` today or later get a session. Repeated failures are rate-limited (10 per user ID and 30 per IP per 15 minutes).
 2. **Lobby** shows only modules where the user has an **active** grant in `user_module_roles`.
 3. **Entering a module** (`POST /api/access/module`) — the server picks the starting role (least-privileged first: User → Reporting Manager → HoD → Auditor → Administrator).
 4. **Switching role** (`POST /api/access/active-role`) — only roles the user actively holds in that module are accepted. The UI always returns to the dashboard.

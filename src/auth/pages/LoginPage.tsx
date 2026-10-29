@@ -1,36 +1,65 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useSession } from '../SessionContext';
 import { WIILogo } from '../../shared/components/WIILogo';
 import { Button, Input, Alert } from '../../shared/components';
-import { ApiError } from '../../shared/services/api';
+import { ApiError, api } from '../../shared/services/api';
 import { formatOrgAddress } from '../../types';
-import { Lock, User, ArrowRight, MapPin } from 'lucide-react';
+import { Lock, Mail, ArrowRight, MapPin } from 'lucide-react';
+
+/** Shown until the server's list arrives; the server's list is what is enforced. */
+const DEFAULT_DOMAINS = ['wii.gov.in', 'edu.wii.gov.in'];
 
 /**
- * Sign in with biometric ID or institute email. All checks (active account,
- * validity date, password, lockout after repeated failures) happen on the server;
- * this form only makes sure both fields are filled in.
+ * Sign in with an institute email. The server decides everything (allowed
+ * domains, active account, validity date, password, lockout); this form only
+ * catches obvious mistakes early so the user gets a clear message.
  */
 export const LoginPage: React.FC = () => {
   const { orgBranding } = useApp();
   const { login, notice } = useSession();
-  const [userId, setUserId] = useState('');
+  const [domains, setDomains] = useState<string[]>(DEFAULT_DOMAINS);
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(notice);
+  const [emailError, setEmailError] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    api<{ emailDomains?: string[] }>('/auth/config')
+      .then((config) => {
+        if (active && Array.isArray(config.emailDomains) && config.emailDomains.length > 0) setDomains(config.emailDomains);
+      })
+      .catch(() => { /* keep defaults */ });
+    return () => { active = false; };
+  }, []);
+
+  const domainText = domains.map((d) => `@${d}`).join(' or ');
+
+  const checkEmail = (value: string): string | undefined => {
+    const trimmed = value.trim().toLowerCase();
+    if (!trimmed) return 'Enter your institute email.';
+    const at = trimmed.lastIndexOf('@');
+    const domain = at > 0 ? trimmed.slice(at + 1) : '';
+    if (!domains.includes(domain)) return `Use your institute email (${domainText}).`;
+    return undefined;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submitting) return;
     setError(null);
-    if (!userId.trim() || !password) {
-      setError('Enter your biometric ID or email, and your password.');
+    const problem = checkEmail(email);
+    setEmailError(problem);
+    if (problem) return;
+    if (!password) {
+      setError('Enter your password.');
       return;
     }
     setSubmitting(true);
     try {
-      await login(userId.trim(), password);
+      await login(email.trim().toLowerCase(), password);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Unable to sign in right now. Please try again.');
       setPassword('');
@@ -49,7 +78,7 @@ export const LoginPage: React.FC = () => {
         <div className="bg-white border border-slate-200 rounded-2xl shadow-xl p-6 sm:p-8 space-y-5">
           <div className="border-b border-slate-100 pb-3.5">
             <h1 className="text-base font-bold text-slate-900 tracking-tight">Sign in</h1>
-            <p className="text-xs text-slate-500 mt-1">Use your biometric ID or institute email.</p>
+            <p className="text-xs text-slate-500 mt-1">Use your institute email ({domainText}).</p>
           </div>
 
           {error && (
@@ -60,17 +89,22 @@ export const LoginPage: React.FC = () => {
 
           <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             <Input
-              label="Biometric ID or email"
-              type="text"
-              name="username"
+              label="Institute email"
+              type="email"
+              name="email"
               autoComplete="username"
               autoCapitalize="none"
               spellCheck={false}
-              value={userId}
-              onChange={(e) => setUserId(e.target.value)}
-              placeholder="e.g. 1024 or name@wii.gov.in"
-              leftIcon={User}
-              maxLength={255}
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (emailError) setEmailError(undefined);
+              }}
+              onBlur={() => email.trim() && setEmailError(checkEmail(email))}
+              placeholder={`name@${domains[0]}`}
+              leftIcon={Mail}
+              maxLength={254}
+              error={emailError}
               required
             />
 

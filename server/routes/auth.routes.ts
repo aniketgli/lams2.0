@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import bcrypt from 'bcrypt';
-import { eq, or } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db } from '../../src/db';
 import { users } from '../../src/db/schema';
 import {
@@ -11,10 +11,11 @@ import { Validator } from '../lib/validate';
 import { accountBlockReason, findAccountById, loadActiveGrants } from '../services/access.service';
 import { buildSessionPayload } from '../services/session.service';
 import { requireAuth } from '../middleware/auth.middleware';
+import { authConfig, normalizeLoginEmail } from '../config/auth.config';
 
 const router = Router();
 
-// 10 failed attempts per user ID, and 30 per IP address, every 15 minutes.
+// 10 failed attempts per email, and 30 per IP address, every 15 minutes.
 const WINDOW_MS = 15 * 60 * 1000;
 const perIdentifier = new AttemptLimiter(10, WINDOW_MS);
 const perIp = new AttemptLimiter(30, WINDOW_MS);
@@ -23,22 +24,32 @@ const perIp = new AttemptLimiter(30, WINDOW_MS);
 // as long to reject as a wrong password and response timing reveals nothing.
 const DUMMY_HASH = bcrypt.hashSync('timing-equaliser-not-a-real-password', 12);
 
-const INVALID_CREDENTIALS = 'Invalid user ID or password.';
+const INVALID_CREDENTIALS = 'Invalid email or password.';
+
+/** Public sign-in rules, so the login form can show the same rules the server applies. */
+router.get('/config', (_req, res) => {
+  res.json({ emailDomains: authConfig.loginEmailDomains });
+});
 
 /**
- * Sign in with biometric ID or email + password.
+ * Sign in with an institute email (allowed domains only) + password.
  * Only accounts that are active and within their validity date get a session.
  */
 router.post('/login', asyncHandler(async (req, res) => {
   const v = new Validator(req.body);
-  // `userId` is the form field; `email`/`biometricId` are accepted for older clients.
-  const identifierRaw = v.raw('userId') ?? v.raw('biometricId') ?? v.raw('email');
-  const identifier = typeof identifierRaw === 'string' ? identifierRaw.trim() : '';
+  // `email` is the form field; `userId` is accepted from older clients but must still be an email.
+  const rawEmail = v.raw('email') ?? v.raw('userId');
   const password = v.string('password', { max: 1024, trim: false });
-  if (!identifier || identifier.length > 255) v.errors.userId = 'Enter your biometric ID or email.';
-  v.assert('Enter your user ID and password.');
+  const email = normalizeLoginEmail(rawEmail);
+  if (!email) {
+    const domains = authConfig.loginEmailDomains.map((d) => `@${d}`).join(' or ');
+    v.errors.email = typeof rawEmail === 'string' && rawEmail.trim()
+      ? `Sign in with your institute email (${domains}).`
+      : 'Enter your institute email.';
+  }
+  v.assert(v.errors.email ?? 'Enter your email and password.');
 
-  const idKey = identifier.toLowerCase();
+  const idKey = email!;
   const ipKey = req.ip || 'unknown';
   const wait = Math.max(perIdentifier.retryAfter(idKey), perIp.retryAfter(ipKey));
   if (wait > 0) {
@@ -52,7 +63,7 @@ router.post('/login', asyncHandler(async (req, res) => {
     passwordHash: users.passwordHash,
     status: users.status,
     validUpto: users.validUpto,
-  }).from(users).where(or(eq(users.email, idKey), eq(users.biometricId, identifier))).limit(1);
+  }).from(users).where(eq(users.email, email!)).limit(1);
 
   const passwordOk = await bcrypt.compare(password, user?.passwordHash || DUMMY_HASH);
   if (!user || !passwordOk) {
