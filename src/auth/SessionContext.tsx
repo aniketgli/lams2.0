@@ -37,7 +37,7 @@ interface SessionContextValue {
   session: SessionPayload | null;
   /** Message to show on the login screen (e.g. "Account is inactive"). */
   notice: string | null;
-  login: (userId: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   logout: (message?: string | null) => Promise<void>;
   enterModule: (moduleId: EnterpriseModuleId) => Promise<void>;
   switchRole: (role: UserRole) => Promise<void>;
@@ -198,8 +198,8 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [status, sync]);
 
   // --- Actions ---------------------------------------------------------------
-  const login = useCallback(async (userId: string, password: string) => {
-    const payload = await api<SessionPayload>('/auth/login', { method: 'POST', body: { userId, password } });
+  const login = useCallback(async (email: string, password: string) => {
+    const payload = await api<SessionPayload>('/auth/login', { method: 'POST', body: { email, password } });
     const now = Date.now();
     lastActivityRef.current = now;
     lastSyncedActivityRef.current = now;
