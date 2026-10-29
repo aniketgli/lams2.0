@@ -39,7 +39,7 @@ export const toServerModule = (id: EnterpriseModuleId): ServerModuleId => UI_TO_
 
 export interface SessionPayload {
   /** salutation is Mr./Mrs./Ms./Miss/Dr./Prof. from the employee profile, or null. */
-  user: { id: string; biometricId: string; name: string; email: string; salutation: string | null };
+  user: { id: string; biometricId: string; name: string; email: string; salutation: string | null; photoUrl?: string | null };
   /** True until the user replaces the default / temporary password; the server blocks everything else meanwhile. */
   mustChangePassword: boolean;
   modules: { moduleId: ServerModuleId; roles: UserRole[] }[];

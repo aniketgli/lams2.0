@@ -633,7 +633,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       officeLocation: row.officeLocation ?? undefined,
       shiftId: row.shiftId ?? undefined,
       moduleRoles: row.moduleRoles as UserModuleRoles,
-      avatar: saved.avatar || '',
+      // Photos are served by the server; old avatar values inside profile_data are ignored.
+      avatar: row.photoUrl ?? '',
       status: row.status === 'active' ? 'active' : 'deactivated',
       leaveBalances: saved.leaveBalances || {},
     };
@@ -1258,6 +1259,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         biometricId: session.user.biometricId,
         name: session.user.name,
         email: session.user.email,
+        avatar: session.user.photoUrl ?? '',
         role: session.activeRole ?? 'general_staff',
         roles: session.modules.find((m) => m.moduleId === 'hrms')?.roles ?? [],
         leaveBalances: directoryEntry?.leaveBalances ?? {},
