@@ -98,7 +98,7 @@ export const ShiftsPanel: React.FC<{ readOnly: boolean }> = ({ readOnly }) => {
 
   const columns: ColumnDef<ShiftRecord>[] = [
     {
-      key: 'name', header: 'Shift',
+      key: 'name', header: 'Shift', width: '22%', sortValue: (s) => s.name,
       render: (s) => (
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 font-semibold text-slate-900">
@@ -109,9 +109,9 @@ export const ShiftsPanel: React.FC<{ readOnly: boolean }> = ({ readOnly }) => {
         </div>
       ),
     },
-    { key: 'timing', header: 'Timing', render: (s) => <span className="font-mono text-[11px] text-slate-700">{s.startTime}–{s.endTime} · {duration(s.startTime, s.endTime)}</span> },
+    { key: 'timing', header: 'Timing', width: '17%', sortValue: (s) => s.startTime, render: (s) => <span className="font-mono text-[11px] text-slate-700">{s.startTime}–{s.endTime} · {duration(s.startTime, s.endTime)}</span> },
     {
-      key: 'days', header: 'Working days',
+      key: 'days', header: 'Working days', width: '17%', sortValue: (s) => s.applicableDays.length,
       render: (s) => (
         <div className="flex gap-0.5">
           {DAYS.map((d) => (
@@ -120,8 +120,8 @@ export const ShiftsPanel: React.FC<{ readOnly: boolean }> = ({ readOnly }) => {
         </div>
       ),
     },
-    { key: 'rules', header: 'Rules', render: (s) => <span className="text-[11px] text-slate-600">Grace {s.gracePeriodMins}m · Full {s.fullDayHours}h · Half {s.halfDayHours}h{s.halfDayCutoffTime ? ` · Cut-off ${s.halfDayCutoffTime}` : ''}</span> },
-    { key: 'status', header: 'Status', width: '10%', render: (s) => <StatusPill active={s.status === 'active'} /> },
+    { key: 'rules', header: 'Rules', sortValue: (s) => s.fullDayHours, render: (s) => <span className="text-[11px] text-slate-600">Grace {s.gracePeriodMins}m · Full {s.fullDayHours}h · Half {s.halfDayHours}h{s.halfDayCutoffTime ? ` · Cut-off ${s.halfDayCutoffTime}` : ''}</span> },
+    { key: 'status', header: 'Status', width: '10%', sortValue: (s) => s.status, render: (s) => <StatusPill active={s.status === 'active'} /> },
     ...(readOnly ? [] : [{
       key: 'actions', header: 'Actions', width: '100px', align: 'right' as const,
       render: (s: ShiftRecord) => (

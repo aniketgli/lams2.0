@@ -83,6 +83,8 @@ export const TableHead: React.FC<TableHeadProps> = ({
 }) => (
   <th
     onClick={sortable ? onSort : undefined}
+    tabIndex={sortable ? 0 : undefined}
+    onKeyDown={sortable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSort?.(); } } : undefined}
     className={`group/th py-2.5 px-3 text-[11px] font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap select-none ${
       sortable ? 'cursor-pointer hover:text-slate-900 group' : ''
     } ${className}`}
@@ -146,9 +148,30 @@ export interface ColumnDef<T> {
   key: string;
   header: React.ReactNode;
   width?: string;
+  /** Sortable by default when sortValue is given. */
   sortable?: boolean;
+  /**
+   * Value used to sort this column (string, number or date ISO string).
+   * When a DataTable has no `onSort`, it sorts by this itself.
+   */
+  sortValue?: (item: T) => string | number | boolean | null | undefined;
   align?: 'left' | 'center' | 'right';
   render?: (item: T, index: number) => React.ReactNode;
+}
+
+const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
+
+/** Compares two cell values; blanks always sort last, in either direction. */
+function compareValues(a: unknown, b: unknown, dir: 'asc' | 'desc'): number {
+  const empty = (v: unknown) => v === null || v === undefined || v === '';
+  if (empty(a) && empty(b)) return 0;
+  if (empty(a)) return 1;
+  if (empty(b)) return -1;
+  let result: number;
+  if (typeof a === 'number' && typeof b === 'number') result = a - b;
+  else if (typeof a === 'boolean' && typeof b === 'boolean') result = Number(b) - Number(a);
+  else result = collator.compare(String(a), String(b));
+  return dir === 'asc' ? result : -result;
 }
 
 export interface DataTableProps<T> {
@@ -186,6 +209,29 @@ export function DataTable<T>({
   className = '',
   containerClassName = ''
 }: DataTableProps<T>) {
+  // Built-in sorting when the parent does not control it.
+  const controlled = Boolean(onSort);
+  const [internalSort, setInternalSort] = React.useState<{ key: string; dir: 'asc' | 'desc' } | null>(null);
+  const activeKey = controlled ? sortColumn : internalSort?.key;
+  const activeDir = controlled ? sortDirection : internalSort?.dir;
+  const isSortable = (col: ColumnDef<T>) => col.sortable ?? Boolean(col.sortValue);
+
+  const handleSort = (col: ColumnDef<T>) => {
+    if (!isSortable(col)) return;
+    if (controlled) return onSort!(col.key);
+    setInternalSort((prev) => (prev?.key === col.key
+      ? (prev.dir === 'asc' ? { key: col.key, dir: 'desc' } : null) // asc → desc → unsorted
+      : { key: col.key, dir: 'asc' }));
+  };
+
+  const rows = React.useMemo(() => {
+    if (controlled || !internalSort) return data;
+    const col = columns.find((c) => c.key === internalSort.key);
+    if (!col) return data;
+    const value = col.sortValue ?? ((item: T) => (item as any)?.[col.key]);
+    return [...data].sort((a, b) => compareValues(value(a), value(b), internalSort.dir));
+  }, [controlled, internalSort, data, columns]);
+
   return (
     <div className={`space-y-3 ${containerClassName}`}>
       <Table className={className}>
@@ -194,9 +240,10 @@ export function DataTable<T>({
             {columns.map((col) => (
               <TableHead
                 key={col.key}
-                sortable={col.sortable}
-                sortDirection={sortColumn === col.key ? sortDirection : null}
-                onSort={() => col.sortable && onSort && onSort(col.key)}
+                sortable={isSortable(col)}
+                sortDirection={activeKey === col.key ? activeDir ?? null : null}
+                onSort={() => handleSort(col)}
+                aria-sort={activeKey === col.key ? (activeDir === 'asc' ? 'ascending' : 'descending') : undefined}
                 style={col.width ? { width: col.width } : undefined}
                 className={col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left'}
               >
@@ -225,7 +272,7 @@ export function DataTable<T>({
                 </div>
               </td>
             </tr>
-          ) : data.length === 0 ? (
+          ) : rows.length === 0 ? (
             <tr>
               <td colSpan={columns.length} className="py-12 text-center text-slate-400">
                 <div className="flex flex-col items-center justify-center space-y-1.5">
@@ -236,7 +283,7 @@ export function DataTable<T>({
               </td>
             </tr>
           ) : (
-            data.map((item, rowIndex) => {
+            rows.map((item, rowIndex) => {
               const rowKey = keyExtractor ? keyExtractor(item, rowIndex) : (item as any)?.id || rowIndex;
               return (
                 <TableRow

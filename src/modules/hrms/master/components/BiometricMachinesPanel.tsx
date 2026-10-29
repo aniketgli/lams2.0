@@ -106,13 +106,13 @@ export const BiometricMachinesPanel: React.FC<{ readOnly: boolean }> = ({ readOn
   };
 
   const columns: ColumnDef<MachineRecord>[] = [
-    { key: 'id', header: 'Device ID', width: '11%', render: (m) => <span className="font-mono text-[11px] font-semibold text-slate-800">{m.id}</span> },
-    { key: 'fullName', header: 'Device', render: (m) => <div><div className="font-semibold text-slate-900">{m.fullName}</div><div className="font-mono text-[11px] text-slate-500">{m.shortName}</div></div> },
-    { key: 'serialNumber', header: 'Serial number', render: (m) => <span className="font-mono text-[11px]">{m.serialNumber}</span> },
-    { key: 'ipAddress', header: 'IP address', render: (m) => <span className="font-mono text-[11px]">{m.ipAddress}</span> },
-    { key: 'purpose', header: 'Purpose', render: (m) => <span className="text-slate-700">{PURPOSE_LABEL[m.purpose]}</span> },
-    { key: 'counts', header: 'Counts for attendance', align: 'center', render: (m) => <span className={m.countsForAttendance ? 'text-success font-semibold' : 'text-slate-400'}>{m.countsForAttendance ? 'Yes' : 'No'}</span> },
-    { key: 'status', header: 'Status', width: '10%', render: (m) => <StatusPill active={m.status === 'ACTIVE'} /> },
+    { key: 'id', header: 'Device ID', width: '11%', sortValue: (m) => m.id, render: (m) => <span className="font-mono text-[11px] font-semibold text-slate-800">{m.id}</span> },
+    { key: 'fullName', header: 'Device', width: '22%', sortValue: (m) => m.fullName, render: (m) => <div><div className="font-semibold text-slate-900">{m.fullName}</div><div className="font-mono text-[11px] text-slate-500">{m.shortName}</div></div> },
+    { key: 'serialNumber', header: 'Serial number', width: '15%', sortValue: (m) => m.serialNumber, render: (m) => <span className="font-mono text-[11px]">{m.serialNumber}</span> },
+    { key: 'ipAddress', header: 'IP address', width: '13%', sortValue: (m) => m.ipAddress.split('.').map((x) => x.padStart(3, '0')).join('.'), render: (m) => <span className="font-mono text-[11px]">{m.ipAddress}</span> },
+    { key: 'purpose', header: 'Purpose', width: '14%', sortValue: (m) => PURPOSE_LABEL[m.purpose], render: (m) => <span className="text-slate-700">{PURPOSE_LABEL[m.purpose]}</span> },
+    { key: 'counts', header: 'Counts for attendance', width: '12%', align: 'center', sortValue: (m) => m.countsForAttendance, render: (m) => <span className={m.countsForAttendance ? 'text-success font-semibold' : 'text-slate-400'}>{m.countsForAttendance ? 'Yes' : 'No'}</span> },
+    { key: 'status', header: 'Status', width: '10%', sortValue: (m) => m.status, render: (m) => <StatusPill active={m.status === 'ACTIVE'} /> },
     ...(readOnly ? [] : [{
       key: 'actions', header: 'Actions', width: '120px', align: 'right' as const,
       render: (m: MachineRecord) => (
