@@ -58,7 +58,6 @@ export const Header: React.FC<HeaderProps> = ({
   const name = session?.user.name ?? currentUser.name;
   const displayName = session?.user.salutation ? `${session.user.salutation} ${name}` : name;
   const biometricId = session?.user.biometricId ?? currentUser.biometricId ?? '—';
-  const email = session?.user.email ?? currentUser.email;
 
   const handleRoleSwitch = async (role: UserRole) => {
     if (role === activeRole || roleSwitchBusy) return;
@@ -103,30 +102,30 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Right Side: User Profile */}
         <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
           {/* User Profile Dropdown */}
-          <div className="relative" ref={userMenuRef}>
+          <div className="relative sm:w-60" ref={userMenuRef}>
             <button
               type="button"
               onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
               aria-haspopup="menu"
               aria-expanded={isUserMenuOpen}
-              title={`${displayName} · ${email}`}
-              className="flex items-center gap-2.5 p-1 sm:pl-1.5 sm:pr-2 rounded-xl hover:bg-slate-100 border border-transparent hover:border-slate-200 transition-colors text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#204088] cursor-pointer"
+              aria-label={`${displayName}, ${activeRoleLabel}. Open role menu`}
+              className="group w-full flex items-center gap-2.5 px-1 sm:px-2 py-1.5 rounded-xl text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#204088] cursor-pointer"
             >
               <UserAvatar name={currentUser.name} src={currentUser.avatar} className="w-8 h-8 rounded-full border border-slate-200" />
-              <span className="hidden sm:block min-w-0 text-left">
-                <span className="block text-xs font-bold text-slate-900 leading-tight truncate max-w-[200px]">{displayName}</span>
-                <span className="block text-[11px] text-slate-500 leading-tight mt-0.5 truncate max-w-[200px]">
+              <span className="hidden sm:block min-w-0 flex-1 text-left">
+                <span className="block text-xs font-bold text-slate-900 leading-tight truncate">{displayName}</span>
+                <span className="block text-[11px] text-slate-500 leading-tight mt-0.5 truncate">
                   B.I. {biometricId}
                   <span className="mx-1 text-slate-300" aria-hidden="true">·</span>
                   <span className="font-semibold text-[#204088]">{activeRoleLabel}</span>
                 </span>
               </span>
-              <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isUserMenuOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+              <ChevronDown className={`w-4 h-4 shrink-0 text-slate-400 group-hover:text-slate-700 transition-transform ${isUserMenuOpen ? 'rotate-180 text-slate-700' : ''}`} aria-hidden="true" />
             </button>
 
             {/* User Dropdown Menu */}
             {isUserMenuOpen && (
-              <div role="menu" className="absolute right-0 mt-1.5 w-56 max-w-[calc(100vw-1.5rem)] bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden divide-y divide-slate-100 animate-in fade-in duration-100">
+              <div role="menu" className="absolute right-0 top-full mt-1 w-60 sm:w-full max-w-[calc(100vw-1.5rem)] bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden divide-y divide-slate-100 animate-in fade-in duration-100">
                 {/* Small screens hide the name in the header, so show it here only there. */}
                 <div className="sm:hidden px-3 py-2.5">
                   <p className="text-xs font-bold text-slate-900 truncate">{displayName}</p>
