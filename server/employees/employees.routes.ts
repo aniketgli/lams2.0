@@ -6,7 +6,9 @@ import { db } from '../../src/db';
 import { user_project_histories, users } from '../../src/db/schema';
 import { isAdmin, isAuthenticated } from '../middleware/auth.middleware';
 import { EmailService } from '../integrations/email/email.service';
-import { asyncHandler, badRequest, notFound } from '../lib/http';
+import { HttpError, asyncHandler, badRequest, notFound } from '../lib/http';
+import { passwordProblem } from '../lib/passwordPolicy';
+import { defaultPasswordHash } from '../masters/accountSettings';
 import { normalizeModule } from '../lib/roles';
 import { destroyUserSessions } from '../lib/sessionStore';
 import { PATTERNS, Validator, escapeHtml, todayInIndia } from '../lib/validate';
@@ -40,7 +42,10 @@ router.get('/employees/:userId', isAuthenticated, asyncHandler(async (req, res) 
 
 router.post('/employees', isAdmin, asyncHandler(async (req, res) => {
   const employee = await createEmployee(req, req.body);
-  res.status(201).json({ employee, message: `Employee ${employee.name} saved.` });
+  res.status(201).json({
+    employee,
+    message: `Employee ${employee.name} saved with the HRMS User role and the default password. They must choose their own password at first sign-in.`,
+  });
 }));
 
 router.put('/employees/:userId', isAdmin, asyncHandler(async (req, res) => {
@@ -99,34 +104,53 @@ router.put('/employees/:userId/module-roles', isAdmin, asyncHandler(async (req, 
 
 // ---------------------------------------------------------------------------
 // Password reset (administrator). Only the hash is stored; the user is signed
-// out of every device; the reset is audited without the password.
+// out of every device and must set a new password; the reset is audited
+// without the password.
 // ---------------------------------------------------------------------------
 const TEMP_PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+/** Random 12-character password that always meets the password rules (has a letter and a digit). */
 function generateTemporaryPassword(length = 12): string {
-  let out = '';
-  for (let i = 0; i < length; i++) out += TEMP_PASSWORD_ALPHABET[randomInt(TEMP_PASSWORD_ALPHABET.length)];
-  return out;
+  for (;;) {
+    let out = '';
+    for (let i = 0; i < length; i++) out += TEMP_PASSWORD_ALPHABET[randomInt(TEMP_PASSWORD_ALPHABET.length)];
+    if (/\d/.test(out) && /[A-Za-z]/.test(out)) return out;
+  }
 }
 
+/**
+ * Modes:
+ *   auto     a random temporary password is emailed to the user
+ *   custom   the administrator types a temporary password (same rules as any password)
+ *   default  back to the default password for new employees
+ * In every mode the user must choose their own password at the next sign-in.
+ */
 router.post('/employees/:biometricId/reset-password', isAdmin, asyncHandler(async (req, res) => {
   const biometricId = String(req.params.biometricId || '').trim();
   if (!PATTERNS.biometricId.test(biometricId)) throw badRequest('A valid 4-digit biometric ID is required.');
-  const mode = req.body?.mode === 'custom' ? 'custom' : 'auto';
+  const mode = req.body?.mode === 'custom' ? 'custom' : req.body?.mode === 'default' ? 'default' : 'auto';
   const reason = String(req.body?.reason || '').trim().slice(0, 500);
-  const customPassword = typeof req.body?.password === 'string' ? req.body.password : '';
-  if (mode === 'custom' && (customPassword.length < 8 || customPassword.length > 128)) {
-    throw badRequest('Custom password must be 8 to 128 characters long.');
-  }
   if (req.auth!.account.biometricId === biometricId) throw badRequest('You cannot reset your own password from User Controls.');
 
   const [target] = await db.select({ id: users.id, name: users.name, email: users.email, biometricId: users.biometricId })
     .from(users).where(eq(users.biometricId, biometricId)).limit(1);
   if (!target) throw notFound('User account not found.');
 
-  const temporaryPassword = mode === 'auto' ? generateTemporaryPassword() : customPassword;
-  const passwordHash = await bcrypt.hash(temporaryPassword, 12);
+  let temporaryPassword = '';
+  let passwordHash: string;
+  if (mode === 'default') {
+    const hash = await defaultPasswordHash();
+    if (!hash) throw new HttpError(409, 'Set the default password first (Master Settings → Organization).', 'DEFAULT_PASSWORD_MISSING');
+    passwordHash = hash;
+  } else {
+    temporaryPassword = mode === 'auto' ? generateTemporaryPassword() : String(req.body?.password ?? '');
+    const problem = passwordProblem(temporaryPassword, target);
+    if (problem) throw badRequest(`Temporary password: ${problem}`, { password: problem });
+    passwordHash = await bcrypt.hash(temporaryPassword, 12);
+  }
+
   await db.update(users).set({
-    passwordHash, lastUpdatedBy: req.auth!.account.biometricId, lastUpdatedAt: new Date(), lastUpdateSummary: 'Password reset by administrator',
+    passwordHash, mustChangePassword: true,
+    lastUpdatedBy: req.auth!.account.biometricId, lastUpdatedAt: new Date(), lastUpdateSummary: 'Password reset by administrator',
   }).where(eq(users.id, target.id));
   await destroyUserSessions(target.id);
 
@@ -137,8 +161,8 @@ router.post('/employees/:biometricId/reset-password', isAdmin, asyncHandler(asyn
       to: target.email,
       toName: target.name,
       subject: 'Your WII Portal temporary password',
-      text: `Dear ${target.name},\n\nAn administrator has reset your WII Portal password. Your temporary password is: ${temporaryPassword}\n\nPlease sign in and change it immediately.\n\nReference: ${reference}\n\nIf you did not request this, contact the IT Cell.`,
-      html: `<p>Dear ${escapeHtml(target.name)},</p><p>An administrator has reset your WII Portal password.</p><p>Your temporary password is: <strong>${escapeHtml(temporaryPassword)}</strong></p><p>Please sign in and change it immediately.</p><p>Reference: ${escapeHtml(reference)}</p><p>If you did not request this, contact the IT Cell.</p>`,
+      text: `Dear ${target.name},\n\nAn administrator has reset your WII Portal password. Your temporary password is: ${temporaryPassword}\n\nYou will be asked to choose a new password when you sign in.\n\nReference: ${reference}\n\nIf you did not request this, contact the IT Cell.`,
+      html: `<p>Dear ${escapeHtml(target.name)},</p><p>An administrator has reset your WII Portal password.</p><p>Your temporary password is: <strong>${escapeHtml(temporaryPassword)}</strong></p><p>You will be asked to choose a new password when you sign in.</p><p>Reference: ${escapeHtml(reference)}</p><p>If you did not request this, contact the IT Cell.</p>`,
       category: 'SECURITY',
       eventType: 'PASSWORD_RESET',
       referenceId: biometricId,
@@ -154,7 +178,9 @@ router.post('/employees/:biometricId/reset-password', isAdmin, asyncHandler(asyn
       error: 'Password was updated, but the email could not be delivered. Check the email settings, then reset again.',
     });
   }
-  return res.json({ success: true, passwordUpdated: true, emailStatus, message: mode === 'auto' ? 'Password reset and temporary password emailed.' : 'Password updated.' });
+  const done = mode === 'auto' ? 'Password reset and temporary password emailed.'
+    : mode === 'default' ? 'Password reset to the default password.' : 'Temporary password set.';
+  return res.json({ success: true, passwordUpdated: true, emailStatus, message: `${done} The user must choose a new password at the next sign-in.` });
 }));
 
 /** Project & posting history, keyed by biometric ID. */

@@ -475,7 +475,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [phdEnrollmentMaster, setPhdEnrollmentMaster] = useState<string[]>([]);
   // Identity, modules and the active role come only from the server session.
   const { status: sessionStatus, session, logout: sessionLogout } = useSession();
-  const isAuthenticated = sessionStatus === 'signedIn' && Boolean(session);
+  // While a password change is pending the server refuses every data request, so nothing is loaded.
+  const isAuthenticated = sessionStatus === 'signedIn' && Boolean(session) && !session?.mustChangePassword;
   const isLoading = sessionStatus === 'loading';
   const [locationsMaster, setLocationsMaster] = useState<string[]>(() => {
     const saved = localStorage.getItem('la_hub_locations_master');
@@ -3738,8 +3739,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const addUserProfile = async (newUser: Omit<User, 'id' | 'leaveBalances'>): Promise<SaveResult> => {
     let createdUser: User;
+    let savedMessage = '';
     try {
       const result = await employeeApi.create(newUser);
+      savedMessage = result.message;
       const fresh = await reloadEmployees();
       createdUser = fresh?.find((u) => u.id === String(result.employee.id)) ?? toDirectoryUser(result.employee);
     } catch (error) {
@@ -3795,7 +3798,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
-    return { success: true, message: `Employee ${createdUser.name} saved.`, user: createdUser };
+    return { success: true, message: savedMessage || `Employee ${createdUser.name} saved.`, user: createdUser };
   };
 
   // --- ADMIN ACTIONS ---

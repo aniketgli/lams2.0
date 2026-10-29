@@ -243,3 +243,18 @@ export const emailSettingsApi = {
   save: (input: EmailSettingsInput) => api<EmailSettings>('/hrms/organization/email-settings', { method: 'PUT', body: input }),
   test: () => api<{ success: boolean; message: string }>('/hrms/organization/email-settings/test', { method: 'POST' }),
 };
+
+/** Default password for new employees. The password itself is never returned, only whether one is set. */
+export interface DefaultPasswordStatus {
+  isSet: boolean;
+  source: 'settings' | 'env' | null;
+  updatedAt: string | null;
+  updatedBy: { biometricId: string; name: string | null } | null;
+  rules: string;
+}
+
+export const defaultPasswordApi = {
+  get: () => api<DefaultPasswordStatus>('/hrms/organization/default-password'),
+  save: (password: string, confirmPassword: string) =>
+    api<DefaultPasswordStatus & { message: string }>('/hrms/organization/default-password', { method: 'PUT', body: { password, confirmPassword } }),
+};

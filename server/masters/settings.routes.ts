@@ -12,6 +12,10 @@ import {
   EmailSettingsView, emailSettingsView, encryptSecret, invalidateEmailSettingsCache, loadEmailSettingsRow, decryptSecret,
 } from './emailSettings';
 import { EmailService } from '../integrations/email/email.service';
+import bcrypt from 'bcrypt';
+import { account_settings } from '../../src/db/schema';
+import { PASSWORD_RULES_TEXT, passwordProblem } from '../lib/passwordPolicy';
+import { ACCOUNT_SETTINGS_ID, defaultPasswordView } from './accountSettings';
 
 /**
  * Shift Master, Biometric Machines and Organization settings (mounted at /api/hrms).
@@ -487,6 +491,41 @@ router.put('/organization/email-settings', ...canEdit, asyncHandler(async (req, 
   });
   invalidateEmailSettingsCache();
   res.json(await emailSettingsView());
+}));
+
+// ===========================================================================
+// Default password for new employees (hash only; never returned or logged)
+// ===========================================================================
+
+router.get('/organization/default-password', ...canView, asyncHandler(async (_req, res) => {
+  res.json({ ...(await defaultPasswordView()), rules: PASSWORD_RULES_TEXT });
+}));
+
+router.put('/organization/default-password', ...canEdit, asyncHandler(async (req, res) => {
+  const body = (req.body ?? {}) as { password?: unknown; confirmPassword?: unknown };
+  const errors: Record<string, string> = {};
+  const problem = passwordProblem(body.password);
+  if (problem) errors.password = problem;
+  else if (body.confirmPassword !== body.password) errors.confirmPassword = 'The two passwords do not match.';
+  if (Object.keys(errors).length) throw badRequest('Please correct the highlighted fields.', errors);
+
+  const hash = await bcrypt.hash(String(body.password), 12);
+  const before = await defaultPasswordView();
+  const actor = req.auth!.account.biometricId;
+  await db.transaction(async (tx) => {
+    await tx.insert(account_settings)
+      .values({ id: ACCOUNT_SETTINGS_ID, defaultPasswordHash: hash, updatedBy: actor })
+      .onDuplicateKeyUpdate({ set: { defaultPasswordHash: hash, updatedBy: actor } });
+    await writeMasterAudit(tx, req, {
+      masterKey: 'default_password', recordId: ACCOUNT_SETTINGS_ID, recordLabel: 'Default password for new employees',
+      action: before.source === 'settings' ? 'UPDATE' : 'CREATE',
+      // Only the fact that it changed is recorded.
+      before: before.source === 'settings' ? { password: 'set' } : null,
+      after: { password: before.source === 'settings' ? 'changed' : 'set' },
+      reason: reasonOf(req.body),
+    });
+  });
+  res.json({ ...(await defaultPasswordView()), rules: PASSWORD_RULES_TEXT, message: 'Default password saved.' });
 }));
 
 /** Connects with the saved settings and sends a test email to the signed-in administrator. */
