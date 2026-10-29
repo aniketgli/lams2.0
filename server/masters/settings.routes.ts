@@ -2,11 +2,12 @@ import { Router } from 'express';
 import { and, eq, ne, sql } from 'drizzle-orm';
 import { isIP } from 'node:net';
 import { db } from '../../src/db';
-import { biometric_machines, employee_profiles, master_audit_logs, organization_settings, shifts } from '../../src/db/schema';
+import { biometric_machines, employee_profiles, master_audit_logs, notification_recipients, organization_settings, shifts } from '../../src/db/schema';
 import { HttpError, asyncHandler, badRequest, notFound } from '../lib/http';
 import { PATTERNS, Validator } from '../lib/validate';
 import { requireActiveRole, requireAuth } from '../middleware/auth.middleware';
 import { writeMasterAudit } from './audit';
+import { invalidateRecipientCache, toRecipient } from './notificationRecipients';
 
 /**
  * Shift Master, Biometric Machines and Organization settings (mounted at /api/hrms).
@@ -344,6 +345,84 @@ router.put('/organization', ...canEdit, asyncHandler(async (req, res) => {
     return org;
   });
   res.json(saved);
+}));
+
+// ===========================================================================
+// Notification CC / BCC recipients (Organization settings)
+// ===========================================================================
+
+function validateRecipient(body: unknown) {
+  const v = new Validator(body);
+  const type = v.oneOf('type', ['CC', 'BCC'] as const);
+  const email = v.string('email', { max: 254, pattern: PATTERNS.email, patternMessage: 'Enter a valid email address.' }).toLowerCase();
+  const name = v.optionalString('name', { max: 255 });
+  const status = v.oneOf('status', ['ACTIVE', 'INACTIVE'] as const, false) ?? 'ACTIVE';
+  v.assert();
+  return { recipientType: type!, email, name, status };
+}
+
+async function assertUniqueEmail(email: string, exceptId?: number) {
+  const [row] = await db.select({ id: notification_recipients.id, type: notification_recipients.recipientType })
+    .from(notification_recipients).where(eq(notification_recipients.email, email));
+  if (row && row.id !== exceptId) {
+    throw badRequest('Please correct the highlighted fields.', { email: `This email is already in the ${row.type} list.` });
+  }
+}
+
+const recipientLabel = (r: { email: string; type: string }) => `${r.type}: ${r.email}`;
+
+router.get('/organization/notification-recipients', ...canView, asyncHandler(async (_req, res) => {
+  const rows = await db.select().from(notification_recipients).orderBy(notification_recipients.recipientType, notification_recipients.email);
+  res.json(rows.map(toRecipient));
+}));
+
+router.post('/organization/notification-recipients', ...canEdit, asyncHandler(async (req, res) => {
+  const input = validateRecipient(req.body);
+  await assertUniqueEmail(input.email);
+  const saved = await db.transaction(async (tx) => {
+    const [result] = await tx.insert(notification_recipients).values(input);
+    const [row] = await tx.select().from(notification_recipients).where(eq(notification_recipients.id, Number(result.insertId)));
+    const recipient = toRecipient(row);
+    await writeMasterAudit(tx, req, { masterKey: 'notification_recipient', recordId: recipient.id, recordLabel: recipientLabel(recipient), action: 'CREATE', after: recipient, reason: reasonOf(req.body) });
+    return recipient;
+  });
+  invalidateRecipientCache();
+  res.status(201).json(saved);
+}));
+
+router.put('/organization/notification-recipients/:id', ...canEdit, asyncHandler(async (req, res) => {
+  const id = idParam(req.params.id);
+  const [existing] = await db.select().from(notification_recipients).where(eq(notification_recipients.id, id));
+  if (!existing) throw notFound('Recipient not found.');
+  const input = validateRecipient(req.body);
+  await assertUniqueEmail(input.email, id);
+  const before = toRecipient(existing);
+  const saved = await db.transaction(async (tx) => {
+    await tx.update(notification_recipients).set(input).where(eq(notification_recipients.id, id));
+    const [row] = await tx.select().from(notification_recipients).where(eq(notification_recipients.id, id));
+    const recipient = toRecipient(row);
+    await writeMasterAudit(tx, req, {
+      masterKey: 'notification_recipient', recordId: recipient.id, recordLabel: recipientLabel(recipient),
+      action: before.status !== recipient.status && before.email === recipient.email && before.type === recipient.type ? 'STATUS' : 'UPDATE',
+      before, after: recipient, reason: reasonOf(req.body),
+    });
+    return recipient;
+  });
+  invalidateRecipientCache();
+  res.json(saved);
+}));
+
+router.delete('/organization/notification-recipients/:id', ...canEdit, asyncHandler(async (req, res) => {
+  const id = idParam(req.params.id);
+  const [existing] = await db.select().from(notification_recipients).where(eq(notification_recipients.id, id));
+  if (!existing) throw notFound('Recipient not found.');
+  const recipient = toRecipient(existing);
+  await db.transaction(async (tx) => {
+    await writeMasterAudit(tx, req, { masterKey: 'notification_recipient', recordId: recipient.id, recordLabel: recipientLabel(recipient), action: 'DELETE', before: recipient, reason: reasonOf(req.body) });
+    await tx.delete(notification_recipients).where(eq(notification_recipients.id, id));
+  });
+  invalidateRecipientCache();
+  res.json({ success: true });
 }));
 
 export default router;

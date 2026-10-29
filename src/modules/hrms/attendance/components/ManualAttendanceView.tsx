@@ -1768,7 +1768,7 @@ export const ManualAttendanceView: React.FC = () => {
         <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150">
           <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-150 my-8">
             {/* Modal Header */}
-            <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white shrink-0 rounded-t-2xl">
+            <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white shrink-0 rounded-t-2xl">
               <div className="flex items-center space-x-3 min-w-0">
                 <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
                   <Clock className="w-5 h-5 text-blue-400" />
@@ -1961,7 +1961,7 @@ export const ManualAttendanceView: React.FC = () => {
       {deleteConfirmId && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="px-5 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white flex items-center justify-between shrink-0">
+            <div className="px-5 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center space-x-3 min-w-0">
                 <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
                   <Trash2 className="w-5 h-5 text-blue-400" />
@@ -2008,7 +2008,7 @@ export const ManualAttendanceView: React.FC = () => {
       {detailModalReq && (
         <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
           <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150">
-            <div className="px-5 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white flex items-center justify-between shrink-0 rounded-t-2xl">
+            <div className="px-5 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white flex items-center justify-between shrink-0 rounded-t-2xl">
               <div className="flex items-center space-x-3 min-w-0">
                 <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
                   <Clock className="w-5 h-5 text-blue-400" />
@@ -2170,7 +2170,7 @@ export const ManualAttendanceView: React.FC = () => {
         <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
           <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] flex flex-col shadow-xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-150 text-xs">
             {/* Header */}
-            <div className="shrink-0 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white px-5 py-4 flex items-center justify-between border-b border-slate-800 rounded-t-2xl">
+            <div className="shrink-0 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white px-5 py-4 flex items-center justify-between border-b border-slate-800 rounded-t-2xl">
               <div className="flex items-center space-x-3 min-w-0">
                 <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
                   <RotateCcw className="w-5 h-5 text-blue-400" />
@@ -2241,7 +2241,7 @@ export const ManualAttendanceView: React.FC = () => {
         <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
           <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] flex flex-col shadow-xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-150 text-xs">
             {/* Header */}
-            <div className="shrink-0 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white px-5 py-4 flex items-center justify-between border-b border-slate-800 rounded-t-2xl">
+            <div className="shrink-0 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white px-5 py-4 flex items-center justify-between border-b border-slate-800 rounded-t-2xl">
               <div className="flex items-center space-x-3 min-w-0">
                 <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
                   <ShieldCheck className="w-5 h-5 text-blue-400" />

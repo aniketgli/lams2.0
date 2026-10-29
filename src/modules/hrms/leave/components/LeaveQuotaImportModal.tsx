@@ -416,7 +416,7 @@ export const LeaveQuotaImportModal: React.FC<LeaveQuotaImportModalProps> = ({
       <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-150 my-auto sm:my-6 flex flex-col max-h-[90vh]">
         
         {/* Standard Modal Header */}
-        <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between shrink-0 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white rounded-t-2xl">
+        <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between shrink-0 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white rounded-t-2xl">
           <div className="flex items-center space-x-3 min-w-0">
             <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
               <Upload className="w-5 h-5 text-blue-400" />

@@ -32,7 +32,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   const actions = rightAction || action;
 
   return (
-    <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 border border-slate-800 rounded-xl p-4 sm:p-5 text-white shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 min-h-[82px] min-w-0">
+    <div className="bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 border border-slate-800 rounded-xl p-4 sm:p-5 text-white shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 min-h-[82px] min-w-0">
       <div className="flex items-center space-x-3.5 min-w-0">
         <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
           <HeaderIcon className="w-5 h-5" />

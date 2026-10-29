@@ -4,6 +4,7 @@ export interface ServerEmailLog {
   to: string;
   toName?: string;
   cc?: string[];
+  bcc?: string[];
   subject: string;
   status: 'delivered' | 'sent' | 'simulated' | 'failed';
   error?: string;

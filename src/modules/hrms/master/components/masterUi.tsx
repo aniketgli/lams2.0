@@ -79,7 +79,7 @@ export function TabStrip<T extends string>({ tabs, value, onChange, size = 'md' 
 export const ReadOnlyNotice: React.FC = () => (
   <div className="flex items-center gap-2 rounded-xl border border-primary-border bg-primary-subtle px-4 py-2.5 text-xs text-primary">
     <Eye className="w-4 h-4 shrink-0" aria-hidden="true" />
-    <span><strong>Read-only view.</strong> You are viewing master settings as Auditor. Every change made by administrators is listed under Audit Trail.</span>
+    <span><strong>Read-only view.</strong> You are viewing master settings as Auditor; only administrators can make changes.</span>
   </div>
 );
 

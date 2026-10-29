@@ -2350,7 +2350,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
             /* ================================================================ */
             <div className="bg-white border border-slate-200/90 rounded-2xl overflow-hidden shadow-xs space-y-6">
               {/* Unified Dark Navy Cover Header */}
-              <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 p-5 sm:p-6 relative text-white">
+              <div className="bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 p-5 sm:p-6 relative text-white">
                 {/* Profile Details Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center space-y-3 sm:space-y-0 sm:space-x-4">
                   <div className="relative shrink-0">
@@ -3366,7 +3366,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       {editingUser && (
         <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
           <div className="bg-white border border-slate-200 rounded-2xl shadow-xl max-w-xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
-            <div className="px-5 py-4 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white flex items-center justify-between shrink-0 border-b border-slate-800 rounded-t-2xl">
+            <div className="px-5 py-4 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white flex items-center justify-between shrink-0 border-b border-slate-800 rounded-t-2xl">
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
                   <Edit3 className="w-5 h-5 text-blue-400" />
@@ -4246,7 +4246,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       {isCreatingUser && (
         <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
           <div className="bg-white border border-slate-200 rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
-            <div className="px-5 py-4 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white flex items-center justify-between shrink-0 border-b border-slate-800 rounded-t-2xl">
+            <div className="px-5 py-4 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white flex items-center justify-between shrink-0 border-b border-slate-800 rounded-t-2xl">
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
                   <UserPlus className="w-5 h-5 text-blue-400" />
@@ -5482,7 +5482,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       {passwordResetModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white border border-slate-200 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in-95">
-            <div className="px-5 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white flex items-center justify-between shrink-0">
+            <div className="px-5 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center space-x-3 min-w-0">
                 <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
                   <KeyRound className="w-4.5 h-4.5 text-emerald-300" />
@@ -5531,7 +5531,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       {userToDelete && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white border border-slate-200 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white flex items-center justify-between shrink-0">
+            <div className="px-5 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center space-x-3 min-w-0">
                 <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
                   <Trash2 className="w-5 h-5 text-blue-400" />
@@ -5592,7 +5592,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
         <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-xs z-50 flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto animate-in fade-in duration-150">
           <div className="bg-white border border-slate-200 rounded-2xl shadow-xl max-w-xl sm:max-w-2xl w-full overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[88vh] my-auto animate-in zoom-in-95 duration-150">
             {/* Dedicated Modal Header */}
-            <div className="px-5 py-4 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white flex items-center justify-between shrink-0 border-b border-slate-800 rounded-t-2xl">
+            <div className="px-5 py-4 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white flex items-center justify-between shrink-0 border-b border-slate-800 rounded-t-2xl">
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
                   <ArrowLeftRight className="w-5 h-5 text-blue-400" />
@@ -5807,7 +5807,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
         <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-xs z-50 flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto animate-in fade-in duration-150">
           <div className="bg-white border border-slate-200 rounded-2xl shadow-xl max-w-xl sm:max-w-2xl w-full overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[88vh] my-auto animate-in zoom-in-95 duration-150">
             {/* Dedicated Modal Header */}
-            <div className="px-5 py-4 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white flex items-center justify-between shrink-0 border-b border-slate-800 rounded-t-2xl">
+            <div className="px-5 py-4 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white flex items-center justify-between shrink-0 border-b border-slate-800 rounded-t-2xl">
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
                   <RefreshCw className="w-5 h-5 text-blue-400" />
@@ -6132,7 +6132,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
         <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-xs z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto animate-in fade-in duration-150">
           <div className="bg-white border border-slate-200 rounded-2xl shadow-xl max-w-2xl sm:max-w-3xl w-full overflow-hidden flex flex-col max-h-[90vh] my-auto animate-in zoom-in-95 duration-150">
             {/* INSTITUTIONAL HEADER */}
-            <div className="px-5 py-4 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white border-b border-slate-800 flex items-center justify-between gap-3 shrink-0 rounded-t-2xl">
+            <div className="px-5 py-4 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white border-b border-slate-800 flex items-center justify-between gap-3 shrink-0 rounded-t-2xl">
               {/* User Identity */}
               <div className="flex items-center space-x-3 min-w-0">
                 <div className="relative">
@@ -6206,7 +6206,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
         <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
           <div className="bg-white border border-slate-200 rounded-2xl shadow-xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-150">
             {/* Unified Theme Modal Header */}
-            <div className="px-5 py-4 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white flex items-center justify-between shrink-0 border-b border-slate-800 rounded-t-2xl">
+            <div className="px-5 py-4 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white flex items-center justify-between shrink-0 border-b border-slate-800 rounded-t-2xl">
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
                   <KeyRound className="w-5 h-5 text-blue-400" />
@@ -6366,7 +6366,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
         <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
           <div className="bg-white border border-slate-200 rounded-2xl shadow-xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-150">
             {/* Standard Institutional Header */}
-            <div className="px-5 py-4 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white flex items-center justify-between shrink-0 border-b border-slate-800 rounded-t-2xl">
+            <div className="px-5 py-4 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white flex items-center justify-between shrink-0 border-b border-slate-800 rounded-t-2xl">
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
                   {userToToggleStatusModal.status === 'active' ? (

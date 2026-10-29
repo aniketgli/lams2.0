@@ -12,7 +12,9 @@ export const Table: React.FC<React.TableHTMLAttributes<HTMLTableElement> & { con
   containerClassName = '',
   ...rest
 }) => (
-  <div className={`w-full overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-2xs custom-table-scrollbar ${containerClassName}`}>
+  // overflow-y-hidden: without it the browser reserves a vertical scrollbar
+  // gutter, which cuts the header's grey strip short on the right.
+  <div className={`w-full overflow-x-auto overflow-y-hidden rounded-xl border border-slate-200 bg-white shadow-2xs custom-table-scrollbar ${containerClassName}`}>
     <table className={`w-full text-left border-collapse text-xs ${className}`} {...rest}>
       {children}
     </table>
@@ -81,12 +83,13 @@ export const TableHead: React.FC<TableHeadProps> = ({
 }) => (
   <th
     onClick={sortable ? onSort : undefined}
-    className={`py-2.5 px-3 text-[11px] font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap select-none ${
+    className={`group/th py-2.5 px-3 text-[11px] font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap select-none ${
       sortable ? 'cursor-pointer hover:text-slate-900 group' : ''
     } ${className}`}
     {...rest}
   >
-    <div className="flex items-center space-x-1.5">
+    {/* Follows the column alignment (text-right / text-center on the th). */}
+    <div className="flex items-center gap-1.5 group-[.text-right]/th:justify-end group-[.text-center]/th:justify-center">
       <span>{children}</span>
       {sortable && (
         <span className="text-slate-400 group-hover:text-slate-700">

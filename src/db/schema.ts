@@ -277,3 +277,14 @@ export const lookup_values = mysqlTable('lookup_values', {
   createdAt: timestamp('created_at', { fsp: 3, mode: 'string' }).defaultNow(),
   updatedAt: timestamp('updated_at', { fsp: 3, mode: 'string' }).defaultNow().onUpdateNow(),
 });
+
+// Organization-wide CC / BCC copies for notification emails (migrations/20261029_notification_recipients.sql).
+export const notification_recipients = mysqlTable('notification_recipients', {
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  recipientType: varchar('recipient_type', { length: 3 }).notNull(),
+  email: varchar('email', { length: 254 }).notNull(),
+  name: varchar('name', { length: 255 }),
+  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
+  createdAt: timestamp('created_at', { fsp: 3, mode: 'string' }).defaultNow(),
+  updatedAt: timestamp('updated_at', { fsp: 3, mode: 'string' }).defaultNow().onUpdateNow(),
+});
