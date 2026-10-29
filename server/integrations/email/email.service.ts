@@ -1,37 +1,45 @@
 import nodemailer from 'nodemailer';
-import { envConfig } from '../../config/env.config';
-import { ServerEmailLog, SendEmailPayload, SmtpConfigPayload } from './email.types';
+import { ServerEmailLog, SendEmailPayload } from './email.types';
 import { activeCopyAddresses, mergeCopies } from '../../masters/notificationRecipients';
+import { EmailTransportConfig, resolveEmailTransport, transportOptions } from '../../masters/emailSettings';
 
+/**
+ * Sends notification email using the sender / SMTP settings from
+ * Master Settings > Organization (falling back to .env). Callers can no
+ * longer pass their own SMTP server: an email always goes through the
+ * institute's configured server.
+ */
 export class EmailService {
   private static emailLogs: ServerEmailLog[] = [];
+  private static readonly MAX_LOGS = 500;
 
   static getRecentLogs(limit = 100): ServerEmailLog[] {
     return this.emailLogs.slice(-limit).reverse();
   }
 
-  static async testSmtpConnection(config?: SmtpConfigPayload): Promise<{ success: boolean; message: string }> {
-    const host = config?.host || envConfig.smtpHost;
-    const port = Number(config?.port || envConfig.smtpPort || 587);
-    const secure = config?.secure !== undefined ? Boolean(config.secure) : envConfig.smtpSecure;
-    const user = config?.user || envConfig.smtpUser;
-    const pass = config?.pass || envConfig.smtpPass;
+  private static remember(entry: ServerEmailLog) {
+    this.emailLogs.push(entry);
+    if (this.emailLogs.length > this.MAX_LOGS) this.emailLogs.splice(0, this.emailLogs.length - this.MAX_LOGS);
+  }
 
-    if (!host || !user || !pass) {
-      throw new Error('Incomplete SMTP credentials. Host, username/email, and password are required.');
+  private static ready(config: EmailTransportConfig): string | null {
+    if (!config.enabled) return 'Notification emails are turned off in Master Settings > Organization.';
+    if (!config.host) return 'No SMTP server is configured (Master Settings > Organization).';
+    if (!config.fromEmail) return 'No sender email is configured (Master Settings > Organization).';
+    if (config.user && !config.password) return 'The SMTP password is missing. Enter it again in Master Settings > Organization.';
+    return null;
+  }
+
+  /** Checks the saved settings can reach and log in to the SMTP server. */
+  static async testSmtpConnection(override?: EmailTransportConfig): Promise<{ success: boolean; message: string }> {
+    const config = override ?? (await resolveEmailTransport());
+    if (!config.host) return { success: false, message: 'No SMTP server is configured.' };
+    try {
+      await nodemailer.createTransport(transportOptions(config)).verify();
+      return { success: true, message: `Connected to ${config.host}:${config.port} and signed in.` };
+    } catch (err) {
+      return { success: false, message: `Could not connect: ${err instanceof Error ? err.message : 'unknown error'}` };
     }
-
-    const transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure,
-      auth: { user, pass },
-      tls: { rejectUnauthorized: false },
-      connectionTimeout: 10000
-    });
-
-    await transporter.verify();
-    return { success: true, message: `SMTP connection established successfully to ${host}:${port}` };
   }
 
   static async sendEmail(payload: SendEmailPayload): Promise<{
@@ -42,18 +50,10 @@ export class EmailService {
     warning?: string;
     log?: ServerEmailLog;
   }> {
-    const { to, toName, cc, subject, html, text, smtpConfig, category, eventType, referenceId } = payload;
+    const { to, toName, cc, subject, html, text, category, eventType, referenceId } = payload;
+    const config = await resolveEmailTransport();
 
-    const host = smtpConfig?.host || envConfig.smtpHost;
-    const port = Number(smtpConfig?.port || envConfig.smtpPort || 587);
-    const secure = smtpConfig?.secure !== undefined ? Boolean(smtpConfig.secure) : envConfig.smtpSecure;
-    const user = smtpConfig?.user || envConfig.smtpUser;
-    const pass = smtpConfig?.pass || envConfig.smtpPass;
-    const fromEmail = smtpConfig?.fromEmail || envConfig.emailFrom;
-    const fromName = smtpConfig?.fromName || envConfig.emailFromName;
-
-    // Organization-wide CC / BCC from Master Settings > Organization
-    // (never added to SECURITY emails such as password resets).
+    // Organization-wide CC / BCC (never added to SECURITY emails such as password resets).
     const copies = mergeCopies(to, Array.isArray(cc) ? cc : undefined, await activeCopyAddresses(), category);
 
     const logEntry: ServerEmailLog = {
@@ -66,64 +66,40 @@ export class EmailService {
       subject,
       status: 'sent',
       referenceId,
-      category
+      category,
     };
 
-    if (host && user && pass) {
-      try {
-        const transporter = nodemailer.createTransport({
-          host,
-          port,
-          secure,
-          auth: { user, pass },
-          tls: { rejectUnauthorized: false }
-        });
-
-        const info = await transporter.sendMail({
-          from: `"${fromName}" <${fromEmail}>`,
-          to: toName ? `"${toName}" <${to}>` : to,
-          cc: copies.cc.length > 0 ? copies.cc.join(', ') : undefined,
-          bcc: copies.bcc.length > 0 ? copies.bcc.join(', ') : undefined,
-          subject,
-          text: text || undefined,
-          html: html || undefined
-        });
-
-        logEntry.status = 'delivered';
-        logEntry.messageId = info.messageId;
-        this.emailLogs.push(logEntry);
-
-        return {
-          success: true,
-          status: 'delivered',
-          messageId: info.messageId,
-          message: `Email dispatched successfully via ${host} to ${to}`
-        };
-      } catch (err: any) {
-        console.error('Nodemailer Send Error:', err);
-        logEntry.status = 'failed';
-        logEntry.error = err?.message || 'SMTP dispatch failed';
-        this.emailLogs.push(logEntry);
-
-        return {
-          success: true,
-          status: 'simulated',
-          warning: `Real SMTP failed (${err?.message}), email recorded in system audit log.`,
-          log: logEntry,
-          message: `Notification simulated due to SMTP error: ${err?.message}`
-        };
-      }
-    } else {
+    const notReady = this.ready(config);
+    if (notReady) {
       logEntry.status = 'simulated';
-      this.emailLogs.push(logEntry);
+      logEntry.error = notReady;
+      this.remember(logEntry);
+      console.log(`[EMAIL NOT SENT] ${notReady} To: ${to} | Subject: "${subject}" | Event: ${eventType || 'GENERAL'}`);
+      return { success: true, status: 'simulated', message: notReady, log: logEntry };
+    }
 
-      console.log(`[EMAIL DISPATCH] To: ${to} | Subject: "${subject}" | Event: ${eventType || 'GENERAL'}`);
-      return {
-        success: true,
-        status: 'simulated',
-        message: `Notification simulated and recorded to dispatch registry for ${to}`,
-        log: logEntry
-      };
+    try {
+      const info = await nodemailer.createTransport(transportOptions(config)).sendMail({
+        from: { name: config.fromName, address: config.fromEmail },
+        to: toName ? { name: toName, address: to } : to,
+        cc: copies.cc.length ? copies.cc : undefined,
+        bcc: copies.bcc.length ? copies.bcc : undefined,
+        replyTo: config.replyTo || undefined,
+        subject,
+        text: text || undefined,
+        html: html || undefined,
+      });
+      logEntry.status = 'delivered';
+      logEntry.messageId = info.messageId;
+      this.remember(logEntry);
+      return { success: true, status: 'delivered', messageId: info.messageId, message: `Email sent to ${to}.` };
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : 'SMTP dispatch failed';
+      console.error('[EMAIL FAILED]', reason);
+      logEntry.status = 'failed';
+      logEntry.error = reason;
+      this.remember(logEntry);
+      return { success: false, status: 'failed', message: `Email could not be sent: ${reason}`, log: logEntry };
     }
   }
 }

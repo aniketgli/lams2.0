@@ -30,7 +30,6 @@ export interface SendEmailPayload {
   subject: string;
   html?: string;
   text?: string;
-  smtpConfig?: SmtpConfigPayload;
   category?: string;
   eventType?: string;
   referenceId?: string;
