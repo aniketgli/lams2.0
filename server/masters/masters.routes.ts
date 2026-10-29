@@ -39,7 +39,10 @@ function idFrom(raw: string): number {
 
 router.get('/catalog', canView, (_req, res) => {
   res.json({
-    masters: MASTERS.map(({ key, label, noun, group, description, fields, kind }) => ({ key, label, noun, group, description, fields, kind })),
+    masters: MASTERS.map((m) => ({
+      key: m.key, label: m.label, noun: m.noun, group: m.group, description: m.description, fields: m.fields, kind: m.kind,
+      ...(m.kind === 'lookup' ? { lookupType: m.lookupType } : {}),
+    })),
     formLayouts: FORM_LAYOUTS,
     auditMasters: auditMasterLabels(),
   });
