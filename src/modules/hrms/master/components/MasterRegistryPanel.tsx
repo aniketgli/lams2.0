@@ -121,12 +121,16 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
   };
 
   const columns: ColumnDef<MasterRecord>[] = [
-    { key: 'name', header: 'Name', render: (r) => <span className="font-semibold text-slate-900">{r.name}</span> },
-    { key: 'code', header: 'Code', width: '14%', render: (r) => <span className="font-mono text-[11px] text-slate-600">{r.code}</span> },
-    ...def.fields.map<ColumnDef<MasterRecord>>((f) => ({ key: `f:${f.key}`, header: f.label, render: (r) => <span className="text-slate-700">{labelFor(f.key, r.fields[f.key])}</span> })),
-    ...(def.kind === 'lookup' ? [{ key: 'sortOrder', header: 'Order', width: '7%', align: 'center' as const, render: (r: MasterRecord) => r.sortOrder ?? 0 }] : []),
-    { key: 'status', header: 'Status', width: '10%', render: (r) => <StatusPill active={r.status === 'ACTIVE'} /> },
-    { key: 'updatedAt', header: 'Last updated', width: '14%', render: (r) => <span className="text-slate-500">{formatDateTime(r.updatedAt)}</span> },
+    { key: 'name', header: 'Name', sortValue: (r) => r.name, render: (r) => <span className="font-semibold text-slate-900">{r.name}</span> },
+    { key: 'code', header: 'Code', width: '14%', sortValue: (r) => r.code, render: (r) => <span className="font-mono text-[11px] text-slate-600">{r.code}</span> },
+    ...def.fields.map<ColumnDef<MasterRecord>>((f) => ({
+      key: `f:${f.key}`, header: f.label, width: '18%',
+      sortValue: (r) => labelFor(f.key, r.fields[f.key]).replace(/^—$/, ''),
+      render: (r) => <span className="text-slate-700">{labelFor(f.key, r.fields[f.key])}</span>,
+    })),
+    ...(def.kind === 'lookup' ? [{ key: 'sortOrder', header: 'Order', width: '8%', align: 'center' as const, sortValue: (r: MasterRecord) => r.sortOrder ?? 0, render: (r: MasterRecord) => r.sortOrder ?? 0 }] : []),
+    { key: 'status', header: 'Status', width: '11%', sortValue: (r) => r.status, render: (r) => <StatusPill active={r.status === 'ACTIVE'} /> },
+    { key: 'updatedAt', header: 'Last updated', width: '15%', sortValue: (r) => r.updatedAt, render: (r) => <span className="text-slate-500 whitespace-nowrap">{formatDateTime(r.updatedAt)}</span> },
     ...(readOnly ? [] : [{
       key: 'actions', header: 'Actions', width: '120px', align: 'right' as const,
       render: (r: MasterRecord) => (

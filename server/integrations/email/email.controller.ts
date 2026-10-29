@@ -7,18 +7,10 @@ export class EmailController {
     res.json({ logs });
   }
 
-  static async testSmtp(req: Request, res: Response) {
-    try {
-      const { smtpConfig } = req.body || {};
-      const result = await EmailService.testSmtpConnection(smtpConfig);
-      res.json(result);
-    } catch (err: any) {
-      console.error('SMTP Verify Error:', err);
-      res.status(500).json({
-        success: false,
-        message: err?.message || 'Failed to connect to SMTP server'
-      });
-    }
+  /** Tests the saved SMTP settings (the request cannot supply its own server). */
+  static async testSmtp(_req: Request, res: Response) {
+    const result = await EmailService.testSmtpConnection();
+    res.status(result.success ? 200 : 502).json(result);
   }
 
   static async send(req: Request, res: Response) {

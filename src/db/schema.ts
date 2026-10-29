@@ -288,3 +288,18 @@ export const notification_recipients = mysqlTable('notification_recipients', {
   createdAt: timestamp('created_at', { fsp: 3, mode: 'string' }).defaultNow(),
   updatedAt: timestamp('updated_at', { fsp: 3, mode: 'string' }).defaultNow().onUpdateNow(),
 });
+
+// Email sender + SMTP server (migrations/20261029_email_settings.sql). Single row 'default'.
+export const email_settings = mysqlTable('email_settings', {
+  id: varchar('id', { length: 32 }).primaryKey(),
+  enabled: boolean('enabled').notNull().default(true),
+  fromName: varchar('from_name', { length: 255 }).notNull(),
+  fromEmail: varchar('from_email', { length: 254 }).notNull(),
+  replyTo: varchar('reply_to', { length: 254 }),
+  smtpHost: varchar('smtp_host', { length: 255 }).notNull(),
+  smtpPort: int('smtp_port').notNull().default(587),
+  smtpSecurity: varchar('smtp_security', { length: 10 }).notNull().default('starttls'),
+  smtpUser: varchar('smtp_user', { length: 255 }),
+  smtpPasswordEnc: text('smtp_password_enc'),
+  updatedAt: timestamp('updated_at', { fsp: 3, mode: 'string' }).defaultNow().onUpdateNow(),
+});

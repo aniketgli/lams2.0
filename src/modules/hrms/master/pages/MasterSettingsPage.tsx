@@ -8,6 +8,7 @@ import { BiometricMachinesPanel } from '../components/BiometricMachinesPanel';
 import { MasterRegistryPanel } from '../components/MasterRegistryPanel';
 import { OrganizationPanel } from '../components/OrganizationPanel';
 import { NotificationRecipientsCard } from '../components/NotificationRecipientsCard';
+import { EmailSettingsCard } from '../components/EmailSettingsCard';
 import { ReadOnlyNotice, TabStrip } from '../components/masterUi';
 import { MasterCatalog, masterApi } from '../masterApi';
 
@@ -62,6 +63,7 @@ export const MasterSettingsPage: React.FC = () => {
       {section === 'organization' && (
         <>
           <OrganizationPanel readOnly={readOnly} />
+          <EmailSettingsCard readOnly={readOnly} />
           <NotificationRecipientsCard readOnly={readOnly} />
         </>
       )}

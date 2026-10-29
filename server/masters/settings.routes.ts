@@ -2,12 +2,16 @@ import { Router } from 'express';
 import { and, eq, ne, sql } from 'drizzle-orm';
 import { isIP } from 'node:net';
 import { db } from '../../src/db';
-import { biometric_machines, employee_profiles, master_audit_logs, notification_recipients, organization_settings, shifts } from '../../src/db/schema';
+import { biometric_machines, email_settings, employee_profiles, master_audit_logs, notification_recipients, organization_settings, shifts } from '../../src/db/schema';
 import { HttpError, asyncHandler, badRequest, notFound } from '../lib/http';
 import { PATTERNS, Validator } from '../lib/validate';
 import { requireActiveRole, requireAuth } from '../middleware/auth.middleware';
 import { writeMasterAudit } from './audit';
 import { invalidateRecipientCache, toRecipient } from './notificationRecipients';
+import {
+  EmailSettingsView, emailSettingsView, encryptSecret, invalidateEmailSettingsCache, loadEmailSettingsRow, decryptSecret,
+} from './emailSettings';
+import { EmailService } from '../integrations/email/email.service';
 
 /**
  * Shift Master, Biometric Machines and Organization settings (mounted at /api/hrms).
@@ -423,6 +427,92 @@ router.delete('/organization/notification-recipients/:id', ...canEdit, asyncHand
   });
   invalidateRecipientCache();
   res.json({ success: true });
+}));
+
+// ===========================================================================
+// Email sender & SMTP server (Organization settings)
+// ===========================================================================
+
+const HOST_PATTERN = /^(?=.{1,253}$)([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$/;
+
+/** Audit view of the settings: the password is never recorded, only whether it changed. */
+function emailAuditView(v: EmailSettingsView | null, passwordChanged = false) {
+  if (!v) return null;
+  const { updatedAt: _u, hasPassword, ...rest } = v;
+  return { ...rest, password: hasPassword ? (passwordChanged ? 'changed' : 'saved') : 'none' };
+}
+
+router.get('/organization/email-settings', ...canView, asyncHandler(async (_req, res) => {
+  res.json(await emailSettingsView());
+}));
+
+router.put('/organization/email-settings', ...canEdit, asyncHandler(async (req, res) => {
+  const v = new Validator(req.body);
+  const enabled = v.bool('enabled', true);
+  const fromName = v.string('fromName', { max: 255 });
+  const fromEmail = v.string('fromEmail', { max: 254, pattern: PATTERNS.email, patternMessage: 'Enter a valid email address.' }).toLowerCase();
+  const replyTo = v.optionalString('replyTo', { max: 254, pattern: PATTERNS.email, patternMessage: 'Enter a valid email address.' });
+  const host = v.string('host', { max: 255, pattern: HOST_PATTERN, patternMessage: 'Enter a server name such as smtp.gov.in.' }).toLowerCase();
+  const port = v.int('port', { min: 1, max: 65535 }) ?? 587;
+  const security = v.oneOf('security', ['none', 'starttls', 'ssl'] as const) ?? 'starttls';
+  const user = v.optionalString('user', { max: 255 });
+  const passwordRaw = v.raw('password');
+  const newPassword = typeof passwordRaw === 'string' && passwordRaw.length > 0 ? passwordRaw : null;
+  if (newPassword && newPassword.length > 500) v.errors.password = 'Password is too long.';
+  const clearPassword = v.bool('clearPassword', false);
+  v.assert();
+
+  const existing = await loadEmailSettingsRow();
+  let passwordEnc = existing?.smtpPasswordEnc ?? null;
+  if (clearPassword || !user) passwordEnc = null;
+  if (newPassword && user) passwordEnc = encryptSecret(newPassword);
+  if (user && !passwordEnc) {
+    throw badRequest('Please correct the highlighted fields.', { password: 'Enter the SMTP password for this username.' });
+  }
+
+  const before = existing ? await emailSettingsView() : null;
+  const values = { enabled, fromName, fromEmail, replyTo: replyTo || null, smtpHost: host, smtpPort: port, smtpSecurity: security, smtpUser: user || null, smtpPasswordEnc: passwordEnc };
+  const after: EmailSettingsView = {
+    source: 'database', enabled, fromName, fromEmail, replyTo: replyTo || '', host, port, security,
+    user: user || '', hasPassword: Boolean(passwordEnc), updatedAt: null,
+  };
+  await db.transaction(async (tx) => {
+    await tx.insert(email_settings).values({ id: 'default', ...values }).onDuplicateKeyUpdate({ set: values });
+    await writeMasterAudit(tx, req, {
+      masterKey: 'email_settings', recordId: 'default', recordLabel: `${fromName} <${fromEmail}>`,
+      action: before ? 'UPDATE' : 'CREATE',
+      before: emailAuditView(before), after: emailAuditView(after, Boolean(newPassword) || clearPassword),
+      reason: reasonOf(req.body),
+    });
+  });
+  invalidateEmailSettingsCache();
+  res.json(await emailSettingsView());
+}));
+
+/** Connects with the saved settings and sends a test email to the signed-in administrator. */
+router.post('/organization/email-settings/test', ...canEdit, asyncHandler(async (req, res) => {
+  const row = await loadEmailSettingsRow();
+  if (!row) throw badRequest('Save the email settings first.');
+  if (row.smtpUser && row.smtpPasswordEnc && !decryptSecret(row.smtpPasswordEnc)) {
+    throw badRequest('The saved password can no longer be read (the encryption key changed). Enter the password again and save.');
+  }
+  invalidateEmailSettingsCache();
+  const connection = await EmailService.testSmtpConnection();
+  if (!connection.success) return res.status(502).json({ ...connection, message: connection.message });
+  const to = req.auth!.account.email;
+  const result = await EmailService.sendEmail({
+    to,
+    toName: req.auth!.account.name,
+    subject: 'Test email from the WII Enterprise Portal',
+    text: `This is a test email sent from Master Settings > Organization by ${req.auth!.account.name}.\n\nIf you received it, notification emails are set up correctly.`,
+    html: `<p>This is a test email sent from <strong>Master Settings &gt; Organization</strong>.</p><p>If you received it, notification emails are set up correctly.</p>`,
+    category: 'SECURITY', // never copied to CC/BCC
+    eventType: 'EMAIL_SETTINGS_TEST',
+  });
+  res.status(result.status === 'delivered' ? 200 : 502).json({
+    success: result.status === 'delivered',
+    message: result.status === 'delivered' ? `Connected, and a test email was sent to ${to}.` : result.message,
+  });
 }));
 
 export default router;

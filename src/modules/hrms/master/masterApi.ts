@@ -203,3 +203,43 @@ export const recipientApi = {
   update: (id: string, input: RecipientInput) => api<NotificationRecipient>(`${RECIPIENTS}/${encodeURIComponent(id)}`, { method: 'PUT', body: input }),
   remove: (id: string, reason?: string) => api(`${RECIPIENTS}/${encodeURIComponent(id)}`, { method: 'DELETE', body: { reason } }),
 };
+
+// ---- Email sender & SMTP server ------------------------------------------------
+
+export type SmtpSecurity = 'none' | 'starttls' | 'ssl';
+
+export interface EmailSettings {
+  /** 'database' once saved here; 'env' while still using the .env values; 'none' if neither. */
+  source: 'database' | 'env' | 'none';
+  enabled: boolean;
+  fromName: string;
+  fromEmail: string;
+  replyTo: string;
+  host: string;
+  port: number;
+  security: SmtpSecurity;
+  user: string;
+  hasPassword: boolean;
+  updatedAt: string | null;
+}
+
+export interface EmailSettingsInput {
+  enabled: boolean;
+  fromName: string;
+  fromEmail: string;
+  replyTo: string;
+  host: string;
+  port: number;
+  security: SmtpSecurity;
+  user: string;
+  /** Leave empty to keep the saved password. */
+  password: string;
+  clearPassword?: boolean;
+  reason?: string;
+}
+
+export const emailSettingsApi = {
+  get: () => api<EmailSettings>('/hrms/organization/email-settings'),
+  save: (input: EmailSettingsInput) => api<EmailSettings>('/hrms/organization/email-settings', { method: 'PUT', body: input }),
+  test: () => api<{ success: boolean; message: string }>('/hrms/organization/email-settings/test', { method: 'POST' }),
+};

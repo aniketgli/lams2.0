@@ -339,10 +339,11 @@ a {
 /* Dense data controls: mobile/tablet responsive behavior                     */
 /* -------------------------------------------------------------------------- */
 
-/* Keep dense administrative tables readable. On narrow screens the table
-   scrolls inside its card instead of squeezing columns into each other. */
+/* Tables scroll sideways inside their card on narrow screens. Do NOT reserve a
+   vertical scrollbar gutter here (scrollbar-gutter: stable): it left a blank
+   strip on the right edge of every table header. */
 div:has(> table) {
-  scrollbar-gutter: stable;
+  scrollbar-gutter: auto;
 }
 
 div:has(> table) > table {

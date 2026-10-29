@@ -93,10 +93,10 @@ export const NotificationRecipientsCard: React.FC<{ readOnly: boolean }> = ({ re
   };
 
   const columns: ColumnDef<NotificationRecipient>[] = [
-    { key: 'type', header: 'Copy as', width: '12%', render: (r) => <span className="inline-flex rounded-md bg-primary-subtle text-primary border border-primary-border px-2 py-0.5 text-[11px] font-semibold">{r.type}</span> },
-    { key: 'email', header: 'Email', render: (r) => <span className="font-semibold text-slate-900">{r.email}</span> },
-    { key: 'name', header: 'Name / purpose', render: (r) => <span className="text-slate-600">{r.name || '—'}</span> },
-    { key: 'status', header: 'Status', width: '12%', render: (r) => <StatusPill active={r.status === 'ACTIVE'} /> },
+    { key: 'type', header: 'Copy as', width: '12%', sortValue: (r) => r.type, render: (r) => <span className="inline-flex rounded-md bg-primary-subtle text-primary border border-primary-border px-2 py-0.5 text-[11px] font-semibold">{r.type}</span> },
+    { key: 'email', header: 'Email', width: '32%', sortValue: (r) => r.email, render: (r) => <span className="font-semibold text-slate-900">{r.email}</span> },
+    { key: 'name', header: 'Name / purpose', sortValue: (r) => r.name, render: (r) => <span className="text-slate-600">{r.name || '—'}</span> },
+    { key: 'status', header: 'Status', width: '12%', sortValue: (r) => r.status, render: (r) => <StatusPill active={r.status === 'ACTIVE'} /> },
     ...(readOnly ? [] : [{
       key: 'actions', header: 'Actions', width: '100px', align: 'right' as const,
       render: (r: NotificationRecipient) => (
