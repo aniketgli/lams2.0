@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import { db } from '../../src/db';
-import { user_module_roles, users } from '../../src/db/schema';
+import { employee_profiles, user_module_roles, users } from '../../src/db/schema';
 import { ModuleId, RoleId, normalizeModule, normalizeRole } from '../lib/roles';
 import { todayInIndia } from '../lib/validate';
 
@@ -65,4 +65,46 @@ export async function loadActiveGrants(biometricId: string): Promise<ModuleGrant
 
 export function hasGrant(grants: ModuleGrants, moduleId: ModuleId, roleId: RoleId): boolean {
   return Boolean(grants[moduleId]?.includes(roleId));
+}
+
+// ---------------------------------------------------------------------------
+// Salutation shown before the user's name (from employee_profiles.suffix).
+// ---------------------------------------------------------------------------
+
+const SALUTATIONS: Record<string, string> = {
+  mr: 'Mr.', mrs: 'Mrs.', ms: 'Ms.', miss: 'Miss', dr: 'Dr.', prof: 'Prof.',
+};
+
+/** Canonical salutation for a stored value, or null if empty/unrecognised. */
+export function normalizeSalutation(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const key = value.trim().toLowerCase().replace(/\.$/, '');
+  return SALUTATIONS[key] ?? null;
+}
+
+let warnedMissingSuffixColumn = false;
+
+/** The salutation saved on the user's profile, or null when none is saved. */
+export async function loadSalutation(biometricId: string): Promise<string | null> {
+  try {
+    const [row] = await db
+      .select({ suffix: employee_profiles.suffix })
+      .from(employee_profiles)
+      .where(eq(employee_profiles.biometricId, biometricId))
+      .limit(1);
+    return normalizeSalutation(row?.suffix);
+  } catch (error) {
+    // Until migrations/20261029_employee_profile_salutation.sql is run the
+    // column does not exist; show names without a salutation instead of failing.
+    const code = (error as { code?: string; cause?: { code?: string } })?.code
+      ?? (error as { cause?: { code?: string } })?.cause?.code;
+    if (code === 'ER_BAD_FIELD_ERROR') {
+      if (!warnedMissingSuffixColumn) {
+        warnedMissingSuffixColumn = true;
+        console.warn('[profile] employee_profiles.suffix is missing; run migrations/20261029_employee_profile_salutation.sql');
+      }
+      return null;
+    }
+    throw error;
+  }
 }
