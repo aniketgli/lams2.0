@@ -111,6 +111,19 @@ export const employeeApi = {
 /** The signed-in employee's own profile, laid out by the server for their employee type. */
 export interface ProfileField { key: string; label: string; value: string | null; kind?: 'text' | 'date' | 'email' | 'phone' }
 export interface ProfileSection { id: string; title: string; fields: ProfileField[] }
+export interface CareerEntry {
+  id: string;
+  title: string;
+  organisation: string | null;
+  details: string[];
+  startDate: string | null;
+  endDate: string | null;
+  isCurrent: boolean;
+  validUpto: string | null;
+  remarks: string | null;
+  source: 'history' | 'current';
+}
+
 export interface MyProfile {
   biometricId: string;
   salutation: string | null;
@@ -123,10 +136,7 @@ export interface MyProfile {
   photoUrl: string | null;
   roles: string[];
   sections: ProfileSection[];
-  history: {
-    id: string; title: string; department: string | null; projectName: string | null; piName: string | null;
-    startDate: string; endDate: string | null; isOngoing: boolean; remarks: string | null;
-  }[];
+  career: CareerEntry[];
 }
 
 export const myProfileApi = {

@@ -30,10 +30,23 @@ export interface MyProfile {
   photoUrl: string | null;
   roles: string[];
   sections: ProfileSection[];
-  history: {
-    id: string; title: string; department: string | null; projectName: string | null; piName: string | null;
-    startDate: string; endDate: string | null; isOngoing: boolean; remarks: string | null;
-  }[];
+  /** Appointment history / career, newest first. Always has the current appointment when a joining date exists. */
+  career: CareerEntry[];
+}
+
+export interface CareerEntry {
+  id: string;
+  title: string;
+  organisation: string | null;
+  details: string[];
+  startDate: string | null;
+  endDate: string | null;
+  isCurrent: boolean;
+  /** For fixed-term appointments: when the current one ends. */
+  validUpto: string | null;
+  remarks: string | null;
+  /** 'history' = a posting record; 'current' = the present appointment from the profile itself. */
+  source: 'history' | 'current';
 }
 
 async function rows(sql: string, params: unknown[]): Promise<RowDataPacket[]> {
@@ -130,7 +143,7 @@ export function buildSections(
           : f('retirementDate', 'Superannuation date', data.retirementDate ?? (data.dob ? retirementDate(String(data.dob)) : null), 'date'),
         f('probation', 'Probation', data.isOnProbation
           ? `On probation${data.probationEndDate ? ` until ${dateOnly(data.probationEndDate)}` : ''}`
-          : 'Confirmed'),
+          : data.dob ? 'Confirmed' : null), // unknown until the profile form has been saved
       );
       reporting.push(f('reportingManager', 'Reporting manager (L1)', resolved.reportingManager), f('hod', 'Head of department (L2)', resolved.hod));
       break;
@@ -144,7 +157,7 @@ export function buildSections(
         { ...validUpto, label: 'Contract valid up to' },
         f('probation', 'Probation', data.isOnProbation
           ? `On probation${data.probationEndDate ? ` until ${dateOnly(data.probationEndDate)}` : ''}`
-          : 'Confirmed'),
+          : data.dob ? 'Confirmed' : null), // unknown until the profile form has been saved
       );
       reporting.push(f('reportingManager', 'Reporting manager', resolved.reportingManager));
       break;
@@ -208,6 +221,58 @@ export function buildSections(
   ];
 }
 
+/**
+ * Career timeline: posting records from user_histories, plus the present
+ * appointment taken from the profile when no record covers it. Exported for tests.
+ */
+export function buildCareer(
+  record: EmployeeRecord,
+  data: Record<string, unknown>,
+  type: { label: string | null; layout: FormLayout | null },
+  historyRows: RowDataPacket[],
+): CareerEntry[] {
+  const entries: CareerEntry[] = historyRows.map((r) => ({
+    id: `h${r.id}`,
+    title: text(r.role_in_project) ?? text(r.project_name) ?? 'Posting',
+    organisation: text(r.department),
+    details: [
+      text(r.project_name) && text(r.project_name) !== text(r.role_in_project) ? `Project: ${text(r.project_name)}` : null,
+      text(r.pi_name) ? `PI: ${text(r.pi_name)}` : null,
+    ].filter((x): x is string => Boolean(x)),
+    startDate: dateOnly(r.start_date),
+    endDate: dateOnly(r.end_date),
+    isCurrent: Boolean(r.is_ongoing),
+    validUpto: null,
+    remarks: text(r.remarks),
+    source: 'history' as const,
+  }));
+
+  if (record.joiningDate && !entries.some((e) => e.isCurrent)) {
+    const student = type.layout === 'diploma_trainee' || type.layout === 'bsc_msc_student';
+    const title = student ? text(data.courseProgram) : type.layout === 'phd_student' ? 'PhD Scholar' : record.designation;
+    const permanentDirect = type.layout === 'permanent' && data.permanentEmploymentType !== 'Deputation';
+    entries.unshift({
+      id: 'current',
+      title: title ?? type.label ?? 'Appointment',
+      organisation: student ? text(data.courseBatch) : record.department,
+      details: [
+        type.label,
+        type.layout === 'permanent' ? text(data.permanentEmploymentType) : null,
+        type.layout === 'permanent' || type.layout === 'contractual' ? text(data.employeeCategory) : null,
+      ].filter((x): x is string => Boolean(x)),
+      startDate: record.joiningDate,
+      endDate: null,
+      isCurrent: record.status === 'active',
+      validUpto: permanentDirect ? null : record.validUpto,
+      remarks: data.isOnProbation
+        ? `On probation${data.probationEndDate ? ` until ${dateOnly(data.probationEndDate)}` : ''}`
+        : null,
+      source: 'current',
+    });
+  }
+  return entries;
+}
+
 export async function getMyProfile(viewer: Viewer): Promise<MyProfile> {
   const record = await getEmployee(viewer, viewer.id);
   let data: Record<string, unknown> = {};
@@ -242,16 +307,6 @@ export async function getMyProfile(viewer: Viewer): Promise<MyProfile> {
     photoUrl: photos.get(record.biometricId) ?? null,
     roles: [...new Set(record.roles.map((r) => ROLE_LABELS[r]))],
     sections: buildSections(record, data, type.layout, { typeLabel: type.label, shift, reportingManager, hod }),
-    history: historyRows.map((r) => ({
-      id: String(r.id),
-      title: text(r.role_in_project) ?? text(r.project_name) ?? 'Posting',
-      department: text(r.department),
-      projectName: text(r.project_name),
-      piName: text(r.pi_name),
-      startDate: dateOnly(r.start_date) ?? '',
-      endDate: dateOnly(r.end_date),
-      isOngoing: Boolean(r.is_ongoing),
-      remarks: text(r.remarks),
-    })),
+    career: buildCareer(record, data, type, historyRows),
   };
 }
