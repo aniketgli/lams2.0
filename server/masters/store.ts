@@ -250,13 +250,13 @@ export async function updateRecord(def: MasterDef, id: number, body: unknown, re
   if (!existing) throw notFound(`${def.noun} not found.`);
   const input = await validate(def, body, existing);
 
-  // Records refer to masters by name (and lookups by code), so a name or code
-  // in use cannot change without leaving those records pointing at nothing.
+  // Profile masters are referenced by name, so a name or code in use cannot
+  // change without leaving those records pointing at nothing. Lists (lookups)
+  // are referenced by their code, which never changes, so renaming is safe.
   const renaming = input.name !== existing.name || input.code !== existing.code;
-  if (renaming) {
+  if (renaming && def.kind === 'table') {
     const usage = await findUsage(def, existing);
-    const relevant = usage.length > 0 && (input.name !== existing.name || def.kind === 'table');
-    if (relevant) {
+    if (usage.length > 0) {
       throw new HttpError(409, `This ${def.noun.toLowerCase()} is used by ${describeUsage(usage)}, so its name and code cannot be changed. Create a new one and deactivate this one instead.`, 'IN_USE');
     }
   }
