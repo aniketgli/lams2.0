@@ -72,6 +72,7 @@ import {
 } from 'lucide-react';
 import { RoleMatrixTable } from '../../master/components/RoleMatrixTable';
 import { exportHRMSToCSV, exportHRMSToPDF, HRMSExportColumn, HRMSFilterTag } from '../../utils/hrmsExportUtils';
+import { UserAvatar } from '../../../../shared/components/UserAvatar';
 
 // Master Data Lists for Dropdowns
 export const DEPARTMENTS_MASTER = [
@@ -1248,7 +1249,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       suffix: newUserForm.suffix,
       email: newUserForm.email,
       gender: newUserForm.gender,
-      avatar: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80`,
+      avatar: '',
       role: newUserForm.role,
       employmentType: newUserForm.employmentType as EmploymentType,
       employeeCategory: newUserForm.employeeCategory,
@@ -2213,11 +2214,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex items-center space-x-3">
                               <div className="relative shrink-0">
-                                <img
-                                  src={u.avatar}
-                                  alt={u.name}
-                                  className="w-12 h-12 rounded-xl object-cover ring-2 ring-slate-100 shadow-2xs"
-                                />
+                                <UserAvatar name={u.name} src={u?.avatar} className="w-12 h-12 rounded-xl ring-2 ring-slate-100 shadow-2xs" />
                                 <span
                                   className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-white ${
                                     u.status === 'deactivated' ? 'bg-slate-400' : 'bg-emerald-500'
@@ -2383,11 +2380,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                 {/* Profile Details Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center space-y-3 sm:space-y-0 sm:space-x-4">
                   <div className="relative shrink-0">
-                    <img
-                      src={selectedUser.avatar}
-                      alt={selectedUser.name}
-                      className="w-20 h-20 sm:w-22 sm:h-22 rounded-2xl object-cover ring-4 ring-white/20 shadow-xl bg-slate-800"
-                    />
+                    <UserAvatar name={selectedUser.name} src={selectedUser?.avatar} className="w-20 h-20 sm:w-22 sm:h-22 rounded-2xl ring-4 ring-white/20 shadow-xl bg-slate-800" />
                     <span
                       className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-slate-900 ${
                         selectedUser.status === 'deactivated' ? 'bg-slate-400' : 'bg-emerald-500'
@@ -2886,11 +2879,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                         {/* 1. Employee Details (3 Lines: Name, Designation, Bio ID) */}
                         <td className="px-3.5 py-3 align-middle">
                           <div className="flex items-start space-x-2.5 min-w-0">
-                            <img
-                              src={u.avatar}
-                              alt={u.name}
-                              className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0 mt-0.5 shadow-2xs aspect-square"
-                            />
+                            <UserAvatar name={u.name} src={u?.avatar} className="w-8 h-8 rounded-full border border-slate-200 shrink-0 mt-0.5 shadow-2xs" />
                             <div className="min-w-0 flex-1">
                               <span className="font-bold text-slate-900 truncate text-xs block">{u.name}</span>
                               <span className="text-[10px] text-slate-500 block truncate mt-0.5" title={u.email || ''}>
@@ -3318,11 +3307,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                           {/* 1. Employee Details (3 Lines: Name, Designation, Bio ID) */}
                           <td className="px-3.5 py-3 align-middle">
                             <div className="flex items-start space-x-2.5 min-w-0">
-                              <img
-                                src={userObj?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'}
-                                alt={log.userName}
-                                className="w-7.5 h-7.5 rounded-full object-cover border border-slate-200 shrink-0 mt-0.5 shadow-2xs"
-                              />
+                              <UserAvatar name={log.userName} src={userObj?.avatar} className="w-7.5 h-7.5 rounded-full border border-slate-200 shrink-0 mt-0.5 shadow-2xs" />
                               <div className="min-w-0 flex-1">
                                 <span className="font-bold text-slate-900 truncate text-xs block">{log.userName}</span>
                                 <div className="text-[11px] text-slate-500 truncate mt-0.5">
@@ -5734,11 +5719,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                     return (
                       <div className="p-3 bg-gradient-to-r from-blue-50/80 to-indigo-50/40 border border-blue-200/90 rounded-xl flex items-center justify-between text-xs shadow-2xs animate-in fade-in">
                         <div className="flex items-center space-x-2.5 min-w-0">
-                          <img
-                            src={emp.avatar}
-                            alt={emp.name}
-                            className="w-9 h-9 rounded-full object-cover ring-2 ring-blue-300/60 shrink-0"
-                          />
+                          <UserAvatar name={emp.name} src={emp?.avatar} className="w-9 h-9 rounded-full ring-2 ring-blue-300/60 shrink-0" />
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="font-bold text-slate-900 truncate">{emp.name}</span>
@@ -6226,11 +6207,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
               {/* User Identity */}
               <div className="flex items-center space-x-3 min-w-0">
                 <div className="relative">
-                  <img
-                    src={userToEditRoles.avatar}
-                    alt={userToEditRoles.name}
-                    className="w-10 h-10 rounded-full object-cover ring-2 ring-blue-400/40 shrink-0 shadow-sm"
-                  />
+                  <UserAvatar name={userToEditRoles.name} src={userToEditRoles?.avatar} className="w-10 h-10 rounded-full ring-2 ring-blue-400/40 shrink-0 shadow-sm" />
                   <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-slate-900" />
                 </div>
                 <div className="min-w-0">
@@ -6323,11 +6300,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
             <form onSubmit={handleExecuteResetPassword} className="p-5 space-y-4 text-xs">
               <div className="flex items-center space-x-3 p-3 bg-slate-50 border border-slate-200/90 rounded-xl">
-                <img
-                  src={userToResetPasswordForm.avatar}
-                  alt={userToResetPasswordForm.name}
-                  className="w-10 h-10 rounded-full object-cover ring-2 ring-slate-200 shrink-0"
-                />
+                <UserAvatar name={userToResetPasswordForm.name} src={userToResetPasswordForm?.avatar} className="w-10 h-10 rounded-full ring-2 ring-slate-200 shrink-0" />
                 <div className="min-w-0 flex-1">
                   <p className="font-extrabold text-slate-900 text-sm truncate">{userToResetPasswordForm.name}</p>
                   <p className="text-[11px] text-slate-500 truncate">{userToResetPasswordForm.designation} &bull; {userToResetPasswordForm.department}</p>
@@ -6496,11 +6469,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                 </div>
               )}
               <div className="flex items-center space-x-3 p-3 bg-slate-50 border border-slate-200/90 rounded-xl">
-                <img
-                  src={userToToggleStatusModal.avatar}
-                  alt={userToToggleStatusModal.name}
-                  className="w-10 h-10 rounded-full object-cover ring-2 ring-slate-200 shrink-0"
-                />
+                <UserAvatar name={userToToggleStatusModal.name} src={userToToggleStatusModal?.avatar} className="w-10 h-10 rounded-full ring-2 ring-slate-200 shrink-0" />
                 <div className="min-w-0 flex-1">
                   <p className="font-extrabold text-slate-900 text-sm truncate">{userToToggleStatusModal.name}</p>
                   <p className="text-[11px] text-slate-500 truncate" title={userToToggleStatusModal.email}>{userToToggleStatusModal.email || 'Email not available'}</p>

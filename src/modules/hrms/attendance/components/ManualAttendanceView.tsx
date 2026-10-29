@@ -43,6 +43,7 @@ import {
 } from 'lucide-react';
 
 import { exportHRMSToCSV, exportHRMSToPDF, HRMSFilterTag, HRMSExportColumn } from '../../utils/hrmsExportUtils';
+import { UserAvatar } from '../../../../shared/components/UserAvatar';
 
 // Standard reason options specified by user
 const REASON_CATEGORIES = [
@@ -1436,11 +1437,7 @@ export const ManualAttendanceView: React.FC = () => {
                       {canSeeTeamFilters && (
                         <td className="py-2.5 px-3 align-middle">
                           <div className="flex items-center space-x-2.5 min-w-0">
-                            <img
-                              src={targetUser?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'}
-                              alt={req.userName}
-                              className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0 shadow-2xs"
-                            />
+                            <UserAvatar name={req.userName} src={targetUser?.avatar} className="w-8 h-8 rounded-full border border-slate-200 shrink-0 shadow-2xs" />
                             <div className="min-w-0 flex-1">
                               <span className="font-bold text-slate-900 block truncate max-w-[160px] text-xs">{req.userName}</span>
                               <span className="text-[11px] text-slate-500 font-medium block truncate max-w-[160px] mt-0.5">

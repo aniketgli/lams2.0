@@ -4,6 +4,7 @@ import { UserRole } from '../../types';
 import { useSession } from '../../auth/SessionContext';
 import { ROLE_LABELS, ROLE_ORDER } from '../../auth/access';
 import { WIILogo } from '../components/WIILogo';
+import { UserAvatar } from '../components/UserAvatar';
 import {
   Menu,
   LogOut,
@@ -13,18 +14,6 @@ import {
   Check,
   User as UserIcon
 } from 'lucide-react';
-
-/** Photo if one exists, otherwise initials, so a missing avatar never shows a broken image. */
-const UserAvatar: React.FC<{ name: string; src?: string; size: 'sm' | 'lg' }> = ({ name, src, size }) => {
-  const dims = size === 'sm' ? 'w-7 h-7 sm:w-8 sm:h-8 text-[10px]' : 'w-10 h-10 text-xs';
-  if (src) return <img src={src} alt="" className={`${dims} rounded-full object-cover border border-slate-200`} />;
-  const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || '?';
-  return (
-    <span className={`${dims} rounded-full bg-[#701618] text-white font-bold flex items-center justify-center shrink-0`} aria-hidden="true">
-      {initials}
-    </span>
-  );
-};
 
 interface HeaderProps {
   activeTab: string;
@@ -42,7 +31,7 @@ export const Header: React.FC<HeaderProps> = ({
   onRoleChangedGoDashboard
 }) => {
   const { currentUser } = useApp();
-  const { session, switchRole, logout } = useSession();
+  const { session, switchRole } = useSession();
 
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -65,6 +54,11 @@ export const Header: React.FC<HeaderProps> = ({
   const rolesList = ROLE_ORDER.filter((role) => assignedRoles.includes(role));
   const activeRole = session?.activeRole ?? null;
   const activeRoleLabel = activeRole ? ROLE_LABELS[activeRole] : '';
+  // Identity comes from the server session; the salutation from the employee profile when present.
+  const salutation = currentUser.suffix ? `${currentUser.suffix} ` : '';
+  const displayName = `${salutation}${session?.user.name ?? currentUser.name}`;
+  const biometricId = session?.user.biometricId ?? currentUser.biometricId ?? '—';
+  const email = session?.user.email ?? currentUser.email;
 
   const handleRoleSwitch = async (role: UserRole) => {
     if (role === activeRole || roleSwitchBusy) return;
@@ -114,7 +108,7 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
               className="flex items-center space-x-2 p-1 sm:p-1.5 rounded-xl hover:bg-slate-100 border border-transparent hover:border-slate-300 transition-all text-left focus:outline-none cursor-pointer"
             >
-              <UserAvatar name={currentUser.name} src={currentUser.avatar} size="sm" />
+              <UserAvatar name={currentUser.name} src={currentUser.avatar} className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-slate-200" />
               <div className="hidden sm:block text-left">
                 <span className="text-xs font-bold text-slate-900 block leading-tight truncate max-w-[140px]">
                   {currentUser.name}
@@ -132,25 +126,26 @@ export const Header: React.FC<HeaderProps> = ({
                 {/* Current Profile Summary */}
                 <div className="p-3 bg-slate-50/80">
                   <div className="flex items-center space-x-3">
-                    <UserAvatar name={currentUser.name} src={currentUser.avatar} size="lg" />
+                    <UserAvatar name={currentUser.name} src={currentUser.avatar} className="w-10 h-10 rounded-full border border-slate-200" />
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-bold text-slate-900 truncate">{currentUser.name}</p>
-                      <p className="text-[11px] text-slate-500 truncate">{currentUser.designation}</p>
-                      <p className="text-[10px] text-[#2563eb] font-mono truncate mt-0.5">{currentUser.email}</p>
+                      <p className="text-xs font-bold text-slate-900 truncate">{displayName}</p>
+                      <p className="text-[11px] text-slate-500 truncate mt-0.5" title={`B.I. ${biometricId} · ${email}`}>
+                        <span className="font-semibold text-slate-600">B.I. {biometricId}</span>
+                        <span className="mx-1.5 text-slate-300" aria-hidden="true">|</span>
+                        <span>{email}</span>
+                      </p>
                     </div>
                   </div>
                 </div>
 
                 {rolesList.length > 1 && (
                   <div className="p-3 border-b border-slate-100">
-                    
-                    <div className="space-y-1">
-                      <p className="px-1 pb-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">Switch role</p>
+                    <div className="space-y-1" role="group" aria-label="Switch role">
                       {rolesList.map((role) => (
                         <button key={role} type="button" disabled={roleSwitchBusy || role === activeRole}
                           onClick={() => void handleRoleSwitch(role)}
                           aria-current={role === activeRole ? 'true' : undefined}
-                          className={`w-full flex items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold transition-colors ${role === activeRole ? 'bg-[#701618]/10 text-[#701618] cursor-default' : 'text-slate-700 hover:bg-slate-50 disabled:opacity-50'}`}>
+                          className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-xs transition-all text-left ${role === activeRole ? 'bg-[#204088]/10 text-[#204088] font-bold border-l-3 border-[#204088] shadow-2xs cursor-default' : 'font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 cursor-pointer disabled:opacity-50'}`}>
                           <span>{ROLE_LABELS[role]}</span>
                           {role === activeRole && <Check className="w-3.5 h-3.5" aria-hidden="true" />}
                         </button>
@@ -160,7 +155,7 @@ export const Header: React.FC<HeaderProps> = ({
                   </div>
                 )}
 
-                {/* Logout / Exit Module */}
+                {/* Inside a module the only exit is back to the lobby; signing out happens there. */}
                 <div className="p-2 space-y-1">
                   <button
                     onClick={handleExitModule}
@@ -168,13 +163,6 @@ export const Header: React.FC<HeaderProps> = ({
                   >
                     <ArrowLeft className="w-4 h-4 text-rose-600" />
                     <span>Back to lobby</span>
-                  </button>
-                  <button
-                    onClick={() => { setIsUserMenuOpen(false); void logout(); }}
-                    className="w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-lg text-xs text-slate-700 hover:bg-slate-50 transition-colors text-left cursor-pointer font-semibold"
-                  >
-                    <LogOut className="w-4 h-4 text-slate-500" />
-                    <span>Sign out</span>
                   </button>
                 </div>
               </div>
