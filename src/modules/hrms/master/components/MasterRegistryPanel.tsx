@@ -18,7 +18,8 @@ type StatusFilter = 'ALL' | MasterStatus;
 
 interface Props {
   catalog: MasterCatalog;
-  group: 'profile' | 'lists';
+  /** Limit to one group; omit to show every master. */
+  group?: 'profile' | 'lists';
   readOnly: boolean;
 }
 
@@ -31,7 +32,7 @@ const emptyInput = (def: MasterDefinition): MasterInput => ({
 });
 
 export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly }) => {
-  const masters = useMemo(() => catalog.masters.filter((m) => m.group === group), [catalog, group]);
+  const masters = useMemo(() => catalog.masters.filter((m) => !group || m.group === group), [catalog, group]);
   const [activeKey, setActiveKey] = useState(masters[0]?.key ?? '');
   const def = masters.find((m) => m.key === activeKey) ?? masters[0];
 

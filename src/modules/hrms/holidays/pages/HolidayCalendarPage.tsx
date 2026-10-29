@@ -1022,7 +1022,7 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/55 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="bg-white border border-slate-200 rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-150">
             {/* Header */}
-            <div className="px-5 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white flex items-center justify-between shrink-0 rounded-t-2xl">
+            <div className="px-5 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white flex items-center justify-between shrink-0 rounded-t-2xl">
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
                   <CalendarDays className="w-5 h-5 text-blue-400" />
@@ -1183,7 +1183,7 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = ({ onNavi
       {deletingHoliday && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
           <div className="bg-white border border-slate-200 rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-scale-up">
-            <div className="px-5 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white flex items-center justify-between shrink-0 rounded-t-2xl">
+            <div className="px-5 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white flex items-center justify-between shrink-0 rounded-t-2xl">
               <div className="flex items-center space-x-3 min-w-0">
                 <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
                   <AlertTriangle className="w-5 h-5 text-blue-400" />

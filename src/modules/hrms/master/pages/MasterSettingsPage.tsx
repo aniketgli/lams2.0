@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Building2, Clock, Cpu, FileText, History, ListChecks, Sliders, Users } from 'lucide-react';
+import { Building2, Clock, Cpu, FileText, Sliders, Users } from 'lucide-react';
 import { useSession } from '../../../../auth/SessionContext';
 import { PageHeader } from '../../../../shared/components/PageHeader';
 import { LeavePolicyMaster } from '../components/LeavePolicyMaster';
@@ -7,25 +7,23 @@ import { ShiftsPanel } from '../components/ShiftsPanel';
 import { BiometricMachinesPanel } from '../components/BiometricMachinesPanel';
 import { MasterRegistryPanel } from '../components/MasterRegistryPanel';
 import { OrganizationPanel } from '../components/OrganizationPanel';
-import { AuditTrailPanel } from '../components/AuditTrailPanel';
 import { ReadOnlyNotice, TabStrip } from '../components/masterUi';
 import { MasterCatalog, masterApi } from '../masterApi';
 
-type Section = 'shifts' | 'biometric' | 'leave' | 'profile' | 'lists' | 'organization' | 'audit';
+type Section = 'shifts' | 'biometric' | 'leave' | 'profile' | 'organization';
 
 const SECTIONS: { id: Section; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: 'shifts', label: 'Shifts', icon: Clock },
   { id: 'biometric', label: 'Biometric Machines', icon: Cpu },
   { id: 'leave', label: 'Leave Policy', icon: FileText },
   { id: 'profile', label: 'Profile Masters', icon: Users },
-  { id: 'lists', label: 'Employee Form Lists', icon: ListChecks },
   { id: 'organization', label: 'Organization', icon: Building2 },
-  { id: 'audit', label: 'Audit Trail', icon: History },
 ];
 
 /**
  * Master Settings. Administrators can change everything; Auditors see the
- * same screens read-only plus the Audit Trail. The server enforces both.
+ * same screens read-only. Every change is still recorded in master_audit_logs
+ * for the Auditor role's own screens (to be built). The server enforces both.
  */
 export const MasterSettingsPage: React.FC = () => {
   const { session } = useSession();
@@ -42,14 +40,14 @@ export const MasterSettingsPage: React.FC = () => {
     return () => { cancelled = true; };
   }, []);
 
-  const needsCatalog = section === 'profile' || section === 'lists' || section === 'audit';
+  const needsCatalog = section === 'profile';
 
   return (
     <div className="space-y-5 pb-6">
       <PageHeader
         icon={Sliders}
         title="Master Settings"
-        subtitle={readOnly ? 'Read-only view of all masters, with the full change history.' : 'Shifts, devices, profile masters, form lists and organization details.'}
+        subtitle={readOnly ? 'Read-only view of all masters.' : 'Shifts, devices, profile masters and organization details.'}
       />
 
       {readOnly && <ReadOnlyNotice />}
@@ -67,9 +65,8 @@ export const MasterSettingsPage: React.FC = () => {
           {catalogError ?? 'Loading…'}
         </div>
       )}
-      {catalog && section === 'profile' && <MasterRegistryPanel key="profile" catalog={catalog} group="profile" readOnly={readOnly} />}
-      {catalog && section === 'lists' && <MasterRegistryPanel key="lists" catalog={catalog} group="lists" readOnly={readOnly} />}
-      {catalog && section === 'audit' && <AuditTrailPanel catalog={catalog} />}
+      {/* Profile masters and the employee-form lists (salutation, gender, …) in one place. */}
+      {catalog && section === 'profile' && <MasterRegistryPanel catalog={catalog} readOnly={readOnly} />}
     </div>
   );
 };

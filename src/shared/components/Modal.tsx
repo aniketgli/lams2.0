@@ -89,7 +89,7 @@ export const Modal: React.FC<ModalProps> = ({
       >
         {/* Header if props provided */}
         {title && (
-          <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between shrink-0 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 rounded-t-2xl text-white">
+          <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between shrink-0 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 rounded-t-2xl text-white">
             <div className="flex items-center space-x-3.5 min-w-0 pr-3">
               {icon && (
                 <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 text-blue-400 flex items-center justify-center shrink-0 shadow-xs">
@@ -159,7 +159,7 @@ export const ModalHeader: React.FC<ModalHeaderProps> = ({
   className = ''
 }) => {
   return (
-    <div className={`px-5 py-4 border-b border-slate-800 flex items-center justify-between shrink-0 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 rounded-t-2xl text-white ${className}`}>
+    <div className={`px-5 py-4 border-b border-slate-800 flex items-center justify-between shrink-0 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 rounded-t-2xl text-white ${className}`}>
       <div className="flex items-center space-x-3.5 min-w-0 pr-3">
         {icon && (
           <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 text-blue-400 flex items-center justify-center shrink-0 shadow-xs">

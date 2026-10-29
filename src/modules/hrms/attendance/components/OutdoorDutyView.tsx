@@ -1648,7 +1648,7 @@ export const OutdoorDutyView: React.FC = () => {
         <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150">
           <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-150 my-8">
             {/* Modal Header */}
-            <div className="px-5 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white flex items-center justify-between shrink-0 rounded-t-2xl">
+            <div className="px-5 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white flex items-center justify-between shrink-0 rounded-t-2xl">
               <div className="flex items-center space-x-3 min-w-0">
                 <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
                   <MapPin className="w-5 h-5 text-blue-400" />
@@ -1850,7 +1850,7 @@ export const OutdoorDutyView: React.FC = () => {
       {actionModalOd && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
           <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white flex items-center justify-between shrink-0">
+            <div className="px-5 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center space-x-3 min-w-0">
                 <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
                   <ShieldCheck className="w-5 h-5 text-blue-400" />
@@ -1965,7 +1965,7 @@ export const OutdoorDutyView: React.FC = () => {
       {cancelModalOd && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
           <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white flex items-center justify-between shrink-0">
+            <div className="px-5 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center space-x-3 min-w-0">
                 <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
                   <RotateCcw className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-rose-300" />
@@ -2052,7 +2052,7 @@ export const OutdoorDutyView: React.FC = () => {
       {deleteConfirmId && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
           <div className="bg-white rounded-2xl max-w-sm w-full shadow-2xl border border-slate-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white flex items-center justify-between shrink-0">
+            <div className="px-5 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center space-x-3 min-w-0">
                 <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
                   <Trash2 className="w-5 h-5 text-blue-400" />
@@ -2099,7 +2099,7 @@ export const OutdoorDutyView: React.FC = () => {
       {detailModalOd && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
           <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white flex items-center justify-between shrink-0">
+            <div className="px-5 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center space-x-3 min-w-0">
                 <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
                   <MapPin className="w-5 h-5 text-blue-400" />
@@ -2229,7 +2229,7 @@ export const OutdoorDutyView: React.FC = () => {
       {activePurposeModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="px-5 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white flex items-center justify-between shrink-0">
+            <div className="px-5 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center space-x-3 min-w-0">
                 <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
                   <FileText className="w-5 h-5 text-blue-400" />

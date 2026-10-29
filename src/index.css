@@ -14,6 +14,9 @@
   --color-primary-light: #dbe3f3;
   --color-primary-border: #b9c7e6;
   --color-primary-foreground: #ffffff;
+  /* Middle colour of the dark header strips (pages and pop-ups):
+     slate-900 → header-glow → slate-900. Brighter than slate so the strip shows a navy sheen. */
+  --color-header-glow: #1c3577;
 
   /* Tailwind's blue scale remapped to the navy primary, so every existing
      bg-blue-*, text-blue-*, border-blue-* class across the app follows the
