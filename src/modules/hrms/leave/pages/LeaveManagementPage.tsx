@@ -67,6 +67,7 @@ import { INITIAL_HOLIDAYS } from '../../holidays/data/holidayData';
 import { AppDatePicker } from '../../../../shared/components/AppDatePicker';
 import { formatTo24H } from '../../attendance/utils/attendanceUtils';
 import { exportHRMSToCSV, exportHRMSToPDF, HRMSFilterTag, HRMSExportColumn } from '../../utils/hrmsExportUtils';
+import { UserAvatar } from '../../../../shared/components/UserAvatar';
 
 // Legacy StationLeaveDatePicker wrapper using unified AppDatePicker
 const StationLeaveDatePicker: React.FC<{
@@ -2870,11 +2871,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
                       {/* Employee Column */}
                       <td className="py-2 px-1.5 align-middle">
                         <div className="flex items-center space-x-1.5 min-w-0 max-w-[105px] sm:max-w-[125px]">
-                          <img
-                            src={staffUser?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'}
-                            alt={lv.userName}
-                            className="w-6 h-6 rounded-full object-cover border border-slate-200 shrink-0 shadow-2xs"
-                          />
+                          <UserAvatar name={lv.userName} src={staffUser?.avatar} className="w-6 h-6 rounded-full border border-slate-200 shrink-0 shadow-2xs" />
                           <div className="min-w-0 flex-1">
                             <span className="font-bold text-slate-900 block truncate text-xs">{lv.userName}</span>
                             <span className="text-[9.5px] text-slate-500 font-medium block truncate">

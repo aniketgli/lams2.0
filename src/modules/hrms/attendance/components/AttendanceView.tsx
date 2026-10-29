@@ -41,6 +41,7 @@ import {
   ArrowUpDown
 } from 'lucide-react';
 import { exportHRMSToCSV, exportHRMSToPDF, HRMSFilterTag, HRMSExportColumn } from '../../utils/hrmsExportUtils';
+import { UserAvatar } from '../../../../shared/components/UserAvatar';
 
 export const AttendanceView: React.FC = () => {
   const {
@@ -1142,7 +1143,7 @@ export const AttendanceView: React.FC = () => {
                         {canSeeTeamFilters && (
                           <td className="py-3 px-4 min-w-[210px]">
                             <div className="flex items-start space-x-2.5 min-w-0">
-                              <img src={u?.avatar} alt={u?.name} className="w-7 h-7 rounded-full object-cover shrink-0 border border-slate-200 mt-0.5 shadow-2xs" />
+                              <UserAvatar name={u?.name} src={u?.avatar} className="w-7 h-7 rounded-full shrink-0 border border-slate-200 mt-0.5 shadow-2xs" />
                               <div className="min-w-0 flex-1">
                                 <span className="font-bold text-slate-900 block leading-tight truncate text-xs">{u?.name || rec.userId}</span>
                                 <span className="text-[11px] text-slate-500 font-medium block leading-tight truncate mt-0.5">
@@ -1304,7 +1305,7 @@ export const AttendanceView: React.FC = () => {
                       <div className="space-y-1 text-xs">
                         {(isAdmin || isManager) && (
                           <div className="flex items-start space-x-1.5 text-slate-700 font-semibold mb-1 pb-1 border-b border-slate-100">
-                            <img src={u?.avatar} alt={u?.name} className="w-5 h-5 rounded-full object-cover shrink-0 mt-0.5" />
+                            <UserAvatar name={u?.name} src={u?.avatar} className="w-5 h-5 rounded-full shrink-0 mt-0.5" />
                             <div className="min-w-0 flex-1">
                               <span className="truncate text-[11px] font-bold text-slate-900 block leading-tight">{u?.name}</span>
                               {u?.designation && (

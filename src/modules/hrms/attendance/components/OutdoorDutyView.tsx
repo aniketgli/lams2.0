@@ -45,6 +45,7 @@ import {
 } from 'lucide-react';
 
 import { exportHRMSToCSV, exportHRMSToPDF, HRMSFilterTag, HRMSExportColumn } from '../../utils/hrmsExportUtils';
+import { UserAvatar } from '../../../../shared/components/UserAvatar';
 
 export const OutdoorDutyView: React.FC = () => {
   const {
@@ -1442,11 +1443,7 @@ export const OutdoorDutyView: React.FC = () => {
                       {canSeeTeamFilters && (
                         <td className="py-2 px-2 align-middle">
                           <div className="flex items-center space-x-2 min-w-0 max-w-[110px] sm:max-w-[130px]">
-                            <img
-                              src={reqUser?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'}
-                              alt={od.userName}
-                              className="w-7 h-7 rounded-full object-cover border border-slate-200 shrink-0 shadow-2xs"
-                            />
+                            <UserAvatar name={od.userName} src={reqUser?.avatar} className="w-7 h-7 rounded-full border border-slate-200 shrink-0 shadow-2xs" />
                             <div className="min-w-0 flex-1">
                               <span className="font-bold text-slate-900 block truncate text-xs">{od.userName}</span>
                               <span className="text-[10px] text-slate-500 font-medium block truncate">

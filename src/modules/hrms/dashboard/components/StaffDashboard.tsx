@@ -13,6 +13,7 @@ import {
   Table as TableIcon,
   LayoutGrid
 } from 'lucide-react';
+import { UserAvatar } from '../../../../shared/components/UserAvatar';
 
 interface StaffDashboardProps {
   onNavigate: (tab: string) => void;
@@ -66,11 +67,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onNavigate }) =>
       {/* Top Welcome & Clock In Header - Clean Minimalism */}
       <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="flex items-center space-x-4">
-          <img
-            src={currentUser.avatar}
-            alt={currentUser.name}
-            className="w-14 h-14 rounded-full object-cover ring-2 ring-slate-200"
-          />
+          <UserAvatar name={currentUser.name} src={currentUser?.avatar} className="w-14 h-14 rounded-full ring-2 ring-slate-200" />
           <div>
             <div className="flex items-center space-x-2">
               <h1 className="text-xl font-bold tracking-tight text-slate-900">Welcome, {currentUser.name}</h1>

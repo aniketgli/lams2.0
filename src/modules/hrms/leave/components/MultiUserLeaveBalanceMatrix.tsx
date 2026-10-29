@@ -50,6 +50,7 @@ import { LeaveQuotaImportModal } from './LeaveQuotaImportModal';
 import { LeaveCycleDropdown } from './LeaveCycleDropdown';
 import { MultiSelectFilter } from '../../../../shared/components/MultiSelectFilter';
 import { exportHRMSToCSV, exportHRMSToPDF, HRMSExportColumn, HRMSFilterTag } from '../../utils/hrmsExportUtils';
+import { UserAvatar } from '../../../../shared/components/UserAvatar';
 
 interface MultiUserLeaveBalanceMatrixProps {
   onOpenQuotaImportModal?: () => void;
@@ -1036,11 +1037,7 @@ export const MultiUserLeaveBalanceMatrix: React.FC<MultiUserLeaveBalanceMatrixPr
                         {/* Employee Details Column */}
                         <td className="py-2.5 px-3.5 align-middle">
                           <div className="flex items-center space-x-2.5 min-w-0">
-                            <img
-                              src={u.avatar}
-                              alt={u.name}
-                              className="w-7 h-7 rounded-full object-cover border border-slate-200 shrink-0 shadow-2xs"
-                            />
+                            <UserAvatar name={u.name} src={u?.avatar} className="w-7 h-7 rounded-full border border-slate-200 shrink-0 shadow-2xs" />
                             <div className="min-w-0 flex-1">
                               <button
                                 type="button"
@@ -1199,11 +1196,7 @@ export const MultiUserLeaveBalanceMatrix: React.FC<MultiUserLeaveBalanceMatrixPr
                 {/* Employee Card Header */}
                 <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
                   <div className="flex items-center space-x-3 min-w-0">
-                    <img
-                      src={u.avatar}
-                      alt={u.name}
-                      className="w-10 h-10 rounded-full object-cover border border-slate-200 shrink-0 shadow-2xs"
-                    />
+                    <UserAvatar name={u.name} src={u?.avatar} className="w-10 h-10 rounded-full border border-slate-200 shrink-0 shadow-2xs" />
                     <div className="min-w-0">
                       <h4 className="font-bold text-sm text-slate-900 truncate">{u.name}</h4>
                       
@@ -1306,11 +1299,7 @@ export const MultiUserLeaveBalanceMatrix: React.FC<MultiUserLeaveBalanceMatrixPr
             {/* Uniform Institutional Header */}
             <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white px-5 py-4 flex items-center justify-between border-b border-slate-800 shrink-0 rounded-t-2xl">
               <div className="flex items-center space-x-3">
-                <img
-                  src={adjustingUser.avatar}
-                  alt={adjustingUser.name}
-                  className="w-10 h-10 rounded-xl object-cover border border-blue-700/60 shadow-sm"
-                />
+                <UserAvatar name={adjustingUser.name} src={adjustingUser?.avatar} className="w-10 h-10 rounded-xl border border-blue-700/60 shadow-sm" />
                 <div>
                   <h3 className="font-bold text-base text-white tracking-tight">
                     Adjust Leave Balances: {adjustingUser.name}
@@ -1455,11 +1444,7 @@ export const MultiUserLeaveBalanceMatrix: React.FC<MultiUserLeaveBalanceMatrixPr
             {/* Uniform Institutional Header */}
             <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white px-5 py-4 flex items-center justify-between border-b border-slate-800 shrink-0 rounded-t-2xl">
               <div className="flex items-center space-x-3.5">
-                <img
-                  src={ledgerUser.avatar}
-                  alt={ledgerUser.name}
-                  className="w-11 h-11 rounded-xl object-cover border border-blue-700/60 shadow-sm"
-                />
+                <UserAvatar name={ledgerUser.name} src={ledgerUser?.avatar} className="w-11 h-11 rounded-xl border border-blue-700/60 shadow-sm" />
                 <div>
                   <h3 className="font-bold text-base text-white tracking-tight">{ledgerUser.name}</h3>
                   <p className="text-[11px] text-slate-400 font-medium mt-0.5">
