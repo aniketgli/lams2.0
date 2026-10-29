@@ -12,7 +12,8 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   if (res.headersSent) return;
 
   if (err instanceof HttpError) {
-    return res.status(err.status).json({ message: err.message, code: err.code, details: err.details });
+    // `error` repeats the message for older screens that still read it.
+    return res.status(err.status).json({ message: err.message, error: err.message, code: err.code, details: err.details });
   }
 
   // Malformed JSON body from express.json()
