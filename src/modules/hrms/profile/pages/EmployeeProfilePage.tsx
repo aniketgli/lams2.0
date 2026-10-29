@@ -15,6 +15,7 @@ import { UserProjectHistoryModal } from '../components/UserProjectHistoryModal';
 import { MultiSelectFilter, matchesMultiSelect } from '../../../../shared/components/MultiSelectFilter';
 import { AppSelect } from '../../../../shared/components/AppSelect';
 import { AppDatePicker } from '../../../../shared/components/AppDatePicker';
+import { api } from '../../../../shared/services/api';
 import { getUserLeaveCycleType, isCalendarYearCadre } from '../../leave/utils/leaveCycleUtils';
 import {
   User as UserIcon,
@@ -604,6 +605,61 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     guideSupervisor: ''
   });
 
+  /** Account being edited in the employee form, or null when adding a new one. */
+  const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
+  // Field errors from the server's last answer, shown under each field.
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  // Allowed email domains come from the server's sign-in rules.
+  const [emailDomains, setEmailDomains] = useState<string[]>(['wii.gov.in', 'edu.wii.gov.in']);
+  useEffect(() => {
+    let active = true;
+    api<{ emailDomains?: string[] }>('/auth/config')
+      .then((c) => { if (active && Array.isArray(c.emailDomains) && c.emailDomains.length) setEmailDomains(c.emailDomains); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, []);
+
+  /** Updates one form field and clears its error. */
+  const setField = <K extends keyof typeof newUserForm>(key: K, value: (typeof newUserForm)[K]) => {
+    setNewUserForm((f) => ({ ...f, [key]: value }));
+    setFormErrors((e) => (e[key as string] ? { ...e, [key as string]: '' } : e));
+  };
+
+  // Instant hints while typing. The server repeats every check when saving.
+  const liveErrors = useMemo(() => {
+    const out: Record<string, string> = {};
+    const others = users.filter((u) => u.id !== editingEmployeeId);
+    const email = newUserForm.email.trim().toLowerCase();
+    if (email) {
+      const domain = email.includes('@') ? email.slice(email.lastIndexOf('@') + 1) : '';
+      if (!emailDomains.includes(domain)) out.email = `Only ${emailDomains.map((d) => `@${d}`).join(' or ')} email addresses are accepted.`;
+      else if (others.some((u) => (u.email || '').toLowerCase() === email)) out.email = 'Another employee already uses this email.';
+    }
+    const phoneDigits = newUserForm.phone.replace(/\D/g, '');
+    if (phoneDigits.length >= 10) {
+      const owner = others.find((u) => (u.phone || '').replace(/\D/g, '').slice(-10) === phoneDigits.slice(-10));
+      if (owner) out.phone = `This mobile number is already registered to ${owner.name}.`;
+    } else if (newUserForm.phone.trim()) {
+      out.phone = 'Enter a 10-digit mobile number.';
+    }
+    const bio = newUserForm.biometricId.trim();
+    if (bio && !editingEmployeeId) {
+      if (!/^\d{4}$/.test(bio)) out.biometricId = 'Biometric ID must be exactly 4 digits.';
+      else if (others.some((u) => u.biometricId === bio)) out.biometricId = 'This biometric ID is already in use.';
+    }
+    return out;
+  }, [newUserForm.email, newUserForm.phone, newUserForm.biometricId, users, emailDomains, editingEmployeeId]);
+
+  const errorOf = (key: string): string => liveErrors[key] || formErrors[key] || '';
+  const inputClass = (key: string, locked = false) =>
+    `w-full px-3 py-2 border rounded-xl focus:outline-none focus:ring-2 text-xs font-medium shadow-2xs transition-all ${
+      locked ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white text-slate-900'
+    } ${
+      errorOf(key) ? 'border-rose-400 focus:ring-rose-500/20 focus:border-rose-500' : 'border-slate-200/90 focus:ring-blue-600/20 focus:border-blue-500'
+    }`;
+  const fieldError = (name: string) =>
+    errorOf(name) ? <p className="mt-1 text-[11px] font-medium text-rose-600" role="alert">{errorOf(name)}</p> : null;
+
   // Password reset modal (display result)
   const [passwordResetModal, setPasswordResetModal] = useState<{
     user: UserType;
@@ -1132,8 +1188,6 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   // Handlers
   const [savingProfile, setSavingProfile] = useState(false);
 
-  /** Account being edited in the employee form, or null when adding a new one. */
-  const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
 
   const closeEmployeeForm = () => {
     setIsCreatingUser(false);
@@ -1176,6 +1230,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       enrolledThrough: saved.enrolledThrough || '',
       guideSupervisor: u.guideSupervisor || ''
     });
+    setFormErrors({});
     setEditingEmployeeId(u.id);
     setIsCreatingUser(true);
   };
@@ -1243,6 +1298,12 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       if (!newUserForm.validUntilDate?.trim()) missingFields.push('Valid Up To Date');
     }
 
+    const liveProblems = Object.values(liveErrors).filter(Boolean);
+    if (liveProblems.length > 0) {
+      showToast(liveProblems[0]);
+      return;
+    }
+
     if (missingFields.length > 0) {
       showToast(`Mandatory fields required: ${missingFields.slice(0, 3).join(', ')}${missingFields.length > 3 ? ` and ${missingFields.length - 3} more` : ''}`);
       return;
@@ -1270,13 +1331,17 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     }
 
     showToast(result.message);
-    if (!result.success) return;
+    if (!result.success) {
+      setFormErrors(result.fieldErrors ?? {});
+      return;
+    }
     const savedId = result.user?.id ?? editingEmployeeId;
     closeEmployeeForm();
     if (savedId) setSelectedUserId(savedId);
   };
 
   const handleOpenCreateEmployeeModal = () => {
+    setFormErrors({});
     setEditingEmployeeId(null);
     setNewUserForm({
       permanentEmploymentType: '',
@@ -3403,18 +3468,36 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                 {/* Unified Form Grid without Subheadings or Numbering */}
                 <div className="p-3.5 sm:p-4 bg-slate-50/70 border border-slate-200/90 rounded-2xl space-y-3.5">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                    {/* Suffix */}
-                    <div>
-                      <label className="block text-slate-700 font-bold mb-1 text-xs">
-                        Suffix <span className="text-blue-600 font-bold ml-0.5">*</span>
-                      </label>
-                      <AppSelect
-                        value={newUserForm.suffix}
-                        placeholder="Select Suffix"
-                        onChange={(val) => setNewUserForm({ ...newUserForm, suffix: val as typeof newUserForm.suffix })}
-                        options={[{ label: 'Select Suffix', value: '' }, ...salutationOptions]}
-                        className="w-full"
-                      />
+                    {/* Row 1: Suffix + Full Name */}
+                    <div className="sm:col-span-2 grid grid-cols-[minmax(0,7.5rem)_minmax(0,1fr)] gap-3.5">
+                      <div>
+                        <label className="block text-slate-700 font-bold mb-1 text-xs">
+                          Suffix <span className="text-blue-600 font-bold ml-0.5">*</span>
+                        </label>
+                        <AppSelect
+                          value={newUserForm.suffix}
+                          placeholder="Select"
+                          onChange={(val) => setField('suffix', val as typeof newUserForm.suffix)}
+                          options={[{ label: 'Select', value: '' }, ...salutationOptions]}
+                          className="w-full"
+                        />
+                        {fieldError('suffix')}
+                      </div>
+                      <div>
+                        <label className="block text-slate-700 font-bold mb-1 text-xs">
+                          Full Name <span className="text-blue-600 font-bold ml-0.5">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          maxLength={255}
+                          placeholder="Enter Full Name"
+                          value={newUserForm.name}
+                          onChange={(e) => setField('name', e.target.value)}
+                          className={inputClass('name')}
+                        />
+                        {fieldError('name')}
+                      </div>
                     </div>
 
                     {/* Gender */}
@@ -3425,28 +3508,14 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                       <AppSelect
                         value={newUserForm.gender}
                         placeholder="Select Gender"
-                        onChange={(val) => setNewUserForm({ ...newUserForm, gender: val })}
+                        onChange={(val) => setField('gender', val)}
                         options={[
                           { label: 'Select Gender', value: '' },
                           ...genderOptions
                         ]}
                         className="w-full"
                       />
-                    </div>
-
-                    {/* Full Name */}
-                    <div>
-                      <label className="block text-slate-700 font-bold mb-1 text-xs">
-                        Full Name <span className="text-blue-600 font-bold ml-0.5">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Enter Full Name"
-                        value={newUserForm.name}
-                        onChange={(e) => setNewUserForm({ ...newUserForm, name: e.target.value })}
-                        className="w-full px-3 py-2 border border-slate-200/90 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 text-xs bg-white text-slate-900 font-medium shadow-2xs transition-all"
-                      />
+                      {fieldError('gender')}
                     </div>
 
                     {/* Date of Birth (DOB) */}
@@ -3457,9 +3526,10 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                       <AppDatePicker
                         value={newUserForm.dob}
                         placeholder="Select Date of Birth"
-                        onChange={(val) => setNewUserForm({ ...newUserForm, dob: val })}
+                        onChange={(val) => setField('dob', val)}
                         className="w-full"
                       />
+                      {fieldError('dob')}
                     </div>
 
                     {/* Mobile Number */}
@@ -3468,13 +3538,17 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                         Mobile Number (Mob) <span className="text-blue-600 font-bold ml-0.5">*</span>
                       </label>
                       <input
-                        type="text"
+                        type="tel"
                         required
-                        placeholder="Enter Mobile Number"
+                        inputMode="tel"
+                        maxLength={16}
+                        placeholder="10-digit mobile number"
                         value={newUserForm.phone}
-                        onChange={(e) => setNewUserForm({ ...newUserForm, phone: e.target.value })}
-                        className="w-full px-3 py-2 border border-slate-200/90 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 text-xs bg-white text-slate-900 font-medium shadow-2xs transition-all"
+                        onChange={(e) => setField('phone', e.target.value.replace(/[^\d+\s-]/g, ''))}
+                        aria-invalid={Boolean(errorOf('phone'))}
+                        className={inputClass('phone')}
                       />
+                      {fieldError('phone')}
                     </div>
 
                     {/* Email Address */}
@@ -3485,11 +3559,16 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                       <input
                         type="email"
                         required
-                        placeholder="Enter Email Address"
+                        maxLength={254}
+                        placeholder={`name@${emailDomains[0] ?? 'wii.gov.in'}`}
                         value={newUserForm.email}
-                        onChange={(e) => setNewUserForm({ ...newUserForm, email: e.target.value })}
-                        className="w-full px-3 py-2 border border-slate-200/90 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 text-xs bg-white text-slate-900 font-medium shadow-2xs transition-all"
+                        onChange={(e) => setField('email', e.target.value.trim())}
+                        aria-invalid={Boolean(errorOf('email'))}
+                        className={inputClass('email')}
                       />
+                      {errorOf('email') ? fieldError('email') : (
+                        <p className="mt-1 text-[11px] text-slate-500">Only {emailDomains.map((d) => `@${d}`).join(' or ')}</p>
+                      )}
                     </div>
 
                     {/* Biometric ID */}
@@ -3505,10 +3584,12 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                         readOnly={Boolean(editingEmployeeId)}
                         title={editingEmployeeId ? 'The biometric ID cannot be changed after the employee is created.' : undefined}
                         value={newUserForm.biometricId}
-                        onChange={(e) => setNewUserForm({ ...newUserForm, biometricId: e.target.value.replace(/\D/g, '').slice(0, 4) })}
-                        placeholder="Enter Biometric ID"
-                        className="w-full px-3 py-2 border border-slate-200/90 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 text-xs bg-white text-slate-900 font-semibold shadow-2xs transition-all"
+                        onChange={(e) => setField('biometricId', e.target.value.replace(/\D/g, '').slice(0, 4))}
+                        placeholder="4-digit biometric ID"
+                        aria-invalid={Boolean(errorOf('biometricId'))}
+                        className={inputClass('biometricId', Boolean(editingEmployeeId))}
                       />
+                      {fieldError('biometricId')}
                     </div>
 
                     {/* Employee Type Selection */}

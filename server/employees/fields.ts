@@ -1,4 +1,4 @@
-import { normalizeLoginEmail } from '../config/auth.config';
+import { authConfig, normalizeLoginEmail } from '../config/auth.config';
 import { PATTERNS, Validator } from '../lib/validate';
 
 /**
@@ -130,7 +130,7 @@ export function parseEmployeeInput(body: unknown, layout: FormLayout | null, tod
   const name = v.string('name', { min: 2, max: 255, pattern: NAME_PATTERN, patternMessage: 'Use letters, spaces, dots, hyphens and apostrophes only.' }).replace(/\s+/g, ' ');
   const rawEmail = v.string('email', { max: 254 });
   const email = rawEmail ? normalizeLoginEmail(rawEmail) : null;
-  if (rawEmail && !email) v.errors.email ||= 'Use an official @wii.gov.in or @edu.wii.gov.in email address.';
+  if (rawEmail && !email) v.errors.email ||= `Use an official email address ending in ${authConfig.loginEmailDomains.map((d) => `@${d}`).join(' or ')}.`;
   const gender = v.string('gender', { max: 40 });
   const dob = v.date('dob');
   const rawPhone = v.string('phone', { max: 20 });
