@@ -569,7 +569,6 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   };
 
   // Modals and Toasts State
-  const [editingUser, setEditingUser] = useState<UserType | null>(null);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [newUserForm, setNewUserForm] = useState({
     name: '',
@@ -1131,24 +1130,59 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   };
 
   // Handlers
-  const handleSaveEditUser = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingUser) return;
-    if (!editingUser.biometricId?.trim() && !editingUser.emergencyContactPhone?.trim()) {
-      alert('Biometric ID is mandatory. Please provide a valid Biometric ID.');
-      return;
-    }
-    if (!isAdmin) {
-      showToast('Only administrators can edit employee profiles.');
-      return;
-    }
-    updateUserProfile(editingUser.id, editingUser);
-    showToast(`Profile for ${editingUser.name} updated successfully!`);
-    setEditingUser(null);
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  /** Account being edited in the employee form, or null when adding a new one. */
+  const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
+
+  const closeEmployeeForm = () => {
+    setIsCreatingUser(false);
+    setEditingEmployeeId(null);
   };
 
-  const handleCreateUserSubmit = (e: React.FormEvent) => {
+  /** Opens the same form used for new employees, filled with the saved profile. */
+  const openEditEmployee = (u: UserType) => {
+    const saved = u as UserType & { permanentEmploymentType?: 'Direct' | 'Deputation'; enrolledThrough?: string };
+    setNewUserForm({
+      name: u.name || '',
+      suffix: u.suffix || '',
+      email: u.email || '',
+      gender: u.gender || '',
+      phone: u.phone || '',
+      emergencyContactPhone: '',
+      biometricId: u.biometricId || '',
+      permanentEmploymentType: saved.permanentEmploymentType || '',
+      shiftId: u.shiftId || '',
+      leaveCycle: u.leaveCycle || '',
+      leaveCycleBasis: u.leaveCycleBasis || '',
+      department: u.department || '',
+      designation: u.designation || '',
+      role: u.role,
+      employmentType: u.employmentType,
+      employeeCategory: u.employeeCategory || '',
+      isPhDEnrolled: Boolean(u.isPhDEnrolled),
+      officeLocation: u.officeLocation || '',
+      reportingManagerId: u.reportingManagerId || '',
+      reviewingManagerId: u.reviewingManagerId || users.find((m) => m.name === u.hodName)?.id || '',
+      joiningDate: u.joiningDate || '',
+      dob: u.dob || '',
+      isOnProbation: Boolean(u.isOnProbation),
+      probationEndDate: u.probationEndDate || '',
+      validUntilDate: u.validUntilDate || '',
+      piName: u.piName || '',
+      hodName: u.hodName || '',
+      courseProgram: u.courseProgram || '',
+      courseBatch: u.courseBatch || '',
+      enrolledThrough: saved.enrolledThrough || '',
+      guideSupervisor: u.guideSupervisor || ''
+    });
+    setEditingEmployeeId(u.id);
+    setIsCreatingUser(true);
+  };
+
+  const handleCreateUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (savingProfile) return;
     if (!isAdmin) {
       showToast('Only administrators can create employee profiles.');
       return;
@@ -1157,12 +1191,11 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     const missingFields: string[] = [];
     if (!newUserForm.suffix?.trim()) missingFields.push('Suffix');
     if (!newUserForm.name?.trim()) missingFields.push('Full Name');
-    if (!newUserForm.role) missingFields.push('Account Role');
     if (!newUserForm.gender?.trim()) missingFields.push('Gender');
     if (!newUserForm.dob?.trim()) missingFields.push('Date of Birth (DOB)');
     if (!newUserForm.phone?.trim()) missingFields.push('Mobile Number');
     if (!newUserForm.email?.trim()) missingFields.push('Email Address');
-    if (!newUserForm.biometricId?.trim() && !newUserForm.emergencyContactPhone?.trim()) missingFields.push('Biometric ID');
+    if (!/^\d{4}$/.test(newUserForm.biometricId?.trim() || '')) missingFields.push('Biometric ID (4 digits)');
     if (!newUserForm.employmentType) missingFields.push('Employee Type');
     if (!newUserForm.shiftId?.trim()) missingFields.push('Shift');
     if (!newUserForm.leaveCycle) missingFields.push('Leave Year Type');
@@ -1174,7 +1207,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       if (!newUserForm.designation?.trim()) missingFields.push('Designation');
       if (!newUserForm.department?.trim()) missingFields.push('Department / Section / Cell');
       if (!newUserForm.reportingManagerId?.trim()) missingFields.push('Reporting Manager');
-      if (!newUserForm.hodName?.trim()) missingFields.push('HoD');
+      if (!newUserForm.reviewingManagerId?.trim()) missingFields.push('HoD');
       if (newUserForm.permanentEmploymentType === 'Deputation' && !newUserForm.validUntilDate?.trim()) {
         missingFields.push('Valid Up To Date');
       }
@@ -1215,49 +1248,39 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       return;
     }
 
-    const defaultShiftId = shifts.find((s) => s.isDefault)?.id || shifts[0]?.id || 'shift-gen';
-    const chosenCycle = (newUserForm.leaveCycle as 'CY' | 'FY') || (isCalendarYearCadre(newUserForm.employmentType as EmploymentType) ? 'CY' : 'FY');
-
-    const created = addUserProfile({
+    // The server re-checks every field and writes users, employee_profiles,
+    // the HRMS role and the audit log together. The form only reports its answer.
+    const payload = {
+      ...newUserForm,
       name: newUserForm.name.trim(),
-      suffix: newUserForm.suffix,
-      email: newUserForm.email,
-      gender: newUserForm.gender,
+      biometricId: newUserForm.biometricId.trim(),
       avatar: '',
-      role: newUserForm.role,
+      role: newUserForm.role || 'general_staff',
       employmentType: newUserForm.employmentType as EmploymentType,
-      employeeCategory: newUserForm.employeeCategory,
-      isPhDEnrolled: newUserForm.isPhDEnrolled,
-      department: newUserForm.department,
-      designation: newUserForm.designation,
-      phone: newUserForm.phone,
-      emergencyContactPhone: newUserForm.emergencyContactPhone || newUserForm.biometricId,
-      biometricId: newUserForm.biometricId || newUserForm.emergencyContactPhone,
-      shiftId: newUserForm.shiftId,
-      leaveCycle: chosenCycle,
-      leaveCycleBasis: chosenCycle === 'FY' ? 'financial_year' : 'calendar_year',
-      officeLocation: newUserForm.officeLocation,
-      reportingManagerId: newUserForm.reportingManagerId,
-      reviewingManagerId: newUserForm.reviewingManagerId,
-      joiningDate: newUserForm.joiningDate,
-      dob: newUserForm.dob,
-      isOnProbation: newUserForm.isOnProbation,
-      probationEndDate: newUserForm.probationEndDate,
-      validUntilDate: newUserForm.validUntilDate,
-      piName: newUserForm.piName,
-      hodName: newUserForm.hodName,
-      courseProgram: newUserForm.courseProgram,
-      guideSupervisor: newUserForm.guideSupervisor,
-      status: 'active'
-    });
+      leaveCycle: newUserForm.leaveCycle as 'CY' | 'FY',
+      leaveCycleBasis: (newUserForm.leaveCycle === 'FY' ? 'financial_year' : 'calendar_year') as 'financial_year' | 'calendar_year',
+      status: 'active' as const
+    };
+    setSavingProfile(true);
+    let result;
+    try {
+      result = editingEmployeeId ? await updateUserProfile(editingEmployeeId, payload) : await addUserProfile(payload);
+    } finally {
+      setSavingProfile(false);
+    }
 
-    showToast(`New Employee profile created for ${created.name}!`);
-    setIsCreatingUser(false);
-    setSelectedUserId(created.id);
+    showToast(result.message);
+    if (!result.success) return;
+    const savedId = result.user?.id ?? editingEmployeeId;
+    closeEmployeeForm();
+    if (savedId) setSelectedUserId(savedId);
   };
 
   const handleOpenCreateEmployeeModal = () => {
+    setEditingEmployeeId(null);
     setNewUserForm({
+      permanentEmploymentType: '',
+      enrolledThrough: '',
       name: '',
       suffix: '' as string,
       email: '',
@@ -1323,7 +1346,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
     const biometricId = String((userToResetPasswordForm as UserType & { biometricId?: string; biometric_id?: string }).biometricId ??
       (userToResetPasswordForm as UserType & { biometric_id?: string }).biometric_id ?? '').trim();
-    if (!/^\\d{4}$/.test(biometricId)) {
+    if (!/^\d{4}$/.test(biometricId)) {
       showToast('Cannot reset password: this user has no valid biometric ID.');
       return;
     }
@@ -2321,15 +2344,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                           {isAdmin && (
                             <button
                               onClick={() => {
-                                const targetShiftId = u.shiftId || shifts.find((s) => s.isDefault)?.id || shifts[0]?.id || 'shift-gen';
-                                const targetCycle = u.leaveCycle || getUserLeaveCycleType(u);
-                                setEditingUser({
-                                  ...u,
-                                  shiftId: targetShiftId,
-                                  leaveCycle: targetCycle,
-                                  leaveCycleBasis: targetCycle === 'CY' ? 'calendar_year' : 'financial_year',
-                                  biometricId: u.biometricId || u.emergencyContactPhone || ''
-                                });
+                                openEditEmployee(u);
                               }}
                               className="bg-blue-50 hover:bg-blue-100 text-blue-700 font-extrabold p-2 rounded-xl text-xs border border-blue-200 cursor-pointer transition-colors"
                               title="Edit User Profile"
@@ -2512,13 +2527,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
                     <div>
                       <span className="text-[10px] text-slate-400 font-semibold block">Contact Phone</span>
-                      <span className="font-bold text-slate-900">{selectedUser.phone || '+91 98765 43210'}</span>
-                    </div>
-
-                    <div>
-                      <span className="text-[10px] text-slate-400 font-semibold block">Emergency Contact</span>
-                      <span className="font-bold text-slate-900">{selectedUser.emergencyContactName || 'Family / Guardian'}</span>
-                      <span className="text-[10px] text-slate-500 block">{selectedUser.emergencyContactPhone || '+91 99887 76655'}</span>
+                      <span className="font-bold text-slate-900">{selectedUser.phone || 'Not provided'}</span>
                     </div>
                   </div>
                 </div>
@@ -3361,886 +3370,6 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       )}
 
       {/* ==================================================================== */}
-      {/* MODAL 1: EDIT USER PROFILE */}
-      {/* ==================================================================== */}
-      {editingUser && (
-        <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
-          <div className="bg-white border border-slate-200 rounded-2xl shadow-xl max-w-xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
-            <div className="px-5 py-4 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white flex items-center justify-between shrink-0 border-b border-slate-800 rounded-t-2xl">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
-                  <Edit3 className="w-5 h-5 text-blue-400" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-base leading-tight text-white tracking-tight">
-                    Edit Profile: {editingUser.name}
-                  </h3>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setEditingUser(null)}
-                className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
-                aria-label="Close dialog"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveEditUser} className="flex flex-col flex-1 overflow-hidden min-h-0">
-              <div className="p-5 space-y-4 overflow-y-auto flex-1 text-xs">
-                {/* BLOCK 1: BASIC DETAILS */}
-              <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl space-y-3">
-                <div className="flex items-center space-x-2 text-slate-900 font-bold border-b border-slate-200 pb-2">
-                  <UserIcon className="w-4 h-4 text-blue-600" />
-                  <span className="uppercase tracking-wider text-[11px] text-slate-700">Basic Personal Details</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-600 font-bold mb-1">Name Suffix</label>
-                    <select
-                      value={editingUser.suffix || ''}
-                      onChange={(e) => setEditingUser({ ...editingUser, suffix: (e.target.value || undefined) as UserType['suffix'] })}
-                      className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white mb-2"
-                    >
-                      <option value="">No salutation</option>{salutationOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
-                    <label className="block text-slate-600 font-bold mb-1">Full Name *</label>
-                    <input
-                      type="text"
-                      required
-                      value={editingUser.name}
-                      onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })}
-                      className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-600 font-bold mb-1">Gender *</label>
-                    <select
-                      value={editingUser.gender || ''}
-                      onChange={(e) => setEditingUser({ ...editingUser, gender: e.target.value })}
-                      className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                    >
-                      {editingUser.gender && !genderOptions.some((o) => o.value === editingUser.gender) && <option value={editingUser.gender}>{editingUser.gender}</option>}
-                      {genderOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-600 font-bold mb-1">Date of Birth (DOB)</label>
-                    <input
-                      type="date"
-                      value={editingUser.dob || ''}
-                      onChange={(e) => setEditingUser({ ...editingUser, dob: e.target.value })}
-                      className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-600 font-bold mb-1">Mobile Number (Mob) *</label>
-                    <input
-                      type="text"
-                      required
-                      value={editingUser.phone || ''}
-                      onChange={(e) => setEditingUser({ ...editingUser, phone: e.target.value })}
-                      placeholder="+91 98765 43210"
-                      className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-600 font-bold mb-1">Email Address *</label>
-                    <input
-                      type="email"
-                      required
-                      value={editingUser.email}
-                      onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })}
-                      className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-600 font-bold mb-1">Biometric ID *</label>
-                    <input
-                      type="text"
-                      required
-                      value={editingUser.biometricId || editingUser.emergencyContactPhone || ''}
-                      onChange={(e) => setEditingUser({ ...editingUser, biometricId: e.target.value, emergencyContactPhone: e.target.value })}
-                      placeholder="e.g. BIO-8842 or 1002"
-                      className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* BLOCK 2: OFFICIAL DETAILS */}
-              <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl space-y-3">
-                <div className="flex items-center space-x-2 text-slate-900 font-bold border-b border-slate-200 pb-2">
-                  <Building className="w-4 h-4 text-emerald-600" />
-                  <span className="uppercase tracking-wider text-[11px] text-slate-700">Official &amp; Cadre Details</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {layoutOf(editingUser.employmentType) === 'contractual' ? (
-                    <>
-                      {/* Row 1: Primary Category & Designation */}
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Primary Category *</label>
-                        <select
-                          value={editingUser.employmentType}
-                          onChange={(e) => {
-                            const newCategory = e.target.value as EmploymentType;
-                            const defaultTypes = EMPLOYEE_TYPE_OPTIONS_MAP[newCategory] || ['Administrative', 'Scientific', 'Technical', 'Support'];
-                            setEditingUser({
-                              ...editingUser,
-                              employmentType: newCategory,
-                              employeeCategory: defaultTypes[0]
-                            });
-                          }}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                        >
-                          {employeeTypeOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Designation *</label>
-                        <select
-                          value={editingUser.designation}
-                          onChange={(e) => setEditingUser({ ...editingUser, designation: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                        >
-                          {editingUser.designation && !designationsMaster.includes(editingUser.designation) && (
-                            <option value={editingUser.designation}>{editingUser.designation}</option>
-                          )}
-                          {designationsMaster.map((desig) => (
-                            <option key={desig} value={desig}>{desig}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Row 2: Shift & Leave Year Type */}
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Shift *</label>
-                        <select
-                          value={editingUser.shiftId || (shifts.find(s => s.isDefault)?.id || shifts[0]?.id || '')}
-                          onChange={(e) => setEditingUser({ ...editingUser, shiftId: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                        >
-                          {shifts.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.code} - {s.name} ({s.startTime} - {s.endTime}){s.isDefault ? ' (Default)' : ''}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Leave Year Type *</label>
-                        <select
-                          value={editingUser.leaveCycle || getUserLeaveCycleType(editingUser)}
-                          onChange={(e) => {
-                            const val = e.target.value as 'CY' | 'FY';
-                            setEditingUser({
-                              ...editingUser,
-                              leaveCycle: val,
-                              leaveCycleBasis: val === 'CY' ? 'calendar_year' : 'financial_year'
-                            });
-                          }}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                        >
-                          <option value="CY">Calendar Year (CY: 01 Jan – 31 Dec)</option>
-                          <option value="FY">Financial Year (FY: 01 Apr – 31 Mar)</option>
-                        </select>
-                      </div>
-
-                      {/* Row 3: Department / Cell & Reporting Manager */}
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Department / Cell *</label>
-                        <select
-                          value={editingUser.department}
-                          onChange={(e) => setEditingUser({ ...editingUser, department: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                        >
-                          {editingUser.department && !departmentsMaster.includes(editingUser.department) && (
-                            <option value={editingUser.department}>{editingUser.department}</option>
-                          )}
-                          {departmentsMaster.map((dept) => (
-                            <option key={dept} value={dept}>{dept}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Reporting Manager (Level 1)</label>
-                        <select
-                          value={editingUser.reportingManagerId || ''}
-                          onChange={(e) => setEditingUser({ ...editingUser, reportingManagerId: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                        >
-                          <option value="">None / Direct</option>
-                          {users.filter(u => u.id !== editingUser.id).map((u) => (
-                            <option key={u.id} value={u.id}>
-                              {u.name} ({u.designation})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Row 4: Date of Joining & Valid Up To Date */}
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Date of Joining</label>
-                        <input
-                          type="date"
-                          value={editingUser.joiningDate || ''}
-                          onChange={(e) => setEditingUser({ ...editingUser, joiningDate: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Valid Up To Date</label>
-                        <input
-                          type="date"
-                          value={editingUser.validUntilDate || ''}
-                          onChange={(e) => setEditingUser({ ...editingUser, validUntilDate: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white"
-                        />
-                      </div>
-                    </>
-                  ) : layoutOf(editingUser.employmentType) === 'researcher' ? (
-                    <>
-                      {/* Row 1: Primary Category & Designation */}
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Primary Category *</label>
-                        <select
-                          value={editingUser.employmentType}
-                          onChange={(e) => {
-                            const newCategory = e.target.value as EmploymentType;
-                            const defaultTypes = EMPLOYEE_TYPE_OPTIONS_MAP[newCategory] || ['Administrative', 'Scientific', 'Technical', 'Support'];
-                            setEditingUser({
-                              ...editingUser,
-                              employmentType: newCategory,
-                              employeeCategory: defaultTypes[0]
-                            });
-                          }}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                        >
-                          {employeeTypeOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Designation *</label>
-                        <select
-                          value={editingUser.designation}
-                          onChange={(e) => setEditingUser({ ...editingUser, designation: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                        >
-                          {editingUser.designation && !designationsMaster.includes(editingUser.designation) && (
-                            <option value={editingUser.designation}>{editingUser.designation}</option>
-                          )}
-                          {designationsMaster.map((desig) => (
-                            <option key={desig} value={desig}>{desig}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Row 2: Shift & Leave Year Type */}
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Shift *</label>
-                        <select
-                          value={editingUser.shiftId || (shifts.find(s => s.isDefault)?.id || shifts[0]?.id || '')}
-                          onChange={(e) => setEditingUser({ ...editingUser, shiftId: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                        >
-                          {shifts.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.code} - {s.name} ({s.startTime} - {s.endTime}){s.isDefault ? ' (Default)' : ''}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Leave Year Type *</label>
-                        <select
-                          value={editingUser.leaveCycle || getUserLeaveCycleType(editingUser)}
-                          onChange={(e) => {
-                            const val = e.target.value as 'CY' | 'FY';
-                            setEditingUser({
-                              ...editingUser,
-                              leaveCycle: val,
-                              leaveCycleBasis: val === 'CY' ? 'calendar_year' : 'financial_year'
-                            });
-                          }}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                        >
-                          <option value="CY">Calendar Year (CY: 01 Jan – 31 Dec)</option>
-                          <option value="FY">Financial Year (FY: 01 Apr – 31 Mar)</option>
-                        </select>
-                      </div>
-
-                      {/* Row 3: Project Name & PI */}
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Project Name *</label>
-                        <input
-                          type="text"
-                          value={editingUser.department}
-                          onChange={(e) => setEditingUser({ ...editingUser, department: e.target.value })}
-                          placeholder="Enter Project Name"
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">PI (Principal Investigator)</label>
-                        <select
-                          value={editingUser.piName || ''}
-                          onChange={(e) => setEditingUser({ ...editingUser, piName: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                        >
-                          <option value="">Select PI</option>
-                          {users.filter(u => u.id !== editingUser.id).map((u) => (
-                            <option key={u.id} value={u.name}>
-                              {u.name} ({u.designation})
-                            </option>
-                          ))}
-                          {editingUser.piName && !users.some(u => u.name === editingUser.piName) && (
-                            <option value={editingUser.piName}>{editingUser.piName}</option>
-                          )}
-                        </select>
-                      </div>
-
-                      {/* Row 4: Date of Joining & Valid Up To Date */}
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Date of Joining</label>
-                        <input
-                          type="date"
-                          value={editingUser.joiningDate || ''}
-                          onChange={(e) => setEditingUser({ ...editingUser, joiningDate: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Valid Up To Date</label>
-                        <input
-                          type="date"
-                          value={editingUser.validUntilDate || ''}
-                          onChange={(e) => setEditingUser({ ...editingUser, validUntilDate: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white"
-                        />
-                      </div>
-
-                      {/* Dual Role Checkbox */}
-                      <div className="sm:col-span-2 p-2.5 bg-purple-50 border border-purple-200 rounded-lg">
-                        <label className="flex items-center space-x-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={!!editingUser.isPhDEnrolled}
-                            onChange={(e) => setEditingUser({ ...editingUser, isPhDEnrolled: e.target.checked })}
-                            className="rounded border-purple-300 text-purple-600 focus:ring-purple-500"
-                          />
-                          <span className="font-bold text-purple-900 text-xs">Simultaneously Enrolled in PhD Program? (Dual Role: Research + PhD)</span>
-                        </label>
-                      </div>
-                    </>
-                  ) : layoutOf(editingUser.employmentType) === 'intern' ? (
-                    <>
-                      {/* Row 1: Primary Category & Reporting Manager / PI */}
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Primary Category *</label>
-                        <select
-                          value={editingUser.employmentType}
-                          onChange={(e) => {
-                            const newCategory = e.target.value as EmploymentType;
-                            const defaultTypes = EMPLOYEE_TYPE_OPTIONS_MAP[newCategory] || ['Administrative', 'Scientific', 'Technical', 'Support'];
-                            setEditingUser({
-                              ...editingUser,
-                              employmentType: newCategory,
-                              employeeCategory: defaultTypes[0]
-                            });
-                          }}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                        >
-                          {employeeTypeOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Reporting Manager / PI</label>
-                        <select
-                          value={editingUser.reportingManagerId || ''}
-                          onChange={(e) => {
-                            const selectedId = e.target.value;
-                            const selectedUser = users.find(u => u.id === selectedId);
-                            setEditingUser({
-                              ...editingUser,
-                              reportingManagerId: selectedId,
-                              piName: selectedUser ? selectedUser.name : editingUser.piName
-                            });
-                          }}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                        >
-                          <option value="">Select Manager / PI</option>
-                          {users.filter(u => u.id !== editingUser.id).map((u) => (
-                            <option key={u.id} value={u.id}>
-                              {u.name} ({u.designation})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Row 2: Shift & Leave Year Type */}
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Shift *</label>
-                        <select
-                          value={editingUser.shiftId || (shifts.find(s => s.isDefault)?.id || shifts[0]?.id || '')}
-                          onChange={(e) => setEditingUser({ ...editingUser, shiftId: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                        >
-                          {shifts.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.code} - {s.name} ({s.startTime} - {s.endTime}){s.isDefault ? ' (Default)' : ''}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Leave Year Type *</label>
-                        <select
-                          value={editingUser.leaveCycle || getUserLeaveCycleType(editingUser)}
-                          onChange={(e) => {
-                            const val = e.target.value as 'CY' | 'FY';
-                            setEditingUser({
-                              ...editingUser,
-                              leaveCycle: val,
-                              leaveCycleBasis: val === 'CY' ? 'calendar_year' : 'financial_year'
-                            });
-                          }}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                        >
-                          <option value="CY">Calendar Year (CY: 01 Jan – 31 Dec)</option>
-                          <option value="FY">Financial Year (FY: 01 Apr – 31 Mar)</option>
-                        </select>
-                      </div>
-
-                      {/* Row 3: Date of Joining & Valid Up To Date */}
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Date of Joining</label>
-                        <input
-                          type="date"
-                          value={editingUser.joiningDate || ''}
-                          onChange={(e) => setEditingUser({ ...editingUser, joiningDate: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Valid Up To Date</label>
-                        <input
-                          type="date"
-                          value={editingUser.validUntilDate || ''}
-                          onChange={(e) => setEditingUser({ ...editingUser, validUntilDate: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white"
-                        />
-                      </div>
-                    </>
-                  ) : layoutOf(editingUser.employmentType) === 'bsc_msc_student' ? (
-                    <>
-                      {/* Row 1: Primary Category & Stream */}
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Primary Category *</label>
-                        <select
-                          value={editingUser.employmentType}
-                          onChange={(e) => {
-                            const newCategory = e.target.value as EmploymentType;
-                            const defaultTypes = EMPLOYEE_TYPE_OPTIONS_MAP[newCategory] || ['Administrative', 'Scientific', 'Technical', 'Support'];
-                            setEditingUser({
-                              ...editingUser,
-                              employmentType: newCategory,
-                              employeeCategory: defaultTypes[0]
-                            });
-                          }}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                        >
-                          {employeeTypeOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Stream *</label>
-                        <select
-                          value={editingUser.courseProgram || editingUser.employeeCategory || databaseStreams[0] || ''}
-                          onChange={(e) => setEditingUser({ ...editingUser, courseProgram: e.target.value, employeeCategory: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                        >
-                          {databaseStreams.map((stream) => (
-                            <option key={stream} value={stream}>{stream}</option>
-                          ))}
-                          {editingUser.courseProgram && !databaseStreams.includes(editingUser.courseProgram) && (
-                            <option value={editingUser.courseProgram}>{editingUser.courseProgram}</option>
-                          )}
-                        </select>
-                      </div>
-
-                      {/* Row 2: Shift & Leave Year Type */}
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Shift *</label>
-                        <select
-                          value={editingUser.shiftId || (shifts.find(s => s.isDefault)?.id || shifts[0]?.id || '')}
-                          onChange={(e) => setEditingUser({ ...editingUser, shiftId: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                        >
-                          {shifts.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.code} - {s.name} ({s.startTime} - {s.endTime}){s.isDefault ? ' (Default)' : ''}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Leave Year Type *</label>
-                        <select
-                          value={editingUser.leaveCycle || getUserLeaveCycleType(editingUser)}
-                          onChange={(e) => {
-                            const val = e.target.value as 'CY' | 'FY';
-                            setEditingUser({
-                              ...editingUser,
-                              leaveCycle: val,
-                              leaveCycleBasis: val === 'CY' ? 'calendar_year' : 'financial_year'
-                            });
-                          }}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                        >
-                          <option value="CY">Calendar Year (CY: 01 Jan – 31 Dec)</option>
-                          <option value="FY">Financial Year (FY: 01 Apr – 31 Mar)</option>
-                        </select>
-                      </div>
-
-                      {/* Row 3: PI (Principal Investigator) & Batch */}
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">PI (Principal Investigator) / Guide</label>
-                        <select
-                          value={editingUser.piName || ''}
-                          onChange={(e) => {
-                            const selectedName = e.target.value;
-                            const matchedUser = users.find(u => u.name === selectedName);
-                            setEditingUser({
-                              ...editingUser,
-                              piName: selectedName,
-                              guideSupervisor: selectedName,
-                              reportingManagerId: matchedUser ? matchedUser.id : editingUser.reportingManagerId
-                            });
-                          }}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                        >
-                          <option value="">Select PI / Guide</option>
-                          {users.filter(u => u.id !== editingUser.id).map((u) => (
-                            <option key={u.id} value={u.name}>
-                              {u.name} ({u.designation})
-                            </option>
-                          ))}
-                          {editingUser.piName && !users.some(u => u.name === editingUser.piName) && (
-                            <option value={editingUser.piName}>{editingUser.piName}</option>
-                          )}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Batch *</label>
-                        <select
-                          value={editingUser.courseBatch || databaseBatches[0] || ''}
-                          onChange={(e) => setEditingUser({ ...editingUser, courseBatch: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                        >
-                          {databaseBatches.map((batch) => (
-                            <option key={batch} value={batch}>{batch}</option>
-                          ))}
-                          {editingUser.courseBatch && !databaseBatches.includes(editingUser.courseBatch) && (
-                            <option value={editingUser.courseBatch}>{editingUser.courseBatch}</option>
-                          )}
-                        </select>
-                      </div>
-
-                      {/* Row 4: Date of Joining & Auto Calculate Valid Up To Date */}
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Date of Joining</label>
-                        <input
-                          type="date"
-                          value={editingUser.joiningDate || ''}
-                          onChange={(e) => {
-                            const newJoining = e.target.value;
-                            const autoValid = calculateStudentValidUntil(newJoining);
-                            setEditingUser({
-                              ...editingUser,
-                              joiningDate: newJoining,
-                              validUntilDate: autoValid || editingUser.validUntilDate
-                            });
-                          }}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1 flex items-center justify-between">
-                          <span>Valid Up To Date</span>
-                          <span className="text-[10px] text-cyan-700 font-normal bg-cyan-50 px-1.5 py-0.5 rounded border border-cyan-200">
-                            Auto (2 Years)
-                          </span>
-                        </label>
-                        <input
-                          type="date"
-                          value={
-                            editingUser.validUntilDate ||
-                            calculateStudentValidUntil(editingUser.joiningDate) ||
-                            ''
-                          }
-                          onChange={(e) => setEditingUser({ ...editingUser, validUntilDate: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-slate-50 font-semibold"
-                        />
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      {/* Row 1: Primary Category & Employee Type */}
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Primary Category *</label>
-                        <select
-                          value={editingUser.employmentType}
-                          onChange={(e) => {
-                            const newCategory = e.target.value as EmploymentType;
-                            const defaultTypes = EMPLOYEE_TYPE_OPTIONS_MAP[newCategory] || ['Administrative', 'Scientific', 'Technical', 'Support'];
-                            setEditingUser({
-                              ...editingUser,
-                              employmentType: newCategory,
-                              employeeCategory: defaultTypes[0]
-                            });
-                          }}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                        >
-                          {employeeTypeOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Employee Type</label>
-                        <select
-                          value={editingUser.employeeCategory || (EMPLOYEE_TYPE_OPTIONS_MAP[editingUser.employmentType]?.[0] || 'Administrative')}
-                          onChange={(e) => setEditingUser({ ...editingUser, employeeCategory: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                        >
-                          {(EMPLOYEE_TYPE_OPTIONS_MAP[editingUser.employmentType] || ['Administrative', 'Scientific', 'Technical', 'Support']).map((opt) => (
-                            <option key={opt} value={opt}>{opt}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Row 2: Shift & Leave Year Type */}
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Shift *</label>
-                        <select
-                          value={editingUser.shiftId || (shifts.find(s => s.isDefault)?.id || shifts[0]?.id || '')}
-                          onChange={(e) => setEditingUser({ ...editingUser, shiftId: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                        >
-                          {shifts.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.code} - {s.name} ({s.startTime} - {s.endTime}){s.isDefault ? ' (Default)' : ''}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Leave Year Type *</label>
-                        <select
-                          value={editingUser.leaveCycle || getUserLeaveCycleType(editingUser)}
-                          onChange={(e) => {
-                            const val = e.target.value as 'CY' | 'FY';
-                            setEditingUser({
-                              ...editingUser,
-                              leaveCycle: val,
-                              leaveCycleBasis: val === 'CY' ? 'calendar_year' : 'financial_year'
-                            });
-                          }}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                        >
-                          <option value="CY">Calendar Year (CY: 01 Jan – 31 Dec)</option>
-                          <option value="FY">Financial Year (FY: 01 Apr – 31 Mar)</option>
-                        </select>
-                      </div>
-
-                      {/* Row 3: Department / Cell & Designation */}
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Department / Cell *</label>
-                        <select
-                          value={editingUser.department}
-                          onChange={(e) => setEditingUser({ ...editingUser, department: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                        >
-                          {editingUser.department && !departmentsMaster.includes(editingUser.department) && (
-                            <option value={editingUser.department}>{editingUser.department}</option>
-                          )}
-                          {departmentsMaster.map((dept) => (
-                            <option key={dept} value={dept}>{dept}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Designation *</label>
-                        <select
-                          value={editingUser.designation}
-                          onChange={(e) => setEditingUser({ ...editingUser, designation: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                        >
-                          {editingUser.designation && !designationsMaster.includes(editingUser.designation) && (
-                            <option value={editingUser.designation}>{editingUser.designation}</option>
-                          )}
-                          {designationsMaster.map((desig) => (
-                            <option key={desig} value={desig}>{desig}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Row 4: Reporting Manager & HoD */}
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Reporting Manager (Level 1)</label>
-                        <select
-                          value={editingUser.reportingManagerId || ''}
-                          onChange={(e) => setEditingUser({ ...editingUser, reportingManagerId: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                        >
-                          <option value="">None / Direct</option>
-                          {users.filter(u => u.id !== editingUser.id).map((u) => (
-                            <option key={u.id} value={u.id}>
-                              {u.name} ({u.designation})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Head of Department (HoD)</label>
-                        <select
-                          value={editingUser.hodName || ''}
-                          onChange={(e) => setEditingUser({ ...editingUser, hodName: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
-                        >
-                          <option value="">Select HoD</option>
-                          {users.map((u) => (
-                            <option key={u.id} value={u.name}>
-                              {u.name} ({u.designation})
-                            </option>
-                          ))}
-                          {editingUser.hodName && !users.some(u => u.name === editingUser.hodName) && (
-                            <option value={editingUser.hodName}>{editingUser.hodName}</option>
-                          )}
-                        </select>
-                      </div>
-
-                      {/* Row 5: Date of Joining & Retirement Date */}
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Date of Joining</label>
-                        <input
-                          type="date"
-                          value={editingUser.joiningDate || ''}
-                          onChange={(e) => setEditingUser({ ...editingUser, joiningDate: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">Calculated Retirement Date</label>
-                        <div className="px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-900 font-bold rounded-lg text-xs flex flex-col justify-center min-h-[34px]">
-                          <span>{calculateRetirementDate(editingUser.dob)}</span>
-                        </div>
-                      </div>
-
-                      {/* Row 6: Probation Status */}
-                      <div className="sm:col-span-2 space-y-2 border-t border-slate-200 pt-2.5">
-                        <label className="flex items-center space-x-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={!!editingUser.isOnProbation}
-                            onChange={(e) => setEditingUser({ ...editingUser, isOnProbation: e.target.checked })}
-                            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                          />
-                          <span className="font-bold text-slate-700 text-xs">Currently on Probation?</span>
-                        </label>
-
-                        {editingUser.isOnProbation && (
-                          <div className="mt-2">
-                            <label className="block text-slate-600 font-bold mb-1">Tentative Probation End Date</label>
-                            <input
-                              type="date"
-                              value={editingUser.probationEndDate || ''}
-                              onChange={(e) => setEditingUser({ ...editingUser, probationEndDate: e.target.value })}
-                              className="w-full sm:w-1/2 px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  )}
-
-                  {layoutOf(editingUser.employmentType) === 'phd_student' && (
-                    <div className="sm:col-span-2 p-2.5 bg-purple-50 border border-purple-200 rounded-lg">
-                      <label className="flex items-center space-x-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={!!editingUser.isPhDEnrolled}
-                          onChange={(e) => setEditingUser({ ...editingUser, isPhDEnrolled: e.target.checked })}
-                          className="rounded border-purple-300 text-purple-600 focus:ring-purple-500"
-                        />
-                        <span className="font-bold text-purple-900 text-xs">Simultaneously Associated with Research Project / Project Staff? (Dual Role: PhD + Project)</span>
-                      </label>
-                    </div>
-                  )}
-
-                  <div className="sm:col-span-2">
-                    <label className="block text-slate-600 font-bold mb-1">Slack Handle</label>
-                    <input
-                      type="text"
-                      value={editingUser.slackHandle || ''}
-                      onChange={(e) => setEditingUser({ ...editingUser, slackHandle: e.target.value })}
-                      placeholder="@username"
-                      className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Pinned Modal Card Footer */}
-              <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-end space-x-3 shrink-0 rounded-b-xl">
-                <button
-                  type="button"
-                  onClick={() => setEditingUser(null)}
-                  className="px-4 py-2 border border-slate-300 text-slate-700 bg-white hover:bg-slate-100 font-semibold rounded-lg text-xs shadow-xs transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-lg text-xs shadow-sm transition-all flex items-center space-x-1.5 cursor-pointer"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>Save Profile Changes</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ==================================================================== */}
       {/* MODAL 2: CREATE NEW EMPLOYEE PROFILE */}
       {/* ==================================================================== */}
       {isCreatingUser && (
@@ -4253,13 +3382,13 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                 </div>
                 <div>
                   <h3 className="font-bold text-base leading-tight text-white tracking-tight">
-                    Add New Employee Profile
+                    {editingEmployeeId ? 'Edit Employee Profile' : 'Add New Employee Profile'}
                   </h3>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => setIsCreatingUser(false)}
+                onClick={closeEmployeeForm}
                 className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
                 aria-label="Close dialog"
               >
@@ -4369,8 +3498,12 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                       <input
                         type="text"
                         required
-                        value={newUserForm.biometricId || newUserForm.emergencyContactPhone}
-                        onChange={(e) => setNewUserForm({ ...newUserForm, biometricId: e.target.value, emergencyContactPhone: e.target.value })}
+                        inputMode="numeric"
+                        maxLength={4}
+                        readOnly={Boolean(editingEmployeeId)}
+                        title={editingEmployeeId ? 'The biometric ID cannot be changed after the employee is created.' : undefined}
+                        value={newUserForm.biometricId}
+                        onChange={(e) => setNewUserForm({ ...newUserForm, biometricId: e.target.value.replace(/\D/g, '').slice(0, 4) })}
                         placeholder="Enter Biometric ID"
                         className="w-full px-3 py-2 border border-slate-200/90 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 text-xs bg-white text-slate-900 font-semibold shadow-2xs transition-all"
                       />
@@ -4550,14 +3683,14 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             HoD <span className="text-blue-600 font-bold ml-0.5">*</span>
                           </label>
                           <AppSelect
-                            value={newUserForm.hodName}
+                            value={newUserForm.reviewingManagerId}
                             placeholder="Select HoD"
-                            onChange={(val) => setNewUserForm({ ...newUserForm, hodName: val })}
+                            onChange={(val) => setNewUserForm({ ...newUserForm, reviewingManagerId: val, hodName: users.find((u) => u.id === val)?.name || '' })}
                             options={[
                               { label: 'Select HoD', value: '' },
                               ...activeManagersAndHods.map((u) => ({
                                 label: `${u.name} (${u.designation || 'HoD'} - ${u.department || 'General'})`,
-                                value: u.name
+                                value: u.id
                               }))
                             ]}
                             className="w-full"
@@ -5458,17 +4591,18 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
               <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-end space-x-3 shrink-0 rounded-b-xl">
                 <button
                   type="button"
-                  onClick={() => setIsCreatingUser(false)}
+                  onClick={closeEmployeeForm}
                   className="px-4 py-2 border border-slate-300 text-slate-700 bg-white hover:bg-slate-100 font-semibold rounded-lg text-xs shadow-xs transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-lg text-xs shadow-sm transition-all flex items-center space-x-1.5 cursor-pointer"
+                  disabled={savingProfile}
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-lg text-xs shadow-sm transition-all flex items-center space-x-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-wait"
                 >
                   <UserPlus className="w-4 h-4" />
-                  <span>New Employee</span>
+                  <span>{savingProfile ? 'Saving…' : editingEmployeeId ? 'Save Changes' : 'New Employee'}</span>
                 </button>
               </div>
             </form>

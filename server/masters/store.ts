@@ -3,6 +3,7 @@ import type { PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/prom
 import { pool } from '../../src/db';
 import { HttpError, badRequest, notFound } from '../lib/http';
 import { writeMasterAuditSql } from './audit';
+import { inTransaction } from '../lib/tx';
 import {
   FORM_LAYOUTS, MASTERS, MasterDef, auditKey, describeUsage, findMaster, findUsage,
 } from './definitions';
@@ -177,20 +178,6 @@ async function validate(def: MasterDef, body: unknown, existing: MasterRecord | 
 // Writes (each in one transaction with its audit entry)
 // ---------------------------------------------------------------------------
 
-async function inTransaction<T>(work: (conn: PoolConnection) => Promise<T>): Promise<T> {
-  const conn = await pool.getConnection();
-  try {
-    await conn.beginTransaction();
-    const result = await work(conn);
-    await conn.commit();
-    return result;
-  } catch (error) {
-    await conn.rollback().catch(() => undefined);
-    throw error;
-  } finally {
-    conn.release();
-  }
-}
 
 function auditView(record: MasterRecord): Record<string, unknown> {
   return {

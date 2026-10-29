@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useSession } from '../auth/SessionContext';
 import { MASTERS_CHANGED_EVENT, MasterOptions, masterApi } from '../modules/hrms/master/masterApi';
+import { EmployeeRow, SaveResult, employeeApi, toSaveError } from '../modules/hrms/profile/employeeApi';
 import {
   User,
   UserRole,
@@ -248,8 +249,9 @@ interface AppContextType {
   ) => { success: boolean; processedCount: number; message: string };
 
   // Admin / Profile Actions
-  updateUserProfile: (userId: string, updatedFields: Partial<User>) => void;
-  addUserProfile: (newUser: Omit<User, 'id' | 'leaveBalances'>) => User;
+  updateUserProfile: (userId: string, updatedFields: Partial<User>) => Promise<SaveResult>;
+  addUserProfile: (newUser: Omit<User, 'id' | 'leaveBalances'>) => Promise<SaveResult>;
+  reloadEmployees: () => Promise<User[] | null>;
   updateUserRoleAndHierarchy: (
     userId: string,
     role: UserRole,
@@ -602,124 +604,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Employee identities must come from the authenticated server/database only.
   // Never hydrate the directory from browser-local seed/demo users.
   const [users, setUsers] = useState<User[]>([]);
-  // Load the employee directory from the authenticated backend, not from seed data.
-  // Keep the richer locally-defined fields for matching users while treating MySQL
-  // as authoritative for identity and the profile columns currently stored there.
+  // The employee directory always comes from the database (GET /api/hrms/employees).
+  // The server decides how much of each profile this user may see.
+  const toDirectoryUser = (row: EmployeeRow): User => {
+    let saved: Partial<User> = {};
+    try {
+      const parsed = JSON.parse(row.profileData || '{}');
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) saved = parsed as Partial<User>;
+    } catch {
+      console.warn('Ignoring invalid profile_data for employee:', row.id);
+    }
+    return {
+      ...saved,
+      id: String(row.id),
+      biometricId: row.biometricId,
+      suffix: row.suffix ?? undefined,
+      name: row.name,
+      email: row.email,
+      role: row.role,
+      roles: row.roles,
+      baseRole: row.role,
+      employmentType: (row.employmentType || '') as EmploymentType,
+      department: row.department || '',
+      designation: row.designation || '',
+      joiningDate: row.joiningDate ?? undefined,
+      phone: row.phone ?? undefined,
+      officeLocation: row.officeLocation ?? undefined,
+      shiftId: row.shiftId ?? undefined,
+      moduleRoles: row.moduleRoles as UserModuleRoles,
+      avatar: saved.avatar || '',
+      status: row.status === 'active' ? 'active' : 'deactivated',
+      leaveBalances: saved.leaveBalances || {},
+    };
+  };
+
+  const reloadEmployees = React.useCallback(async (): Promise<User[] | null> => {
+    try {
+      const rows = await employeeApi.list();
+      const next = Array.isArray(rows) ? rows.map(toDirectoryUser) : [];
+      setUsers(next);
+      return next;
+    } catch (error) {
+      // Never fall back to seed data for an authenticated directory.
+      console.error('Employee directory load failed:', error);
+      return null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (!isAuthenticated) return;
-
-    let cancelled = false;
-    const loadEmployees = async () => {
-      try {
-        const response = await fetch('/api/hrms/employees', {
-          credentials: 'same-origin',
-          headers: { Accept: 'application/json' },
-          cache: 'no-store'
-        });
-
-        if (!response.ok) {
-          throw new Error(response.status === 401
-            ? 'Your session has expired. Please sign in again.'
-            : 'Unable to load employee records from the server.');
-        }
-
-        const rows: Array<{
-          id: string;
-          biometricId: string | null;
-          name: string;
-          email: string;
-          role: string;
-          department: string | null;
-          designation: string | null;
-          employmentType: string | null;
-          joiningDate: string | null;
-          phone: string | null;
-          officeLocation: string | null;
-          shiftId: string | null;
-          profileData: string | null;
-          moduleRoles?: UserModuleRoles;
-        }> = await response.json();
-
-        if (cancelled || !Array.isArray(rows)) return;
-
-        const validRoles: UserRole[] = [
-          'administrator',
-          'reporting_manager',
-          'reviewing_manager',
-          'general_staff',
-          'audit'
-        ];
-        const validEmploymentTypes: EmploymentType[] = [
-          'permanent',
-          'contractual',
-          'researcher',
-          'diploma_trainee',
-          'intern',
-          'bsc_msc_student',
-          'phd_student'
-        ];
-
-        const databaseUsers: User[] = rows.map((row) => {
-          let savedProfile: Partial<User> = {};
-          if (row.profileData) {
-            try {
-              const parsed = JSON.parse(row.profileData);
-              if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-                savedProfile = parsed as Partial<User>;
-              }
-            } catch {
-              console.warn('Ignoring invalid profile_data for employee:', row.id);
-            }
-          }
-
-          const role = validRoles.includes(row.role as UserRole)
-            ? row.role as UserRole
-            : (savedProfile.role && validRoles.includes(savedProfile.role) ? savedProfile.role : 'general_staff');
-          const employmentType = validEmploymentTypes.includes(row.employmentType as EmploymentType)
-            ? row.employmentType as EmploymentType
-            : (savedProfile.employmentType && validEmploymentTypes.includes(savedProfile.employmentType)
-              ? savedProfile.employmentType : 'permanent');
-
-          return {
-            ...savedProfile,
-            id: row.id,
-            biometricId: row.biometricId || savedProfile.biometricId || (savedProfile as any).biometric_id || '',
-            name: row.name,
-            email: row.email,
-            role,
-            baseRole: savedProfile.baseRole || role,
-            employmentType,
-            department: row.department || savedProfile.department || 'Unassigned',
-            designation: row.designation || savedProfile.designation || 'Staff',
-            joiningDate: row.joiningDate || savedProfile.joiningDate,
-            phone: row.phone || savedProfile.phone,
-            officeLocation: row.officeLocation || savedProfile.officeLocation,
-            shiftId: row.shiftId || savedProfile.shiftId,
-            // Module roles are supplied by the server from the normalized user_module_roles table.
-            moduleRoles: row.moduleRoles || {},
-            avatar: savedProfile.avatar || '',
-            status: savedProfile.status || 'active',
-            leaveBalances: savedProfile.leaveBalances || {
-              casual: { total: 8, used: 0, pending: 0 },
-              earned: { total: 0, used: 0, pending: 0 },
-              half_pay: { total: 0, used: 0, pending: 0 },
-              restricted: { total: 2, used: 0, pending: 0 }
-            }
-          };
-        });
-
-        setUsers(databaseUsers);
-      } catch (error) {
-        // Do not silently fall back to seed data for an authenticated directory.
-        console.error('Employee directory load failed:', error);
-      }
-    };
-
-    void loadEmployees();
-    return () => {
-      cancelled = true;
-    };
-  }, [isAuthenticated]);
+    void reloadEmployees();
+  }, [isAuthenticated, reloadEmployees]);
 
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>(() => {
     const isLatestSeed = localStorage.getItem(SEED_VERSION_KEY);
@@ -3787,92 +3723,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // --- PROFILE ACTIONS ---
-  const updateUserProfile = (userId: string, updatedFields: Partial<User>) => {
+  /** Saves the employee form to the database, then reloads the directory from it. */
+  const updateUserProfile = async (userId: string, updatedFields: Partial<User>): Promise<SaveResult> => {
     const existing = users.find((user) => user.id === userId);
-    if (!existing) return;
-
-    const updatedUser: User = { ...existing, ...updatedFields };
-    setUsers((prev) => prev.map((user) => user.id === userId ? updatedUser : user));
-
-    // Persist profile changes to MySQL. Roll back the optimistic UI update on failure.
-    void fetch(`/api/hrms/employees/${encodeURIComponent(userId)}`, {
-      method: 'PUT',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      cache: 'no-store',
-      body: JSON.stringify(updatedUser)
-    }).then(async (response) => {
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.error || 'Could not save employee changes.');
-      }
-    }).catch((error) => {
-      console.error('Employee profile save failed:', error);
-      setUsers((prev) => prev.map((user) => user.id === userId ? existing : user));
-      window.alert(error instanceof Error ? error.message : 'Could not save employee changes.');
-    });
+    if (!existing) return { success: false, message: 'Employee account not found.' };
+    try {
+      const result = await employeeApi.update(userId, { ...existing, ...updatedFields });
+      const fresh = await reloadEmployees();
+      return { success: true, message: result.message, user: fresh?.find((u) => u.id === userId) };
+    } catch (error) {
+      return toSaveError(error, 'Could not save employee changes.');
+    }
   };
 
-  const addUserProfile = (newUser: Omit<User, 'id' | 'leaveBalances'>): User => {
-    const newId = `usr-${Date.now().toString().slice(-4)}`;
-    
-    let defaultBalances = {
-      casual: { total: 12, used: 0, pending: 0 },
-      earned: { total: 30, used: 0, pending: 0 },
-      half_pay: { total: 20, used: 0, pending: 0 },
-      restricted: { total: 2, used: 0, pending: 0 }
-    };
-
-    if (newUser.employmentType === 'contractual') {
-      defaultBalances = {
-        casual: { total: 8, used: 0, pending: 0 },
-        sick: { total: 6, used: 0, pending: 0 }
-      } as any;
-    } else if (newUser.employmentType === 'researcher') {
-      defaultBalances = {
-        casual: { total: 10, used: 0, pending: 0 },
-        field_work: { total: 30, used: 0, pending: 0 },
-        academic: { total: 15, used: 0, pending: 0 }
-      } as any;
-    } else if (
-      newUser.employmentType === 'diploma_trainee' ||
-      newUser.employmentType === 'intern' ||
-      newUser.employmentType === 'bsc_msc_student' ||
-      newUser.employmentType === 'phd_student'
-    ) {
-      defaultBalances = {
-        stipend_off: { total: 6, used: 0, pending: 0 },
-        contingency: { total: 5, used: 0, pending: 0 }
-      } as any;
+  const addUserProfile = async (newUser: Omit<User, 'id' | 'leaveBalances'>): Promise<SaveResult> => {
+    let createdUser: User;
+    try {
+      const result = await employeeApi.create(newUser);
+      const fresh = await reloadEmployees();
+      createdUser = fresh?.find((u) => u.id === String(result.employee.id)) ?? toDirectoryUser(result.employee);
+    } catch (error) {
+      return toSaveError(error, 'Could not save the new employee.');
     }
-
-    const createdUser: User = {
-      ...newUser,
-      id: newId,
-      baseRole: newUser.role,
-      leaveBalances: defaultBalances
-    };
-
-    setUsers((prev) => [...prev, createdUser]);
-
-    // Save the new account and full employee profile in MySQL. If the server rejects
-    // it (including duplicate email), remove the optimistic local record.
-    void fetch('/api/hrms/employees', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      cache: 'no-store',
-      body: JSON.stringify(createdUser)
-    }).then(async (response) => {
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.error || 'Could not save the new employee.');
-      }
-    }).catch((error) => {
-      console.error('Employee creation failed:', error);
-      setUsers((prev) => prev.filter((user) => user.id !== createdUser.id));
-      window.alert(error instanceof Error ? error.message : 'Could not save the new employee.');
-    });
 
     // Send Automated Email Notification to Concerning Parties (New User & Supervisor)
     if (emailConfig.notifyOnUserCreation && createdUser.email) {
@@ -3923,7 +3795,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
-    return createdUser;
+    return { success: true, message: `Employee ${createdUser.name} saved.`, user: createdUser };
   };
 
   // --- ADMIN ACTIONS ---
@@ -3975,30 +3847,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!targetUser) return { success: false, message: 'Employee account not found.' };
 
     const isActivating = targetUser.status === 'deactivated';
+    let savedDate = effectiveDate;
     try {
-      const response = await fetch(`/api/hrms/employees/${encodeURIComponent(userId)}/status`, {
-        method: 'PATCH',
-        credentials: 'same-origin',
-        cache: 'no-store',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({
-          status: isActivating ? 'active' : 'inactive',
-          reason: reason || '',
-          effectiveDate: effectiveDate || new Date().toISOString().slice(0, 10)
-        })
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        return { success: false, message: payload.error || payload.message || 'Account status could not be updated.' };
-      }
+      // The server checks responsibilities, writes users + profile + audit, and signs a deactivated user out.
+      const result = await employeeApi.setStatus(userId, isActivating ? 'active' : 'inactive', reason || '', effectiveDate || undefined);
+      savedDate = (result as { effectiveDate?: string }).effectiveDate || effectiveDate;
     } catch (error) {
-      console.error('Employee account status update failed:', error);
-      return { success: false, message: 'Unable to reach the server. Account status was not changed.' };
+      return toSaveError(error, 'Unable to reach the server. Account status was not changed.');
     }
 
-    // Update local state only after the server has confirmed the database change.
-    setUsers((prev) => prev.map((u) => u.id === userId ? { ...u, status: isActivating ? 'active' : 'deactivated' } : u));
-    const eventDate = effectiveDate || new Date().toISOString().split('T')[0];
+    // Show what the database now holds.
+    await reloadEmployees();
+    const eventDate = savedDate || new Date().toISOString().split('T')[0];
 
     if (!isActivating) {
       setProjectHistories((prev) => prev.map((item) => item.userId === userId && item.isOngoing
@@ -4049,21 +3909,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const existing = users.find((user) => user.id === userId);
     if (!existing) return { success: false, message: 'Employee account not found.' };
     try {
-      const response = await fetch(`/api/hrms/employees/${encodeURIComponent(userId)}`, {
-        method: 'DELETE',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        cache: 'no-store',
-        body: JSON.stringify({ reason, reference: reference || '' })
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) return { success: false, message: payload.error || 'Could not delete employee.' };
-      setUsers((prev) => prev.filter((user) => user.id !== userId));
-      return { success: true };
+      await employeeApi.remove(userId, reason, reference || '');
     } catch (error) {
-      console.error('Employee deletion failed:', error);
-      return { success: false, message: 'Unable to reach server. Employee account was not deleted.' };
+      return toSaveError(error, 'Unable to reach server. Employee account was not deleted.');
     }
+    await reloadEmployees();
+    return { success: true };
   };
 
   // --- MULTI-MODULE ROLES ACTIONS ---
@@ -4910,6 +4761,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         runYearEndLeaveRoll,
         updateUserProfile,
         addUserProfile,
+        reloadEmployees,
         updateUserRoleAndHierarchy,
         toggleUserStatus,
         deleteUser,
