@@ -8,6 +8,9 @@ import { eq, and } from 'drizzle-orm';
 import { randomInt } from 'node:crypto';
 import { EmailService } from '../integrations/email/email.service';
 import { isIP } from 'node:net';
+import { asyncHandler } from '../lib/http';
+import { escapeHtml } from '../lib/validate';
+import { destroyUserSessions } from '../lib/sessionStore';
 
 const router = Router();
 
@@ -141,10 +144,10 @@ async function validateEmployeeProfile(profile: Record<string, any>, employmentT
       !profile.dob?.trim() || !profile.joiningDate?.trim() || !profile.role || !employmentType) {
     return 'Complete all required personal, account, employment type, and joining-date fields.';
   }
-  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(String(profile.email))) return 'Enter a valid email address.';
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(String(profile.joiningDate)) ||
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(profile.email))) return 'Enter a valid email address.';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(profile.joiningDate)) ||
       Number.isNaN(Date.parse(String(profile.joiningDate)))) return 'Select a valid date of joining.';
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(String(profile.dob)) ||
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(profile.dob)) ||
       Number.isNaN(Date.parse(String(profile.dob)))) return 'Select a valid date of birth.';
   if (String(profile.phone).trim().length < 7 || String(profile.phone).trim().length > 20) return 'Enter a valid mobile number.';
   if (profile.shiftId) {
@@ -208,70 +211,75 @@ function toProfileRow(userId: string, profile: Record<string, any>, role: string
 }
 
 // Administrator-triggered portal password reset. Only the password hash is persisted.
-router.post('/employees/:biometricId/reset-password', isAuthenticated, isAdmin, async (req, res) => {
+// The target user is signed out of every device once the password changes.
+const TEMP_PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+function generateTemporaryPassword(length = 12): string {
+  let out = '';
+  for (let i = 0; i < length; i++) out += TEMP_PASSWORD_ALPHABET[randomInt(TEMP_PASSWORD_ALPHABET.length)];
+  return out;
+}
+
+router.post('/employees/:biometricId/reset-password', isAdmin, asyncHandler(async (req, res) => {
   const biometricId = String(req.params.biometricId || '').trim();
   const mode = req.body?.mode === 'custom' ? 'custom' : 'auto';
   const reason = String(req.body?.reason || '').trim().slice(0, 500);
   const customPassword = typeof req.body?.password === 'string' ? req.body.password : '';
 
-  if (!/^\\d{4}$/.test(biometricId)) {
+  if (!/^\d{4}$/.test(biometricId)) {
     return res.status(400).json({ error: 'A valid 4-digit biometric ID is required.' });
   }
-  if (mode === 'custom' && customPassword.length < 6) {
-    return res.status(400).json({ error: 'Custom password must be at least 6 characters long.' });
+  if (mode === 'custom' && (customPassword.length < 8 || customPassword.length > 128)) {
+    return res.status(400).json({ error: 'Custom password must be 8 to 128 characters long.' });
+  }
+  if (req.auth!.account.biometricId === biometricId) {
+    return res.status(400).json({ error: 'You cannot reset your own password from User Controls.' });
   }
 
-  try {
-    const [target] = await db.select({
-      id: users.id, name: users.name, email: users.email, biometricId: users.biometricId
-    }).from(users).where(eq(users.biometricId, biometricId)).limit(1);
-    if (!target) return res.status(404).json({ error: 'User account not found.' });
-    if (String(req.session?.biometricId || '') === biometricId) {
-      return res.status(400).json({ error: 'You cannot reset your own password from User Controls.' });
-    }
+  const [target] = await db.select({
+    id: users.id, name: users.name, email: users.email, biometricId: users.biometricId
+  }).from(users).where(eq(users.biometricId, biometricId)).limit(1);
+  if (!target) return res.status(404).json({ error: 'User account not found.' });
 
-    const temporaryPassword = mode === 'auto' ? String(randomInt(100000, 1000000)) : customPassword;
-    const passwordHash = await bcrypt.hash(temporaryPassword, 12);
-    await db.update(users).set({ passwordHash }).where(eq(users.biometricId, biometricId));
+  const temporaryPassword = mode === 'auto' ? generateTemporaryPassword() : customPassword;
+  const passwordHash = await bcrypt.hash(temporaryPassword, 12);
+  await db.update(users).set({ passwordHash }).where(eq(users.id, target.id));
+  await destroyUserSessions(target.id);
 
-    let emailStatus: 'delivered' | 'simulated' | 'not_required' = 'not_required';
-    if (mode === 'auto') {
-      const emailResult = await EmailService.sendEmail({
-        to: target.email,
-        toName: target.name,
-        subject: 'Your WII Portal temporary password',
-        text: `Dear ${target.name},\\n\\nAn administrator has reset your WII Portal password. Your temporary password is: ${temporaryPassword}\\n\\nPlease sign in and change it immediately.\\n\\nReference: ${reason || 'Official Reset Request'}\\n\\nIf you did not request this, contact the IT Cell.`,
-        html: `<p>Dear ${target.name},</p><p>An administrator has reset your WII Portal password.</p><p>Your temporary password is: <strong>${temporaryPassword}</strong></p><p>Please sign in and change it immediately.</p><p>Reference: ${reason || 'Official Reset Request'}</p><p>If you did not request this, contact the IT Cell.</p>`,
-        category: 'SECURITY',
-        eventType: 'PASSWORD_RESET',
-        referenceId: biometricId
+  let emailStatus: 'delivered' | 'simulated' | 'not_required' = 'not_required';
+  if (mode === 'auto') {
+    const reference = reason || 'Official Reset Request';
+    const emailResult = await EmailService.sendEmail({
+      to: target.email,
+      toName: target.name,
+      subject: 'Your WII Portal temporary password',
+      text: `Dear ${target.name},\n\nAn administrator has reset your WII Portal password. Your temporary password is: ${temporaryPassword}\n\nPlease sign in and change it immediately.\n\nReference: ${reference}\n\nIf you did not request this, contact the IT Cell.`,
+      html: `<p>Dear ${escapeHtml(target.name)},</p><p>An administrator has reset your WII Portal password.</p><p>Your temporary password is: <strong>${escapeHtml(temporaryPassword)}</strong></p><p>Please sign in and change it immediately.</p><p>Reference: ${escapeHtml(reference)}</p><p>If you did not request this, contact the IT Cell.</p>`,
+      category: 'SECURITY',
+      eventType: 'PASSWORD_RESET',
+      referenceId: biometricId
+    });
+    emailStatus = emailResult.status === 'delivered' ? 'delivered' : 'simulated';
+    if (emailStatus !== 'delivered') {
+      return res.status(502).json({
+        success: false,
+        passwordUpdated: true,
+        emailStatus,
+        error: 'Password was updated, but the email could not be delivered. Check the SMTP settings, then reset again.'
       });
-      emailStatus = emailResult.status === 'delivered' ? 'delivered' : 'simulated';
-      if (emailStatus !== 'delivered') {
-        return res.status(502).json({
-          success: false,
-          passwordUpdated: true,
-          emailStatus,
-          error: 'Password was updated in the database, but email delivery could not be confirmed. Verify SMTP configuration before retrying.'
-        });
-      }
     }
-
-    console.info('[PASSWORD_RESET]', JSON.stringify({
-      targetBiometricId: biometricId,
-      actorBiometricId: req.session?.biometricId || null,
-      mode,
-      reason,
-      timestamp: new Date().toISOString()
-    }));
-    return res.json({ success: true, passwordUpdated: true, emailStatus, message: mode === 'auto'
-      ? 'Password reset and temporary credential emailed successfully.'
-      : 'Password updated successfully.' });
-  } catch (error) {
-    console.error('Portal password reset failed:', error instanceof Error ? error.message : error);
-    return res.status(500).json({ error: 'Unable to reset the portal password.' });
   }
-});
+
+  console.info('[PASSWORD_RESET]', JSON.stringify({
+    targetBiometricId: biometricId,
+    actorBiometricId: req.auth!.account.biometricId,
+    mode,
+    reason,
+    timestamp: new Date().toISOString()
+  }));
+  return res.json({ success: true, passwordUpdated: true, emailStatus, message: mode === 'auto'
+    ? 'Password reset and temporary password emailed.'
+    : 'Password updated.' });
+}));
 
 // Create account and employee profile together. A random unknown initial password prevents
 // accidentally issuing a predictable credential; use the approved password-reset flow to activate login.
@@ -985,7 +993,7 @@ router.post('/profile-masters/organizations', isAdmin, async (req, res) => {
   const status = typeof body.status === 'string' && body.status.toUpperCase() === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE';
   if (!name || name.length > 255 || !code || code.length > 80) return res.status(400).json({ error: 'Organization name and code are required (maximum 255 and 80 characters).' });
   if (!['Department', 'Cell', 'Project', 'Division', 'Unit', 'Other'].includes(type)) return res.status(400).json({ error: 'Select a valid organization type.' });
-  try { await db.insert(organization_units).values({ name, code, type, status }); const [organization] = await db.select().from(organization_units).where(eq(organization_units.code, code)); if (organization) await db.insert(organization_unit_audit_logs).values({ organizationId: organization.id, organizationName: organization.name, organizationCode: organization.code, action: 'CREATE', changedByBiometricId: req.session?.biometricId || null, changedByName: req.session?.name || null, afterData: JSON.stringify(organization) }); return res.status(201).json(organization); }
+  try { await db.insert(organization_units).values({ name, code, type, status }); const [organization] = await db.select().from(organization_units).where(eq(organization_units.code, code)); if (organization) await db.insert(organization_unit_audit_logs).values({ organizationId: organization.id, organizationName: organization.name, organizationCode: organization.code, action: 'CREATE', changedByBiometricId: req.session?.biometricId || null, changedByName: req.auth?.account.name || null, afterData: JSON.stringify(organization) }); return res.status(201).json(organization); }
   catch (error: any) { if (error?.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Organization code already exists. Use a unique code.' }); console.error('Failed to create organization:', error); return res.status(500).json({ error: 'Failed to create organization.' }); }
 });
 router.put('/profile-masters/organizations/:id', isAdmin, async (req, res) => {
@@ -996,11 +1004,11 @@ router.put('/profile-masters/organizations/:id', isAdmin, async (req, res) => {
   const status = typeof body.status === 'string' && body.status.toUpperCase() === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE';
   if (!name || name.length > 255 || !code || code.length > 80) return res.status(400).json({ error: 'Organization name and code are required.' });
   if (!['Department', 'Cell', 'Project', 'Division', 'Unit', 'Other'].includes(type)) return res.status(400).json({ error: 'Select a valid organization type.' });
-  try { const [before] = await db.select().from(organization_units).where(eq(organization_units.id, Number(req.params.id))); if (!before) return res.status(404).json({ error: 'Organization not found.' }); await db.update(organization_units).set({ name, code, type, status }).where(eq(organization_units.id, Number(req.params.id))); const [organization] = await db.select().from(organization_units).where(eq(organization_units.id, Number(req.params.id))); if (!organization) return res.status(404).json({ error: 'Organization not found.' }); await db.insert(organization_unit_audit_logs).values({ organizationId: organization.id, organizationName: organization.name, organizationCode: organization.code, action: 'UPDATE', changedByBiometricId: req.session?.biometricId || null, changedByName: req.session?.name || null, beforeData: JSON.stringify(before), afterData: JSON.stringify(organization) }); return res.json(organization); }
+  try { const [before] = await db.select().from(organization_units).where(eq(organization_units.id, Number(req.params.id))); if (!before) return res.status(404).json({ error: 'Organization not found.' }); await db.update(organization_units).set({ name, code, type, status }).where(eq(organization_units.id, Number(req.params.id))); const [organization] = await db.select().from(organization_units).where(eq(organization_units.id, Number(req.params.id))); if (!organization) return res.status(404).json({ error: 'Organization not found.' }); await db.insert(organization_unit_audit_logs).values({ organizationId: organization.id, organizationName: organization.name, organizationCode: organization.code, action: 'UPDATE', changedByBiometricId: req.session?.biometricId || null, changedByName: req.auth?.account.name || null, beforeData: JSON.stringify(before), afterData: JSON.stringify(organization) }); return res.json(organization); }
   catch (error: any) { if (error?.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Organization code already exists. Use a unique code.' }); console.error('Failed to update organization:', error); return res.status(500).json({ error: 'Failed to update organization.' }); }
 });
 router.delete('/profile-masters/organizations/:id', isAdmin, async (req, res) => {
-  try { const [existing] = await db.select().from(organization_units).where(eq(organization_units.id, Number(req.params.id))); if (!existing) return res.status(404).json({ error: 'Organization not found.' }); await db.insert(organization_unit_audit_logs).values({ organizationId: existing.id, organizationName: existing.name, organizationCode: existing.code, action: 'DELETE', changedByBiometricId: req.session?.biometricId || null, changedByName: req.session?.name || null, beforeData: JSON.stringify(existing) }); await db.delete(organization_units).where(eq(organization_units.id, Number(req.params.id))); return res.json({ success: true }); }
+  try { const [existing] = await db.select().from(organization_units).where(eq(organization_units.id, Number(req.params.id))); if (!existing) return res.status(404).json({ error: 'Organization not found.' }); await db.insert(organization_unit_audit_logs).values({ organizationId: existing.id, organizationName: existing.name, organizationCode: existing.code, action: 'DELETE', changedByBiometricId: req.session?.biometricId || null, changedByName: req.auth?.account.name || null, beforeData: JSON.stringify(existing) }); await db.delete(organization_units).where(eq(organization_units.id, Number(req.params.id))); return res.json({ success: true }); }
   catch (error) { console.error('Failed to delete organization:', error); return res.status(500).json({ error: 'Failed to delete organization.' }); }
 });
 

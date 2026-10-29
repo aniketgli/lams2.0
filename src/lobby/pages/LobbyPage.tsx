@@ -1,194 +1,115 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { EnterpriseModuleId, UserRole, formatOrgAddress } from '../../types';
+import { useSession } from '../../auth/SessionContext';
+import { ServerModuleId, toUiModule } from '../../auth/access';
+import { ApiError } from '../../shared/services/api';
+import { formatOrgAddress } from '../../types';
 import { WIILogo } from '../../shared/components/WIILogo';
-import {
-  Users,
-  Package,
-  IndianRupee,
-  Building2,
-  FolderKanban,
-  LogOut,
-  Lock,
-  ArrowUpRight,
-  MapPin
-} from 'lucide-react';
+import { Alert } from '../../shared/components';
+import { Users, Package, IndianRupee, Building2, FolderKanban, LogOut, MapPin, Loader2 } from 'lucide-react';
 
-export interface LobbyPageProps {
-  onSelectModule: (moduleId: EnterpriseModuleId) => void;
-  onLogout?: () => void;
-}
-
-export type LobbyViewProps = LobbyPageProps;
-
-interface LobbyCardItem {
-  id: EnterpriseModuleId;
+interface ModuleCard {
   title: string;
   subtitle: string;
   icon: React.ComponentType<{ className?: string }>;
   iconBg: string;
-  allowedRoles: UserRole[];
 }
 
-const LOBBY_MODULES: LobbyCardItem[] = [
-  {
-    id: 'lams',
-    title: 'HRMS',
-    subtitle: 'Human Resource Management System',
-    icon: Users,
-    iconBg: 'bg-blue-600',
-    allowedRoles: ['administrator', 'audit', 'reporting_manager', 'reviewing_manager', 'general_staff']
-  },
-  {
-    id: 'sims',
-    title: 'Stock Inventory',
-    subtitle: 'Inventory & Supply Chain Management',
-    icon: Package,
-    iconBg: 'bg-emerald-600',
-    allowedRoles: ['administrator', 'audit', 'reporting_manager', 'reviewing_manager', 'general_staff']
-  },
-  {
-    id: 'finance',
-    title: 'Finance Management',
-    subtitle: 'Financial Planning & Accounting',
-    icon: IndianRupee,
-    iconBg: 'bg-purple-600',
-    allowedRoles: ['administrator', 'audit', 'reporting_manager', 'reviewing_manager', 'general_staff']
-  },
-  {
-    id: 'fms',
-    title: 'Facility Management',
-    subtitle: 'Facilities & Asset Management',
-    icon: Building2,
-    iconBg: 'bg-orange-600',
-    allowedRoles: ['administrator', 'audit', 'reporting_manager', 'reviewing_manager', 'general_staff']
-  },
-  {
-    id: 'pms',
-    title: 'Project Management',
-    subtitle: 'Projects & Task Tracking',
-    icon: FolderKanban,
-    iconBg: 'bg-teal-600',
-    allowedRoles: ['administrator', 'audit', 'reporting_manager', 'reviewing_manager', 'general_staff']
-  }
-];
+/** Presentation only. Which modules appear is decided by the server. */
+const MODULE_CARDS: Record<ServerModuleId, ModuleCard> = {
+  hrms: { title: 'HRMS', subtitle: 'Human Resource Management System', icon: Users, iconBg: 'bg-blue-600' },
+  stock: { title: 'Stock Inventory', subtitle: 'Inventory & Supply Chain Management', icon: Package, iconBg: 'bg-emerald-600' },
+  finance: { title: 'Finance Management', subtitle: 'Financial Planning & Accounting', icon: IndianRupee, iconBg: 'bg-purple-600' },
+  facility: { title: 'Facility Management', subtitle: 'Facilities & Asset Management', icon: Building2, iconBg: 'bg-orange-600' },
+  pms: { title: 'Project Management', subtitle: 'Projects & Task Tracking', icon: FolderKanban, iconBg: 'bg-teal-600' },
+};
 
-export const LobbyPage: React.FC<LobbyPageProps> = ({ onSelectModule, onLogout }) => {
-  const { currentUser, logout, orgBranding } = useApp();
-  const [assignedModules, setAssignedModules] = useState<string[]>([]);
-  const [accessLoaded, setAccessLoaded] = useState(false);
+export const LobbyPage: React.FC = () => {
+  const { orgBranding } = useApp();
+  const { session, enterModule, logout } = useSession();
+  const [opening, setOpening] = useState<ServerModuleId | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    fetch('/api/access/modules', { credentials: 'include', headers: { Accept: 'application/json' } })
-      .then(async (response) => {
-        if (!response.ok) throw new Error('Unable to load module assignments');
-        return response.json();
-      })
-      .then((data) => {
-        if (active) setAssignedModules(Array.isArray(data.modules) ? data.modules.map((item: { moduleId: string }) => item.moduleId) : []);
-      })
-      .catch(() => { if (active) setAssignedModules([]); })
-      .finally(() => { if (active) setAccessLoaded(true); });
-    return () => { active = false; };
-  }, []);
+  if (!session) return null;
+  const modules = session.modules;
 
-  const handleLogout = () => {
-    if (onLogout) {
-      onLogout();
-    } else {
-      logout();
+  const open = async (moduleId: ServerModuleId) => {
+    if (opening) return;
+    setError(null);
+    setOpening(moduleId);
+    try {
+      await enterModule(toUiModule(moduleId));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Unable to open this module.');
+      setOpening(null);
     }
   };
 
-  const isModuleAllowed = (card: LobbyCardItem) => {
-    const normalizedModule = ({ lams: 'hrms', sims: 'stock', fms: 'facility' } as Record<string, string>)[card.id] || card.id;
-    return assignedModules.includes(normalizedModule);
-  };
-
   return (
-    <div className="min-h-screen w-full bg-slate-50 text-slate-900 flex flex-col justify-between selection:bg-blue-500 selection:text-white">
-      {/* Top Navigation Bar with Logo and Logout */}
+    <div className="min-h-screen w-full bg-slate-50 text-slate-900 flex flex-col justify-between">
       <header className="w-full px-6 sm:px-10 lg:px-12 py-5 flex items-center justify-between">
-        {/* WII Brand Mark */}
-        <div className="flex items-center space-x-3">
-          <WIILogo variant="horizontal" size="md" />
-        </div>
-
-        {/* Right Actions: Logout Button */}
-        <div>
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 hover:text-slate-900 text-xs font-semibold shadow-2xs transition-all cursor-pointer"
-            title="Sign out of WII Enterprise Portal"
-          >
-            <LogOut className="w-3.5 h-3.5 text-slate-500" />
-            <span>Logout</span>
-          </button>
-        </div>
+        <WIILogo variant="horizontal" size="md" />
+        <button
+          type="button"
+          onClick={() => void logout()}
+          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 hover:text-slate-900 text-xs font-semibold transition-colors cursor-pointer"
+        >
+          <LogOut className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
+          <span>Sign out</span>
+        </button>
       </header>
 
-      {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-6 sm:px-10 lg:px-12 py-10 lg:py-16 flex flex-col justify-center">
-        {/* Welcome Headline */}
-        <div className="mb-10 sm:mb-12">
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-slate-900 tracking-tight">
-            Welcome back, {currentUser.name}!
-          </h1>
-        </div>
+        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-slate-900 tracking-tight mb-8 sm:mb-10">
+          Welcome back, {session.user.name}
+        </h1>
 
-        {/* 5 Cards Row - Responsive */}
-        <div className="flex flex-wrap items-stretch justify-center gap-4 sm:gap-5 lg:gap-5 xl:gap-6 w-full max-w-7xl mx-auto">
-          {LOBBY_MODULES.filter((mod) => accessLoaded && isModuleAllowed(mod)).map((mod) => {
-            const Icon = mod.icon;
-            const allowed = accessLoaded && isModuleAllowed(mod);
+        {error && (
+          <div className="mb-6 max-w-xl">
+            <Alert variant="error" onDismiss={() => setError(null)}>{error}</Alert>
+          </div>
+        )}
 
-            return (
-              <div
-                key={mod.id}
-                onClick={() => allowed && onSelectModule(mod.id)}
-                role="button"
-                tabIndex={allowed ? 0 : -1}
-                aria-disabled={!allowed}
-                className={`group relative bg-white border rounded-2xl p-6 sm:p-7 flex flex-col items-center text-center transition-all duration-200 select-none w-full max-w-[340px] sm:max-w-none sm:w-[calc(33.333%-14px)] md:w-[calc(33.333%-18px)] lg:w-[calc(20%-16px)] xl:w-[calc(20%-20px)] shrink-0 ${
-                  allowed
-                    ? 'border-slate-200/90 hover:border-slate-300 hover:shadow-lg hover:-translate-y-1 cursor-pointer'
-                    : 'border-slate-200 opacity-60 cursor-not-allowed'
-                }`}
-              >
-                {/* Module Icon Box */}
-                <div
-                  className={`w-16 h-16 rounded-2xl flex items-center justify-center text-white mb-5 shadow-2xs transition-transform duration-200 ${
-                    allowed ? 'group-hover:scale-105' : ''
-                  } ${mod.iconBg}`}
+        {modules.length === 0 ? (
+          <div className="max-w-xl bg-white border border-slate-200 rounded-2xl p-6 text-sm text-slate-600">
+            No modules are assigned to your account yet. Please contact the administrator.
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-stretch justify-center gap-4 sm:gap-5 xl:gap-6 w-full">
+            {modules.map(({ moduleId }) => {
+              const card = MODULE_CARDS[moduleId];
+              if (!card) return null;
+              const Icon = card.icon;
+              const isOpening = opening === moduleId;
+              return (
+                <button
+                  key={moduleId}
+                  type="button"
+                  onClick={() => void open(moduleId)}
+                  disabled={opening !== null}
+                  className="group bg-white border border-slate-200 rounded-2xl p-6 sm:p-7 flex flex-col items-center text-center transition-all duration-200 w-full max-w-[340px] sm:max-w-none sm:w-[calc(33.333%-14px)] lg:w-[calc(20%-16px)] hover:border-slate-300 hover:shadow-lg hover:-translate-y-1 disabled:hover:translate-y-0 disabled:opacity-70 cursor-pointer disabled:cursor-wait focus:outline-none focus-visible:ring-2 focus-visible:ring-[#701618]"
                 >
-                  <Icon className="w-8 h-8 stroke-[2.2]" />
-                </div>
-
-                {/* Module Title */}
-                <h3 className="font-bold text-slate-900 text-base tracking-tight mb-1.5 group-hover:text-blue-900 transition-colors">
-                  {mod.title}
-                </h3>
-
-                {/* Subtitle / Description */}
-                <p className="text-xs text-slate-500 font-normal leading-relaxed max-w-[190px]">
-                  {mod.subtitle}
-                </p>
-              </div>
-            );
-          })}
-        </div>
+                  <span className={`w-16 h-16 rounded-2xl flex items-center justify-center text-white mb-5 ${card.iconBg}`}>
+                    {isOpening ? <Loader2 className="w-8 h-8 animate-spin" aria-hidden="true" /> : <Icon className="w-8 h-8 stroke-[2.2]" />}
+                  </span>
+                  <span className="font-bold text-slate-900 text-base tracking-tight mb-1.5">{card.title}</span>
+                  <span className="text-xs text-slate-500 leading-relaxed max-w-[190px]">{card.subtitle}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </main>
 
-      {/* Subtle Footer with Copyright on one side and Address on the other side */}
-      <footer className="w-full px-6 sm:px-10 lg:px-12 py-5 bg-white border-t border-slate-200 text-xs text-slate-500 font-medium shrink-0">
+      <footer className="w-full px-6 sm:px-10 lg:px-12 py-5 bg-white border-t border-slate-200 text-xs text-slate-500 font-medium">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-center sm:text-left">
-          <p>{orgBranding?.copyrightText || `© ${new Date().getFullYear()} ${orgBranding?.orgName || 'Wildlife Institute of India'} • Integrated Enterprise Portal`}</p>
-          <div className="flex items-center space-x-1.5 text-slate-600 text-[11px] sm:text-xs">
-            <MapPin className="w-3.5 h-3.5 text-[#701618] shrink-0" />
-            <span>{formatOrgAddress(orgBranding)}</span>
-          </div>
+          <p>{orgBranding?.copyrightText || `© ${new Date().getFullYear()} ${orgBranding?.orgName || 'Wildlife Institute of India'}`}</p>
+          {formatOrgAddress(orgBranding) && (
+            <p className="flex items-center gap-1.5 text-slate-600">
+              <MapPin className="w-3.5 h-3.5 text-[#701618] shrink-0" aria-hidden="true" />
+              <span>{formatOrgAddress(orgBranding)}</span>
+            </p>
+          )}
         </div>
       </footer>
     </div>

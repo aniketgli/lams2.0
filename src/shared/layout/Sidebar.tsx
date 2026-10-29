@@ -40,7 +40,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const {
     currentUser,
     users,
-    setCurrentUserId,
     orgBranding,
     setIsLogoViewerOpen
   } = useApp();

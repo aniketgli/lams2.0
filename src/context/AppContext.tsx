@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useSession } from '../auth/SessionContext';
 import {
   User,
   UserRole,
@@ -68,10 +69,7 @@ interface AppContextType {
   users: User[];
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, password?: string) => Promise<{ success: boolean; message: string }>;
   logout: () => void;
-  setCurrentUserId: (id: string) => void;
-  applyActiveSessionRole: (roleLabel: string) => void;
   attendanceRecords: AttendanceRecord[];
   manualAttendanceRequests: ManualAttendanceRegularizationRequest[];
   odRequests: OutdoorDutyRequest[];
@@ -470,7 +468,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [coursesMaster, setCoursesMaster] = useState<string[]>([]);
   const [batchesMaster, setBatchesMaster] = useState<string[]>([]);
   const [phdEnrollmentMaster, setPhdEnrollmentMaster] = useState<string[]>([]);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  // Identity, modules and the active role come only from the server session.
+  const { status: sessionStatus, session, logout: sessionLogout } = useSession();
+  const isAuthenticated = sessionStatus === 'signedIn' && Boolean(session);
+  const isLoading = sessionStatus === 'loading';
   const [locationsMaster, setLocationsMaster] = useState<string[]>(() => {
     const saved = localStorage.getItem('la_hub_locations_master');
     return saved ? JSON.parse(saved) : DEFAULT_LOCATIONS_MASTER;
@@ -611,39 +612,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Employee identities must come from the authenticated server/database only.
   // Never hydrate the directory from browser-local seed/demo users.
   const [users, setUsers] = useState<User[]>([]);
-  const [currentUserId, setCurrentUserId] = useState<string>('');
-
-  const [sessionUser, setSessionUser] = useState<Partial<User> | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-
-  useEffect(() => {
-    fetch('/api/auth/me')
-      .then((res) => {
-        if (res.ok) return res.json();
-        throw new Error('Unauthorized');
-      })
-      .then((data) => {
-        const authenticatedUser = data.user && typeof data.user === 'object' ? data.user : null;
-        const userId = authenticatedUser?.id || data.userId;
-        if (userId) setCurrentUserId(userId);
-        if (authenticatedUser) {
-          const activeRoleMap: Record<string, string> = {
-            Administrator: 'administrator', Auditor: 'audit', 'Reporting Manager': 'reporting_manager',
-            HoD: 'reviewing_manager', User: 'general_staff'
-          };
-          const activeRole = typeof data.activeRole === 'string' ? activeRoleMap[data.activeRole] : undefined;
-          setSessionUser({ ...authenticatedUser, ...(activeRole ? { role: activeRole, baseRole: authenticatedUser.role || activeRole } : {}) });
-        }
-        setIsAuthenticated(true);
-      })
-      .catch(() => {
-        setIsAuthenticated(false);
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
-  }, []);
-
   // Load the employee directory from the authenticated backend, not from seed data.
   // Keep the richer locally-defined fields for matching users while treating MySQL
   // as authoritative for identity and the profile columns currently stored there.
@@ -1320,65 +1288,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem('la_hub_transfer_logs', JSON.stringify(transferLogs));
   }, [transferLogs]);
 
-  // Save to localStorage
-  useEffect(() => {
-    localStorage.setItem('la_hub_users', JSON.stringify(users));
-  }, [users]);
-
-  useEffect(() => {
-    localStorage.setItem('la_hub_current_user_id', currentUserId);
-  }, [currentUserId]);
-
-  useEffect(() => {
-    localStorage.setItem('la_hub_is_authenticated', String(isAuthenticated));
-  }, [isAuthenticated]);
-
-  const login = async (email: string, password?: string) => {
-    try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-      if (!res.ok) {
-        const error = await res.json();
-        return { success: false, message: error.message || 'Login failed' };
-      }
-      const data = await res.json();
-      setCurrentUserId(data.user.id);
-      setSessionUser(data.user);
-      setIsAuthenticated(true);
-      return { success: true, message: `Welcome back, ${data.user.name}!` };
-    } catch (err: any) {
-      return { success: false, message: 'Network error during login' };
-    }
-  };
-
-  const applyActiveSessionRole = (roleLabel: string) => {
-    const roleMap: Record<string, string> = {
-      Administrator: 'administrator',
-      Auditor: 'audit',
-      'Reporting Manager': 'reporting_manager',
-      HoD: 'reviewing_manager',
-      User: 'general_staff'
-    };
-    const role = roleMap[roleLabel];
-    if (!role) return;
-    setSessionUser((previous) => previous ? { ...previous, role } : previous);
-  };
-
-  const logout = async () => {
-    try {
-      await fetch('/api/auth/logout', {
-        method: 'POST',
-        credentials: 'same-origin',
-        cache: 'no-store'
-      });
-    } finally {
-      setIsAuthenticated(false);
-      setCurrentUserId('');
-      setSessionUser(null);
-    }
+  const logout = () => {
+    void sessionLogout();
   };
 
   useEffect(() => {
@@ -1405,14 +1316,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem('la_hub_slack_logs', JSON.stringify(slackLogs));
   }, [slackLogs]);
 
-  // The server session is the identity source of truth. Keep the signed-in user's
-  // name and role visible immediately, even while the employee directory loads.
-  const localCurrentUser = users.find((u) => u.id === currentUserId);
-  const currentUser = (sessionUser
-    ? ({ ...(localCurrentUser || {}), ...sessionUser, id: currentUserId || sessionUser.id } as User)
-    : localCurrentUser) as User;
-
-
+  // The server session is the identity source of truth. The directory entry
+  // (loaded from /api/hrms/employees) only adds profile details for display.
+  const sessionUserId = session?.user.id ?? '';
+  const directoryEntry = users.find((u) => String(u.id) === sessionUserId);
+  const currentUser = (session
+    ? ({
+        ...(directoryEntry || {}),
+        id: sessionUserId,
+        biometricId: session.user.biometricId,
+        name: session.user.name,
+        email: session.user.email,
+        role: session.activeRole ?? 'general_staff',
+        roles: session.modules.find((m) => m.moduleId === 'hrms')?.roles ?? [],
+        leaveBalances: directoryEntry?.leaveBalances ?? {},
+      } as User)
+    : undefined) as User;
 
   const addSlackLog = (log: SlackNotification) => {
     setSlackLogs((prev) => [log, ...prev]);
@@ -4913,8 +4832,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const resetAllData = () => {
     localStorage.clear();
-    setUsers(INITIAL_USERS);
-    setCurrentUserId('usr-1');
     setAttendanceRecords(generateSeedAttendance());
     setOdRequests(INITIAL_OD_REQUESTS);
     setManualAttendanceRequests(INITIAL_MANUAL_ATTENDANCE_REQUESTS);
@@ -4943,11 +4860,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         currentUser,
         users,
         isAuthenticated,
-        login,
-
+        isLoading,
         logout,
-        setCurrentUserId,
-        applyActiveSessionRole,
 
         attendanceRecords,
         manualAttendanceRequests,
