@@ -133,11 +133,11 @@ export const MetricCard: React.FC<MetricCardProps> = ({
 }) => {
   const variantsMap = {
     primary: {
-      bg: 'bg-[#eff6ff]/60 border-[#bfdbfe]',
-      titleColor: 'text-[#2563eb]',
-      valueColor: 'text-[#1e40af]',
-      iconBg: 'bg-[#dbeafe] border-[#bfdbfe] text-[#2563eb]',
-      subColor: 'text-[#2563eb]'
+      bg: 'bg-primary-subtle/60 border-primary-border',
+      titleColor: 'text-primary',
+      valueColor: 'text-primary-active',
+      iconBg: 'bg-primary-light border-primary-border text-primary',
+      subColor: 'text-primary'
     },
     slate: {
       bg: 'bg-white border-slate-200/90',

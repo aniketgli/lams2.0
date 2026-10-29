@@ -98,7 +98,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                   } • Integrated Enterprise Suite (WII-ERP)`}
               </p>
               <div className="flex items-center space-x-1.5 text-slate-600 font-medium text-[11px] sm:text-xs">
-                <MapPin className="w-3.5 h-3.5 text-[#2563eb] shrink-0" />
+                <MapPin className="w-3.5 h-3.5 text-primary shrink-0" />
                 <span>{formatOrgAddress(orgBranding)}</span>
               </div>
             </div>

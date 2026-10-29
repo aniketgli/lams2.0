@@ -73,7 +73,7 @@ export const LogoViewerModal: React.FC<LogoViewerModalProps> = ({
         <div className="bg-gradient-to-b from-amber-50/70 via-amber-50/20 to-white border border-amber-200/90 rounded-xl p-5 flex flex-col items-center justify-center text-center shadow-2xs relative">
           <div className="absolute top-3 right-3 flex items-center space-x-1.5">
             <Badge variant="primary" size="sm">
-              <Sparkles className="w-3 h-3 text-[#2563eb] mr-1" />
+              <Sparkles className="w-3 h-3 text-primary mr-1" />
               {orgBranding.badgeText || 'HUB'}
             </Badge>
           </div>
@@ -148,7 +148,7 @@ export const LogoViewerModal: React.FC<LogoViewerModalProps> = ({
 
           <div className="flex items-start justify-between border-b border-slate-200/80 pb-2">
             <span className="text-slate-500 font-medium flex items-center space-x-1.5 shrink-0 pt-0.5">
-              <MapPin className="w-3.5 h-3.5 text-[#2563eb]" />
+              <MapPin className="w-3.5 h-3.5 text-primary" />
               <span>Address</span>
             </span>
             <span className="font-medium text-slate-800 text-right text-[11px] max-w-xs">

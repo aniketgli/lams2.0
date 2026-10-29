@@ -58,7 +58,7 @@ export const Badge: React.FC<BadgeProps> = ({
       warning: 'bg-amber-500',
       error: 'bg-rose-600',
       info: 'bg-blue-600',
-      primary: 'bg-[#2563eb]',
+      primary: 'bg-primary',
       neutral: 'bg-slate-400'
     };
 
@@ -67,7 +67,7 @@ export const Badge: React.FC<BadgeProps> = ({
       warning: 'text-amber-700',
       error: 'text-rose-700',
       info: 'text-blue-700',
-      primary: 'text-[#2563eb]',
+      primary: 'text-primary',
       neutral: 'text-slate-600'
     };
 
@@ -91,7 +91,7 @@ export const Badge: React.FC<BadgeProps> = ({
     warning: 'bg-amber-50 text-amber-800 border-amber-200',
     error: 'bg-rose-50 text-rose-800 border-rose-200',
     info: 'bg-blue-50 text-blue-800 border-blue-200',
-    primary: 'bg-[#eff6ff] text-[#2563eb] border-[#bfdbfe]',
+    primary: 'bg-primary-subtle text-primary border-primary-border',
     neutral: 'bg-slate-100 text-slate-700 border-slate-200'
   };
 

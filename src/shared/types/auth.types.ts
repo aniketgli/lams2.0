@@ -22,7 +22,8 @@ export interface UserModuleRoles {
 export interface User {
   id: string;
   name: string;
-  suffix?: 'Mr.' | 'Mrs.' | 'Miss' | 'Dr.';
+  /** Salutation code from the salutation master (Mr., Dr., ...). */
+  suffix?: string;
   email: string;
   avatar: string;
   role: UserRole;

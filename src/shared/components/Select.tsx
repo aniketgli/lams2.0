@@ -362,8 +362,8 @@ export const Select: React.FC<SelectProps> = ({
                         onClick={() => handleToggleOption(opt.value)}
                         className={`w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center justify-between text-left disabled:opacity-40 disabled:cursor-not-allowed ${
                           isSelected
-                            ? 'bg-[#2563eb] text-white font-bold shadow-2xs'
-                            : 'text-slate-700 hover:bg-[#eff6ff] hover:text-[#2563eb]'
+                            ? 'bg-primary text-white font-bold shadow-2xs'
+                            : 'text-slate-700 hover:bg-primary-subtle hover:text-primary'
                         }`}
                       >
                         <div className="flex items-center space-x-2 truncate pr-2 min-w-0">

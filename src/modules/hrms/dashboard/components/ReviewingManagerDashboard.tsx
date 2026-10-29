@@ -41,33 +41,33 @@ export const ReviewingManagerDashboard: React.FC<ReviewingManagerDashboardProps>
           <button
             type="button"
             onClick={() => onNavigate('manual_attendance')}
-            className="p-3.5 bg-[#204088]/5 hover:bg-[#204088]/10 text-[#204088] border-[#204088]/20 hover:border-[#204088]/40 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 text-center group"
+            className="p-3.5 bg-primary/5 hover:bg-primary/10 text-primary border-primary/20 hover:border-primary/40 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 text-center group"
           >
-            <Clock className="w-5 h-5 text-[#204088] shrink-0 transition-colors" />
+            <Clock className="w-5 h-5 text-primary shrink-0 transition-colors" />
             <span>Manual Attendance</span>
           </button>
           <button
             type="button"
             onClick={() => onNavigate('od')}
-            className="p-3.5 bg-[#204088]/5 hover:bg-[#204088]/10 text-[#204088] border-[#204088]/20 hover:border-[#204088]/40 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 text-center group"
+            className="p-3.5 bg-primary/5 hover:bg-primary/10 text-primary border-primary/20 hover:border-primary/40 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 text-center group"
           >
-            <MapPin className="w-5 h-5 text-[#204088] shrink-0 transition-colors" />
+            <MapPin className="w-5 h-5 text-primary shrink-0 transition-colors" />
             <span>Outdoor Duty</span>
           </button>
           <button
             type="button"
             onClick={() => onNavigate('leave')}
-            className="p-3.5 bg-[#204088]/5 hover:bg-[#204088]/10 text-[#204088] border-[#204088]/20 hover:border-[#204088]/40 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 text-center group"
+            className="p-3.5 bg-primary/5 hover:bg-primary/10 text-primary border-primary/20 hover:border-primary/40 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 text-center group"
           >
-            <Calendar className="w-5 h-5 text-[#204088] shrink-0 transition-colors" />
+            <Calendar className="w-5 h-5 text-primary shrink-0 transition-colors" />
             <span>Leave Management</span>
           </button>
           <button
             type="button"
             onClick={() => onNavigate('holiday_calendar')}
-            className="p-3.5 bg-[#204088]/5 hover:bg-[#204088]/10 text-[#204088] border-[#204088]/20 hover:border-[#204088]/40 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 text-center group"
+            className="p-3.5 bg-primary/5 hover:bg-primary/10 text-primary border-primary/20 hover:border-primary/40 rounded-xl font-bold text-xs flex flex-col items-center justify-center space-y-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 text-center group"
           >
-            <Calendar className="w-5 h-5 text-[#204088] shrink-0 transition-colors" />
+            <Calendar className="w-5 h-5 text-primary shrink-0 transition-colors" />
             <span>Holiday Calendar</span>
           </button>
         </div>
@@ -77,7 +77,7 @@ export const ReviewingManagerDashboard: React.FC<ReviewingManagerDashboardProps>
       <div className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <h3 className="text-sm font-bold text-slate-900 flex items-center space-x-2 min-w-0">
-            <FileText className="w-4.5 h-4.5 text-[#204088] shrink-0" />
+            <FileText className="w-4.5 h-4.5 text-primary shrink-0" />
             <span className="truncate">Pending Leave Level-2 Approvals</span>
           </h3>
           <button

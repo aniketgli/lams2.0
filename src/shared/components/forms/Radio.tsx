@@ -51,11 +51,11 @@ export const Radio = React.forwardRef<HTMLInputElement, RadioProps>(
           <div
             className={`w-4 h-4 rounded-full border flex items-center justify-center transition-all ${
               checked
-                ? 'border-[#2563eb] bg-white shadow-2xs'
+                ? 'border-primary bg-white shadow-2xs'
                 : 'border-slate-300 bg-white peer-hover:border-slate-400 peer-focus:ring-2 peer-focus:ring-blue-600/20'
             } ${disabled ? 'bg-slate-100 border-slate-200' : ''} ${className}`}
           >
-            {checked && <div className="w-2 h-2 rounded-full bg-[#2563eb]" />}
+            {checked && <div className="w-2 h-2 rounded-full bg-primary" />}
           </div>
         </div>
 

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useSession } from '../auth/SessionContext';
+import { MASTERS_CHANGED_EVENT, MasterOptions, masterApi } from '../modules/hrms/master/masterApi';
 import {
   User,
   UserRole,
@@ -69,6 +70,8 @@ interface AppContextType {
   users: User[];
   isAuthenticated: boolean;
   isLoading: boolean;
+  /** Active values of every master (salutation, gender, employee type, departments, ...). */
+  masterOptions: MasterOptions;
   logout: () => void;
   attendanceRecords: AttendanceRecord[];
   manualAttendanceRequests: ManualAttendanceRegularizationRequest[];
@@ -477,49 +480,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return saved ? JSON.parse(saved) : DEFAULT_LOCATIONS_MASTER;
   });
 
+  // All dropdown masters come from one server call (/api/hrms/masters/options),
+  // reloaded whenever any master changes (MASTERS_CHANGED_EVENT).
+  const [masterOptions, setMasterOptions] = useState<MasterOptions>({});
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || !session?.activeModule) return;
     let cancelled = false;
-    const masterEndpoints = [
-      { endpoint: 'organizations', setter: setDepartmentsMaster },
-      { endpoint: 'designations', setter: setDesignationsMaster },
-      { endpoint: 'categories', setter: setCategoriesMaster },
-      { endpoint: 'projects', setter: setProjectsMaster },
-      { endpoint: 'courses', setter: setCoursesMaster },
-      { endpoint: 'mscBatches', setter: setBatchesMaster },
-      { endpoint: 'phdEnrollment', setter: setPhdEnrollmentMaster },
-    ] as const;
-
-    const loadProfileMasters = () => {
-      void Promise.all(masterEndpoints.map(async ({ endpoint, setter }) => {
-        try {
-          const response = await fetch(`/api/hrms/profile-masters/${endpoint}`, {
-            credentials: 'same-origin',
-            headers: { Accept: 'application/json' },
-            cache: 'no-store',
-          });
-          if (!response.ok) throw new Error(`Master request failed (${response.status})`);
-          const rows = await response.json();
-          if (!cancelled && Array.isArray(rows)) {
-            setter(rows
-              .filter((row: any) => String(row.status || 'Active').toLowerCase() !== 'inactive')
-              .map((row: any) => String(row.name || '').trim())
-              .filter(Boolean));
-          }
-        } catch (error) {
-          console.error(`Unable to load ${endpoint} master from MySQL`, error);
-          if (!cancelled) setter([]);
-        }
-      }));
+    const names = (key: string, opts: MasterOptions) => (opts[key] ?? []).map((r) => r.name);
+    const loadMasters = async () => {
+      try {
+        const opts = await masterApi.options();
+        if (cancelled) return;
+        setMasterOptions(opts);
+        setDepartmentsMaster(names('organizations', opts));
+        setDesignationsMaster(names('designations', opts));
+        setCategoriesMaster(names('categories', opts));
+        setProjectsMaster(names('projects', opts));
+        setCoursesMaster(names('courses', opts));
+        setBatchesMaster([...names('mscBatches', opts), ...names('traineeBatches', opts)]);
+        setPhdEnrollmentMaster(names('phdEnrollment', opts));
+      } catch (error) {
+        console.error('Unable to load masters', error);
+      }
     };
-
-    loadProfileMasters();
-    window.addEventListener('hrms:profile-masters-updated', loadProfileMasters);
+    void loadMasters();
+    window.addEventListener(MASTERS_CHANGED_EVENT, loadMasters);
     return () => {
       cancelled = true;
-      window.removeEventListener('hrms:profile-masters-updated', loadProfileMasters);
+      window.removeEventListener(MASTERS_CHANGED_EVENT, loadMasters);
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, session?.activeModule, session?.activeRole]);
 
   useEffect(() => {
     localStorage.setItem('la_hub_locations_master', JSON.stringify(locationsMaster));
@@ -888,7 +878,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     };
     void loadShifts();
-    return () => { cancelled = true; };
+    window.addEventListener(MASTERS_CHANGED_EVENT, loadShifts);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(MASTERS_CHANGED_EVENT, loadShifts);
+    };
   }, [isAuthenticated]);
 
   useEffect(() => {
@@ -1017,7 +1011,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     orgHindiName: '',
     badgeText: 'HUB',
     logoType: 'custom',
-    themePrimaryColor: '#2563eb',
+    themePrimaryColor: '#204088',
     updatedAt: new Date().toISOString(),
     updatedBy: 'System Administrator'
   };
@@ -4861,6 +4855,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         users,
         isAuthenticated,
         isLoading,
+        masterOptions,
         logout,
 
         attendanceRecords,

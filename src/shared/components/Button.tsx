@@ -60,7 +60,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
     const variantClasses: Record<ButtonVariant, string> = {
       primary:
-        'bg-[#2563eb] hover:bg-[#1d4ed8] active:bg-[#1e40af] text-white focus:ring-[#2563eb]/30 shadow-xs border border-transparent',
+        'bg-primary hover:bg-primary-hover active:bg-primary-active text-white focus:ring-primary/30 shadow-xs border border-transparent',
       secondary:
         'bg-slate-900 hover:bg-slate-800 active:bg-slate-950 text-white focus:ring-slate-900/30 shadow-xs border border-transparent',
       outline:
@@ -72,7 +72,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       danger:
         'bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white focus:ring-rose-600/30 shadow-xs border border-transparent',
       link:
-        'bg-transparent p-0 h-auto text-[#2563eb] hover:underline focus:ring-0 active:scale-100 shadow-none',
+        'bg-transparent p-0 h-auto text-primary hover:underline focus:ring-0 active:scale-100 shadow-none',
       icon:
         'bg-white hover:bg-slate-50 active:bg-slate-100 text-slate-700 border border-slate-200/90 focus:ring-slate-400/20 shadow-2xs'
     };

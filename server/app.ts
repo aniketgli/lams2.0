@@ -10,6 +10,8 @@ import { slackRoutes } from './integrations/slack/slack.routes';
 import { authRoutes } from './routes/auth.routes';
 import accessRoutes from './routes/access.routes';
 import hrmsRoutes from './routes/hrms.routes';
+import mastersRoutes from './masters/masters.routes';
+import settingsRoutes from './masters/settings.routes';
 import { apiNotFound, errorHandler } from './middleware/errorHandler';
 import { csrfGuard, noStore, securityHeaders } from './middleware/security';
 import { MySqlSessionStore } from './lib/sessionStore';
@@ -83,6 +85,8 @@ export async function createApp(httpServer?: HttpServer) {
   api.use('/access', accessRoutes);
   api.use('/email', emailRoutes);
   api.use('/slack', slackRoutes);
+  api.use('/hrms/masters', mastersRoutes);
+  api.use('/hrms', settingsRoutes); // shifts, biometric machines, organization settings
   api.use('/hrms', hrmsRoutes);
   api.use(apiNotFound);
   app.use('/api', api);

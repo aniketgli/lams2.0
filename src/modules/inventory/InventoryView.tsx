@@ -466,7 +466,7 @@ export const InventoryView: React.FC<SIMSViewProps> = ({ onReturnToLobby }) => {
                     </TableCell>
                     <TableCell className="align-middle">
                       <div className="font-bold text-slate-900">{ind.itemRequested}</div>
-                      <div className="text-[11px] text-[#2563eb] font-bold mt-0.5">
+                      <div className="text-[11px] text-primary font-bold mt-0.5">
                         Qty: {ind.quantity} Units
                       </div>
                     </TableCell>

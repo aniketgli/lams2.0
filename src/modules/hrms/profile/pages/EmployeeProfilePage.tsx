@@ -207,47 +207,21 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     coursesMaster,
     batchesMaster,
     phdEnrollmentMaster,
-    locationsMaster
+    locationsMaster,
+    masterOptions
   } = useApp();
 
-  // Stream and batch options are fetched from their dedicated MySQL masters.
-  const [databaseStreams, setDatabaseStreams] = useState<string[]>([]);
-  const [databaseBatches, setDatabaseBatches] = useState<string[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    const requests = [
-      { endpoint: 'mscStreams', apply: setDatabaseStreams },
-      { endpoint: 'mscBatches', apply: setDatabaseBatches },
-    ] as const;
-    const loadAcademicMasters = () => {
-      void Promise.all(requests.map(async ({ endpoint, apply }) => {
-        try {
-          const response = await fetch(`/api/hrms/profile-masters/${endpoint}`, {
-            credentials: 'same-origin',
-            headers: { Accept: 'application/json' },
-            cache: 'no-store',
-          });
-          if (!response.ok) throw new Error(`Master request failed (${response.status})`);
-          const rows = await response.json();
-          if (!cancelled && Array.isArray(rows)) {
-            apply(rows
-              .filter((row: any) => String(row.status || 'Active').toLowerCase() !== 'inactive')
-              .map((row: any) => String(row.name || '').trim())
-              .filter(Boolean));
-          }
-        } catch (error) {
-          console.error(`Unable to load ${endpoint} master from MySQL`, error);
-          if (!cancelled) apply([]);
-        }
-      }));
-    };
-    loadAcademicMasters();
-    window.addEventListener('hrms:profile-masters-updated', loadAcademicMasters);
-    return () => {
-      cancelled = true;
-      window.removeEventListener('hrms:profile-masters-updated', loadAcademicMasters);
-    };
-  }, []);
+  // Every dropdown on the employee form comes from the database masters
+  // (Master Settings), loaded once in AppContext and refreshed when they change.
+  const optionNames = (key: string) => (masterOptions[key] ?? []).map((r) => r.name);
+  const databaseStreams = optionNames('mscStreams');
+  const databaseBatches = optionNames('mscBatches');
+  const salutationOptions = (masterOptions.salutation ?? []).map((r) => ({ label: r.name, value: r.code }));
+  const genderOptions = (masterOptions.gender ?? []).map((r) => ({ label: r.name, value: r.code }));
+  const employeeTypeOptions = (masterOptions.employeeType ?? []).map((r) => ({ label: r.name, value: r.code }));
+  /** The form layout behind an employee type (types are admin-defined; layouts are fixed). */
+  const layoutOf = (employeeType?: string | null): string =>
+    (masterOptions.employeeType ?? []).find((r) => r.code === employeeType)?.fields.formLayout || String(employeeType || '');
 
   // Role Checks
   const isAdmin = currentUser.role === 'administrator';
@@ -275,8 +249,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   // Profile / Directory Summary KPI Stats
   const profileStats = useMemo(() => {
     const total = users.length;
-    const regular = users.filter((u) => u.employmentType === 'regular' || u.employmentType === 'permanent' || u.employmentType === 'deputation').length;
-    const contractual = users.filter((u) => u.employmentType === 'contractual' || u.employmentType === 'project' || u.employmentType === 'outsourced').length;
+    const regular = users.filter((u) => layoutOf(u.employmentType) === 'regular' || layoutOf(u.employmentType) === 'permanent' || layoutOf(u.employmentType) === 'deputation').length;
+    const contractual = users.filter((u) => layoutOf(u.employmentType) === 'contractual' || layoutOf(u.employmentType) === 'project' || layoutOf(u.employmentType) === 'outsourced').length;
     const depts = new Set(users.map((u) => u.department).filter(Boolean)).size;
     return { total, regular, contractual, depts };
   }, [users]);
@@ -353,13 +327,13 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const categoryCounts = useMemo(() => {
     return {
       all: accessibleProfiles.length,
-      permanent: accessibleProfiles.filter((u) => u.employmentType === 'permanent').length,
-      contractual: accessibleProfiles.filter((u) => u.employmentType === 'contractual').length,
-      researcher: accessibleProfiles.filter((u) => u.employmentType === 'researcher').length,
-      diploma_trainee: accessibleProfiles.filter((u) => u.employmentType === 'diploma_trainee').length,
-      intern: accessibleProfiles.filter((u) => u.employmentType === 'intern').length,
-      bsc_msc_student: accessibleProfiles.filter((u) => u.employmentType === 'bsc_msc_student').length,
-      phd_student: accessibleProfiles.filter((u) => u.employmentType === 'phd_student').length,
+      permanent: accessibleProfiles.filter((u) => layoutOf(u.employmentType) === 'permanent').length,
+      contractual: accessibleProfiles.filter((u) => layoutOf(u.employmentType) === 'contractual').length,
+      researcher: accessibleProfiles.filter((u) => layoutOf(u.employmentType) === 'researcher').length,
+      diploma_trainee: accessibleProfiles.filter((u) => layoutOf(u.employmentType) === 'diploma_trainee').length,
+      intern: accessibleProfiles.filter((u) => layoutOf(u.employmentType) === 'intern').length,
+      bsc_msc_student: accessibleProfiles.filter((u) => layoutOf(u.employmentType) === 'bsc_msc_student').length,
+      phd_student: accessibleProfiles.filter((u) => layoutOf(u.employmentType) === 'phd_student').length,
     };
   }, [accessibleProfiles]);
 
@@ -447,7 +421,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   };
 
   const getCategoryBadge = (u: UserType) => {
-    if (u.employmentType === 'researcher' && u.isPhDEnrolled) {
+    if (layoutOf(u.employmentType) === 'researcher' && u.isPhDEnrolled) {
       return {
         label: 'Researchers / Project Staff (PhD Enrolled)',
         shortLabel: 'Researcher (PhD Dual)',
@@ -457,7 +431,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
         emoji: '🔬🎓'
       };
     }
-    if (u.employmentType === 'phd_student' && u.isPhDEnrolled) {
+    if (layoutOf(u.employmentType) === 'phd_student' && u.isPhDEnrolled) {
       return {
         label: 'PhD Student (Project Associated)',
         shortLabel: 'PhD (Project Dual)',
@@ -599,7 +573,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [newUserForm, setNewUserForm] = useState({
     name: '',
-    suffix: '' as 'Mr.' | 'Mrs.' | 'Miss' | 'Dr.',
+    suffix: '' as string,
     email: '',
     gender: '',
     phone: '',
@@ -1194,7 +1168,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     if (!newUserForm.leaveCycle) missingFields.push('Leave Year Type');
     if (!newUserForm.joiningDate?.trim()) missingFields.push('Date of Joining');
 
-    if (newUserForm.employmentType === 'permanent') {
+    if (layoutOf(newUserForm.employmentType) === 'permanent') {
       if (!newUserForm.permanentEmploymentType?.trim()) missingFields.push('Category (Direct / Deputation)');
       if (!newUserForm.employeeCategory?.trim()) missingFields.push('Category (Administrative / Scientific / Technical)');
       if (!newUserForm.designation?.trim()) missingFields.push('Designation');
@@ -1205,32 +1179,32 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
         missingFields.push('Valid Up To Date');
       }
       if (newUserForm.isOnProbation && !newUserForm.probationEndDate?.trim()) missingFields.push('Tentative Probation End Date');
-    } else if (newUserForm.employmentType === 'contractual') {
+    } else if (layoutOf(newUserForm.employmentType) === 'contractual') {
       if (!newUserForm.employeeCategory?.trim()) missingFields.push('Category (Administrative / Scientific / Technical)');
       if (!newUserForm.designation?.trim()) missingFields.push('Designation');
       if (!newUserForm.department?.trim()) missingFields.push('Department / Section / Cell');
       if (!newUserForm.reportingManagerId?.trim()) missingFields.push('Reporting Manager');
       if (!newUserForm.validUntilDate?.trim()) missingFields.push('Valid Up To Date');
-    } else if (newUserForm.employmentType === 'researcher') {
+    } else if (layoutOf(newUserForm.employmentType) === 'researcher') {
       if (!newUserForm.designation?.trim()) missingFields.push('Designation');
       if (!newUserForm.department?.trim()) missingFields.push('Project Name');
       if (!newUserForm.reportingManagerId?.trim()) missingFields.push('Reporting Manager / PI');
       if (!newUserForm.validUntilDate?.trim()) missingFields.push('Valid Up To Date');
-    } else if (newUserForm.employmentType === 'diploma_trainee') {
+    } else if (layoutOf(newUserForm.employmentType) === 'diploma_trainee') {
       if (!newUserForm.courseProgram?.trim()) missingFields.push('Course');
       if (!newUserForm.courseBatch?.trim()) missingFields.push('Batch');
       if (!newUserForm.reportingManagerId?.trim()) missingFields.push('Reporting Manager');
       if (!newUserForm.validUntilDate?.trim()) missingFields.push('Valid Up To Date');
-    } else if (newUserForm.employmentType === 'bsc_msc_student') {
+    } else if (layoutOf(newUserForm.employmentType) === 'bsc_msc_student') {
       if (!newUserForm.courseProgram?.trim()) missingFields.push('Course');
       if (!newUserForm.courseBatch?.trim()) missingFields.push('Batch');
       if (!newUserForm.reportingManagerId?.trim()) missingFields.push('Reporting Manager');
       if (!newUserForm.validUntilDate?.trim()) missingFields.push('Valid Up To Date');
-    } else if (newUserForm.employmentType === 'phd_student') {
+    } else if (layoutOf(newUserForm.employmentType) === 'phd_student') {
       if (!newUserForm.enrolledThrough?.trim()) missingFields.push('Enrolled Through');
       if (!newUserForm.reportingManagerId?.trim()) missingFields.push('Reporting Manager');
       if (!newUserForm.validUntilDate?.trim()) missingFields.push('Valid Up To Date');
-    } else if (newUserForm.employmentType === 'intern') {
+    } else if (layoutOf(newUserForm.employmentType) === 'intern') {
       if (!newUserForm.department?.trim()) missingFields.push('Project / Department / Section / Cell');
       if (!newUserForm.reportingManagerId?.trim()) missingFields.push('Reporting Manager');
       if (!newUserForm.validUntilDate?.trim()) missingFields.push('Valid Up To Date');
@@ -1285,7 +1259,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const handleOpenCreateEmployeeModal = () => {
     setNewUserForm({
       name: '',
-      suffix: '' as 'Mr.' | 'Mrs.' | 'Miss' | 'Dr.',
+      suffix: '' as string,
       email: '',
       gender: '',
       phone: '',
@@ -2236,7 +2210,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                               <span>{badge.label}</span>
                             </span>
 
-                            {u.employmentType === 'researcher' && u.isPhDEnrolled && (
+                            {layoutOf(u.employmentType) === 'researcher' && u.isPhDEnrolled && (
                               <span className="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider bg-purple-100 text-purple-800 border border-purple-300 flex items-center space-x-1">
                                 <Sparkles className="w-3 h-3 text-purple-600 shrink-0" />
                                 <span>Dual PhD Enrolled</span>
@@ -2246,7 +2220,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
                           {/* Category Specific Highlights */}
                           <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-[11px] space-y-1.5 text-slate-700">
-                            {(u.employmentType === 'msc_student' || u.employmentType === 'phd_scholar' || u.isPhDEnrolled) && (
+                            {(layoutOf(u.employmentType) === 'msc_student' || layoutOf(u.employmentType) === 'phd_scholar' || u.isPhDEnrolled) && (
                               <>
                                 {u.courseProgram && (
                                   <div className="flex justify-between">
@@ -2275,7 +2249,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                               </>
                             )}
 
-                            {(u.employmentType === 'trainee' || u.employmentType === 'intern') && (
+                            {(layoutOf(u.employmentType) === 'trainee' || layoutOf(u.employmentType) === 'intern') && (
                               <>
                                 {u.parentInstitution && (
                                   <div className="flex justify-between">
@@ -2298,7 +2272,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                               </>
                             )}
 
-                            {(u.employmentType === 'permanent' || u.employmentType === 'contractual' || (u.employmentType === 'researcher' && !u.isPhDEnrolled)) && (
+                            {(layoutOf(u.employmentType) === 'permanent' || layoutOf(u.employmentType) === 'contractual' || (layoutOf(u.employmentType) === 'researcher' && !u.isPhDEnrolled)) && (
                               <>
                                 {u.piName && (
                                   <div className="flex justify-between">
@@ -2434,7 +2408,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                         </div>
                       )}
 
-                      {selectedUser.employmentType === 'permanent' ? (
+                      {layoutOf(selectedUser.employmentType) === 'permanent' ? (
                         <div>
                           <span className="text-[10px] text-slate-400 font-semibold block">Superannuation Date</span>
                           <span className="font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 inline-block text-[11px]">
@@ -2550,10 +2524,10 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                 </div>
 
                 {/* Card 4: Academic Program & Research (Conditionally displayed when relevant) */}
-                {(selectedUser.employmentType === 'bsc_msc_student' ||
-                  selectedUser.employmentType === 'phd_student' ||
-                  selectedUser.employmentType === 'diploma_trainee' ||
-                  selectedUser.employmentType === 'intern' ||
+                {(layoutOf(selectedUser.employmentType) === 'bsc_msc_student' ||
+                  layoutOf(selectedUser.employmentType) === 'phd_student' ||
+                  layoutOf(selectedUser.employmentType) === 'diploma_trainee' ||
+                  layoutOf(selectedUser.employmentType) === 'intern' ||
                   selectedUser.isPhDEnrolled) && (
                   <div className="bg-indigo-50/70 border border-indigo-200 rounded-xl p-4 sm:p-5 shadow-2xs space-y-3.5">
                     <div className="flex items-center space-x-2 text-indigo-950 font-black text-xs uppercase tracking-wider border-b border-indigo-200/80 pb-2.5">
@@ -3430,7 +3404,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                       onChange={(e) => setEditingUser({ ...editingUser, suffix: (e.target.value || undefined) as UserType['suffix'] })}
                       className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white mb-2"
                     >
-                      <option value="">No suffix</option><option value="Mr.">Mr.</option><option value="Mrs.">Mrs.</option><option value="Miss">Miss</option><option value="Dr.">Dr.</option>
+                      <option value="">No salutation</option>{salutationOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                     <label className="block text-slate-600 font-bold mb-1">Full Name *</label>
                     <input
@@ -3445,13 +3419,12 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                   <div>
                     <label className="block text-slate-600 font-bold mb-1">Gender *</label>
                     <select
-                      value={editingUser.gender || 'Male'}
+                      value={editingUser.gender || ''}
                       onChange={(e) => setEditingUser({ ...editingUser, gender: e.target.value })}
                       className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
                     >
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                      <option value="Other">Other</option>
+                      {editingUser.gender && !genderOptions.some((o) => o.value === editingUser.gender) && <option value={editingUser.gender}>{editingUser.gender}</option>}
+                      {genderOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                   </div>
 
@@ -3510,7 +3483,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {editingUser.employmentType === 'contractual' ? (
+                  {layoutOf(editingUser.employmentType) === 'contractual' ? (
                     <>
                       {/* Row 1: Primary Category & Designation */}
                       <div>
@@ -3528,13 +3501,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                           }}
                           className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
                         >
-                          <option value="permanent">Permanent Employees</option>
-                          <option value="contractual">Contractual Employees</option>
-                          <option value="researcher">Researchers / Project Staff</option>
-                          <option value="diploma_trainee">Diploma Trainee</option>
-                          <option value="intern">Interns</option>
-                          <option value="bsc_msc_student">BSc / MSc Students</option>
-                          <option value="phd_student">PhD Students</option>
+                          {employeeTypeOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </select>
                       </div>
 
@@ -3643,7 +3610,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                         />
                       </div>
                     </>
-                  ) : editingUser.employmentType === 'researcher' ? (
+                  ) : layoutOf(editingUser.employmentType) === 'researcher' ? (
                     <>
                       {/* Row 1: Primary Category & Designation */}
                       <div>
@@ -3661,13 +3628,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                           }}
                           className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
                         >
-                          <option value="permanent">Permanent Employees</option>
-                          <option value="contractual">Contractual Employees</option>
-                          <option value="researcher">Researchers / Project Staff</option>
-                          <option value="diploma_trainee">Diploma Trainee</option>
-                          <option value="intern">Interns</option>
-                          <option value="bsc_msc_student">BSc / MSc Students</option>
-                          <option value="phd_student">PhD Students</option>
+                          {employeeTypeOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </select>
                       </div>
 
@@ -3787,7 +3748,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                         </label>
                       </div>
                     </>
-                  ) : editingUser.employmentType === 'intern' ? (
+                  ) : layoutOf(editingUser.employmentType) === 'intern' ? (
                     <>
                       {/* Row 1: Primary Category & Reporting Manager / PI */}
                       <div>
@@ -3805,13 +3766,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                           }}
                           className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
                         >
-                          <option value="permanent">Permanent Employees</option>
-                          <option value="contractual">Contractual Employees</option>
-                          <option value="researcher">Researchers / Project Staff</option>
-                          <option value="diploma_trainee">Diploma Trainee</option>
-                          <option value="intern">Interns</option>
-                          <option value="bsc_msc_student">BSc / MSc Students</option>
-                          <option value="phd_student">PhD Students</option>
+                          {employeeTypeOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </select>
                       </div>
 
@@ -3895,7 +3850,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                         />
                       </div>
                     </>
-                  ) : editingUser.employmentType === 'bsc_msc_student' ? (
+                  ) : layoutOf(editingUser.employmentType) === 'bsc_msc_student' ? (
                     <>
                       {/* Row 1: Primary Category & Stream */}
                       <div>
@@ -3913,13 +3868,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                           }}
                           className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
                         >
-                          <option value="permanent">Permanent Employees</option>
-                          <option value="contractual">Contractual Employees</option>
-                          <option value="researcher">Researchers / Project Staff</option>
-                          <option value="diploma_trainee">Diploma Trainee</option>
-                          <option value="intern">Interns</option>
-                          <option value="bsc_msc_student">BSc / MSc Students</option>
-                          <option value="phd_student">PhD Students</option>
+                          {employeeTypeOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </select>
                       </div>
 
@@ -4075,13 +4024,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                           }}
                           className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs bg-white font-semibold"
                         >
-                          <option value="permanent">Permanent Employees</option>
-                          <option value="contractual">Contractual Employees</option>
-                          <option value="researcher">Researchers / Project Staff</option>
-                          <option value="diploma_trainee">Diploma Trainee</option>
-                          <option value="intern">Interns</option>
-                          <option value="bsc_msc_student">BSc / MSc Students</option>
-                          <option value="phd_student">PhD Students</option>
+                          {employeeTypeOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </select>
                       </div>
 
@@ -4247,7 +4190,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                     </>
                   )}
 
-                  {editingUser.employmentType === 'phd_student' && (
+                  {layoutOf(editingUser.employmentType) === 'phd_student' && (
                     <div className="sm:col-span-2 p-2.5 bg-purple-50 border border-purple-200 rounded-lg">
                       <label className="flex items-center space-x-2 cursor-pointer">
                         <input
@@ -4337,14 +4280,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                       <AppSelect
                         value={newUserForm.suffix}
                         placeholder="Select Suffix"
-                        onChange={(val) => setNewUserForm({ ...newUserForm, suffix: val as 'Mr.' | 'Mrs.' | 'Miss' | 'Dr.' | '' })}
-                        options={[
-                          { label: 'Select Suffix', value: '' },
-                          { label: 'Mr.', value: 'Mr.' },
-                          { label: 'Mrs.', value: 'Mrs.' },
-                          { label: 'Miss', value: 'Miss' },
-                          { label: 'Dr.', value: 'Dr.' }
-                        ]}
+                        onChange={(val) => setNewUserForm({ ...newUserForm, suffix: val as typeof newUserForm.suffix })}
+                        options={[{ label: 'Select Suffix', value: '' }, ...salutationOptions]}
                         className="w-full"
                       />
                     </div>
@@ -4360,9 +4297,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                         onChange={(val) => setNewUserForm({ ...newUserForm, gender: val })}
                         options={[
                           { label: 'Select Gender', value: '' },
-                          { label: 'Male', value: 'Male' },
-                          { label: 'Female', value: 'Female' },
-                          { label: 'Other', value: 'Other' }
+                          ...genderOptions
                         ]}
                         className="w-full"
                       />
@@ -4460,20 +4395,14 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                         }}
                         options={[
                           { label: 'Select Employee Type', value: '' },
-                          { label: 'Permanent', value: 'permanent' },
-                          { label: 'Contractual', value: 'contractual' },
-                          { label: 'Project Staff', value: 'researcher' },
-                          { label: 'Trainee', value: 'diploma_trainee' },
-                          { label: 'M.Sc Student', value: 'bsc_msc_student' },
-                          { label: 'PhD Scholar', value: 'phd_student' },
-                          { label: 'Intern', value: 'intern' }
+                          ...employeeTypeOptions
                         ]}
                         className="w-full"
                       />
                     </div>
 
                     {/* PERMANENT */}
-                    {newUserForm.employmentType === 'permanent' && (
+                    {layoutOf(newUserForm.employmentType) === 'permanent' && (
                       <>
                         {/* Category: Direct / Deputation */}
                         <div>
@@ -4702,7 +4631,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                     )}
 
                     {/* CONTRACTUAL */}
-                    {newUserForm.employmentType === 'contractual' && (
+                    {layoutOf(newUserForm.employmentType) === 'contractual' && (
                       <>
                         {/* Category: Administrative / Scientific / Technical */}
                         <div>
@@ -4855,7 +4784,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                     )}
 
                     {/* PROJECT STAFF */}
-                    {newUserForm.employmentType === 'researcher' && (
+                    {layoutOf(newUserForm.employmentType) === 'researcher' && (
                       <>
                         {/* Designation */}
                         <div>
@@ -5007,7 +4936,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                     )}
 
                     {/* TRAINEE */}
-                    {newUserForm.employmentType === 'diploma_trainee' && (
+                    {layoutOf(newUserForm.employmentType) === 'diploma_trainee' && (
                       <>
                         {/* Course */}
                         <div>
@@ -5139,7 +5068,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                     )}
 
                     {/* M.SC STUDENT */}
-                    {newUserForm.employmentType === 'bsc_msc_student' && (
+                    {layoutOf(newUserForm.employmentType) === 'bsc_msc_student' && (
                       <>
                         {/* Course */}
                         <div>
@@ -5274,7 +5203,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                     )}
 
                     {/* PHD SCHOLAR */}
-                    {newUserForm.employmentType === 'phd_student' && (
+                    {layoutOf(newUserForm.employmentType) === 'phd_student' && (
                       <>
                         {/* Enrolled through */}
                         <div>
@@ -5405,7 +5334,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                     )}
 
                     {/* INTERN */}
-                    {newUserForm.employmentType === 'intern' && (
+                    {layoutOf(newUserForm.employmentType) === 'intern' && (
                       <>
                         {/* project / Department / section / cell */}
                         <div>

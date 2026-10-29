@@ -27,10 +27,10 @@ export const Alert: React.FC<AlertProps> = ({
     { container: string; iconColor: string; titleColor: string; defaultIcon: React.ReactNode }
   > = {
     primary: {
-      container: 'bg-[#eff6ff] border-[#bfdbfe] text-[#2563eb]',
-      iconColor: 'text-[#2563eb]',
-      titleColor: 'text-[#1e40af]',
-      defaultIcon: <Info className="w-4 h-4 shrink-0 text-[#2563eb]" />
+      container: 'bg-primary-subtle border-primary-border text-primary',
+      iconColor: 'text-primary',
+      titleColor: 'text-primary-active',
+      defaultIcon: <Info className="w-4 h-4 shrink-0 text-primary" />
     },
     success: {
       container: 'bg-emerald-50 border-emerald-200 text-emerald-800',

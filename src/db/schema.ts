@@ -245,3 +245,35 @@ export const shift_master_audit_logs = mysqlTable('shift_master_audit_logs', {
   beforeData: longtext('before_data'),
   afterData: longtext('after_data'),
 });
+
+// Unified audit trail for every master (migrations/20261029_master_settings.sql).
+export const master_audit_logs = mysqlTable('master_audit_logs', {
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  masterKey: varchar('master_key', { length: 40 }).notNull(),
+  recordId: varchar('record_id', { length: 64 }).notNull(),
+  recordLabel: varchar('record_label', { length: 255 }),
+  action: varchar('action', { length: 16 }).notNull(),
+  changedFields: text('changed_fields'),
+  beforeData: longtext('before_data'),
+  afterData: longtext('after_data'),
+  reason: varchar('reason', { length: 500 }),
+  actorBiometricId: varchar('actor_biometric_id', { length: 4 }),
+  actorName: varchar('actor_name', { length: 255 }),
+  actorRole: varchar('actor_role', { length: 32 }),
+  ipAddress: varchar('ip_address', { length: 45 }),
+  createdAt: timestamp('created_at', { fsp: 3, mode: 'string' }).defaultNow(),
+  legacyRef: varchar('legacy_ref', { length: 64 }),
+});
+
+// Short admin-managed dropdown lists (salutation, gender, employee type, ...).
+export const lookup_values = mysqlTable('lookup_values', {
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  lookupType: varchar('lookup_type', { length: 40 }).notNull(),
+  code: varchar('code', { length: 50 }).notNull(),
+  name: varchar('name', { length: 255 }).notNull(),
+  sortOrder: int('sort_order').notNull().default(0),
+  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
+  metadata: longtext('metadata'),
+  createdAt: timestamp('created_at', { fsp: 3, mode: 'string' }).defaultNow(),
+  updatedAt: timestamp('updated_at', { fsp: 3, mode: 'string' }).defaultNow().onUpdateNow(),
+});

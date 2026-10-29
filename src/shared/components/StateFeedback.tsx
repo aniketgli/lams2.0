@@ -33,7 +33,7 @@ export const LoadingState: React.FC<LoadingStateProps> = ({
         fullHeight ? 'min-h-[280px] h-full' : 'py-10'
       } ${className}`}
     >
-      <Loader2 className={`${spinnerSizes[size]} animate-spin text-[#2563eb] mb-2.5`} />
+      <Loader2 className={`${spinnerSizes[size]} animate-spin text-primary mb-2.5`} />
       <p className="text-xs font-bold text-slate-800 tracking-tight">{title}</p>
       {description && (
         <p className="text-[11px] text-slate-500 mt-1 max-w-sm">{description}</p>

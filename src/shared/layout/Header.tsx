@@ -109,7 +109,7 @@ export const Header: React.FC<HeaderProps> = ({
               aria-haspopup="menu"
               aria-expanded={isUserMenuOpen}
               aria-label={`${displayName}, ${activeRoleLabel}. Open role menu`}
-              className="group w-full flex items-center gap-2.5 px-1 sm:px-2 py-1.5 rounded-xl text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#204088] cursor-pointer"
+              className="group w-full flex items-center gap-2.5 px-1 sm:px-2 py-1.5 rounded-xl text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer"
             >
               <UserAvatar name={currentUser.name} src={currentUser.avatar} className="w-8 h-8 rounded-full border border-slate-200" />
               <span className="hidden sm:block min-w-0 flex-1 text-left">
@@ -117,7 +117,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="block text-[11px] text-slate-500 leading-tight mt-0.5 truncate">
                   B.I. {biometricId}
                   <span className="mx-1 text-slate-300" aria-hidden="true">·</span>
-                  <span className="font-semibold text-[#204088]">{activeRoleLabel}</span>
+                  <span className="font-semibold text-primary">{activeRoleLabel}</span>
                 </span>
               </span>
               <ChevronDown className={`w-4 h-4 shrink-0 text-slate-400 group-hover:text-slate-700 transition-transform ${isUserMenuOpen ? 'rotate-180 text-slate-700' : ''}`} aria-hidden="true" />
@@ -139,7 +139,7 @@ export const Header: React.FC<HeaderProps> = ({
                         <button key={role} type="button" role="menuitemradio" aria-checked={role === activeRole} disabled={roleSwitchBusy || role === activeRole}
                           onClick={() => void handleRoleSwitch(role)}
                           aria-current={role === activeRole ? 'true' : undefined}
-                          className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-xs transition-all text-left ${role === activeRole ? 'bg-[#204088]/10 text-[#204088] font-bold cursor-default' : 'font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 cursor-pointer disabled:opacity-50'}`}>
+                          className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-xs transition-all text-left ${role === activeRole ? 'bg-primary/10 text-primary font-bold cursor-default' : 'font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 cursor-pointer disabled:opacity-50'}`}>
                           <span>{ROLE_LABELS[role]}</span>
                           {role === activeRole && <Check className="w-3.5 h-3.5" aria-hidden="true" />}
                         </button>
