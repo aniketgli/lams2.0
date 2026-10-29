@@ -657,8 +657,13 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     } ${
       errorOf(key) ? 'border-rose-400 focus:ring-rose-500/20 focus:border-rose-500' : 'border-slate-200/90 focus:ring-blue-600/20 focus:border-blue-500'
     }`;
+  // Nothing is written under a field: a problem shows as a red border with the
+  // reason on hover, is read out by screen readers, and appears in the toast on save.
   const fieldError = (name: string) =>
-    errorOf(name) ? <p className="mt-1 text-[11px] font-medium text-rose-600" role="alert">{errorOf(name)}</p> : null;
+    errorOf(name) ? <span className="sr-only" role="alert">{errorOf(name)}</span> : null;
+  /** Red outline around a dropdown / date picker that has a problem. */
+  const controlBox = (name: string) =>
+    errorOf(name) ? 'rounded-xl ring-2 ring-rose-400' : '';
 
   // Password reset modal (display result)
   const [passwordResetModal, setPasswordResetModal] = useState<{
@@ -3474,6 +3479,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                         <label className="block text-slate-700 font-bold mb-1 text-xs">
                           Suffix <span className="text-blue-600 font-bold ml-0.5">*</span>
                         </label>
+                        <div className={controlBox('suffix')} title={errorOf('suffix') || undefined}>
                         <AppSelect
                           value={newUserForm.suffix}
                           placeholder="Select"
@@ -3481,6 +3487,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                           options={[{ label: 'Select', value: '' }, ...salutationOptions]}
                           className="w-full"
                         />
+                        </div>
                         {fieldError('suffix')}
                       </div>
                       <div>
@@ -3494,7 +3501,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                           placeholder="Enter Full Name"
                           value={newUserForm.name}
                           onChange={(e) => setField('name', e.target.value)}
-                          className={inputClass('name')}
+                          title={errorOf('name') || undefined}
+                        className={inputClass('name')}
                         />
                         {fieldError('name')}
                       </div>
@@ -3505,6 +3513,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                       <label className="block text-slate-700 font-bold mb-1 text-xs">
                         Gender <span className="text-blue-600 font-bold ml-0.5">*</span>
                       </label>
+                      <div className={controlBox('gender')} title={errorOf('gender') || undefined}>
                       <AppSelect
                         value={newUserForm.gender}
                         placeholder="Select Gender"
@@ -3515,6 +3524,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                         ]}
                         className="w-full"
                       />
+                      </div>
                       {fieldError('gender')}
                     </div>
 
@@ -3523,12 +3533,14 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                       <label className="block text-slate-700 font-bold mb-1 text-xs">
                         Date of Birth (DOB) <span className="text-blue-600 font-bold ml-0.5">*</span>
                       </label>
+                      <div className={controlBox('dob')} title={errorOf('dob') || undefined}>
                       <AppDatePicker
                         value={newUserForm.dob}
                         placeholder="Select Date of Birth"
                         onChange={(val) => setField('dob', val)}
                         className="w-full"
                       />
+                      </div>
                       {fieldError('dob')}
                     </div>
 
@@ -3546,6 +3558,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                         value={newUserForm.phone}
                         onChange={(e) => setField('phone', e.target.value.replace(/[^\d+\s-]/g, ''))}
                         aria-invalid={Boolean(errorOf('phone'))}
+                        title={errorOf('phone') || undefined}
                         className={inputClass('phone')}
                       />
                       {fieldError('phone')}
@@ -3564,11 +3577,10 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                         value={newUserForm.email}
                         onChange={(e) => setField('email', e.target.value.trim())}
                         aria-invalid={Boolean(errorOf('email'))}
+                        title={errorOf('email') || undefined}
                         className={inputClass('email')}
                       />
-                      {errorOf('email') ? fieldError('email') : (
-                        <p className="mt-1 text-[11px] text-slate-500">Only {emailDomains.map((d) => `@${d}`).join(' or ')}</p>
-                      )}
+                      {fieldError('email')}
                     </div>
 
                     {/* Biometric ID */}
@@ -3587,6 +3599,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                         onChange={(e) => setField('biometricId', e.target.value.replace(/\D/g, '').slice(0, 4))}
                         placeholder="4-digit biometric ID"
                         aria-invalid={Boolean(errorOf('biometricId'))}
+                        title={errorOf('biometricId') || undefined}
                         className={inputClass('biometricId', Boolean(editingEmployeeId))}
                       />
                       {fieldError('biometricId')}
