@@ -10,6 +10,10 @@ declare module 'express-session' {
     activeRole?: RoleId | null;
     /** Mirror of activeRole for legacy route code that still reads it. */
     role?: RoleId;
+    /** Epoch ms of sign-in; the session ends sessionConfig.maxMs after this. */
+    loginAt: number;
+    /** Epoch ms of the last user-initiated request; idle timeout counts from here. */
+    lastActivityAt: number;
   }
 }
 

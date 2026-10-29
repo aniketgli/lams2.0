@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { WIILogo } from '../components/WIILogo';
+import { canOpenPage } from '../../modules/hrms/hrmsPages';
 import {
   LayoutDashboard,
   Clock,
@@ -45,13 +46,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   } = useApp();
   const [expandedGroup, setExpandedGroup] = useState<'attendance' | 'leave' | 'employee' | null>(null);
 
-  const isAdminOrManager = currentUser.role === 'administrator' || currentUser.role === 'reporting_manager' || currentUser.role === 'reviewing_manager';
-  const isAdmin = currentUser.role === 'administrator';
-  const isAudit = currentUser.role === 'audit';
-  const canSeeAdminTabs = isAdmin || isAudit;
+  // Which links appear comes from the same page map the router enforces.
+  const show = (pageId: string) => canOpenPage(pageId, currentUser.role);
 
   const handleNavClick = (id: string) => {
-    setActiveModule('lams');
     setActiveTab(id);
     setIsOpenMobile(false);
   };
@@ -215,7 +213,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         <span>Leaves</span>
                       </button>
 
-                      {currentUser.role === 'administrator' && (
+                      {show('leave_balance') && (
                         <button
                           onClick={() => handleNavClick('leave_balance')}
                           className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-medium transition-all text-left cursor-pointer ${
@@ -281,7 +279,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         <span>Profiles</span>
                       </button>
 
-                      {canSeeAdminTabs && (
+                      {show('user_controls') && (
                         <>
                           <button
                             onClick={() => handleNavClick('user_controls')}
@@ -313,7 +311,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </div>
 
                 {/* 5. Master Settings (For Administrator & Audit) */}
-                {canSeeAdminTabs && (
+                {show('master') && (
                   <button
                     onClick={() => {
                       setExpandedGroup(null);

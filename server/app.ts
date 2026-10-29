@@ -14,8 +14,9 @@ import { apiNotFound, errorHandler } from './middleware/errorHandler';
 import { csrfGuard, noStore, securityHeaders } from './middleware/security';
 import { MySqlSessionStore } from './lib/sessionStore';
 import { SESSION_COOKIE } from './lib/http';
+import { sessionConfig } from './config/session.config';
+import { requireCurrentContext } from './middleware/auth.middleware';
 
-const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours, extended on activity
 
 async function sessionTableExists(): Promise<boolean> {
   try {
@@ -32,7 +33,7 @@ async function createSessionStore(isProduction: boolean): Promise<session.Store 
     console.warn('[startup] SESSION_STORE=memory: logins will be lost on every restart.');
     return undefined;
   }
-  if (await sessionTableExists()) return new MySqlSessionStore({ ttlMs: SESSION_TTL_MS });
+  if (await sessionTableExists()) return new MySqlSessionStore({ ttlMs: sessionConfig.maxMs });
   if (isProduction) {
     throw new Error('Table web_sessions is missing. Run migrations/20261029_web_sessions.sql before starting in production.');
   }
@@ -61,18 +62,20 @@ export async function createApp(httpServer?: HttpServer) {
     secret: sessionSecret || 'local-development-only-session-secret-change-me',
     resave: false,
     saveUninitialized: false,
-    rolling: true,
+    // The cookie lives for the maximum session length from sign-in; the idle
+    // limit is enforced server-side in requireAuth on every request.
+    rolling: false,
     cookie: {
       httpOnly: true,
       secure: isProduction,
-      sameSite: 'lax',
-      maxAge: SESSION_TTL_MS,
+      sameSite: 'strict',
+      maxAge: sessionConfig.maxMs,
       path: '/',
     },
   }));
 
   const api = express.Router();
-  api.use(noStore, csrfGuard);
+  api.use(noStore, csrfGuard, requireCurrentContext);
   api.get('/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
