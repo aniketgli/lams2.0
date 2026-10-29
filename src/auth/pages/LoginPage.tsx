@@ -78,7 +78,6 @@ export const LoginPage: React.FC = () => {
         <div className="bg-white border border-slate-200 rounded-2xl shadow-xl p-6 sm:p-8 space-y-5">
           <div className="border-b border-slate-100 pb-3.5">
             <h1 className="text-base font-bold text-slate-900 tracking-tight">Sign in</h1>
-            <p className="text-xs text-slate-500 mt-1">Use your institute email ({domainText}).</p>
           </div>
 
           {error && (
@@ -89,7 +88,7 @@ export const LoginPage: React.FC = () => {
 
           <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             <Input
-              label="Institute email"
+              label="Email"
               type="email"
               name="email"
               autoComplete="username"
@@ -101,7 +100,7 @@ export const LoginPage: React.FC = () => {
                 if (emailError) setEmailError(undefined);
               }}
               onBlur={() => email.trim() && setEmailError(checkEmail(email))}
-              placeholder={`name@${domains[0]}`}
+              placeholder="Enter your email address"
               leftIcon={Mail}
               maxLength={254}
               error={emailError}
@@ -115,7 +114,7 @@ export const LoginPage: React.FC = () => {
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
+              placeholder="Enter your password"
               leftIcon={Lock}
               maxLength={1024}
               required
