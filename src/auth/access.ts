@@ -42,4 +42,6 @@ export interface SessionPayload {
   modules: { moduleId: ServerModuleId; roles: UserRole[] }[];
   activeModule: ServerModuleId | null;
   activeRole: UserRole | null;
+  /** Session limits from the server; the browser only uses them to warn in time. */
+  limits: { idleSeconds: number; expiresAt: string };
 }

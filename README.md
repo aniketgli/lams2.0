@@ -31,13 +31,17 @@ Login ──► Lobby ──► Module (HRMS) ──► Dashboard for the active
 3. **Entering a module** (`POST /api/access/module`) — the server picks the starting role (least-privileged first: User → Reporting Manager → HoD → Auditor → Administrator).
 4. **Switching role** (`POST /api/access/active-role`) — only roles the user actively holds in that module are accepted. The UI always returns to the dashboard.
 5. **Every API request** re-checks the account and the active role against the database (`requireAuth`). Deactivating a user, letting their validity lapse, or revoking a role takes effect on their next request.
+6. **Idle and maximum time.** After `SESSION_IDLE_MINUTES` (default 15) without activity the session ends, with a one-minute warning first. Every session also ends `SESSION_MAX_HOURS` (default 8) after sign-in. Both limits are enforced by the server; background status checks don't count as activity.
+7. **URLs never grant access.** Any address is resolved against the session (`src/auth/resolveRoute.ts`): signed out → `/login`, no module open → `/lobby`, a page the active role may not open → `/hrms/dashboard`. Page permissions are defined once in `src/modules/hrms/hrmsPages.ts` and used by both the router and the sidebar.
+8. **Tabs and devices stay consistent.** Tabs in one browser share a session and sync instantly (sign-in, sign-out, role change). Every request carries the tab's current role; if it changed elsewhere, the server refuses the action (`409 CONTEXT_CHANGED`) and the tab reloads its role. Other devices have their own sessions and pick up deactivation or role revocation on their next request or within a minute.
 
 All session state comes from one payload (`GET /api/auth/me`):
 
 ```json
 { "user": { "id", "biometricId", "name", "email" },
   "modules": [{ "moduleId": "hrms", "roles": ["general_staff", "administrator"] }],
-  "activeModule": "hrms", "activeRole": "administrator" }
+  "activeModule": "hrms", "activeRole": "administrator",
+  "limits": { "idleSeconds": 900, "expiresAt": "2026-10-29T15:30:00.000Z" } }
 ```
 
 Nothing about identity or roles is stored in `localStorage`.

@@ -1,11 +1,14 @@
 import type { Request } from 'express';
 import { MODULE_IDS, ModuleId, RoleId } from '../lib/roles';
+import { sessionConfig } from '../config/session.config';
 
 export interface SessionPayload {
   user: { id: string; biometricId: string; name: string; email: string };
   modules: { moduleId: ModuleId; roles: RoleId[] }[];
   activeModule: ModuleId | null;
   activeRole: RoleId | null;
+  /** Limits the browser mirrors to warn before sign-out. The server enforces them regardless. */
+  limits: { idleSeconds: number; expiresAt: string };
 }
 
 /**
@@ -27,5 +30,9 @@ export function buildSessionPayload(req: Request): SessionPayload {
       .map((moduleId) => ({ moduleId, roles: [...(auth.grants[moduleId] ?? [])] })),
     activeModule: auth.activeModule,
     activeRole: auth.activeRole,
+    limits: {
+      idleSeconds: Math.round(sessionConfig.idleMs / 1000),
+      expiresAt: new Date(Number(req.session.loginAt) + sessionConfig.maxMs).toISOString(),
+    },
   };
 }

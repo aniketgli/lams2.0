@@ -73,6 +73,8 @@ router.post('/login', asyncHandler(async (req, res) => {
   req.session.biometricId = user.biometricId;
   req.session.activeModule = null;
   req.session.activeRole = null;
+  req.session.loginAt = Date.now();
+  req.session.lastActivityAt = req.session.loginAt;
   await saveSession(req);
 
   // Build the response through the same checks every later request goes through.
