@@ -38,7 +38,8 @@ export const toUiModule = (id: ServerModuleId): EnterpriseModuleId => SERVER_TO_
 export const toServerModule = (id: EnterpriseModuleId): ServerModuleId => UI_TO_SERVER[id];
 
 export interface SessionPayload {
-  user: { id: string; biometricId: string; name: string; email: string };
+  /** salutation is Mr./Mrs./Ms./Miss/Dr./Prof. from the employee profile, or null. */
+  user: { id: string; biometricId: string; name: string; email: string; salutation: string | null };
   modules: { moduleId: ServerModuleId; roles: UserRole[] }[];
   activeModule: ServerModuleId | null;
   activeRole: UserRole | null;

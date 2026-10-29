@@ -94,7 +94,7 @@ router.post('/login', asyncHandler(async (req, res) => {
   const grants = await loadActiveGrants(account.biometricId);
   req.auth = { account, grants, activeModule: null, activeRole: null };
 
-  res.json(buildSessionPayload(req));
+  res.json(await buildSessionPayload(req));
 }));
 
 router.post('/logout', asyncHandler(async (req, res) => {
@@ -106,7 +106,7 @@ router.post('/logout', asyncHandler(async (req, res) => {
 /** Current identity, active module grants and active role. 401 when signed out. */
 router.get('/me', requireAuth, asyncHandler(async (req, res) => {
   await saveSession(req); // persists any role cleanup done by requireAuth
-  res.json(buildSessionPayload(req));
+  res.json(await buildSessionPayload(req));
 }));
 
 export const authRoutes = router;

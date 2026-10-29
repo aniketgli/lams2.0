@@ -1,9 +1,11 @@
 import type { Request } from 'express';
 import { MODULE_IDS, ModuleId, RoleId } from '../lib/roles';
 import { sessionConfig } from '../config/session.config';
+import { loadSalutation } from './access.service';
 
 export interface SessionPayload {
-  user: { id: string; biometricId: string; name: string; email: string };
+  /** salutation: Mr./Mrs./Ms./Miss/Dr./Prof. from the employee profile, or null if none saved. */
+  user: { id: string; biometricId: string; name: string; email: string; salutation: string | null };
   modules: { moduleId: ModuleId; roles: RoleId[] }[];
   activeModule: ModuleId | null;
   activeRole: RoleId | null;
@@ -16,7 +18,7 @@ export interface SessionPayload {
  * Returned by login, /auth/me, and every module/role change, so the client
  * never has to piece session state together from several calls.
  */
-export function buildSessionPayload(req: Request): SessionPayload {
+export async function buildSessionPayload(req: Request): Promise<SessionPayload> {
   const auth = req.auth!;
   return {
     user: {
@@ -24,6 +26,7 @@ export function buildSessionPayload(req: Request): SessionPayload {
       biometricId: auth.account.biometricId,
       name: auth.account.name,
       email: auth.account.email,
+      salutation: await loadSalutation(auth.account.biometricId),
     },
     modules: MODULE_IDS
       .filter((moduleId) => auth.grants[moduleId] !== undefined)

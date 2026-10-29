@@ -54,9 +54,9 @@ export const Header: React.FC<HeaderProps> = ({
   const rolesList = ROLE_ORDER.filter((role) => assignedRoles.includes(role));
   const activeRole = session?.activeRole ?? null;
   const activeRoleLabel = activeRole ? ROLE_LABELS[activeRole] : '';
-  // Identity comes from the server session; the salutation from the employee profile when present.
-  const salutation = currentUser.suffix ? `${currentUser.suffix} ` : '';
-  const displayName = `${salutation}${session?.user.name ?? currentUser.name}`;
+  // Identity and salutation come from the server (users + employee_profiles.suffix).
+  const name = session?.user.name ?? currentUser.name;
+  const displayName = session?.user.salutation ? `${session.user.salutation} ${name}` : name;
   const biometricId = session?.user.biometricId ?? currentUser.biometricId ?? '—';
   const email = session?.user.email ?? currentUser.email;
 
@@ -122,7 +122,7 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* User Dropdown Menu */}
             {isUserMenuOpen && (
-              <div className="absolute right-0 mt-1.5 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden divide-y divide-slate-100 animate-in fade-in duration-100">
+              <div className="absolute right-0 mt-1.5 w-72 max-w-[calc(100vw-1.5rem)] bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden divide-y divide-slate-100 animate-in fade-in duration-100">
                 {/* Current Profile Summary */}
                 <div className="p-3 bg-slate-50/80">
                   <div className="flex items-center space-x-3">
@@ -145,7 +145,7 @@ export const Header: React.FC<HeaderProps> = ({
                         <button key={role} type="button" disabled={roleSwitchBusy || role === activeRole}
                           onClick={() => void handleRoleSwitch(role)}
                           aria-current={role === activeRole ? 'true' : undefined}
-                          className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-xs transition-all text-left ${role === activeRole ? 'bg-[#204088]/10 text-[#204088] font-bold border-l-3 border-[#204088] shadow-2xs cursor-default' : 'font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 cursor-pointer disabled:opacity-50'}`}>
+                          className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-xs transition-all text-left ${role === activeRole ? 'bg-[#204088]/10 text-[#204088] font-bold cursor-default' : 'font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 cursor-pointer disabled:opacity-50'}`}>
                           <span>{ROLE_LABELS[role]}</span>
                           {role === activeRole && <Check className="w-3.5 h-3.5" aria-hidden="true" />}
                         </button>

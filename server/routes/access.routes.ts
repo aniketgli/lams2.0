@@ -30,7 +30,7 @@ router.post('/module', asyncHandler(async (req, res) => {
 
   setActive(req, moduleId, role);
   await saveSession(req);
-  res.json(buildSessionPayload(req));
+  res.json(await buildSessionPayload(req));
 }));
 
 /** Switch role inside the active module. Only roles the user actively holds are accepted. */
@@ -46,7 +46,7 @@ router.post('/active-role', asyncHandler(async (req, res) => {
 
   setActive(req, moduleId, role);
   await saveSession(req);
-  res.json(buildSessionPayload(req));
+  res.json(await buildSessionPayload(req));
 }));
 
 /** Back to the lobby. */
@@ -56,7 +56,7 @@ router.post('/exit-module', asyncHandler(async (req, res) => {
   req.session.role = undefined;
   req.auth = { ...req.auth!, activeModule: null, activeRole: null };
   await saveSession(req);
-  res.json(buildSessionPayload(req));
+  res.json(await buildSessionPayload(req));
 }));
 
 function setActive(req: Request, moduleId: ModuleId, role: RoleId) {
