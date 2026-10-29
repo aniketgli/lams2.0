@@ -225,6 +225,9 @@ export function auditMasterLabels(): Record<string, string> {
     organization_settings: 'Organization Settings',
     notification_recipient: 'Email CC / BCC',
     email_settings: 'Email Sender & Server',
+    employee: 'Employee Profiles',
+    user_roles: 'Module Roles',
+    employee_password: 'Password Resets',
   };
   for (const def of MASTERS) labels[auditKey(def)] = def.label;
   return labels;

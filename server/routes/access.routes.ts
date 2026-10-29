@@ -7,6 +7,7 @@ import { ModuleId, ROLE_LABELS, RoleId, normalizeModule, normalizeRole, pickDefa
 import { PATTERNS, Validator } from '../lib/validate';
 import { requireActiveRole, requireAuth } from '../middleware/auth.middleware';
 import { buildSessionPayload } from '../services/session.service';
+import { replaceRoleGrants } from '../employees/store';
 
 const router = Router();
 router.use(requireAuth);
@@ -91,6 +92,7 @@ router.get('/users/:biometricId/roles', requireHrmsAdmin, asyncHandler(async (re
 /**
  * Replace a user's complete module-role matrix in one transaction.
  * Existing grants are switched active/inactive (history is kept); new ones are inserted.
+ * The change is written to the audit trail in the same transaction.
  */
 router.put('/users/:biometricId/roles', requireHrmsAdmin, asyncHandler(async (req, res) => {
   const target = parseTarget(req.params.biometricId);
@@ -114,28 +116,7 @@ router.put('/users/:biometricId/roles', requireHrmsAdmin, asyncHandler(async (re
     if (!keepsAdmin) throw badRequest(`You cannot remove your own HRMS ${ROLE_LABELS.administrator} role.`);
   }
 
-  const [targetUser] = await db.select({ id: users.id }).from(users).where(eq(users.biometricId, target)).limit(1);
-  if (!targetUser) throw notFound('User account not found.');
-
-  await db.transaction(async (tx) => {
-    const existing = await tx
-      .select({ id: user_module_roles.id, moduleId: user_module_roles.moduleId, roleId: user_module_roles.roleId, status: user_module_roles.status })
-      .from(user_module_roles)
-      .where(eq(user_module_roles.biometricId, target));
-
-    for (const row of existing) {
-      const key = `${normalizeModule(row.moduleId) ?? row.moduleId.toLowerCase()}::${row.roleId}`;
-      const nextStatus = wanted.has(key) ? 'active' : 'inactive';
-      wanted.delete(key);
-      if (row.status === nextStatus) continue;
-      await tx.update(user_module_roles)
-        .set({ status: nextStatus, lastUpdatedBy: actor, lastUpdated: new Date() })
-        .where(eq(user_module_roles.id, row.id));
-    }
-    for (const { moduleId, roleId } of wanted.values()) {
-      await tx.insert(user_module_roles).values({ biometricId: target, moduleId, roleId, status: 'active', lastUpdatedBy: actor });
-    }
-  });
+  await replaceRoleGrants(req, target, [...wanted.values()]);
 
   res.json({ success: true });
 }));
