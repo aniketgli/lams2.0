@@ -1,15 +1,30 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { UserRole, getUserRoles } from '../../types';
+import { UserRole } from '../../types';
+import { useSession } from '../../auth/SessionContext';
+import { ROLE_LABELS, ROLE_ORDER } from '../../auth/access';
 import { WIILogo } from '../components/WIILogo';
 import {
   Menu,
   LogOut,
+  ArrowLeft,
   ChevronDown,
   ShieldCheck,
   Check,
   User as UserIcon
 } from 'lucide-react';
+
+/** Photo if one exists, otherwise initials, so a missing avatar never shows a broken image. */
+const UserAvatar: React.FC<{ name: string; src?: string; size: 'sm' | 'lg' }> = ({ name, src, size }) => {
+  const dims = size === 'sm' ? 'w-7 h-7 sm:w-8 sm:h-8 text-[10px]' : 'w-10 h-10 text-xs';
+  if (src) return <img src={src} alt="" className={`${dims} rounded-full object-cover border border-slate-200`} />;
+  const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || '?';
+  return (
+    <span className={`${dims} rounded-full bg-[#701618] text-white font-bold flex items-center justify-center shrink-0`} aria-hidden="true">
+      {initials}
+    </span>
+  );
+};
 
 interface HeaderProps {
   activeTab: string;
@@ -22,25 +37,17 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  activeTab,
-  setActiveTab,
-  activeModule,
   setActiveModule,
   setIsOpenMobile,
   onRoleChangedGoDashboard
 }) => {
-  const {
-    currentUser,
-    logout,
-    applyActiveSessionRole
-  } = useApp();
+  const { currentUser } = useApp();
+  const { session, switchRole, logout } = useSession();
 
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
-  const [assignedRoleLabels, setAssignedRoleLabels] = useState<string[]>([]);
   const [roleSwitchBusy, setRoleSwitchBusy] = useState(false);
   const [roleSwitchError, setRoleSwitchError] = useState('');
-  const [currentRoleLabel, setCurrentRoleLabel] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isUserMenuOpen) return;
@@ -53,39 +60,18 @@ export const Header: React.FC<HeaderProps> = ({
     return () => { document.removeEventListener('click', closeMenu, true); document.removeEventListener('keydown', closeOnEscape); };
   }, [isUserMenuOpen]);
 
-  useEffect(() => {
-    let active = true;
-    fetch(`/api/access/roles?moduleId=${encodeURIComponent(({ lams: 'hrms', pms: 'pms', sims: 'stock', fms: 'facility', finance: 'finance' } as Record<string, string>)[activeModule] || activeModule)}`, { credentials: 'same-origin', cache: 'no-store' })
-      .then(async (response) => {
-        if (!response.ok) throw new Error('Unable to load assigned roles');
-        return response.json();
-      })
-      .then((data) => { if (active) setAssignedRoleLabels(Array.isArray(data.roles) ? data.roles : []); })
-      .catch(() => { if (active) setAssignedRoleLabels([]); });
-    return () => { active = false; };
-  }, [activeModule]);
+  // Roles come from the server session: only active grants in the active module.
+  const assignedRoles = session?.modules.find((m) => m.moduleId === session.activeModule)?.roles ?? [];
+  const rolesList = ROLE_ORDER.filter((role) => assignedRoles.includes(role));
+  const activeRole = session?.activeRole ?? null;
+  const activeRoleLabel = activeRole ? ROLE_LABELS[activeRole] : '';
 
-  const roleToLabel: Record<string, string> = {
-    administrator: 'Administrator', audit: 'Auditor', reporting_manager: 'Reporting Manager',
-    reviewing_manager: 'HoD', general_staff: 'User'
-  };
-  const labelToRole: Record<string, UserRole> = {
-    Administrator: 'administrator', Auditor: 'audit', 'Reporting Manager': 'reporting_manager',
-    HoD: 'reviewing_manager', User: 'general_staff'
-  };
-  const handleRoleSwitch = async (label: string) => {
+  const handleRoleSwitch = async (role: UserRole) => {
+    if (role === activeRole || roleSwitchBusy) return;
     setRoleSwitchError('');
     setRoleSwitchBusy(true);
     try {
-      const response = await fetch('/api/access/active-role', {
-        method: 'POST', credentials: 'same-origin', cache: 'no-store',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ role: label, moduleId: ({ lams: 'hrms', pms: 'pms', sims: 'stock', fms: 'facility', finance: 'finance' } as Record<string, string>)[activeModule] || activeModule })
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.message || 'Role switch was rejected.');
-      applyActiveSessionRole(label);
-      setCurrentRoleLabel(label);
+      await switchRole(role);
       setIsUserMenuOpen(false);
       onRoleChangedGoDashboard();
     } catch (error) {
@@ -94,52 +80,6 @@ export const Header: React.FC<HeaderProps> = ({
       setRoleSwitchBusy(false);
     }
   };
-
-  const getRoleLabel = (role: UserRole) => {
-    switch (role) {
-      case 'administrator':
-        return 'Administrator';
-      case 'audit':
-        return 'Auditor';
-      case 'reporting_manager':
-        return 'Reporting Manager';
-      case 'reviewing_manager':
-        return 'HoD';
-      default:
-        return 'User';
-    }
-  };
-
-  const getRoleBadgeStyle = (role: UserRole) => {
-    switch (role) {
-      case 'administrator':
-        return 'bg-[#eff6ff] text-[#2563eb] border-[#bfdbfe]';
-      case 'audit':
-        return 'bg-purple-50 text-purple-800 border-purple-200';
-      case 'reporting_manager':
-        return 'bg-blue-50 text-blue-800 border-blue-200';
-      case 'reviewing_manager':
-        return 'bg-amber-50 text-amber-800 border-amber-200';
-      default:
-        return 'bg-emerald-50 text-emerald-800 border-emerald-200';
-    }
-  };
-
-  const userRoles = getUserRoles(currentUser);
-  const isAdminUser = userRoles.includes('administrator') || currentUser.baseRole === 'administrator' || currentUser.role === 'administrator';
-
-  const allRolesList: { role: UserRole; label: string }[] = [
-    { role: 'administrator', label: 'Administrator' },
-    { role: 'audit', label: 'Auditor' },
-    { role: 'reporting_manager', label: 'Reporting Manager' },
-    { role: 'reviewing_manager', label: 'HoD' },
-    { role: 'general_staff', label: 'User' }
-  ];
-
-  const rolesList = allRolesList.filter((item) => assignedRoleLabels.includes(item.label));
-  const activeRoleLabel = currentRoleLabel || getRoleLabel(currentUser.role);
-
-
 
   const handleExitModule = () => {
     setIsUserMenuOpen(false);
@@ -174,11 +114,7 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
               className="flex items-center space-x-2 p-1 sm:p-1.5 rounded-xl hover:bg-slate-100 border border-transparent hover:border-slate-300 transition-all text-left focus:outline-none cursor-pointer"
             >
-              <img
-                src={currentUser.avatar}
-                alt={currentUser.name}
-                className="w-7 h-7 sm:w-8 sm:h-8 rounded-full object-cover border border-slate-200 shadow-2xs"
-              />
+              <UserAvatar name={currentUser.name} src={currentUser.avatar} size="sm" />
               <div className="hidden sm:block text-left">
                 <span className="text-xs font-bold text-slate-900 block leading-tight truncate max-w-[140px]">
                   {currentUser.name}
@@ -196,11 +132,7 @@ export const Header: React.FC<HeaderProps> = ({
                 {/* Current Profile Summary */}
                 <div className="p-3 bg-slate-50/80">
                   <div className="flex items-center space-x-3">
-                    <img
-                      src={currentUser.avatar}
-                      alt={currentUser.name}
-                      className="w-10 h-10 rounded-full object-cover border border-slate-200 shadow-2xs"
-                    />
+                    <UserAvatar name={currentUser.name} src={currentUser.avatar} size="lg" />
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-bold text-slate-900 truncate">{currentUser.name}</p>
                       <p className="text-[11px] text-slate-500 truncate">{currentUser.designation}</p>
@@ -213,12 +145,14 @@ export const Header: React.FC<HeaderProps> = ({
                   <div className="p-3 border-b border-slate-100">
                     
                     <div className="space-y-1">
-                      {rolesList.map((item) => (
-                        <button key={item.role} type="button" disabled={roleSwitchBusy || item.label === activeRoleLabel}
-                          onClick={() => handleRoleSwitch(item.label)}
-                          className={`w-full flex items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold transition-colors ${item.label === activeRoleLabel ? 'bg-blue-50 text-blue-800 cursor-default' : 'text-slate-700 hover:bg-slate-50 disabled:opacity-50'}`}>
-                          <span>{item.label}</span>
-                          {getRoleLabel(item.role) === getRoleLabel(currentUser.role) && <Check className="w-3.5 h-3.5" />}
+                      <p className="px-1 pb-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">Switch role</p>
+                      {rolesList.map((role) => (
+                        <button key={role} type="button" disabled={roleSwitchBusy || role === activeRole}
+                          onClick={() => void handleRoleSwitch(role)}
+                          aria-current={role === activeRole ? 'true' : undefined}
+                          className={`w-full flex items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold transition-colors ${role === activeRole ? 'bg-[#701618]/10 text-[#701618] cursor-default' : 'text-slate-700 hover:bg-slate-50 disabled:opacity-50'}`}>
+                          <span>{ROLE_LABELS[role]}</span>
+                          {role === activeRole && <Check className="w-3.5 h-3.5" aria-hidden="true" />}
                         </button>
                       ))}
                     </div>
@@ -232,8 +166,15 @@ export const Header: React.FC<HeaderProps> = ({
                     onClick={handleExitModule}
                     className="w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-lg text-xs text-rose-600 hover:bg-rose-50 transition-colors text-left cursor-pointer font-semibold"
                   >
-                    <LogOut className="w-4 h-4 text-rose-600" />
-                    <span>Exit Module</span>
+                    <ArrowLeft className="w-4 h-4 text-rose-600" />
+                    <span>Back to lobby</span>
+                  </button>
+                  <button
+                    onClick={() => { setIsUserMenuOpen(false); void logout(); }}
+                    className="w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-lg text-xs text-slate-700 hover:bg-slate-50 transition-colors text-left cursor-pointer font-semibold"
+                  >
+                    <LogOut className="w-4 h-4 text-slate-500" />
+                    <span>Sign out</span>
                   </button>
                 </div>
               </div>

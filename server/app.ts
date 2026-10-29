@@ -2,31 +2,62 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import type { Server as HttpServer } from 'http';
-import { createServer as createViteServer } from 'vite';
+import session from 'express-session';
+import type { RowDataPacket } from 'mysql2';
+import { pool } from '../src/db';
 import { emailRoutes } from './integrations/email/email.routes';
 import { slackRoutes } from './integrations/slack/slack.routes';
 import { authRoutes } from './routes/auth.routes';
 import accessRoutes from './routes/access.routes';
 import hrmsRoutes from './routes/hrms.routes';
-import { errorHandler } from './middleware/errorHandler';
-import session from 'express-session';
+import { apiNotFound, errorHandler } from './middleware/errorHandler';
+import { csrfGuard, noStore, securityHeaders } from './middleware/security';
+import { MySqlSessionStore } from './lib/sessionStore';
+import { SESSION_COOKIE } from './lib/http';
+
+const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours, extended on activity
+
+async function sessionTableExists(): Promise<boolean> {
+  try {
+    const [rows] = await pool.query<RowDataPacket[]>("SHOW TABLES LIKE 'web_sessions'");
+    return rows.length > 0;
+  } catch (error) {
+    console.error('[startup] Could not reach the database:', error instanceof Error ? error.message : error);
+    return false;
+  }
+}
+
+async function createSessionStore(isProduction: boolean): Promise<session.Store | undefined> {
+  if (process.env.SESSION_STORE === 'memory' && !isProduction) {
+    console.warn('[startup] SESSION_STORE=memory: logins will be lost on every restart.');
+    return undefined;
+  }
+  if (await sessionTableExists()) return new MySqlSessionStore({ ttlMs: SESSION_TTL_MS });
+  if (isProduction) {
+    throw new Error('Table web_sessions is missing. Run migrations/20261029_web_sessions.sql before starting in production.');
+  }
+  console.warn('[startup] Table web_sessions not found; using in-memory sessions. Run migrations/20261029_web_sessions.sql.');
+  return undefined;
+}
 
 export async function createApp(httpServer?: HttpServer) {
   const app = express();
-
-  app.use(express.json({ limit: '10mb' }));
-
   const isProduction = process.env.NODE_ENV === 'production';
   const sessionSecret = process.env.SESSION_SECRET;
 
-  // Never silently run production with a known, insecure session secret.
+  // Never run production with a missing or weak session secret.
   if (isProduction && (!sessionSecret || sessionSecret.length < 32)) {
     throw new Error('SESSION_SECRET must be configured with at least 32 characters in production.');
   }
 
+  app.disable('x-powered-by');
   app.set('trust proxy', isProduction ? 1 : false);
+  app.use(securityHeaders);
+  app.use(express.json({ limit: '2mb' }));
+
   app.use(session({
-    name: 'connect.sid',
+    name: SESSION_COOKIE,
+    store: await createSessionStore(isProduction),
     secret: sessionSecret || 'local-development-only-session-secret-change-me',
     resave: false,
     saveUninitialized: false,
@@ -35,35 +66,32 @@ export async function createApp(httpServer?: HttpServer) {
       httpOnly: true,
       secure: isProduction,
       sameSite: 'lax',
-      maxAge: 8 * 60 * 60 * 1000,
-      path: '/'
-    }
+      maxAge: SESSION_TTL_MS,
+      path: '/',
+    },
   }));
 
-  // Do not let browsers or shared proxies cache authenticated API responses.
-  app.use('/api', (_req, res, next) => {
-    res.setHeader('Cache-Control', 'no-store');
-    res.setHeader('Pragma', 'no-cache');
-    next();
-  });
-
-  app.get('/api/health', (_req, res) => {
+  const api = express.Router();
+  api.use(noStore, csrfGuard);
+  api.get('/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
-
-  app.use('/api/auth', authRoutes);
-  app.use('/api/access', accessRoutes);
-  app.use('/api/email', emailRoutes);
-  app.use('/api/slack', slackRoutes);
-  app.use('/api/hrms', hrmsRoutes);
+  api.use('/auth', authRoutes);
+  api.use('/access', accessRoutes);
+  api.use('/email', emailRoutes);
+  api.use('/slack', slackRoutes);
+  api.use('/hrms', hrmsRoutes);
+  api.use(apiNotFound);
+  app.use('/api', api);
 
   if (!isProduction) {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: {
         middlewareMode: httpServer ? { server: httpServer } : true,
-        hmr: httpServer ? { server: httpServer } : undefined
+        hmr: httpServer ? { server: httpServer } : undefined,
       },
-      appType: 'spa'
+      appType: 'spa',
     });
     app.use(vite.middlewares);
   } else {
@@ -71,8 +99,11 @@ export async function createApp(httpServer?: HttpServer) {
     const buildPath = path.join(process.cwd(), 'build');
     const staticPath = fs.existsSync(distPath) ? distPath : buildPath;
 
-    app.use(express.static(staticPath));
+    // Vite fingerprints files under /assets, so they can be cached forever.
+    app.use('/assets', express.static(path.join(staticPath, 'assets'), { maxAge: '365d', immutable: true }));
+    app.use(express.static(staticPath, { index: false, maxAge: '1h' }));
     app.get('*', (_req, res) => {
+      res.setHeader('Cache-Control', 'no-cache');
       res.sendFile(path.join(staticPath, 'index.html'));
     });
   }

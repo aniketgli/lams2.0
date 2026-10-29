@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
+import { SessionProvider, useSession } from './auth/SessionContext';
+import { toUiModule } from './auth/access';
 import { AppLayout } from './shared/layout';
 import { DashboardPage } from './modules/hrms/dashboard/pages/DashboardPage';
 import { AttendanceManagementPage } from './modules/hrms/attendance/pages/AttendanceManagementPage';
@@ -17,135 +19,89 @@ import { InventoryView } from './modules/inventory/InventoryView';
 import { FMSView } from './modules/fms/FMSView';
 import { FinanceView } from './modules/finance/FinanceView';
 import { EnterpriseModuleId } from './types';
+import { LoadingScreen } from './shared/components/LoadingScreen';
+
+type UiModule = 'lobby' | EnterpriseModuleId;
+
+/** Tabs each HRMS role may open. Anything else falls back to the dashboard. */
+const ADMIN_ONLY_TABS = new Set(['master']);
 
 const AppContent: React.FC = () => {
-  const [activeModule, setActiveModule] = useState<'lobby' | 'lams' | 'pms' | 'sims' | 'fms' | 'finance'>('lobby');
+  const { status, session, enterModule, exitModule } = useSession();
+  const { currentUser, isLogoViewerOpen, setIsLogoViewerOpen } = useApp();
   const [activeTab, setActiveTab] = useState<string>('dashboard');
-  const [isSlackModalOpen, setIsSlackModalOpen] = useState<boolean>(false);
-  const [isOpenMobile, setIsOpenMobile] = useState<boolean>(false);
-  const {
-    currentUser,
-    isAuthenticated,
-    isLogoViewerOpen,
-    setIsLogoViewerOpen,
-    logout
-  } = useApp();
+  const [isSlackModalOpen, setIsSlackModalOpen] = useState(false);
+  const [isOpenMobile, setIsOpenMobile] = useState(false);
 
-  if (!isAuthenticated || !currentUser) {
-    return <LoginPage />;
-  }
+  const activeModule: UiModule = session?.activeModule ? toUiModule(session.activeModule) : 'lobby';
+  const activeRole = session?.activeRole ?? null;
 
-  const handleRoleChangedGoDashboard = () => {
+  // Entering a module or changing role always lands on that role's dashboard.
+  useEffect(() => {
     setActiveTab('dashboard');
+  }, [activeModule, activeRole]);
+
+  if (status === 'loading') return <LoadingScreen />;
+  if (status === 'signedOut' || !session || !currentUser) return <LoginPage />;
+
+  const setActiveModule = (module: UiModule) => {
+    if (module === activeModule) return;
+    const action = module === 'lobby' ? exitModule() : enterModule(module);
+    action.catch((error) => console.error('Module change failed:', error));
   };
 
-  const handleSelectModuleFromLobby = (modId: EnterpriseModuleId) => {
-    // Lobby uses current module IDs; AppContent still renders legacy internal IDs.
-    // Translate at the boundary so clicking HRMS never leaves the app with no page.
-    const moduleMap: Record<string, 'lams' | 'pms' | 'sims' | 'fms' | 'finance'> = {
-      hrms: 'lams',
-      lams: 'lams',
-      pms: 'pms',
-      stock: 'sims',
-      sims: 'sims',
-      facility: 'fms',
-      fms: 'fms',
-      finance: 'finance',
-    };
-    const targetModule = moduleMap[String(modId)];
-    if (!targetModule) return;
-    setActiveModule(targetModule);
-    if (targetModule === 'lams') {
-      setActiveTab('dashboard');
-    }
-  };
+  if (activeModule === 'lobby') return <LobbyPage />;
 
-  // When on Lobby, render clean standalone portal layout matching Pic 1
-  if (activeModule === 'lobby') {
-    return (
-      <LobbyPage
-        onSelectModule={handleSelectModuleFromLobby}
-        onLogout={logout}
-      />
-    );
-  }
+  const canOpen = (tab: string) => !ADMIN_ONLY_TABS.has(tab) || activeRole === 'administrator' || activeRole === 'audit';
+  const tab = canOpen(activeTab) ? activeTab : 'dashboard';
 
   return (
     <>
       <AppLayout
-        activeTab={activeTab}
+        activeTab={tab}
         setActiveTab={setActiveTab}
         activeModule={activeModule}
         setActiveModule={setActiveModule}
         isOpenMobile={isOpenMobile}
         setIsOpenMobile={setIsOpenMobile}
-        onRoleChangedGoDashboard={handleRoleChangedGoDashboard}
+        onRoleChangedGoDashboard={() => setActiveTab('dashboard')}
         onOpenSlackModal={() => setIsSlackModalOpen(true)}
       >
-        {/* 1. Leave & Attendance Management (LAMS 2.0) */}
         {activeModule === 'lams' && (
-          <>
-            {activeTab === 'dashboard' && (
-              <DashboardPage
-                onNavigate={setActiveTab}
-                onOpenSlackModal={() => setIsSlackModalOpen(true)}
-              />
+          // Keyed by role so every page remounts with fresh state after a role switch.
+          <React.Fragment key={activeRole ?? 'none'}>
+            {tab === 'dashboard' && (
+              <DashboardPage onNavigate={setActiveTab} onOpenSlackModal={() => setIsSlackModalOpen(true)} />
             )}
-            {(activeTab === 'attendance' || activeTab === 'manual_attendance' || activeTab === 'od' || activeTab === 'attendance_management') && (
-              <AttendanceManagementPage initialTab={activeTab} />
+            {(tab === 'attendance' || tab === 'manual_attendance' || tab === 'od' || tab === 'attendance_management') && (
+              <AttendanceManagementPage initialTab={tab} />
             )}
-            {(activeTab === 'leave' || activeTab === 'leave_matrix' || activeTab === 'leave_balance') && (
-              <LeaveManagementPage onNavigate={setActiveTab} initialTab={activeTab} />
+            {(tab === 'leave' || tab === 'leave_matrix' || tab === 'leave_balance') && (
+              <LeaveManagementPage onNavigate={setActiveTab} initialTab={tab} />
             )}
-            {activeTab === 'holiday_calendar' && <HolidayCalendarPage onNavigate={setActiveTab} />}
-            {(activeTab === 'profile' || activeTab === 'roles' || activeTab === 'user_controls' || activeTab === 'transfers') && (
+            {tab === 'holiday_calendar' && <HolidayCalendarPage onNavigate={setActiveTab} />}
+            {(tab === 'profile' || tab === 'roles' || tab === 'user_controls' || tab === 'transfers') && (
               <EmployeeProfilePage
-                initialTab={
-                  activeTab === 'roles' || activeTab === 'user_controls'
-                    ? 'user_controls'
-                    : activeTab === 'transfers'
-                    ? 'transfers'
-                    : 'profile'
-                }
+                initialTab={tab === 'roles' || tab === 'user_controls' ? 'user_controls' : tab === 'transfers' ? 'transfers' : 'profile'}
               />
             )}
-            {activeTab === 'master' && (currentUser.role === 'administrator' || currentUser.role === 'audit') && <MasterSettingsPage />}
-          </>
+            {tab === 'master' && <MasterSettingsPage />}
+          </React.Fragment>
         )}
 
-        {/* 2. Project Management System (WII-PMS) */}
-        {activeModule === 'pms' && (
-          <PMSView onReturnToLobby={() => setActiveModule('lobby')} />
-        )}
-
-        {/* 3. Stock & Inventory Management (WII-SIMS) */}
-        {activeModule === 'sims' && (
-          <InventoryView onReturnToLobby={() => setActiveModule('lobby')} />
-        )}
-
-        {/* 4. Facility & Campus Management (WII-FMS) */}
-        {activeModule === 'fms' && (
-          <FMSView onReturnToLobby={() => setActiveModule('lobby')} />
-        )}
-
-        {/* 5. Finance & TA/DA Claims (WII-FinPay) */}
-        {activeModule === 'finance' && (
-          <FinanceView onReturnToLobby={() => setActiveModule('lobby')} />
-        )}
+        {activeModule === 'pms' && <PMSView onReturnToLobby={() => setActiveModule('lobby')} />}
+        {activeModule === 'sims' && <InventoryView onReturnToLobby={() => setActiveModule('lobby')} />}
+        {activeModule === 'fms' && <FMSView onReturnToLobby={() => setActiveModule('lobby')} />}
+        {activeModule === 'finance' && <FinanceView onReturnToLobby={() => setActiveModule('lobby')} />}
       </AppLayout>
 
-      {/* Slack Integration Hub Modal */}
       <SlackHubModal isOpen={isSlackModalOpen} onClose={() => setIsSlackModalOpen(false)} />
-
-      {/* Real-time Email Dispatch Toast Banner */}
       <EmailToast />
-
-      {/* Organization Logo & Brand Viewer Modal */}
       <LogoViewerModal
         isOpen={isLogoViewerOpen}
         onClose={() => setIsLogoViewerOpen(false)}
         onOpenMasterBranding={() => {
-          setActiveModule('lams');
+          if (activeModule !== 'lams') setActiveModule('lams');
           setActiveTab('master');
         }}
       />
@@ -155,8 +111,10 @@ const AppContent: React.FC = () => {
 
 export default function App() {
   return (
-    <AppProvider>
-      <AppContent />
-    </AppProvider>
+    <SessionProvider>
+      <AppProvider>
+        <AppContent />
+      </AppProvider>
+    </SessionProvider>
   );
 }
