@@ -105,44 +105,39 @@ export const Header: React.FC<HeaderProps> = ({
           {/* User Profile Dropdown */}
           <div className="relative" ref={userMenuRef}>
             <button
+              type="button"
               onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-              className="flex items-center space-x-2 p-1 sm:p-1.5 rounded-xl hover:bg-slate-100 border border-transparent hover:border-slate-300 transition-all text-left focus:outline-none cursor-pointer"
+              aria-haspopup="menu"
+              aria-expanded={isUserMenuOpen}
+              title={`${displayName} · ${email}`}
+              className="flex items-center gap-2.5 p-1 sm:pl-1.5 sm:pr-2 rounded-xl hover:bg-slate-100 border border-transparent hover:border-slate-200 transition-colors text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#204088] cursor-pointer"
             >
-              <UserAvatar name={currentUser.name} src={currentUser.avatar} className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-slate-200" />
-              <div className="hidden sm:block text-left">
-                <span className="text-xs font-bold text-slate-900 block leading-tight truncate max-w-[140px]">
-                  {currentUser.name}
+              <UserAvatar name={currentUser.name} src={currentUser.avatar} className="w-8 h-8 rounded-full border border-slate-200" />
+              <span className="hidden sm:block min-w-0 text-left">
+                <span className="block text-xs font-bold text-slate-900 leading-tight truncate max-w-[200px]">{displayName}</span>
+                <span className="block text-[11px] text-slate-500 leading-tight mt-0.5 truncate max-w-[200px]">
+                  B.I. {biometricId}
+                  <span className="mx-1 text-slate-300" aria-hidden="true">·</span>
+                  <span className="font-semibold text-[#204088]">{activeRoleLabel}</span>
                 </span>
-                <span className="text-[10px] text-slate-500 block leading-tight font-medium">
-                  {activeRoleLabel}
-                </span>
-              </div>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+              </span>
+              <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isUserMenuOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
             </button>
 
             {/* User Dropdown Menu */}
             {isUserMenuOpen && (
-              <div className="absolute right-0 mt-1.5 w-72 max-w-[calc(100vw-1.5rem)] bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden divide-y divide-slate-100 animate-in fade-in duration-100">
-                {/* Current Profile Summary */}
-                <div className="p-3 bg-slate-50/80">
-                  <div className="flex items-center space-x-3">
-                    <UserAvatar name={currentUser.name} src={currentUser.avatar} className="w-10 h-10 rounded-full border border-slate-200" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-bold text-slate-900 truncate">{displayName}</p>
-                      <p className="text-[11px] text-slate-500 truncate mt-0.5" title={`B.I. ${biometricId} · ${email}`}>
-                        <span className="font-semibold text-slate-600">B.I. {biometricId}</span>
-                        <span className="mx-1.5 text-slate-300" aria-hidden="true">|</span>
-                        <span>{email}</span>
-                      </p>
-                    </div>
-                  </div>
+              <div role="menu" className="absolute right-0 mt-1.5 w-56 max-w-[calc(100vw-1.5rem)] bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden divide-y divide-slate-100 animate-in fade-in duration-100">
+                {/* Small screens hide the name in the header, so show it here only there. */}
+                <div className="sm:hidden px-3 py-2.5">
+                  <p className="text-xs font-bold text-slate-900 truncate">{displayName}</p>
+                  <p className="text-[11px] text-slate-500 truncate">B.I. {biometricId}</p>
                 </div>
 
                 {rolesList.length > 1 && (
-                  <div className="p-3 border-b border-slate-100">
-                    <div className="space-y-1" role="group" aria-label="Switch role">
+                  <div className="p-1.5">
+                    <div className="space-y-0.5" role="group" aria-label="Switch role">
                       {rolesList.map((role) => (
-                        <button key={role} type="button" disabled={roleSwitchBusy || role === activeRole}
+                        <button key={role} type="button" role="menuitemradio" aria-checked={role === activeRole} disabled={roleSwitchBusy || role === activeRole}
                           onClick={() => void handleRoleSwitch(role)}
                           aria-current={role === activeRole ? 'true' : undefined}
                           className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-xs transition-all text-left ${role === activeRole ? 'bg-[#204088]/10 text-[#204088] font-bold cursor-default' : 'font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 cursor-pointer disabled:opacity-50'}`}>
@@ -151,17 +146,19 @@ export const Header: React.FC<HeaderProps> = ({
                         </button>
                       ))}
                     </div>
-                    {roleSwitchError && <p role="alert" className="text-[11px] text-rose-600 mt-2">{roleSwitchError}</p>}
+                    {roleSwitchError && <p role="alert" className="px-3 pt-1.5 pb-1 text-[11px] text-rose-600">{roleSwitchError}</p>}
                   </div>
                 )}
 
                 {/* Inside a module the only exit is back to the lobby; signing out happens there. */}
-                <div className="p-2 space-y-1">
+                <div className="p-1.5">
                   <button
+                    type="button"
+                    role="menuitem"
                     onClick={handleExitModule}
-                    className="w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-lg text-xs text-rose-600 hover:bg-rose-50 transition-colors text-left cursor-pointer font-semibold"
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-rose-600 hover:bg-rose-50 transition-colors text-left cursor-pointer font-semibold"
                   >
-                    <ArrowLeft className="w-4 h-4 text-rose-600" />
+                    <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" />
                     <span>Back to lobby</span>
                   </button>
                 </div>
