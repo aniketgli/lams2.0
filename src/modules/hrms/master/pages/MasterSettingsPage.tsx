@@ -408,7 +408,7 @@ export const MasterSettingsPage: React.FC = () => {
           onClick={() => setActiveSubMaster('attendance')}
           className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeSubMaster === 'attendance'
-              ? 'bg-[#2563eb] text-white shadow-xs'
+              ? 'bg-primary text-white shadow-xs'
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
@@ -420,7 +420,7 @@ export const MasterSettingsPage: React.FC = () => {
           onClick={() => setActiveSubMaster('biometric')}
           className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeSubMaster === 'biometric'
-              ? 'bg-[#2563eb] text-white shadow-xs'
+              ? 'bg-primary text-white shadow-xs'
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
@@ -432,7 +432,7 @@ export const MasterSettingsPage: React.FC = () => {
           onClick={() => setActiveSubMaster('leave')}
           className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeSubMaster === 'leave'
-              ? 'bg-[#2563eb] text-white shadow-xs'
+              ? 'bg-primary text-white shadow-xs'
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
@@ -444,7 +444,7 @@ export const MasterSettingsPage: React.FC = () => {
           onClick={() => setActiveSubMaster('departments')}
           className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeSubMaster === 'departments'
-              ? 'bg-[#2563eb] text-white shadow-xs'
+              ? 'bg-primary text-white shadow-xs'
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
@@ -456,7 +456,7 @@ export const MasterSettingsPage: React.FC = () => {
           onClick={() => setActiveSubMaster('organization')}
           className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeSubMaster === 'organization'
-              ? 'bg-[#2563eb] text-white shadow-xs'
+              ? 'bg-primary text-white shadow-xs'
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
@@ -598,7 +598,7 @@ export const MasterSettingsPage: React.FC = () => {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
               <div>
                 <h2 className="text-base font-extrabold text-slate-900 flex items-center space-x-2">
-                  <Building2 className="w-5 h-5 text-[#2563eb]" />
+                  <Building2 className="w-5 h-5 text-primary" />
                   <span>Organization Master</span>
                 </h2>
                 
@@ -635,7 +635,7 @@ export const MasterSettingsPage: React.FC = () => {
                 {/* 1. Organization Name */}
                 <div className="border border-slate-200 rounded-xl p-4.5 bg-slate-50/50 space-y-3">
                   <span className="text-xs font-extrabold text-slate-900 flex items-center space-x-1.5 uppercase tracking-wider">
-                    <Building2 className="w-4 h-4 text-[#2563eb]" />
+                    <Building2 className="w-4 h-4 text-primary" />
                     <span>Organization Name</span>
                   </span>
                   <div>
@@ -657,7 +657,7 @@ export const MasterSettingsPage: React.FC = () => {
                 <div className="border border-slate-200 rounded-xl p-4.5 bg-slate-50/50 space-y-4">
                   <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
                     <span className="text-xs font-extrabold text-slate-900 flex items-center space-x-1.5 uppercase tracking-wider">
-                      <ImageIcon className="w-4 h-4 text-[#2563eb]" />
+                      <ImageIcon className="w-4 h-4 text-primary" />
                       <span>Upload Logo</span>
                     </span>
                     <span className="text-[10px] font-bold text-blue-800 bg-blue-100 px-2 py-0.5 rounded-full">
@@ -667,7 +667,7 @@ export const MasterSettingsPage: React.FC = () => {
 
                   <div className="space-y-3">
                     <div className="flex flex-wrap items-center gap-3">
-                      <label className="px-4 py-2 bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center space-x-2 shadow-2xs">
+                      <label className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center space-x-2 shadow-2xs">
                         <Upload className="w-4 h-4 text-amber-300" />
                         <span>Upload Logo File</span>
                         <input
@@ -748,7 +748,7 @@ export const MasterSettingsPage: React.FC = () => {
                 <div className="border border-slate-200 rounded-xl p-4.5 bg-slate-50/50 space-y-3">
                   <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
                     <span className="text-xs font-extrabold text-slate-900 flex items-center space-x-1.5 uppercase tracking-wider">
-                      <MapPin className="w-4 h-4 text-[#2563eb]" />
+                      <MapPin className="w-4 h-4 text-primary" />
                       <span>Organization Address</span>
                     </span>
                     <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
@@ -775,7 +775,7 @@ export const MasterSettingsPage: React.FC = () => {
                 <div className="border border-slate-200 rounded-xl p-4.5 bg-slate-50/50 space-y-3">
                   <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
                     <span className="text-xs font-extrabold text-slate-900 flex items-center space-x-1.5 uppercase tracking-wider">
-                      <FileText className="w-4 h-4 text-[#2563eb]" />
+                      <FileText className="w-4 h-4 text-primary" />
                       <span>Footer Copyright Notice</span>
                     </span>
                     <span className="text-[10px] font-bold text-purple-800 bg-purple-100 px-2 py-0.5 rounded-full">
@@ -820,7 +820,7 @@ export const MasterSettingsPage: React.FC = () => {
                         showToast(error instanceof Error ? error.message : 'Could not save organization settings.');
                       }
                     }}
-                    className="px-6 py-2.5 bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-xl font-extrabold text-xs transition-all flex items-center justify-center space-x-2 shadow-sm cursor-pointer"
+                    className="px-6 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-xl font-extrabold text-xs transition-all flex items-center justify-center space-x-2 shadow-sm cursor-pointer"
                   >
                     <Save className="w-4 h-4 text-amber-300" />
                     <span>Save Organization Settings</span>
@@ -868,7 +868,7 @@ export const MasterSettingsPage: React.FC = () => {
                       <div className="font-semibold text-slate-700 text-[10.5px]">
                         {orgCopyrightText || `© 2026 ${brandingOrgName || 'Organization'}`}
                       </div>
-                      <div className="flex items-center space-x-1 text-[#2563eb] font-semibold text-[10.5px]">
+                      <div className="flex items-center space-x-1 text-primary font-semibold text-[10.5px]">
                         <MapPin className="w-3 h-3 shrink-0" />
                         <span>{orgAddress || 'Address not specified'}</span>
                       </div>

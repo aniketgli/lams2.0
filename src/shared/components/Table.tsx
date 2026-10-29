@@ -91,9 +91,9 @@ export const TableHead: React.FC<TableHeadProps> = ({
       {sortable && (
         <span className="text-slate-400 group-hover:text-slate-700">
           {sortDirection === 'asc' ? (
-            <ArrowUp className="w-3 h-3 text-[#2563eb]" />
+            <ArrowUp className="w-3 h-3 text-primary" />
           ) : sortDirection === 'desc' ? (
-            <ArrowDown className="w-3 h-3 text-[#2563eb]" />
+            <ArrowDown className="w-3 h-3 text-primary" />
           ) : (
             <ArrowUpDown className="w-3 h-3 opacity-60" />
           )}
@@ -208,7 +208,7 @@ export function DataTable<T>({
             <tr>
               <td colSpan={columns.length} className="py-12 text-center text-slate-500">
                 <div className="flex flex-col items-center justify-center space-y-2">
-                  <Loader2 className="w-6 h-6 animate-spin text-[#2563eb]" />
+                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
                   <span className="text-xs font-semibold">Loading data...</span>
                 </div>
               </td>

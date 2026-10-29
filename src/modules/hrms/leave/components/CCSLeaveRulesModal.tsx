@@ -103,7 +103,7 @@ export const CCSLeaveRulesModal: React.FC<CCSLeaveRulesModalProps> = ({ isOpen =
               <div key={catIdx} className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
                 <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
                   <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center space-x-2">
-                    <Award className="w-3.5 h-3.5 text-[#2563eb]" />
+                    <Award className="w-3.5 h-3.5 text-primary" />
                     <span>{cat.category}</span>
                   </h3>
                   <Badge variant="neutral" size="sm">

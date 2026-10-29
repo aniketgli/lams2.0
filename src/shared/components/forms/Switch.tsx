@@ -47,7 +47,7 @@ export const Switch: React.FC<SwitchProps> = ({
         <div
           className={`${dimensions.track} rounded-full transition-colors duration-200 ease-in-out border border-slate-300 ${
             checked
-              ? 'bg-[#2563eb] border-[#2563eb]'
+              ? 'bg-primary border-primary'
               : 'bg-slate-200 hover:bg-slate-300'
           }`}
         >

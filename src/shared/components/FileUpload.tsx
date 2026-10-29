@@ -117,7 +117,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
           disabled
             ? 'bg-slate-50 border-slate-200 cursor-not-allowed opacity-60'
             : isDragOver
-            ? 'bg-[#eff6ff] border-[#2563eb] ring-2 ring-[#2563eb]/10'
+            ? 'bg-primary-subtle border-primary ring-2 ring-primary/10'
             : 'bg-white hover:bg-slate-50 border-slate-300 hover:border-slate-400'
         }`}
       >
@@ -136,7 +136,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         </div>
 
         <p className="text-xs font-bold text-slate-800">
-          <span className="text-[#2563eb] hover:underline">Click to browse</span> or drag and drop files here
+          <span className="text-primary hover:underline">Click to browse</span> or drag and drop files here
         </p>
         <p className="text-[11px] text-slate-400 mt-0.5">
           Supported files: {accept.replace(/\./g, '').toUpperCase()} (Max {maxSizeMB}MB)

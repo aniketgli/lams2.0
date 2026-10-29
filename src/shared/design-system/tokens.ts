@@ -12,7 +12,7 @@
 export const DS_COLORS = {
   // Brand / Institutional Primary (WII Garnet / Maroon)
   primary: {
-    DEFAULT: '#2563eb', // Kept as provided
+    DEFAULT: '#204088', // WII navy (see src/index.css)
     hover: '#1d4ed8',
     active: '#1e40af',
     subtle: '#eff6ff',
@@ -46,7 +46,7 @@ export const DS_COLORS = {
     subtle: '#f1f5f9',  // Slate-100
     DEFAULT: '#e2e8f0', // Slate-200 standard card and container border
     strong: '#cbd5e1',  // Slate-300 input border, prominent dividers
-    focus: '#2563eb',   // Blue-600 focus ring
+    focus: '#204088',   // primary focus ring
     focusRing: 'rgba(37, 99, 235, 0.2)' // Focus glow
   },
 
@@ -87,7 +87,7 @@ export const DS_COLORS = {
   },
 
   info: {
-    DEFAULT: '#2563eb', // Blue-600
+    DEFAULT: '#204088', // primary
     hover: '#1d4ed8',   // Blue-700
     subtle: '#eff6ff',  // Blue-50
     border: '#bfdbfe',  // Blue-200
@@ -308,7 +308,7 @@ export const DS_BREAKPOINTS = {
 export const DS_COMPONENTS = {
   button: {
     primary:
-      'h-9 px-4 bg-[#2563eb] hover:bg-[#1d4ed8] active:bg-[#1e40af] text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center space-x-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed',
+      'h-9 px-4 bg-primary hover:bg-primary-hover active:bg-primary-active text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center space-x-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed',
     secondary:
       'h-9 px-4 bg-slate-900 hover:bg-slate-800 active:bg-slate-950 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center space-x-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed',
     outline:

@@ -5,14 +5,35 @@
 /* -------------------------------------------------------------------------- */
 
 @theme {
-  /* Institutional Brand Primary (Professional Blue) */
-  --color-primary: #2563eb;
-  --color-primary-hover: #1d4ed8;
-  --color-primary-active: #1e40af;
-  --color-primary-subtle: #eff6ff;
-  --color-primary-light: #dbeafe;
-  --color-primary-border: #bfdbfe;
+  /* Primary (WII navy) — the single source of the app's main colour.
+     To change the theme, edit these values and the --ds-primary* values below. */
+  --color-primary: #204088;
+  --color-primary-hover: #1a3570;
+  --color-primary-active: #142a59;
+  --color-primary-subtle: #eef2fa;
+  --color-primary-light: #dbe3f3;
+  --color-primary-border: #b9c7e6;
   --color-primary-foreground: #ffffff;
+
+  /* Tailwind's blue scale remapped to the navy primary, so every existing
+     bg-blue-*, text-blue-*, border-blue-* class across the app follows the
+     theme. 600 = primary, 700 = hover, 800 = active. */
+  --color-blue-50: #eef2fa;
+  --color-blue-100: #dbe3f3;
+  --color-blue-200: #b9c7e6;
+  --color-blue-300: #8fa5d4;
+  --color-blue-400: #6080c0;
+  --color-blue-500: #3a5fa8;
+  --color-blue-600: #204088;
+  --color-blue-700: #1a3570;
+  --color-blue-800: #142a59;
+  --color-blue-900: #0f1f42;
+  --color-blue-950: #0a152d;
+
+  /* Brand accent (WII maroon) — logo, avatars, brand marks only */
+  --color-brand: #701618;
+  --color-brand-hover: #561012;
+  --color-brand-active: #400c0e;
 
   /* Structural Corporate Secondary (Deep Slate) */
   --color-secondary: #0f172a;
@@ -42,10 +63,10 @@
   --color-error-subtle: #fff1f2;
   --color-error-border: #fecdd3;
 
-  --color-info: #2563eb;
-  --color-info-hover: #1d4ed8;
-  --color-info-subtle: #eff6ff;
-  --color-info-border: #bfdbfe;
+  --color-info: #204088;
+  --color-info-hover: #1a3570;
+  --color-info-subtle: #eef2fa;
+  --color-info-border: #b9c7e6;
 
   /* Typography Font Stacks */
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -54,12 +75,12 @@
 
 :root {
   /* Design System Tokens for CSS & Inline References */
-  --ds-primary: #2563eb;
-  --ds-primary-hover: #1d4ed8;
-  --ds-primary-active: #1e40af;
-  --ds-primary-subtle: #eff6ff;
-  --ds-primary-light: #dbeafe;
-  --ds-primary-border: #bfdbfe;
+  --ds-primary: #204088;
+  --ds-primary-hover: #1a3570;
+  --ds-primary-active: #142a59;
+  --ds-primary-subtle: #eef2fa;
+  --ds-primary-light: #dbe3f3;
+  --ds-primary-border: #b9c7e6;
   --ds-primary-foreground: #ffffff;
 
   --ds-secondary: #0f172a;

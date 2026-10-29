@@ -1017,7 +1017,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     orgHindiName: '',
     badgeText: 'HUB',
     logoType: 'custom',
-    themePrimaryColor: '#2563eb',
+    themePrimaryColor: '#204088',
     updatedAt: new Date().toISOString(),
     updatedBy: 'System Administrator'
   };

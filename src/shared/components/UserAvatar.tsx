@@ -56,7 +56,7 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({ name, src, className = '
     <span
       role="img"
       aria-label={label}
-      className={`${className} shrink-0 inline-flex items-center justify-center bg-[#701618] text-white font-bold leading-none select-none`}
+      className={`${className} shrink-0 inline-flex items-center justify-center bg-brand text-white font-bold leading-none select-none`}
       style={{ fontSize: fontSizeFor(className) }}
     >
       {initialsOf(name)}

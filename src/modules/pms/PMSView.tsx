@@ -355,7 +355,7 @@ export const PMSView: React.FC<PMSViewProps> = ({ onReturnToLobby }) => {
               paginatedProjects.map((p) => (
                 <TableRow key={p.id}>
                   <TableCell className="align-top">
-                    <span className="font-mono font-bold text-[#2563eb] bg-[#eff6ff] border border-[#bfdbfe] px-1.5 py-0.5 rounded text-[10px] inline-block mb-1">
+                    <span className="font-mono font-bold text-primary bg-primary-subtle border border-primary-border px-1.5 py-0.5 rounded text-[10px] inline-block mb-1">
                       {p.code}
                     </span>
                     <div className="font-bold text-slate-900 leading-snug">{p.title}</div>
@@ -367,14 +367,14 @@ export const PMSView: React.FC<PMSViewProps> = ({ onReturnToLobby }) => {
                   <TableCell className="align-top whitespace-nowrap">
                     <div className="font-bold text-slate-800">{p.piName}</div>
                     {p.coPiName && <div className="text-[11px] text-slate-500">Co-PI: {p.coPiName}</div>}
-                    <div className="text-[11px] text-[#2563eb] font-medium mt-1 truncate max-w-xs">{p.fundingAgency}</div>
+                    <div className="text-[11px] text-primary font-medium mt-1 truncate max-w-xs">{p.fundingAgency}</div>
                   </TableCell>
                   <TableCell className="align-top whitespace-nowrap">
                     <div className="font-bold text-slate-900">{formatCurrency(p.sanctionAmount)}</div>
                     <div className="text-[11px] text-slate-500">Spent: {formatCurrency(p.spentAmount)}</div>
                     <div className="w-24 bg-slate-100 h-1.5 rounded-sm overflow-hidden mt-1.5 border border-slate-200">
                       <div
-                        className="bg-[#2563eb] h-full rounded-sm"
+                        className="bg-primary h-full rounded-sm"
                         style={{ width: `${Math.min(100, Math.round((p.spentAmount / p.sanctionAmount) * 100))}%` }}
                       />
                     </div>

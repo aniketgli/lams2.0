@@ -75,7 +75,7 @@ export const SessionTimeoutGuard: React.FC = () => {
                   setBusy(false);
                 }
               }}
-              className="px-3.5 py-2 rounded-lg text-xs font-bold text-white bg-[#701618] hover:bg-[#561012] disabled:opacity-60 cursor-pointer"
+              className="px-3.5 py-2 rounded-lg text-xs font-bold text-white bg-brand hover:bg-brand-hover disabled:opacity-60 cursor-pointer"
             >
               Stay signed in
             </button>

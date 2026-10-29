@@ -54,7 +54,7 @@ export const LobbyPage: React.FC = () => {
         <button
           type="button"
           onClick={() => void logout()}
-          className="shrink-0 whitespace-nowrap inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-white border border-slate-200 hover:border-[#701618]/40 hover:bg-[#701618]/5 text-slate-700 hover:text-[#701618] text-xs font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#701618]"
+          className="shrink-0 whitespace-nowrap inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-white border border-slate-200 hover:border-brand/40 hover:bg-brand/5 text-slate-700 hover:text-brand text-xs font-semibold transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
         >
           <LogOut className="w-4 h-4 shrink-0" aria-hidden="true" />
           <span>Sign out</span>
@@ -89,7 +89,7 @@ export const LobbyPage: React.FC = () => {
                   type="button"
                   onClick={() => void open(moduleId)}
                   disabled={opening !== null}
-                  className="group bg-white border border-slate-200 rounded-2xl p-6 sm:p-7 flex flex-col items-center text-center transition-all duration-200 w-full max-w-[340px] sm:max-w-none sm:w-[calc(33.333%-14px)] lg:w-[calc(20%-16px)] hover:border-slate-300 hover:shadow-lg hover:-translate-y-1 disabled:hover:translate-y-0 disabled:opacity-70 cursor-pointer disabled:cursor-wait focus:outline-none focus-visible:ring-2 focus-visible:ring-[#701618]"
+                  className="group bg-white border border-slate-200 rounded-2xl p-6 sm:p-7 flex flex-col items-center text-center transition-all duration-200 w-full max-w-[340px] sm:max-w-none sm:w-[calc(33.333%-14px)] lg:w-[calc(20%-16px)] hover:border-slate-300 hover:shadow-lg hover:-translate-y-1 disabled:hover:translate-y-0 disabled:opacity-70 cursor-pointer disabled:cursor-wait focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                 >
                   <span className={`w-16 h-16 rounded-2xl flex items-center justify-center text-white mb-5 ${card.iconBg}`}>
                     {isOpening ? <Loader2 className="w-8 h-8 animate-spin" aria-hidden="true" /> : <Icon className="w-8 h-8 stroke-[2.2]" />}
@@ -108,7 +108,7 @@ export const LobbyPage: React.FC = () => {
           <p>{orgBranding?.copyrightText || `© ${new Date().getFullYear()} ${orgBranding?.orgName || 'Wildlife Institute of India'}`}</p>
           {formatOrgAddress(orgBranding) && (
             <p className="flex items-center gap-1.5 text-slate-600">
-              <MapPin className="w-3.5 h-3.5 text-[#701618] shrink-0" aria-hidden="true" />
+              <MapPin className="w-3.5 h-3.5 text-brand shrink-0" aria-hidden="true" />
               <span>{formatOrgAddress(orgBranding)}</span>
             </p>
           )}

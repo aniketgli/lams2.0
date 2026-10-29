@@ -144,7 +144,7 @@ export const LoginPage: React.FC = () => {
           </p>
           {formatOrgAddress(orgBranding) && (
             <p className="flex items-center justify-center gap-1">
-              <MapPin className="w-3 h-3 text-[#701618] shrink-0" aria-hidden="true" />
+              <MapPin className="w-3 h-3 text-brand shrink-0" aria-hidden="true" />
               <span>{formatOrgAddress(orgBranding)}</span>
             </p>
           )}

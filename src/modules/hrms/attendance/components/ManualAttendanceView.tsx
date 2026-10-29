@@ -1259,7 +1259,7 @@ export const ManualAttendanceView: React.FC = () => {
                 }
               }
             }}
-            className="bg-[#2563eb] hover:bg-[#1d4ed8] active:bg-[#400c0e] text-white font-bold text-xs px-4 py-2 rounded-xl shadow-xs transition-all cursor-pointer shrink-0 flex items-center space-x-1.5"
+            className="bg-primary hover:bg-primary-hover active:bg-brand-active text-white font-bold text-xs px-4 py-2 rounded-xl shadow-xs transition-all cursor-pointer shrink-0 flex items-center space-x-1.5"
           >
             <span>Review Queue ({pendingManagerQueue.length})</span>
           </button>

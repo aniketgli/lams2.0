@@ -198,7 +198,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
           <Filter className="w-4 h-4 text-slate-500" />
           <h4 className="text-xs font-bold text-slate-800 tracking-tight">{title}</h4>
           {activeFilterCount > 0 && (
-            <span className="text-[10px] font-bold bg-[#eff6ff] text-[#2563eb] border border-[#bfdbfe] px-1.5 py-0.2 rounded-md">
+            <span className="text-[10px] font-bold bg-primary-subtle text-primary border border-primary-border px-1.5 py-0.2 rounded-md">
               {activeFilterCount} active
             </span>
           )}
