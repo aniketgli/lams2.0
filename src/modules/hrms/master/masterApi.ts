@@ -180,3 +180,26 @@ export const MASTERS_CHANGED_EVENT = 'hrms:masters-changed';
 export function announceMastersChanged() {
   window.dispatchEvent(new Event(MASTERS_CHANGED_EVENT));
 }
+
+// ---- Notification CC / BCC recipients -------------------------------------------
+
+export type RecipientType = 'CC' | 'BCC';
+
+export interface NotificationRecipient {
+  id: string;
+  type: RecipientType;
+  email: string;
+  name: string;
+  status: MasterStatus;
+  updatedAt: string | null;
+}
+
+export type RecipientInput = Omit<NotificationRecipient, 'id' | 'updatedAt'> & { reason?: string };
+
+const RECIPIENTS = '/hrms/organization/notification-recipients';
+export const recipientApi = {
+  list: () => api<NotificationRecipient[]>(RECIPIENTS),
+  create: (input: RecipientInput) => api<NotificationRecipient>(RECIPIENTS, { method: 'POST', body: input }),
+  update: (id: string, input: RecipientInput) => api<NotificationRecipient>(`${RECIPIENTS}/${encodeURIComponent(id)}`, { method: 'PUT', body: input }),
+  remove: (id: string, reason?: string) => api(`${RECIPIENTS}/${encodeURIComponent(id)}`, { method: 'DELETE', body: { reason } }),
+};

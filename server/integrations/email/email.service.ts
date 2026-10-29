@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
 import { envConfig } from '../../config/env.config';
 import { ServerEmailLog, SendEmailPayload, SmtpConfigPayload } from './email.types';
+import { activeCopyAddresses, mergeCopies } from '../../masters/notificationRecipients';
 
 export class EmailService {
   private static emailLogs: ServerEmailLog[] = [];
@@ -51,12 +52,17 @@ export class EmailService {
     const fromEmail = smtpConfig?.fromEmail || envConfig.emailFrom;
     const fromName = smtpConfig?.fromName || envConfig.emailFromName;
 
+    // Organization-wide CC / BCC from Master Settings > Organization
+    // (never added to SECURITY emails such as password resets).
+    const copies = mergeCopies(to, Array.isArray(cc) ? cc : undefined, await activeCopyAddresses(), category);
+
     const logEntry: ServerEmailLog = {
       id: `mail-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       timestamp: new Date().toISOString(),
       to,
       toName,
-      cc: Array.isArray(cc) ? cc : undefined,
+      cc: copies.cc.length ? copies.cc : undefined,
+      bcc: copies.bcc.length ? copies.bcc : undefined,
       subject,
       status: 'sent',
       referenceId,
@@ -76,7 +82,8 @@ export class EmailService {
         const info = await transporter.sendMail({
           from: `"${fromName}" <${fromEmail}>`,
           to: toName ? `"${toName}" <${to}>` : to,
-          cc: Array.isArray(cc) && cc.length > 0 ? cc.join(', ') : undefined,
+          cc: copies.cc.length > 0 ? copies.cc.join(', ') : undefined,
+          bcc: copies.bcc.length > 0 ? copies.bcc.join(', ') : undefined,
           subject,
           text: text || undefined,
           html: html || undefined

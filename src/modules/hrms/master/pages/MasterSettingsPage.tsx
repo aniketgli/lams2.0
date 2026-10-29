@@ -7,6 +7,7 @@ import { ShiftsPanel } from '../components/ShiftsPanel';
 import { BiometricMachinesPanel } from '../components/BiometricMachinesPanel';
 import { MasterRegistryPanel } from '../components/MasterRegistryPanel';
 import { OrganizationPanel } from '../components/OrganizationPanel';
+import { NotificationRecipientsCard } from '../components/NotificationRecipientsCard';
 import { ReadOnlyNotice, TabStrip } from '../components/masterUi';
 import { MasterCatalog, masterApi } from '../masterApi';
 
@@ -58,7 +59,12 @@ export const MasterSettingsPage: React.FC = () => {
       {section === 'biometric' && <BiometricMachinesPanel readOnly={readOnly} />}
       {/* Leave Policy is unchanged in this step. */}
       {section === 'leave' && <LeavePolicyMaster />}
-      {section === 'organization' && <OrganizationPanel readOnly={readOnly} />}
+      {section === 'organization' && (
+        <>
+          <OrganizationPanel readOnly={readOnly} />
+          <NotificationRecipientsCard readOnly={readOnly} />
+        </>
+      )}
 
       {needsCatalog && !catalog && (
         <div className={`rounded-xl border px-4 py-6 text-center text-xs ${catalogError ? 'border-error-border bg-error-subtle text-error' : 'border-slate-200 bg-white text-slate-500'}`}>

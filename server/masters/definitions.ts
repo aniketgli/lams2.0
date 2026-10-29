@@ -223,6 +223,7 @@ export function auditMasterLabels(): Record<string, string> {
     shift: 'Shifts',
     biometric_machine: 'Biometric Machines',
     organization_settings: 'Organization Settings',
+    notification_recipient: 'Email CC / BCC',
   };
   for (const def of MASTERS) labels[auditKey(def)] = def.label;
   return labels;

@@ -14,6 +14,7 @@ npm install
 mysql lams_db < migrations/20261029_web_sessions.sql
 mysql lams_db < migrations/20261029_employee_profile_salutation.sql
 mysql lams_db < migrations/20261029_master_settings.sql
+mysql lams_db < migrations/20261029_notification_recipients.sql
 npm run dev                   # http://localhost:3000
 npm run lint                  # type-check
 ```
@@ -50,13 +51,14 @@ Nothing about identity or roles is stored in `localStorage`.
 
 ## Master Settings
 
-Administrators manage masters; Auditors see the same screens read-only plus the **Audit Trail**.
+Administrators manage masters; Auditors see the same screens read-only. Profile Masters include the employee-form lists.
 
 - **Masters registry** (`server/masters/definitions.ts`): every simple master — profile masters (organizations, designations, categories, projects, courses, batches, streams, PhD enrollment) and employee-form lists (salutation, gender, employee type, unit type, cadre group, funding category) — is one entry. Routes, validation, dropdown options and usage checks all come from it.
 - **Lists** live in `lookup_values`. Records store a list item's **code**, which never changes; the name can be edited freely.
 - **Employee types** are admin-defined; each picks one fixed **form layout**, which decides the fields the employee form asks for.
 - **In use = protected:** a master value used by employees or another master cannot be deleted, and profile masters in use cannot be renamed. Make them *Inactive* instead; they disappear from dropdowns but existing records keep them.
-- **Audit:** every create / update / status change / delete (masters, shifts, biometric machines, organization settings) is written to `master_audit_logs` in the same transaction, with who, role, when, before/after and an optional reason.
+- **Audit:** every create / update / status change / delete (masters, shifts, biometric machines, organization settings, CC/BCC emails) is written to `master_audit_logs` in the same transaction, with who, role, when, before/after and an optional reason. The Auditor role's screens will read it (`GET /api/hrms/masters/audit`).
+- **Email CC / BCC** (Organization tab, table `notification_recipients`): active addresses are added to every notification email. Emails with category `SECURITY` (password resets) are never copied.
 
 API: `GET /api/hrms/masters/catalog`, `/options`, `/audit`, and `GET|POST /api/hrms/masters/:key`, `PUT|DELETE /:key/:id`, `PATCH /:key/:id/status`.
 
