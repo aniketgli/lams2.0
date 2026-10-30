@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Briefcase, Camera, CheckCircle2, Clock, Fingerprint, History as HistoryIcon, Building2, Loader2, Mail, Network, Phone,
+  ArrowLeft, Briefcase, Camera, CheckCircle2, Clock, Fingerprint, History as HistoryIcon, Building2, Loader2, Mail, Network, Phone,
   ShieldCheck, Trash2, Upload, UserRound, XCircle,
 } from 'lucide-react';
 import { Alert } from '../../../../shared/components';
@@ -204,7 +204,7 @@ export const MyProfileView: React.FC<{ onPhotoChanged?: () => void | Promise<voi
  * Another employee's profile. The server decides whether the viewer may see it;
  * `canEditPhoto` (administrators) adds the camera button, which the server checks again.
  */
-export const EmployeeProfileView: React.FC<{ userId: string; canEditPhoto: boolean; onPhotoChanged?: () => void | Promise<void> }> = ({ userId, canEditPhoto, onPhotoChanged }) => {
+export const EmployeeProfileView: React.FC<{ userId: string; canEditPhoto: boolean; onBack?: () => void; onPhotoChanged?: () => void | Promise<void> }> = ({ userId, canEditPhoto, onBack, onPhotoChanged }) => {
   const source = React.useMemo<ProfileSource>(() => ({
     key: `employee:${userId}:${canEditPhoto}`,
     load: () => employeeProfileApi.get(userId),
@@ -215,10 +215,10 @@ export const EmployeeProfileView: React.FC<{ userId: string; canEditPhoto: boole
       }
       : null,
   }), [userId, canEditPhoto]);
-  return <ProfileView source={source} onPhotoChanged={onPhotoChanged} />;
+  return <ProfileView source={source} onBack={onBack} onPhotoChanged={onPhotoChanged} />;
 };
 
-const ProfileView: React.FC<{ source: ProfileSource; onPhotoChanged?: () => void | Promise<void> }> = ({ source, onPhotoChanged }) => {
+const ProfileView: React.FC<{ source: ProfileSource; onBack?: () => void; onPhotoChanged?: () => void | Promise<void> }> = ({ source, onBack, onPhotoChanged }) => {
   const [profile, setProfile] = useState<MyProfile | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
@@ -331,7 +331,17 @@ const ProfileView: React.FC<{ source: ProfileSource; onPhotoChanged?: () => void
     <div className="space-y-5">
       {/* Identity */}
       <section className="bg-white border border-slate-200 rounded-2xl shadow-xs">
-        <div className="h-24 sm:h-28 rounded-t-2xl bg-gradient-to-r from-slate-900 via-header-glow to-slate-900" aria-hidden="true" />
+        <div className="relative h-24 sm:h-28 rounded-t-2xl bg-gradient-to-r from-slate-900 via-header-glow to-slate-900">
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              className="absolute top-3 right-3 sm:top-4 sm:right-4 h-8 px-3 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" /> Back to directory
+            </button>
+          )}
+        </div>
         <div className="px-5 sm:px-7 pb-5 flex flex-col sm:flex-row sm:items-end gap-4 -mt-12 sm:-mt-14">
           <div className="relative shrink-0 self-start" ref={menuRef}>
             <UserAvatar name={profile.name} src={profile.photoUrl} className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl ring-4 ring-white bg-slate-800 shadow-md" />

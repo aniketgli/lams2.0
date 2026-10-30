@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Download, RotateCcw, Search } from 'lucide-react';
-import { Button, DataTable, Input, Select } from '../../../../shared/components';
+import { RotateCcw, Search } from 'lucide-react';
+import { DataTable, Input, Select } from '../../../../shared/components';
+import { ExportButtons } from '../../../../shared/components/ExportButtons';
+import { printTable, printedAt } from '../../../../shared/services/printTable';
 import type { ColumnDef } from '../../../../shared/components';
 import { AppDatePicker } from '../../../../shared/components/AppDatePicker';
 import { ActivityQuery, ActivityRow, auditorApi } from '../employeeApi';
@@ -67,7 +69,8 @@ const ROLE_LABEL: Record<string, string> = {
   administrator: 'Administrator', audit: 'Auditor', reviewing_manager: 'HoD', reporting_manager: 'Reporting Manager', general_staff: 'User',
 };
 
-export const EmployeeActivityLog: React.FC = () => {
+/** `toolbarStart` sits at the left of the top row (the auditor's Directory / Activity switch). */
+export const EmployeeActivityLog: React.FC<{ toolbarStart?: React.ReactNode }> = ({ toolbarStart }) => {
   const [filters, setFilters] = useState<ActivityQuery>(EMPTY);
   const [applied, setApplied] = useState<ActivityQuery>(EMPTY);
   const [page, setPage] = useState(1);
@@ -75,7 +78,7 @@ export const EmployeeActivityLog: React.FC = () => {
   const [data, setData] = useState<{ rows: ActivityRow[]; total: number }>({ rows: [], total: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting] = useState<'csv' | 'pdf' | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -102,13 +105,37 @@ export const EmployeeActivityLog: React.FC = () => {
   const filtered = Object.values(toQuery(applied)).some(Boolean);
 
   const exportCsv = async () => {
-    setExporting(true);
+    setExporting('csv');
     try {
       await auditorApi.downloadActivity(toQuery(applied));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'The download failed.');
     } finally {
-      setExporting(false);
+      setExporting(null);
+    }
+  };
+
+  /** Same filters as the screen; the server supplies the rows and logs the download. */
+  const exportPdf = async () => {
+    setExporting('pdf');
+    try {
+      const q = toQuery(applied);
+      const table = await auditorApi.activityForPdf(q);
+      const filterLine = [
+        q.area && `Area: ${AREA_LABEL[q.area] ?? q.area}`,
+        q.action && `Action: ${ACTION_LABEL[q.action] ?? q.action}`,
+        q.from && `From ${q.from}`, q.to && `To ${q.to}`, q.search && `Search: “${q.search}”`,
+      ].filter(Boolean).join(' · ');
+      printTable({
+        title: 'Employee activity log',
+        subtitle: [`Generated ${printedAt(table.generatedAt)}`, filterLine || 'All activity'],
+        headers: table.headers,
+        rows: table.rows.map((r) => [printedAt(String(r[0])), ...r.slice(1)]),
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'The PDF could not be prepared.');
+    } finally {
+      setExporting(null);
     }
   };
 
@@ -152,14 +179,16 @@ export const EmployeeActivityLog: React.FC = () => {
 
   return (
     <section className="bg-white border border-slate-200/90 rounded-2xl shadow-xs">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4 border-b border-slate-100">
-        <div>
-          <h3 className="text-sm font-bold text-slate-900">Employee activity log</h3>
-          <p className="text-xs text-slate-500 mt-0.5">Every change to employee records, roles, passwords and photos, and every data download.</p>
-        </div>
-        <Button variant="outline" size="sm" leftIcon={Download} loading={exporting} onClick={() => void exportCsv()} disabled={data.total === 0}>
-          Export CSV
-        </Button>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-5 pt-4 sm:pt-5 pb-3.5 mx-0 border-b border-slate-100">
+        <div className="min-w-0">{toolbarStart}</div>
+        <ExportButtons
+          onCsv={() => void exportCsv()}
+          onPdf={() => void exportPdf()}
+          busy={exporting}
+          disabled={data.total === 0}
+          csvTitle="Download the filtered log as CSV (the download is logged)"
+          pdfTitle="Print / save the filtered log as PDF (the download is logged)"
+        />
       </div>
 
       <div className="px-5 py-4 grid grid-cols-1 md:grid-cols-12 gap-3 items-end">

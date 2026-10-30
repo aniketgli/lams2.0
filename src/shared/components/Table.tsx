@@ -162,7 +162,7 @@ export interface ColumnDef<T> {
 const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
 
 /** Compares two cell values; blanks always sort last, in either direction. */
-function compareValues(a: unknown, b: unknown, dir: 'asc' | 'desc'): number {
+export function compareValues(a: unknown, b: unknown, dir: 'asc' | 'desc'): number {
   const empty = (v: unknown) => v === null || v === undefined || v === '';
   if (empty(a) && empty(b)) return 0;
   if (empty(a)) return 1;

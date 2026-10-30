@@ -17,7 +17,7 @@ import {
   replaceRoleGrants, setEmployeeStatus, updateEmployee,
 } from './store';
 import { deleteOwnPhoto, deletePhotoFor, loadPhoto, saveOwnPhoto, savePhotoFor } from './photos';
-import { activityCsv, employeeDirectoryCsv, listActivity, parseActivityFilter } from './activity';
+import { activityCsv, activityTable, employeeDirectoryCsv, employeeDirectoryTable, listActivity, parseActivityFilter } from './activity';
 import { getMyProfile, getProfileFor } from './myProfile';
 
 /**
@@ -82,6 +82,15 @@ function sendCsv(res: import('express').Response, file: { filename: string; csv:
 
 router.get('/employees/export.csv', ...isAuditor, asyncHandler(async (req, res) => {
   sendCsv(res, await employeeDirectoryCsv(req, viewerOf(req)));
+}));
+
+/** Rows for a printable PDF (the browser lays it out); logged like the CSV download. */
+router.get('/employees/export-pdf', ...isAuditor, asyncHandler(async (req, res) => {
+  res.json({ generatedAt: new Date().toISOString(), ...(await employeeDirectoryTable(req, viewerOf(req), 'pdf')) });
+}));
+
+router.get('/employees/activity/export-pdf', ...isAuditor, asyncHandler(async (req, res) => {
+  res.json({ generatedAt: new Date().toISOString(), ...(await activityTable(req, parseActivityFilter(req.query as Record<string, unknown>), 'pdf')) });
 }));
 
 router.get('/employees/activity', ...isAuditor, asyncHandler(async (req, res) => {
