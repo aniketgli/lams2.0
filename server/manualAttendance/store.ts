@@ -133,8 +133,8 @@ function canSee(viewer: Viewer, row: RowDataPacket): boolean {
 
 function canDecide(viewer: Viewer, row: RowDataPacket): boolean {
   if (String(row.status) !== 'pending') return false;
-  if (Number(row.user_id) === viewer.id) return false; // nobody approves their own request
-  if (viewer.role === 'administrator') return true;
+  if (viewer.role === 'administrator') return true; // the audit log records who decided what
+  if (Number(row.user_id) === viewer.id) return false; // a manager never approves their own request
   return viewer.role === 'reporting_manager' && managersOf(row).reporting === String(viewer.id);
 }
 
@@ -376,7 +376,7 @@ export async function decideRequest(req: Request, viewer: Viewer, id: number, bo
       const before = toRequest(viewer, row);
       if (before.status !== 'pending') throw new HttpError(409, `This request is already ${before.status}.`, 'NOT_PENDING');
       if (!canDecide(viewer, row)) {
-        throw forbidden(Number(row.user_id) === viewer.id ? 'You cannot approve or reject your own request.' : 'Only the reporting manager or an administrator can approve or reject this request.');
+        throw forbidden(Number(row.user_id) === viewer.id ? 'You cannot approve or reject your own request. Ask your reporting manager or an administrator.' : 'Only the reporting manager or an administrator can approve or reject this request.');
       }
       const status: RequestStatus = action === 'approve' ? 'approved' : 'rejected';
       await conn.query(

@@ -113,7 +113,7 @@ export const TableCell: React.FC<React.TdHTMLAttributes<HTMLTableCellElement>> =
   className = '',
   ...rest
 }) => (
-  <td className={`py-2.5 px-3 text-xs font-medium text-slate-800 whitespace-nowrap ${className}`} {...rest}>
+  <td className={`py-2.5 px-3 text-xs font-medium text-slate-800 whitespace-nowrap align-middle ${className}`} {...rest}>
     {children}
   </td>
 );
@@ -190,6 +190,8 @@ export interface DataTableProps<T> {
   pagination?: TablePaginationProps;
   className?: string;
   containerClassName?: string;
+  /** Sr. No. as the first column (on by default; follows the page when paginated). Pass false for matrices and similar grids. */
+  serial?: boolean;
 }
 
 export function DataTable<T>({
@@ -207,8 +209,11 @@ export function DataTable<T>({
   onSort,
   pagination,
   className = '',
-  containerClassName = ''
+  containerClassName = '',
+  serial = true,
 }: DataTableProps<T>) {
+  const serialStart = pagination ? (pagination.currentPage - 1) * pagination.pageSize : 0;
+  const columnCount = columns.length + (serial ? 1 : 0);
   // Built-in sorting when the parent does not control it.
   const controlled = Boolean(onSort);
   const [internalSort, setInternalSort] = React.useState<{ key: string; dir: 'asc' | 'desc' } | null>(null);
@@ -237,6 +242,7 @@ export function DataTable<T>({
       <Table className={className}>
         <TableHeader>
           <tr>
+            {serial && <TableHead style={{ width: '64px' }} className="text-center">Sr. No.</TableHead>}
             {columns.map((col) => (
               <TableHead
                 key={col.key}
@@ -256,7 +262,7 @@ export function DataTable<T>({
         <TableBody>
           {loading ? (
             <tr>
-              <td colSpan={columns.length} className="py-12 text-center text-slate-500">
+              <td colSpan={columnCount} className="py-12 text-center text-slate-500">
                 <div className="flex flex-col items-center justify-center space-y-2">
                   <Loader2 className="w-6 h-6 animate-spin text-primary" />
                   <span className="text-xs font-semibold">Loading data...</span>
@@ -265,7 +271,7 @@ export function DataTable<T>({
             </tr>
           ) : error ? (
             <tr>
-              <td colSpan={columns.length} className="py-12 text-center text-rose-600">
+              <td colSpan={columnCount} className="py-12 text-center text-rose-600">
                 <div className="flex flex-col items-center justify-center space-y-2">
                   <AlertCircle className="w-6 h-6 text-rose-500" />
                   <span className="text-xs font-semibold">{error}</span>
@@ -274,7 +280,7 @@ export function DataTable<T>({
             </tr>
           ) : rows.length === 0 ? (
             <tr>
-              <td colSpan={columns.length} className="py-12 text-center text-slate-400">
+              <td colSpan={columnCount} className="py-12 text-center text-slate-400">
                 <div className="flex flex-col items-center justify-center space-y-1.5">
                   <Inbox className="w-8 h-8 text-slate-300 stroke-[1.5]" />
                   <span className="text-xs font-bold text-slate-700">{emptyTitle}</span>
@@ -292,6 +298,7 @@ export function DataTable<T>({
                   isStriped={striped}
                   onClick={() => onRowClick && onRowClick(item)}
                 >
+                  {serial && <TableCell className="text-center text-slate-500 tabular-nums">{serialStart + rowIndex + 1}</TableCell>}
                   {columns.map((col) => {
                     const cellContent = col.render
                       ? col.render(item, rowIndex)

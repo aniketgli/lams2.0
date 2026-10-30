@@ -269,7 +269,7 @@ export const ManualAttendanceView: React.FC = () => {
   };
 
   const iconBtn = 'w-8 h-8 rounded-lg border flex items-center justify-center cursor-pointer shrink-0';
-  const statusBy = (r: ManualRequest) => (r.status === 'pending' ? `Applied by ${r.appliedByName || r.name}` : `by ${r.actionByName ?? '—'}`);
+  const statusBy = (r: ManualRequest) => (r.status === 'pending' ? `by ${r.managerName ?? 'Administrator'}` : `by ${r.actionByName ?? '—'}`);
   // Who sees which columns: the employee column for everyone who sees other people's requests.
   const columns: ColumnDef<ManualRequest>[] = [
     ...(teamView ? [{
@@ -285,7 +285,7 @@ export const ManualAttendanceView: React.FC = () => {
       ),
     } as ColumnDef<ManualRequest>] : []),
     {
-      key: 'date', header: 'Forgot date & time', width: teamView ? '13%' : '17%', sortValue: (r) => r.date,
+      key: 'date', header: 'Forgot date & time', width: teamView ? '14%' : '17%', sortValue: (r) => r.date,
       render: (r) => (
         <div className="leading-tight">
           <div className="font-semibold text-slate-900 whitespace-nowrap">{formatDate(r.date)}</div>
@@ -304,7 +304,7 @@ export const ManualAttendanceView: React.FC = () => {
     },
     { key: 'category', header: 'Category', width: teamView ? '11%' : '14%', sortValue: (r) => r.category, render: (r) => <span className="font-semibold text-slate-800">{r.category}</span> },
     {
-      key: 'reason', header: 'Reason', width: teamView ? '17%' : '24%', sortValue: (r) => r.reason,
+      key: 'reason', header: 'Reason', width: teamView ? '16%' : '24%', sortValue: (r) => r.reason,
       render: (r) => <div className="whitespace-normal leading-snug min-w-[140px] text-slate-700 line-clamp-2" title={r.reason}>{r.reason}</div>,
     },
     {
