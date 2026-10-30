@@ -33,7 +33,7 @@ export interface ShiftRule {
   workingDays: string[];
 }
 
-export type DayStatus = 'PP' | 'AA' | 'PA' | 'AP' | 'WW' | 'WW#' | 'GH' | 'HH#';
+export type DayStatus = 'PP' | 'AA' | 'PA' | 'AP' | 'WW' | 'WW#' | 'GH' | 'HH#' | 'OD';
 
 export interface DayRecord {
   date: string;
@@ -44,7 +44,7 @@ export interface DayRecord {
   totalHours: number | null;
   punches: number;
   status: DayStatus;
-  workMode: 'in_office' | 'absent';
+  workMode: 'in_office' | 'absent' | 'field_od';
   shiftCode: string;
   lateByMins: number;
   earlyByMins: number;

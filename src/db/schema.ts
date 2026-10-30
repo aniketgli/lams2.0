@@ -360,3 +360,28 @@ export const manual_attendance_requests = mysqlTable('manual_attendance_requests
   updatedAt: datetime('updated_at', { fsp: 3 }),
 });
 
+
+// Outdoor duty (OD) requests; approved ones show as OD on the Attendance page.
+export const outdoor_duty_requests = mysqlTable('outdoor_duty_requests', {
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  userId: bigint('user_id', { mode: 'number', unsigned: true }).notNull(),
+  startDate: date('start_date').notNull(),
+  endDate: date('end_date').notNull(),
+  startTime: varchar('start_time', { length: 5 }).notNull(),
+  endTime: varchar('end_time', { length: 5 }).notNull(),
+  daysCount: int('days_count').notNull(),
+  odType: varchar('od_type', { length: 16 }).notNull(),
+  location: varchar('location', { length: 200 }).notNull(),
+  estimatedFunds: decimal('estimated_funds', { precision: 12, scale: 2 }).notNull().default('0'),
+  fundingSource: varchar('funding_source', { length: 100 }),
+  purpose: varchar('purpose', { length: 1000 }).notNull(),
+  status: varchar('status', { length: 16 }).notNull().default('pending'),
+  appliedBy: bigint('applied_by', { mode: 'number', unsigned: true }).notNull(),
+  managerId: bigint('manager_id', { mode: 'number', unsigned: true }),
+  actionBy: bigint('action_by', { mode: 'number', unsigned: true }),
+  actionAt: datetime('action_at', { fsp: 3 }),
+  managerComment: varchar('manager_comment', { length: 500 }),
+  undoCount: int('undo_count').notNull().default(0),
+  createdAt: datetime('created_at', { fsp: 3 }),
+  updatedAt: datetime('updated_at', { fsp: 3 }),
+});
