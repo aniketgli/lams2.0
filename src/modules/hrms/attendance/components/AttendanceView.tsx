@@ -1,11 +1,12 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useApp } from '../../../../context/AppContext';
 import { AttendanceRecord, AttendanceStatus, Shift } from '../../../../types';
 import { PageHeader } from '../../../../shared/components/PageHeader';
 import { AppDatePicker } from '../../../../shared/components/AppDatePicker';
 import { MultiSelectFilter, matchesMultiSelect } from '../../../../shared/components/MultiSelectFilter';
 import { TablePagination } from '../../../../shared/components/TablePagination';
-import { generateTodayAttendanceRecords } from '../../data/hrmsSeedData';
+import { attendanceApi, AttendanceResponse } from '../attendanceApi';
+import { ApiError } from '../../../../shared/services/api';
 import {
   getNormalizedStatusCode,
   getStatusLabel,
@@ -47,9 +48,6 @@ export const AttendanceView: React.FC = () => {
   const {
     currentUser,
     users,
-    attendanceRecords,
-    shifts,
-    getUserShift,
     odRequests,
     leaveRequests,
     manualAttendanceRequests
@@ -87,7 +85,9 @@ export const AttendanceView: React.FC = () => {
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
 
   // Current date (today) YYYY-MM-DD
-  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  // Local calendar date (toISOString would give yesterday before 05:30 IST).
+  const todayStr = useMemo(() => new Date().toLocaleDateString('en-CA'), []);
+  const monthStartStr = `${todayStr.slice(0, 8)}01`;
 
   // Toast Notification State
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
@@ -101,11 +101,54 @@ export const AttendanceView: React.FC = () => {
   // For Reporting Manager, HoD (Reviewing Manager), Audit, and Administrator: by default show current date's attendance
   // For General Staff: default to full month range
   const isManagerOrAdmin = isAdmin || isAudit || isReportingManager || isReviewingManager;
-  const DEFAULT_START_DATE = isManagerOrAdmin ? todayStr : '2026-08-01';
-  const DEFAULT_END_DATE = isManagerOrAdmin ? todayStr : '2026-09-30';
+  const DEFAULT_START_DATE = isManagerOrAdmin ? todayStr : monthStartStr;
+  const DEFAULT_END_DATE = todayStr;
 
   const [startDate, setStartDate] = useState<string>(DEFAULT_START_DATE);
   const [endDate, setEndDate] = useState<string>(DEFAULT_END_DATE);
+
+  // Biometric attendance for the chosen dates, from the server (punch log of registered machines).
+  const [attendance, setAttendance] = useState<AttendanceResponse | null>(null);
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
+  const [attendanceError, setAttendanceError] = useState<string | null>(null);
+  useEffect(() => {
+    const from = startDate || monthStartStr;
+    const to = endDate || todayStr;
+    if (from > to) {
+      setAttendanceError('The From date must be on or before the To date.');
+      return;
+    }
+    let cancelled = false;
+    setAttendanceLoading(true);
+    setAttendanceError(null);
+    attendanceApi.list(from, to)
+      .then((res) => { if (!cancelled) setAttendance(res); })
+      .catch((e) => { if (!cancelled) { setAttendance(null); setAttendanceError(e instanceof ApiError ? e.message : 'Attendance could not be loaded. Please try again.'); } })
+      .finally(() => { if (!cancelled) setAttendanceLoading(false); });
+    return () => { cancelled = true; };
+  }, [startDate, endDate, monthStartStr, todayStr, currentUser.role]);
+
+  const attendanceRecords = useMemo<AttendanceRecord[]>(() => (attendance?.records ?? []).map((r) => ({
+    id: `${r.userId}-${r.date}`,
+    userId: r.userId,
+    date: r.date,
+    clockIn: r.clockIn ?? undefined,
+    clockOut: r.clockOut ?? undefined,
+    shiftCode: r.shiftCode,
+    workMode: r.workMode,
+    status: r.status,
+    totalHours: r.totalHours ?? undefined,
+    location: r.devices.join(', '),
+    remark: r.remark,
+  })), [attendance]);
+
+  // Shifts the records refer to (from the Shift master).
+  const shifts = useMemo<Shift[]>(() => (attendance?.shifts ?? []).map((sh) => ({
+    id: sh.code, code: sh.code, name: sh.name, startTime: sh.startTime, endTime: sh.endTime,
+    gracePeriodMins: 0, halfDayHours: 0, fullDayHours: 0,
+  })), [attendance]);
+  const noShift: Shift = { id: '', code: '—', name: '', startTime: '', endTime: '', gracePeriodMins: 0, halfDayHours: 0, fullDayHours: 0 };
+  const getUserShift = (_userId: string): Shift => noShift;
 
   // Role Visibility Matrix Flags (per specification table)
   // 1. General (Staff): Status filter only
@@ -240,14 +283,7 @@ export const AttendanceView: React.FC = () => {
     }
   };
 
-  // Ensure attendance records exist for todayStr for all users so managers/admins immediately see their staff logs
-  const effectiveAttendanceRecords = useMemo(() => {
-    if (attendanceRecords.some((r) => r.date === todayStr)) {
-      return attendanceRecords;
-    }
-    const todayRecords = generateTodayAttendanceRecords(users as any, todayStr);
-    return [...attendanceRecords, ...todayRecords];
-  }, [attendanceRecords, todayStr, users]);
+  const effectiveAttendanceRecords = attendanceRecords;
 
   // Apply Role Scope, Employee, Department, Designation, Reporting Manager, Type & Status Filters
   const filteredRecords = effectiveAttendanceRecords.filter((rec) => {
@@ -767,6 +803,15 @@ export const AttendanceView: React.FC = () => {
 
       {/* Professional Date Range & Related Filters Control Bar */}
       <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3.5">
+        {(attendanceError || attendanceLoading || attendance?.machinesConfigured === false) && (
+          <div role="status" className={`mb-3 px-3.5 py-2.5 rounded-xl border text-xs font-semibold ${
+            attendanceError ? 'bg-error-subtle border-error/30 text-error' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
+            {attendanceError
+              ?? (attendanceLoading ? 'Loading biometric attendance…'
+                : 'No attendance machine is registered yet. Add the machines (with their serial numbers) in Master Settings → Biometric Machines.')}
+          </div>
+        )}
+
         {/* Top Bar: Clean Themed Date Pickers & Presets & Export Buttons */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3.5 border-b border-slate-100 pb-3">
           {/* Row 1 on mobile (Left on tab/desktop): Date Pickers & Presets */}
