@@ -18,7 +18,6 @@ import {
 import { LeaveRequest } from '../../types/hrms.types';
 import { useApp } from '../../../../context/AppContext';
 import { AppDatePicker } from '../../../../shared/components/AppDatePicker';
-import { INITIAL_HOLIDAYS } from '../../holidays/data/holidayData';
 
 interface JoiningReportModalProps {
   isOpen: boolean;
@@ -39,7 +38,8 @@ export const JoiningReportModal: React.FC<JoiningReportModalProps> = ({
     leaveRequests,
     submitJoiningReport,
     forwardJoiningReport,
-    verifyJoiningReport
+    verifyJoiningReport,
+    holidays
   } = useApp();
 
   // Pick current leave passed via props (or fallback to matching leave in leaveRequests state)
@@ -138,7 +138,7 @@ export const JoiningReportModal: React.FC<JoiningReportModalProps> = ({
 
       const dayOfWeek = curr.getDay(); // 0 = Sun, 6 = Sat
       const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-      const isGH = INITIAL_HOLIDAYS.some((h) => h.date === dateStr && h.type === 'gazetted');
+      const isGH = holidays.some((h) => h.date === dateStr && h.type === 'gazetted');
 
       if (!isWeekend && !isGH) {
         return dateStr;

@@ -40,7 +40,8 @@ import {
   generateTodayAttendanceRecords
 } from '../modules/hrms/data/hrmsSeedData';
 import { INITIAL_PROJECT_HISTORIES } from '../modules/hrms/profile/data/projectHistoryData';
-import { INITIAL_HOLIDAYS, HolidayItem } from '../modules/hrms/holidays/data/holidayData';
+import { HolidayItem } from '../modules/hrms/holidays/data/holidayData';
+import { holidayApi, toHolidayItem } from '../modules/hrms/holidays/holidayApi';
 import { sendSlackNotification, buildLeaveSlackBlock, buildODSlackBlock } from '../shared/services/slackService';
 import {
   DEFAULT_EMAIL_CONFIG,
@@ -299,10 +300,8 @@ interface AppContextType {
 
   // Holiday Management Actions (Admin)
   holidays: HolidayItem[];
-  addHoliday: (data: Omit<HolidayItem, 'id' | 'year' | 'month' | 'dayOfWeek'> & Partial<Pick<HolidayItem, 'year' | 'month' | 'dayOfWeek' | 'isLongWeekend'>>) => { success: boolean; message: string; holiday?: HolidayItem };
-  updateHoliday: (id: string, updatedFields: Partial<HolidayItem>) => { success: boolean; message: string };
-  deleteHoliday: (id: string) => { success: boolean; message: string };
-  resetHolidays: () => void;
+  /** Re-reads the holiday calendar from the database (after a change on the Holiday Calendar page). */
+  reloadHolidays: () => Promise<void>;
 
   // Organization Branding & Logo Management
   orgBranding: OrgBranding;
@@ -4554,107 +4553,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  const [holidays, setHolidays] = useState<HolidayItem[]>(() => {
-    const saved = localStorage.getItem('la_hub_holidays');
-    return saved ? JSON.parse(saved) : INITIAL_HOLIDAYS;
-  });
-
+  // Holiday calendar: always from the database (GET /api/hrms/holidays), all years.
+  // Leave, attendance and dashboards read this list; only the Holiday Calendar page changes it.
+  const [holidays, setHolidays] = useState<HolidayItem[]>([]);
+  const reloadHolidays = React.useCallback(async () => {
+    try {
+      const result = await holidayApi.list();
+      setHolidays(result.holidays.map(toHolidayItem));
+    } catch (error) {
+      console.error('Holiday calendar load failed:', error);
+    }
+  }, []);
   useEffect(() => {
-    localStorage.setItem('la_hub_holidays', JSON.stringify(holidays));
-  }, [holidays]);
-
-  const addHoliday = (data: Omit<HolidayItem, 'id' | 'year' | 'month' | 'dayOfWeek'> & Partial<Pick<HolidayItem, 'year' | 'month' | 'dayOfWeek' | 'isLongWeekend'>>) => {
-    if (!data.name || !data.date) {
-      return { success: false, message: 'Holiday name and date are required.' };
-    }
-
-    const dateObj = new Date(data.date + 'T00:00:00');
-    const year = data.year || dateObj.getFullYear();
-    const month = data.month || (dateObj.getMonth() + 1);
-    const dayOfWeek = data.dayOfWeek || dateObj.toLocaleDateString('en-US', { weekday: 'long' });
-    const isLongWeekend = data.isLongWeekend !== undefined 
-      ? data.isLongWeekend 
-      : (dayOfWeek === 'Friday' || dayOfWeek === 'Monday' || dayOfWeek === 'Saturday' || dayOfWeek === 'Sunday');
-
-    const prefix = data.type === 'gazetted' ? 'gh' : data.type === 'restricted' ? 'rh' : 'lh';
-    const newHoliday: HolidayItem = {
-      id: `${prefix}-${year}-${Date.now().toString(36)}`,
-      name: data.name.trim(),
-      hindiName: data.hindiName?.trim() || undefined,
-      date: data.date,
-      dayOfWeek,
-      type: data.type,
-      category: data.category,
-      description: data.description?.trim() || `${data.name} (${dayOfWeek})`,
-      year,
-      month,
-      isLongWeekend
-    };
-
-    setHolidays((prev) => [...prev, newHoliday].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
-
-    return { 
-      success: true, 
-      message: `Holiday "${newHoliday.name}" (${newHoliday.date}) added successfully.`,
-      holiday: newHoliday 
-    };
-  };
-
-  const updateHoliday = (id: string, updatedFields: Partial<HolidayItem>) => {
-    const existing = holidays.find((h) => h.id === id);
-    if (!existing) {
-      return { success: false, message: 'Holiday not found.' };
-    }
-
-    let updatedDayOfWeek = updatedFields.dayOfWeek || existing.dayOfWeek;
-    let updatedYear = updatedFields.year || existing.year;
-    let updatedMonth = updatedFields.month || existing.month;
-    let updatedIsLongWeekend = updatedFields.isLongWeekend !== undefined ? updatedFields.isLongWeekend : existing.isLongWeekend;
-
-    if (updatedFields.date && updatedFields.date !== existing.date) {
-      const dateObj = new Date(updatedFields.date + 'T00:00:00');
-      updatedYear = dateObj.getFullYear();
-      updatedMonth = dateObj.getMonth() + 1;
-      updatedDayOfWeek = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
-      if (updatedFields.isLongWeekend === undefined) {
-        updatedIsLongWeekend = (updatedDayOfWeek === 'Friday' || updatedDayOfWeek === 'Monday' || updatedDayOfWeek === 'Saturday' || updatedDayOfWeek === 'Sunday');
-      }
-    }
-
-    setHolidays((prev) =>
-      prev.map((h) => {
-        if (h.id === id) {
-          return {
-            ...h,
-            ...updatedFields,
-            date: updatedFields.date || h.date,
-            dayOfWeek: updatedDayOfWeek,
-            year: updatedYear,
-            month: updatedMonth,
-            isLongWeekend: updatedIsLongWeekend
-          };
-        }
-        return h;
-      }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-    );
-
-    return { success: true, message: `Holiday "${updatedFields.name || existing.name}" updated successfully.` };
-  };
-
-  const deleteHoliday = (id: string) => {
-    const target = holidays.find((h) => h.id === id);
-    if (!target) {
-      return { success: false, message: 'Holiday not found.' };
-    }
-
-    setHolidays((prev) => prev.filter((h) => h.id !== id));
-    return { success: true, message: `Holiday "${target.name}" deleted successfully.` };
-  };
-
-  const resetHolidays = () => {
-    setHolidays(INITIAL_HOLIDAYS);
-    localStorage.removeItem('la_hub_holidays');
-  };
+    if (!isAuthenticated) return;
+    try { localStorage.removeItem('la_hub_holidays'); } catch { /* storage unavailable */ }
+    void reloadHolidays();
+  }, [isAuthenticated, reloadHolidays]);
 
   const addProjectHistory = (data: Omit<UserProjectHistory, 'id'>) => {
     const newEntry: UserProjectHistory = {
@@ -4688,7 +4602,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setManualAttendanceRequests(INITIAL_MANUAL_ATTENDANCE_REQUESTS);
     setLeaveRequests(INITIAL_LEAVE_REQUESTS);
     setSlackConfig(INITIAL_SLACK_CONFIG);
-    setHolidays(INITIAL_HOLIDAYS);
+    void reloadHolidays();
     setShifts(INITIAL_SHIFTS);
     setProjectHistories(INITIAL_PROJECT_HISTORIES);
     setSlackLogs([
@@ -4779,10 +4693,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateSlackConfig,
         resetAllData,
         holidays,
-        addHoliday,
-        updateHoliday,
-        deleteHoliday,
-        resetHolidays,
+        reloadHolidays,
         orgBranding,
         updateOrgBranding,
         resetOrgBranding,

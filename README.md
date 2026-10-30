@@ -19,6 +19,7 @@ mysql lams_db < migrations/20261029_email_settings.sql
 mysql lams_db < migrations/20261029_password_policy.sql   # required: sign-in reads users.must_change_password
 mysql lams_db < migrations/20261029_employee_photos.sql
 mysql lams_db < migrations/20261030_institutes.sql
+mysql lams_db < migrations/20261030_holidays.sql
 npm run dev                   # http://localhost:3000
 npm run lint                  # type-check
 ```

@@ -244,6 +244,8 @@ export function auditMasterLabels(): Record<string, string> {
     default_password: 'Default Password',
     employee_photo: 'Profile Photos',
     employee_export: 'Employee Data Downloads',
+    holiday: 'Holidays',
+    holiday_export: 'Holiday Log Downloads',
   };
   for (const def of MASTERS) labels[auditKey(def)] = def.label;
   return labels;
