@@ -88,9 +88,33 @@ export async function employeeDirectoryCsv(req: Request, viewer: Viewer): Promis
 // Activity log
 // ---------------------------------------------------------------------------
 
+/**
+ * Which audit records a log covers. The employee log and the holiday log
+ * share all the code below; only the scope differs.
+ */
+export interface ActivityScope {
+  keys: readonly string[];
+  areaLabels: Record<string, string>;
+  /** master_key used when a download of this log is itself recorded. */
+  exportKey: string;
+  title: string;
+  filePrefix: string;
+}
+
+export const EMPLOYEE_SCOPE: ActivityScope = {
+  keys: EMPLOYEE_ACTIVITY_KEYS,
+  areaLabels: {
+    employee: 'Employee profile', user_roles: 'Module roles', employee_password: 'Password',
+    employee_photo: 'Profile photo', employee_export: 'Data download',
+  },
+  exportKey: 'employee_export',
+  title: 'Employee activity log',
+  filePrefix: 'WII_Employee_Activity',
+};
+
 export interface ActivityFilter {
   action: (typeof ACTIONS)[number] | null;
-  area: (typeof EMPLOYEE_ACTIVITY_KEYS)[number] | null;
+  area: string | null;
   from: string | null;
   to: string | null;
   search: string | null;
@@ -98,12 +122,12 @@ export interface ActivityFilter {
   pageSize: number;
 }
 
-export function parseActivityFilter(query: Record<string, unknown>): ActivityFilter {
+export function parseActivityFilter(query: Record<string, unknown>, scope: ActivityScope = EMPLOYEE_SCOPE): ActivityFilter {
   const one = (k: string) => (typeof query[k] === 'string' && query[k] ? String(query[k]).trim() : null);
   const action = one('action')?.toUpperCase() ?? null;
   if (action && !(ACTIONS as readonly string[]).includes(action)) throw badRequest('Unknown action.');
   const area = one('area');
-  if (area && !(EMPLOYEE_ACTIVITY_KEYS as readonly string[]).includes(area)) throw badRequest('Unknown area.');
+  if (area && !scope.keys.includes(area)) throw badRequest('Unknown area.');
   const from = one('from');
   const to = one('to');
   if (from && !isValidIsoDate(from)) throw badRequest('Invalid from date.');
@@ -111,7 +135,7 @@ export function parseActivityFilter(query: Record<string, unknown>): ActivityFil
   if (from && to && from > to) throw badRequest('The from date must be on or before the to date.');
   return {
     action: action as ActivityFilter['action'],
-    area: area as ActivityFilter['area'],
+    area,
     from, to,
     search: one('search')?.slice(0, 100) ?? null,
     page: Math.max(1, Math.min(10_000, Number(query.page) || 1)),
@@ -119,9 +143,9 @@ export function parseActivityFilter(query: Record<string, unknown>): ActivityFil
   };
 }
 
-function whereFor(f: ActivityFilter): { sql: string; params: unknown[] } {
-  const where = [`master_key IN (${EMPLOYEE_ACTIVITY_KEYS.map(() => '?').join(',')})`];
-  const params: unknown[] = [...EMPLOYEE_ACTIVITY_KEYS];
+function whereFor(f: ActivityFilter, scope: ActivityScope): { sql: string; params: unknown[] } {
+  const where = [`master_key IN (${scope.keys.map(() => '?').join(',')})`];
+  const params: unknown[] = [...scope.keys];
   if (f.area) { where.push('master_key = ?'); params.push(f.area); }
   if (f.action) { where.push('action = ?'); params.push(f.action); }
   if (f.from) { where.push('created_at >= ?'); params.push(`${f.from} 00:00:00`); }
@@ -167,8 +191,8 @@ function toActivity(r: RowDataPacket): ActivityRow {
 const SELECT = `SELECT id, created_at, master_key, action, record_id, record_label, changed_fields, before_data, after_data,
                        reason, actor_biometric_id, actor_name, actor_role FROM master_audit_logs`;
 
-export async function listActivity(f: ActivityFilter): Promise<{ rows: ActivityRow[]; total: number; page: number; pageSize: number }> {
-  const { sql, params } = whereFor(f);
+export async function listActivity(f: ActivityFilter, scope: ActivityScope = EMPLOYEE_SCOPE): Promise<{ rows: ActivityRow[]; total: number; page: number; pageSize: number }> {
+  const { sql, params } = whereFor(f, scope);
   const [[count]] = await pool.query<RowDataPacket[]>(`SELECT COUNT(*) AS n FROM master_audit_logs ${sql}`, params);
   const [rows] = await pool.query<RowDataPacket[]>(
     `${SELECT} ${sql} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`,
@@ -176,11 +200,6 @@ export async function listActivity(f: ActivityFilter): Promise<{ rows: ActivityR
   );
   return { rows: rows.map(toActivity), total: Number(count?.n ?? 0), page: f.page, pageSize: f.pageSize };
 }
-
-const AREA_LABELS: Record<string, string> = {
-  employee: 'Employee profile', user_roles: 'Module roles', employee_password: 'Password',
-  employee_photo: 'Profile photo', employee_export: 'Data download',
-};
 
 const ACTION_LABELS: Record<string, string> = {
   CREATE: 'Created', UPDATE: 'Changed', STATUS: 'Activated / deactivated', DELETE: 'Deleted', RESET: 'Password reset', EXPORT: 'Downloaded',
@@ -200,18 +219,18 @@ export function describeChange(row: ActivityRow): string {
 export const MAX_ACTIVITY_EXPORT = 10_000;
 
 /** Activity log as a table for download, logged as an export in `format`. */
-export async function activityTable(req: Request, f: ActivityFilter, format: ExportFormat): Promise<{ headers: string[]; rows: unknown[][] }> {
-  const { sql, params } = whereFor(f);
+export async function activityTable(req: Request, f: ActivityFilter, format: ExportFormat, scope: ActivityScope = EMPLOYEE_SCOPE): Promise<{ headers: string[]; rows: unknown[][] }> {
+  const { sql, params } = whereFor(f, scope);
   const limit = format === 'pdf' ? MAX_ACTIVITY_PDF : MAX_ACTIVITY_EXPORT;
   const [rows] = await pool.query<RowDataPacket[]>(`${SELECT} ${sql} ORDER BY created_at DESC, id DESC LIMIT ?`, [...params, limit]);
   const items = rows.map(toActivity);
   const headers = ['When (UTC)', 'Area', 'Action', 'Record', 'Biometric ID / ref', 'Changes', 'Reason', 'Done by', 'Done by (B.I.)', 'Role'];
   const out = items.map((r) => [
-    r.at, AREA_LABELS[r.area] ?? r.area, ACTION_LABELS[r.action] ?? r.action, r.recordLabel, r.recordId, describeChange(r), r.reason,
+    r.at, scope.areaLabels[r.area] ?? r.area, ACTION_LABELS[r.action] ?? r.action, r.recordLabel, r.recordId, describeChange(r), r.reason,
     r.actor.name, r.actor.biometricId, r.actor.role ? ROLE_LABELS[r.actor.role as RoleId] ?? r.actor.role : null,
   ]);
   await writeMasterAuditSql(pool, req, {
-    masterKey: 'employee_export', recordId: 'activity', recordLabel: `Employee activity log (${format.toUpperCase()})`, action: 'EXPORT',
+    masterKey: scope.exportKey, recordId: 'activity', recordLabel: `${scope.title} (${format.toUpperCase()})`, action: 'EXPORT',
     after: { rows: out.length, format, area: f.area, action: f.action, from: f.from, to: f.to, search: f.search },
   });
   return { headers, rows: out };
@@ -220,8 +239,8 @@ export async function activityTable(req: Request, f: ActivityFilter, format: Exp
 /** A PDF is printed in the browser, so it is capped lower than a CSV. */
 export const MAX_ACTIVITY_PDF = 2_000;
 
-export async function activityCsv(req: Request, f: ActivityFilter): Promise<{ filename: string; csv: string; count: number }> {
-  const { headers, rows } = await activityTable(req, f, 'csv');
+export async function activityCsv(req: Request, f: ActivityFilter, scope: ActivityScope = EMPLOYEE_SCOPE): Promise<{ filename: string; csv: string; count: number }> {
+  const { headers, rows } = await activityTable(req, f, 'csv', scope);
   const day = new Date().toISOString().slice(0, 10);
-  return { filename: `WII_Employee_Activity_${day}.csv`, csv: toCsv(headers, rows), count: rows.length };
+  return { filename: `${scope.filePrefix}_${day}.csv`, csv: toCsv(headers, rows), count: rows.length };
 }

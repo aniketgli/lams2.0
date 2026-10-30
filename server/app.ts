@@ -10,6 +10,7 @@ import { slackRoutes } from './integrations/slack/slack.routes';
 import { authRoutes } from './routes/auth.routes';
 import accessRoutes from './routes/access.routes';
 import employeeRoutes from './employees/employees.routes';
+import holidayRoutes from './holidays/holidays.routes';
 import mastersRoutes from './masters/masters.routes';
 import settingsRoutes from './masters/settings.routes';
 import { apiNotFound, errorHandler } from './middleware/errorHandler';
@@ -87,6 +88,7 @@ export async function createApp(httpServer?: HttpServer) {
   api.use('/slack', slackRoutes);
   api.use('/hrms/masters', mastersRoutes);
   api.use('/hrms', settingsRoutes); // shifts, biometric machines, organization settings
+  api.use('/hrms', holidayRoutes); // holiday calendar
   api.use('/hrms', employeeRoutes); // employee accounts, profiles, roles, password resets
   api.use(apiNotFound);
   app.use('/api', api);

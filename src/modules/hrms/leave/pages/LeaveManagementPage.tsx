@@ -63,7 +63,6 @@ import {
   matchesCycleFilter,
   LEAVE_CYCLE_OPTIONS
 } from '../utils/leaveCycleUtils';
-import { INITIAL_HOLIDAYS } from '../../holidays/data/holidayData';
 import { AppDatePicker } from '../../../../shared/components/AppDatePicker';
 import { formatTo24H } from '../../attendance/utils/attendanceUtils';
 import { exportHRMSToCSV, exportHRMSToPDF, HRMSFilterTag, HRMSExportColumn } from '../../utils/hrmsExportUtils';
@@ -79,7 +78,8 @@ const StationLeaveDatePicker: React.FC<{
   onToggle?: () => void;
   isRightColumn?: boolean;
 }> = (props) => {
-  return <AppDatePicker {...props} restrictToStationLeave={true} holidays={INITIAL_HOLIDAYS} />;
+  const { holidays } = useApp();
+  return <AppDatePicker {...props} restrictToStationLeave={true} holidays={holidays} />;
 };
 
 interface LeaveManagementPageProps {
@@ -105,7 +105,8 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
     bulkImportLeaveBalances,
     batchUpdateLeaveBalances,
     reconcileLeaveBalances,
-    runYearEndLeaveRoll
+    runYearEndLeaveRoll,
+    holidays
   } = useApp();
 
   const [showApplyModal, setShowApplyModal] = useState(false);
@@ -141,8 +142,8 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
 
   // Restricted Holiday (RH) selection
   const restrictedHolidaysList = useMemo(() => {
-    return INITIAL_HOLIDAYS.filter((h) => h.type === 'restricted').sort((a, b) => a.date.localeCompare(b.date));
-  }, []);
+    return holidays.filter((h) => h.type === 'restricted').sort((a, b) => a.date.localeCompare(b.date));
+  }, [holidays]);
   const [selectedRhId, setSelectedRhId] = useState<string>('');
   const [isRhDropdownOpen, setIsRhDropdownOpen] = useState(false);
   const [rhSearchQuery, setRhSearchQuery] = useState('');
@@ -168,7 +169,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
 
     const dayOfWeek = d.getDay(); // 0 = Sun, 6 = Sat
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-    const ghMatch = INITIAL_HOLIDAYS.find((h) => h.date === dateStr && h.type === 'gazetted');
+    const ghMatch = holidays.find((h) => h.date === dateStr && h.type === 'gazetted');
 
     if (isWeekend) {
       return { eligible: true, reason: dayOfWeek === 0 ? 'Sunday (Weekend)' : 'Saturday (Weekend)' };
@@ -245,7 +246,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
     const isUserAdmin = currentUser.role === 'administrator';
     const targetUid = isUserAdmin && applyTargetUserId ? applyTargetUserId : currentUser.id;
     const userAtt = (attendanceRecords || []).filter((a) => a.userId === targetUid);
-    const holidayDates = new Set(INITIAL_HOLIDAYS.map((h) => h.date));
+    const holidayDates = new Set(holidays.map((h) => h.date));
 
     const workedOnOffDays = userAtt.filter((rec) => {
       if (!rec.date) return false;
@@ -259,7 +260,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
     });
 
     const mapped = workedOnOffDays.map((rec) => {
-      const hol = INITIAL_HOLIDAYS.find((h) => h.date === rec.date);
+      const hol = holidays.find((h) => h.date === rec.date);
       const dObj = new Date(`${rec.date}T10:00:00`);
       const dayName = dObj.toLocaleDateString('en-US', { weekday: 'long' });
       const label = hol ? hol.name : `${dayName} Duty`;
@@ -326,7 +327,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
     const existingDates = new Set(mapped.map((m) => m.date));
     const extraSeed = defaultSeedOffDays.filter((s) => !existingDates.has(s.date));
     return [...mapped, ...extraSeed].sort((a, b) => b.date.localeCompare(a.date));
-  }, [attendanceRecords, currentUser.id, currentUser.role, applyTargetUserId]);
+  }, [attendanceRecords, currentUser.id, currentUser.role, applyTargetUserId, holidays]);
 
   const [selectedCoffId, setSelectedCoffId] = useState<string>('');
   const [isCoffDropdownOpen, setIsCoffDropdownOpen] = useState(false);
@@ -365,7 +366,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
     if (isNaN(s.getTime()) || isNaN(e.getTime()) || e < s) return 0;
     const diffTime = Math.abs(e.getTime() - s.getTime());
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-  }, [startDate, endDate]);
+  }, [startDate, endDate, holidays]);
 
   // CL Working days excluding weekends and gazetted holidays
   const clBaseWorkingDays = useMemo(() => {
@@ -374,7 +375,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
     const e = new Date(endDate);
     if (isNaN(s.getTime()) || isNaN(e.getTime()) || e < s) return 0;
 
-    const holidaySet = new Set(INITIAL_HOLIDAYS.map((h) => h.date));
+    const holidaySet = new Set(holidays.map((h) => h.date));
     let count = 0;
     const curr = new Date(s);
     while (curr <= e) {
@@ -388,7 +389,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
       curr.setDate(curr.getDate() + 1);
     }
     return count;
-  }, [startDate, endDate]);
+  }, [startDate, endDate, holidays]);
 
   const calculatedDays = useMemo(() => {
     if (selectedLeaveType === 'restricted' || selectedLeaveType === 'compensatory_off') {
