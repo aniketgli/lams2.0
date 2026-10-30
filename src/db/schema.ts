@@ -1,4 +1,4 @@
-import { mysqlTable, varchar, text, longtext, timestamp, boolean, int, decimal, bigint, uniqueIndex, date, json } from 'drizzle-orm/mysql-core';
+import { mysqlTable, varchar, text, longtext, timestamp, boolean, int, decimal, bigint, uniqueIndex, date, json, datetime, time, index } from 'drizzle-orm/mysql-core';
 
 export const users = mysqlTable('users', {
   // ORM mapping only: the existing MySQL table is not modified by this declaration.
@@ -320,3 +320,20 @@ export const account_settings = mysqlTable('account_settings', {
   updatedBy: varchar('updated_by', { length: 4 }),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });
+
+// Biometric punch log, filled by the machine software (parallel export). The portal only reads it.
+// Column names follow the export format (migrations/20261030_attendance_logs.sql).
+export const atten = mysqlTable('Atten', {
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  employeeCode: varchar('EmployeeCode', { length: 50 }).notNull(),
+  logDateTime: datetime('LogDateTime', { fsp: 6 }).notNull(),
+  logDate: date('LogDate').notNull(),
+  logTime: time('LogTime', { fsp: 6 }),
+  direction: varchar('Direction', { length: 20 }),
+  deviceName: varchar('DeviceName', { length: 150 }),
+  deviceSr: varchar('DeviceSR', { length: 120 }),
+  deviceId: varchar('DeviceId', { length: 50 }),
+}, (t) => ({
+  byDateEmp: index('idx_atten_date_emp').on(t.logDate, t.employeeCode),
+  byEmpDate: index('idx_atten_emp_date').on(t.employeeCode, t.logDate),
+}));
