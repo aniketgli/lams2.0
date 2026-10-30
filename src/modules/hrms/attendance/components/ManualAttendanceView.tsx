@@ -2,10 +2,11 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarCheck, Check, CheckCircle2, ClipboardList, Clock, Pencil, Plus, Trash2, X, XCircle } from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
 import { PageHeader } from '../../../../shared/components/PageHeader';
-import { DataTable, Input, Modal, Select } from '../../../../shared/components';
+import { DataTable, Modal } from '../../../../shared/components';
 import type { ColumnDef } from '../../../../shared/components';
 import { Textarea } from '../../../../shared/components/forms/Textarea';
 import { AppDatePicker } from '../../../../shared/components/AppDatePicker';
+import { AppTimePicker } from '../../../../shared/components/AppTimePicker';
 import { AppSelect } from '../../../../shared/components/AppSelect';
 import { MultiSelectFilter, matchesMultiSelect } from '../../../../shared/components/MultiSelectFilter';
 import { FilterToolbar } from '../../../../shared/components/FilterToolbar';
@@ -498,12 +499,19 @@ export const ManualAttendanceView: React.FC = () => {
                   placeholder={gapsLoading ? 'Loading dates…' : isAdmin && !form.userId ? 'Select employee first' : dateChoices.length === 0 ? 'No date with a missing punch' : 'Select date'}
                   options={dateChoices.map((g) => ({ label: `${formatDate(g.date)} (${dayShort(g.date)}) · ${gapText(g)}`, value: g.date }))} />
               </div>
-              <Select label="Category" required value={form.category} error={Boolean(formErrors.category)}
-                options={(data?.categories ?? []).map((c) => ({ label: c, value: c }))} onChange={(v: string) => setField('category', v)} />
-              <Input label="Check-In" type="time" required disabled={!chosen || Boolean(chosen.in)} value={form.inTime} error={Boolean(formErrors.inTime)} title={formErrors.inTime || undefined}
-                onChange={(e) => setField('inTime', e.target.value)} />
-              <Input label="Check-Out" type="time" required disabled={!chosen || Boolean(chosen.out)} value={form.outTime} error={Boolean(formErrors.outTime)} title={formErrors.outTime || undefined}
-                onChange={(e) => setField('outTime', e.target.value)} />
+              <div className={formErrors.category ? 'rounded-xl ring-2 ring-rose-400' : ''} title={formErrors.category || undefined}>
+                <label className="block font-bold text-slate-800 text-xs tracking-tight mb-1">Category *</label>
+                <AppSelect value={form.category} onChange={(v) => setField('category', v)} searchable={false} placeholder="Select category"
+                  options={(data?.categories ?? []).map((c) => ({ label: c, value: c }))} />
+              </div>
+              <div className={formErrors.inTime ? 'rounded-xl ring-2 ring-rose-400' : ''} title={formErrors.inTime || undefined}>
+                <AppTimePicker label="Check-In *" value={form.inTime} placeholder="HH:mm" disabled={!chosen || Boolean(chosen.in)}
+                  onChange={(v) => setField('inTime', v)} className="w-full" />
+              </div>
+              <div className={formErrors.outTime ? 'rounded-xl ring-2 ring-rose-400' : ''} title={formErrors.outTime || undefined}>
+                <AppTimePicker label="Check-Out *" value={form.outTime} placeholder="HH:mm" disabled={!chosen || Boolean(chosen.out)}
+                  onChange={(v) => setField('outTime', v)} align="right" className="w-full" />
+              </div>
             </div>
             <Textarea label="Reason *" rows={3} maxLength={500} value={form.reason} error={Boolean(formErrors.reason)}
               onChange={(e) => setField('reason', e.target.value)} />
