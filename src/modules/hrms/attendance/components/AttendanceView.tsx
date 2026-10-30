@@ -1,1621 +1,427 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  AlarmClock, CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, Clock, LayoutGrid, List, UserX,
+} from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
-import { AttendanceRecord, AttendanceStatus, Shift } from '../../../../types';
 import { PageHeader } from '../../../../shared/components/PageHeader';
+import { DataTable } from '../../../../shared/components';
+import type { ColumnDef } from '../../../../shared/components';
 import { AppDatePicker } from '../../../../shared/components/AppDatePicker';
 import { MultiSelectFilter, matchesMultiSelect } from '../../../../shared/components/MultiSelectFilter';
-import { TablePagination } from '../../../../shared/components/TablePagination';
-import { attendanceApi, AttendanceResponse } from '../attendanceApi';
-import { ApiError } from '../../../../shared/services/api';
-import {
-  getNormalizedStatusCode,
-  getStatusLabel,
-  ATTENDANCE_STATUS_MAP,
-  ALL_STATUS_CODES,
-  formatTo24H
-} from '../utils/attendanceUtils';
-import {
-  Clock,
-  Calendar,
-  Search,
-  Filter,
-  Download,
-  FileText,
-  Building,
-  Briefcase,
-  Layers,
-  GraduationCap,
-  User as UserIcon,
-  UserCheck,
-  Eye,
-  X,
-  XCircle,
-  CheckCircle2,
-  AlertCircle,
-  MapPin,
-  RotateCcw,
-  LayoutGrid,
-  Table as TableIcon,
-  ChevronDown,
-  ArrowUp,
-  ArrowDown,
-  ArrowUpDown
-} from 'lucide-react';
-import { exportHRMSToCSV, exportHRMSToPDF, HRMSFilterTag, HRMSExportColumn } from '../../utils/hrmsExportUtils';
+import { FilterToolbar } from '../../../../shared/components/FilterToolbar';
 import { UserAvatar } from '../../../../shared/components/UserAvatar';
+import { ApiError } from '../../../../shared/services/api';
+import { downloadCsvText, downloadTablePdf, printedAt, toCsvText } from '../../../../shared/services/printTable';
+import { AttendanceDay, AttendanceResponse, attendanceApi } from '../attendanceApi';
+
+/**
+ * Biometric Attendance.
+ * Each day is worked out on the server from the punch log the machine software
+ * fills (first punch = In, last = Out, hours against the employee's shift).
+ *
+ *   User                       : own attendance; status filter
+ *   Reporting Manager / HoD    : own and team attendance; team filters
+ *   Administrator / Auditor    : everyone; all filters
+ * Everyone can download what is shown (CSV / PDF). The server enforces who sees whom.
+ */
+
+const STATUS_META: Record<AttendanceDay['status'], { label: string; pill: string; dot: string }> = {
+  PP: { label: 'Present', pill: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-600' },
+  PA: { label: 'Half day (1st half)', pill: 'bg-amber-50 text-amber-800 border-amber-200', dot: 'bg-amber-500' },
+  AP: { label: 'Half day (2nd half)', pill: 'bg-amber-50 text-amber-800 border-amber-200', dot: 'bg-amber-500' },
+  AA: { label: 'Absent', pill: 'bg-rose-50 text-rose-700 border-rose-200', dot: 'bg-rose-600' },
+  WW: { label: 'Weekly off', pill: 'bg-slate-50 text-slate-600 border-slate-200', dot: 'bg-slate-400' },
+  'WW#': { label: 'Worked on weekly off', pill: 'bg-sky-50 text-sky-700 border-sky-200', dot: 'bg-sky-600' },
+  GH: { label: 'Holiday', pill: 'bg-blue-50 text-blue-700 border-blue-200', dot: 'bg-blue-600' },
+  'HH#': { label: 'Worked on holiday', pill: 'bg-sky-50 text-sky-700 border-sky-200', dot: 'bg-sky-600' },
+};
+const STATUSES = Object.keys(STATUS_META) as AttendanceDay['status'][];
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const PAGE_SIZES = [25, 50, 100];
+
+function localToday(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function formatDate(date: string): string {
+  const d = new Date(`${date}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? date : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+const dayName = (date: string) => WEEKDAYS[new Date(`${date}T00:00:00`).getDay()] ?? '';
+const hoursText = (h: number | null) => (h === null ? '—' : `${Math.floor(h)}h ${String(Math.round((h % 1) * 60)).padStart(2, '0')}m`);
+
+const StatusPill: React.FC<{ status: AttendanceDay['status'] }> = ({ status }) => {
+  const meta = STATUS_META[status];
+  return (
+    <span title={meta.label} className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[11px] font-bold whitespace-nowrap ${meta.pill}`}>
+      <span className="font-mono">{status}</span>
+      <span className="font-semibold">{meta.label}</span>
+    </span>
+  );
+};
+
+type Row = AttendanceDay & { name: string; department: string; designation: string; employmentType: string; reportingManagerId: string; avatar: string };
 
 export const AttendanceView: React.FC = () => {
-  const {
-    currentUser,
-    users,
-    odRequests,
-    leaveRequests,
-    manualAttendanceRequests
-  } = useApp();
+  const { currentUser, users, masterOptions } = useApp();
+  const role = currentUser.role;
+  const isAdminOrAudit = role === 'administrator' || role === 'audit';
+  const isManager = role === 'reporting_manager' || role === 'reviewing_manager';
+  const teamView = isAdminOrAudit || isManager;
+  const showManagerFilter = isAdminOrAudit || role === 'reviewing_manager';
 
-  // Role Checks
-  const isAdmin = currentUser.role === 'administrator';
-  const isAudit = currentUser.role === 'audit';
-  const isReportingManager = currentUser.role === 'reporting_manager';
-  const isReviewingManager = currentUser.role === 'reviewing_manager';
-  const isManager = isReportingManager || isReviewingManager;
+  // ---- Dates and data ---------------------------------------------------------
+  const today = localToday();
+  const monthStart = `${today.slice(0, 8)}01`;
+  const defaultFrom = teamView ? today : monthStart;
+  const [from, setFrom] = useState(defaultFrom);
+  const [to, setTo] = useState(today);
+  const [data, setData] = useState<AttendanceResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'table' | 'month'>('table');
+  // Month view shows (and loads) one whole month; the table shows the chosen dates.
+  const [month, setMonth] = useState(() => (from || today).slice(0, 7));
+  const monthEnd = (() => {
+    const [y, m] = month.split('-').map(Number);
+    return `${month}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+  })();
+  const start = viewMode === 'month' ? `${month}-01` : from || monthStart;
+  const end = viewMode === 'month' ? (monthEnd < today ? monthEnd : today) : to || today;
 
-  // Accessible Users list based on Role
-  // Admin & Audit: All users
-  // Manager: Team members reporting/reviewing under currentUser + currentUser
-  // Employee: Only currentUser
-  const accessibleUsers = React.useMemo(() => {
-    if (isAdmin || isAudit) {
-      return users;
-    }
-    if (isManager) {
-      return users.filter(
-        (u) =>
-          u.id === currentUser.id ||
-          u.reportingManagerId === currentUser.id ||
-          u.reviewingManagerId === currentUser.id
-      );
-    }
-    return users.filter((u) => u.id === currentUser.id);
-  }, [currentUser, users, isAdmin, isAudit, isManager]);
-
-  const accessibleUserIds = React.useMemo(() => accessibleUsers.map((u) => u.id), [accessibleUsers]);
-
-  // Display View Mode: 'table' (Row View) or 'grid' (Calendar/Grid Card View)
-  const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
-
-  // Current date (today) YYYY-MM-DD
-  // Local calendar date (toISOString would give yesterday before 05:30 IST).
-  const todayStr = useMemo(() => new Date().toLocaleDateString('en-CA'), []);
-  const monthStartStr = `${todayStr.slice(0, 8)}01`;
-
-  // Toast Notification State
-  const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
-
-  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
-    setToastMessage({ text, type });
-    setTimeout(() => setToastMessage(null), 4000);
-  };
-
-  // Default Dates:
-  // For Reporting Manager, HoD (Reviewing Manager), Audit, and Administrator: by default show current date's attendance
-  // For General Staff: default to full month range
-  const isManagerOrAdmin = isAdmin || isAudit || isReportingManager || isReviewingManager;
-  const DEFAULT_START_DATE = isManagerOrAdmin ? todayStr : monthStartStr;
-  const DEFAULT_END_DATE = todayStr;
-
-  const [startDate, setStartDate] = useState<string>(DEFAULT_START_DATE);
-  const [endDate, setEndDate] = useState<string>(DEFAULT_END_DATE);
-
-  // Biometric attendance for the chosen dates, from the server (punch log of registered machines).
-  const [attendance, setAttendance] = useState<AttendanceResponse | null>(null);
-  const [attendanceLoading, setAttendanceLoading] = useState(false);
-  const [attendanceError, setAttendanceError] = useState<string | null>(null);
   useEffect(() => {
-    const from = startDate || monthStartStr;
-    const to = endDate || todayStr;
-    if (from > to) {
-      setAttendanceError('The From date must be on or before the To date.');
+    if (start > end) {
+      setData(null);
+      setError(viewMode === 'month' ? null : 'The From date must be on or before the To date.');
       return;
     }
     let cancelled = false;
-    setAttendanceLoading(true);
-    setAttendanceError(null);
-    attendanceApi.list(from, to)
-      .then((res) => { if (!cancelled) setAttendance(res); })
-      .catch((e) => { if (!cancelled) { setAttendance(null); setAttendanceError(e instanceof ApiError ? e.message : 'Attendance could not be loaded. Please try again.'); } })
-      .finally(() => { if (!cancelled) setAttendanceLoading(false); });
+    setLoading(true);
+    setError(null);
+    attendanceApi.list(start, end)
+      .then((res) => { if (!cancelled) setData(res); })
+      .catch((e) => { if (!cancelled) { setData(null); setError(e instanceof ApiError ? e.message : 'Attendance could not be loaded. Please try again.'); } })
+      .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [startDate, endDate, monthStartStr, todayStr, currentUser.role]);
+  }, [start, end, viewMode, role]);
 
-  const attendanceRecords = useMemo<AttendanceRecord[]>(() => (attendance?.records ?? []).map((r) => ({
-    id: `${r.userId}-${r.date}`,
-    userId: r.userId,
-    date: r.date,
-    clockIn: r.clockIn ?? undefined,
-    clockOut: r.clockOut ?? undefined,
-    shiftCode: r.shiftCode,
-    workMode: r.workMode,
-    status: r.status,
-    totalHours: r.totalHours ?? undefined,
-    location: r.devices.join(', '),
-    remark: r.remark,
-  })), [attendance]);
+  const shiftByCode = useMemo(() => new Map((data?.shifts ?? []).map((s) => [s.code, s])), [data]);
+  const typeName = (code: string) => (masterOptions.employeeType ?? []).find((r) => r.code === code)?.name || code;
+  const userById = useMemo(() => new Map(users.map((u) => [String(u.id), u])), [users]);
 
-  // Shifts the records refer to (from the Shift master).
-  const shifts = useMemo<Shift[]>(() => (attendance?.shifts ?? []).map((sh) => ({
-    id: sh.code, code: sh.code, name: sh.name, startTime: sh.startTime, endTime: sh.endTime,
-    gracePeriodMins: 0, halfDayHours: 0, fullDayHours: 0,
-  })), [attendance]);
-  const noShift: Shift = { id: '', code: '—', name: '', startTime: '', endTime: '', gracePeriodMins: 0, halfDayHours: 0, fullDayHours: 0 };
-  const getUserShift = (_userId: string): Shift => noShift;
+  const rows = useMemo<Row[]>(() => (data?.records ?? []).map((r) => {
+    const u = userById.get(r.userId);
+    return {
+      ...r,
+      name: u?.name ?? `Biometric ${r.biometricId}`,
+      department: u?.department ?? '',
+      designation: u?.designation ?? '',
+      employmentType: String(u?.employmentType ?? ''),
+      reportingManagerId: String(u?.reportingManagerId ?? ''),
+      avatar: (u as { avatar?: string } | undefined)?.avatar ?? '',
+    };
+  }), [data, userById]);
 
-  // Role Visibility Matrix Flags (per specification table)
-  // 1. General (Staff): Status filter only
-  // 2. Reporting Manager / PI (if non-permanent): Employee, Designation, Department, Type, Status
-  // 3. Reviewing Manager & Admin & Audit: Employee, Designation, Department, Reporting Manager, Type, Status
-  const isNonPermanentPI = currentUser.employmentType !== 'permanent' && (Boolean(currentUser.piName) || accessibleUsers.length > 1);
-  const isReportingManagerOrPI = isReportingManager || isNonPermanentPI;
+  // ---- Filters ------------------------------------------------------------------
+  const [search, setSearch] = useState('');
+  const [statuses, setStatuses] = useState<string[]>(['all']);
+  const [employees, setEmployees] = useState<string[]>(['all']);
+  const [departments, setDepartments] = useState<string[]>(['all']);
+  const [designations, setDesignations] = useState<string[]>(['all']);
+  const [types, setTypes] = useState<string[]>(['all']);
+  const [shiftsFilter, setShiftsFilter] = useState<string[]>(['all']);
+  const [managers, setManagers] = useState<string[]>(['all']);
 
-  const canSeeReportingManagerFilter = isAdmin || isAudit || isReviewingManager;
-  const canSeeTeamFilters = isAdmin || isAudit || isReviewingManager || isReportingManagerOrPI;
-
-  // User (General Staff) role check: Shift column is removed ONLY for user role
-  const isUserRole = currentUser.role === 'general_staff';
-  const showShiftColumn = !isUserRole;
-
-  // Search & Filter States (Multi-select supported)
-  const [selectedUserFilter, setSelectedUserFilter] = useState<string[]>(['all']);
-  const [selectedDeptFilter, setSelectedDeptFilter] = useState<string[]>(['all']);
-  const [selectedPostFilter, setSelectedPostFilter] = useState<string[]>(['all']);
-  const [selectedShiftFilter, setSelectedShiftFilter] = useState<string[]>(['all']);
-  const [selectedRepManagerFilter, setSelectedRepManagerFilter] = useState<string[]>(['all']);
-  const [selectedEmpTypeFilter, setSelectedEmpTypeFilter] = useState<string[]>(['all']);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string[]>(['all']);
-
-  // Check if any filter or search query is currently active
-  const hasActiveFilters = Boolean(
-    searchTerm.trim() !== '' ||
-    startDate !== DEFAULT_START_DATE ||
-    endDate !== DEFAULT_END_DATE ||
-    (!selectedStatusFilter.includes('all') && selectedStatusFilter.length > 0) ||
-    (!selectedShiftFilter.includes('all') && selectedShiftFilter.length > 0) ||
-    (!selectedUserFilter.includes('all') && selectedUserFilter.length > 0) ||
-    (!selectedDeptFilter.includes('all') && selectedDeptFilter.length > 0) ||
-    (!selectedPostFilter.includes('all') && selectedPostFilter.length > 0) ||
-    (!selectedRepManagerFilter.includes('all') && selectedRepManagerFilter.length > 0) ||
-    (!selectedEmpTypeFilter.includes('all') && selectedEmpTypeFilter.length > 0)
-  );
-
-  // Derived Filter Dropdown Option Lists
-  const departmentList = React.useMemo(() => {
-    const depts = new Set<string>();
-    accessibleUsers.forEach((u) => {
-      if (u.department) depts.add(u.department);
-    });
-    return Array.from(depts).sort();
-  }, [accessibleUsers]);
-
-  const designationList = React.useMemo(() => {
-    const posts = new Set<string>();
-    accessibleUsers.forEach((u) => {
-      if (u.designation) posts.add(u.designation);
-    });
-    return Array.from(posts).sort();
-  }, [accessibleUsers]);
-
-  const reportingManagerList = React.useMemo(() => {
-    const map = new Map<string, string>();
-    users.forEach((u) => {
-      if (u.role === 'reporting_manager' || u.role === 'reviewing_manager' || u.role === 'administrator') {
-        map.set(u.id, u.name);
-      }
-    });
-    users.forEach((u) => {
-      if (u.reportingManagerId) {
-        const mgr = users.find((m) => m.id === u.reportingManagerId);
-        if (mgr) {
-          map.set(mgr.id, mgr.name);
-        }
-      }
-    });
-    return Array.from(map.entries())
-      .map(([id, name]) => ({ id, name }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [users]);
-
-  // Remark Modal
-  const [activeRemarkModal, setActiveRemarkModal] = useState<{
-    dateAndDay: string;
-    employeeName: string;
-    remark: string;
-  } | null>(null);
-
-  // Shift Inspector Modal
-  const [activeShiftModal, setActiveShiftModal] = useState<{
-    dateAndDay: string;
-    employeeName: string;
-    employeeDesignation?: string;
-    employeeDept?: string;
-    shift: Shift;
-    clockIn?: string;
-    clockOut?: string;
-    totalHours?: number;
-    status: string;
-    remark?: string;
-  } | null>(null);
-
-  // Quick Preset Handlers
-  const handlePresetCurrentMonth = () => {
-    setStartDate(DEFAULT_START_DATE);
-    setEndDate(DEFAULT_END_DATE);
+  const distinct = (pick: (r: Row) => string) => [...new Set(rows.map(pick).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const filterSets = [statuses, employees, departments, designations, types, shiftsFilter, managers];
+  const filtered = Boolean(search.trim()) || filterSets.some((f) => !f.includes('all')) || (viewMode === 'table' && (from !== defaultFrom || to !== today));
+  const resetAll = () => {
+    setSearch(''); [setStatuses, setEmployees, setDepartments, setDesignations, setTypes, setShiftsFilter, setManagers].forEach((set) => set(['all']));
+    setFrom(defaultFrom); setTo(today);
   };
 
-  const handleResetFilters = () => {
-    setStartDate(DEFAULT_START_DATE);
-    setEndDate(DEFAULT_END_DATE);
-    setSearchTerm('');
-    setSelectedStatusFilter(['all']);
-    setSelectedShiftFilter(['all']);
-    setSelectedUserFilter(['all']);
-    setSelectedDeptFilter(['all']);
-    setSelectedPostFilter(['all']);
-    setSelectedRepManagerFilter(['all']);
-    setSelectedEmpTypeFilter(['all']);
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return rows.filter((r) =>
+      matchesMultiSelect(statuses, r.status) &&
+      (!teamView || (
+        matchesMultiSelect(employees, r.userId) && matchesMultiSelect(departments, r.department) &&
+        matchesMultiSelect(designations, r.designation) && matchesMultiSelect(types, r.employmentType) &&
+        matchesMultiSelect(shiftsFilter, r.shiftCode)
+      )) &&
+      (!showManagerFilter || matchesMultiSelect(managers, r.reportingManagerId)) &&
+      (!q || [r.name, r.biometricId, r.department, r.designation, r.date, formatDate(r.date), dayName(r.date), r.remark, STATUS_META[r.status].label]
+        .some((v) => (v || '').toLowerCase().includes(q))));
+  }, [rows, search, statuses, employees, departments, designations, types, shiftsFilter, managers, teamView, showManagerFilter]);
+
+  // ---- Sorting and pages (the whole list is sorted, then paged) ----------------------
+  const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' }>({ key: 'date', dir: teamView ? 'asc' : 'desc' });
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZES[0]);
+  useEffect(() => setPage(1), [visible.length, pageSize, sort]);
+
+  // ---- Summary --------------------------------------------------------------------
+  const range = start > end ? '—' : start !== end ? `${formatDate(start)} – ${formatDate(end)}` : formatDate(start);
+  const stats = useMemo(() => ({
+    present: visible.filter((r) => r.status === 'PP' || r.status === 'WW#' || r.status === 'HH#').length,
+    half: visible.filter((r) => r.status === 'PA' || r.status === 'AP').length,
+    absent: visible.filter((r) => r.status === 'AA').length,
+    late: visible.filter((r) => r.lateByMins > 0).length,
+  }), [visible]);
+  const statCards = [
+    { label: 'Present', value: stats.present, note: range, icon: CalendarCheck, tone: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+    { label: 'Half day', value: stats.half, note: range, icon: Clock, tone: 'bg-amber-50 text-amber-700 border-amber-200' },
+    { label: 'Absent', value: stats.absent, note: range, icon: UserX, tone: 'bg-rose-50 text-rose-700 border-rose-200' },
+    { label: 'Late arrivals', value: stats.late, note: range, icon: AlarmClock, tone: 'bg-sky-50 text-sky-700 border-sky-200' },
+  ];
+
+  // ---- Table -----------------------------------------------------------------------
+  const shiftText = (code: string) => {
+    const s = shiftByCode.get(code);
+    return s ? `${s.startTime}–${s.endTime}` : '';
   };
+  const columns: ColumnDef<Row>[] = [
+    {
+      key: 'date', header: 'Date', width: '130px', sortValue: (r) => r.date,
+      render: (r) => (
+        <div className="leading-tight">
+          <div className="font-semibold text-slate-900 whitespace-nowrap">{formatDate(r.date)}</div>
+          <div className="text-[11px] text-slate-500">{dayName(r.date)}</div>
+        </div>
+      ),
+    },
+    ...(teamView ? [{
+      key: 'employee', header: 'Employee', sortValue: (r: Row) => r.name,
+      render: (r: Row) => (
+        <div className="flex items-center gap-2.5 min-w-0">
+          <UserAvatar name={r.name} src={r.avatar || null} className="w-8 h-8 rounded-full shrink-0" />
+          <div className="min-w-0 leading-tight">
+            <div className="font-semibold text-slate-900 truncate">{r.name}</div>
+            <div className="text-[11px] text-slate-500 truncate">B.I. {r.biometricId}{r.designation ? ` · ${r.designation}` : ''}</div>
+          </div>
+        </div>
+      ),
+    } as ColumnDef<Row>] : []),
+    ...(teamView ? [{
+      key: 'shift', header: 'Shift', width: '120px', sortValue: (r: Row) => r.shiftCode,
+      render: (r: Row) => (
+        <div className="leading-tight">
+          <div className="font-mono text-[11px] font-bold text-slate-800">{r.shiftCode}</div>
+          <div className="text-[11px] text-slate-500 font-mono">{shiftText(r.shiftCode)}</div>
+        </div>
+      ),
+    } as ColumnDef<Row>] : []),
+    { key: 'in', header: 'In', width: '80px', align: 'center', sortValue: (r) => r.clockIn ?? '', render: (r) => <span className={`font-mono font-semibold ${r.lateByMins > 0 ? 'text-rose-600' : 'text-slate-800'}`}>{r.clockIn ?? '—'}</span> },
+    { key: 'out', header: 'Out', width: '80px', align: 'center', sortValue: (r) => r.clockOut ?? '', render: (r) => <span className={`font-mono font-semibold ${r.earlyByMins > 0 ? 'text-rose-600' : 'text-slate-800'}`}>{r.clockOut ?? '—'}</span> },
+    { key: 'hours', header: 'Hours', width: '90px', align: 'center', sortValue: (r) => r.totalHours ?? -1, render: (r) => <span className="font-mono text-slate-700">{hoursText(r.totalHours)}</span> },
+    { key: 'status', header: 'Status', width: '180px', sortValue: (r) => r.status, render: (r) => <StatusPill status={r.status} /> },
+    {
+      key: 'remark', header: 'Remark', sortValue: (r) => r.remark,
+      render: (r) => (
+        <div className="whitespace-normal leading-snug min-w-[140px]">
+          <span className="text-slate-700">{r.remark || '—'}</span>
+          {r.devices.length > 0 && <div className="text-[11px] text-slate-400">{r.devices.join(', ')}</div>}
+        </div>
+      ),
+    },
+  ];
 
-  // Date & Day Formatter e.g. "11/08/2026 (Tue)"
-  const formatDateAndDay = (dateStr: string): string => {
-    try {
-      const parts = dateStr.split('-');
-      if (parts.length !== 3) return dateStr;
-      const year = parseInt(parts[0], 10);
-      const month = parseInt(parts[1], 10) - 1;
-      const day = parseInt(parts[2], 10);
-      const dateObj = new Date(year, month, day);
-      const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
-      const dayStr = parts[2].padStart(2, '0');
-      const monthStr = parts[1].padStart(2, '0');
-      return `${dayStr}/${monthStr}/${year} (${dayName})`;
-    } catch {
-      return dateStr;
-    }
-  };
+  const sorted = useMemo(() => {
+    const col = columns.find((c) => c.key === sort.key);
+    const value = col?.sortValue ?? ((r: Row) => r.date);
+    const dir = sort.dir === 'asc' ? 1 : -1;
+    const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
+    return [...visible].sort((a, b) => {
+      const x = value(a), y = value(b);
+      const primary = typeof x === 'number' && typeof y === 'number' ? x - y : collator.compare(String(x ?? ''), String(y ?? ''));
+      return primary * dir || a.name.localeCompare(b.name) || a.date.localeCompare(b.date);
+    });
+    // columns are rebuilt each render; their sort values depend only on the row
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, sort]);
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const pageRows = sorted.slice((page - 1) * pageSize, page * pageSize);
 
-  const effectiveAttendanceRecords = attendanceRecords;
-
-  // Apply Role Scope, Employee, Department, Designation, Reporting Manager, Type & Status Filters
-  const filteredRecords = effectiveAttendanceRecords.filter((rec) => {
-    // 1. Accessibility Check based on Role
-    if (!accessibleUserIds.includes(rec.userId)) return false;
-
-    const userObj = users.find((u) => u.id === rec.userId);
-
-    // Team Filters apply if user is Reporting Manager / PI, Reviewing Manager, or Admin
-    if (canSeeTeamFilters) {
-      // 2. Employee Specific Filter
-      if (!matchesMultiSelect(selectedUserFilter, rec.userId)) return false;
-
-      // 3. Department Filter
-      if (!matchesMultiSelect(selectedDeptFilter, userObj?.department)) return false;
-
-      // 4. Post / Designation Filter
-      if (!matchesMultiSelect(selectedPostFilter, userObj?.designation)) return false;
-
-      // 5. Employment Type Filter
-      if (!matchesMultiSelect(selectedEmpTypeFilter, userObj?.employmentType)) return false;
-    }
-
-    // 6. Reporting Manager Filter (Exclusively for Reviewing Manager & Admin)
-    if (canSeeReportingManagerFilter) {
-      if (!matchesMultiSelect(selectedRepManagerFilter, userObj?.reportingManagerId)) return false;
-    }
-
-    // 7. Date Range Match (blank startDate/endDate means no date restriction)
-    const inDateRange = (!startDate || rec.date >= startDate) && (!endDate || rec.date <= endDate);
-    if (!inDateRange) return false;
-
-    // 8. Search Keyword Match
-    const dateFormatted = formatDateAndDay(rec.date);
-    const searchLower = searchTerm.toLowerCase();
-    const matchesSearch =
-      !searchTerm ||
-      userObj?.name.toLowerCase().includes(searchLower) ||
-      userObj?.department?.toLowerCase().includes(searchLower) ||
-      userObj?.designation?.toLowerCase().includes(searchLower) ||
-      rec.date.includes(searchLower) ||
-      dateFormatted.toLowerCase().includes(searchLower) ||
-      (rec.remark && rec.remark.toLowerCase().includes(searchLower));
-
-    if (!matchesSearch) return false;
-
-    // 9. Status Filter (For ALL roles, including General)
-    const statusCode = getNormalizedStatusCode(rec.status);
-    const matchesStatus =
-      matchesMultiSelect(selectedStatusFilter, statusCode) ||
-      matchesMultiSelect(selectedStatusFilter, rec.status);
-
-    if (!matchesStatus) return false;
-
-    // 10. Shift Filter
-    const userShift = shifts.find((s) => s.code === rec.shiftCode) || getUserShift(rec.userId);
-    const assignedShiftCode = rec.shiftCode || userShift?.code || 'GEN-01';
-    const matchesShift = matchesMultiSelect(selectedShiftFilter, assignedShiftCode);
-
-    return matchesShift;
+  // ---- Downloads -------------------------------------------------------------------
+  const exportHeaders = [...(teamView ? ['Biometric ID', 'Employee', 'Department', 'Designation', 'Shift'] : []), 'Date', 'Day', 'In', 'Out', 'Hours', 'Status', 'Remark'];
+  const exportRows = () => sorted.map((r) => [
+    ...(teamView ? [r.biometricId, r.name, r.department, r.designation, r.shiftCode] : []),
+    formatDate(r.date), dayName(r.date), r.clockIn ?? '', r.clockOut ?? '', r.totalHours === null ? '' : hoursText(r.totalHours),
+    `${r.status} – ${STATUS_META[r.status].label}`, [r.remark, r.devices.join(', ')].filter(Boolean).join(' · '),
+  ]);
+  const filterLine = () => [
+    !statuses.includes('all') && statuses.length ? `Status: ${statuses.join(', ')}` : null,
+    teamView && !departments.includes('all') && departments.length ? `Department: ${departments.join(', ')}` : null,
+    teamView && !employees.includes('all') && employees.length ? `Employees: ${employees.length}` : null,
+    search.trim() ? `Search: “${search.trim()}”` : null,
+  ].filter(Boolean).join(' · ');
+  const fileName = `WII_Attendance_${start}_to_${end}`;
+  const downloadCsv = () => downloadCsvText(toCsvText(exportHeaders, exportRows()), fileName);
+  const downloadPdf = () => downloadTablePdf({
+    title: 'Biometric Attendance',
+    subtitle: [`${range} · Generated ${printedAt(new Date().toISOString())}`, filterLine() || (teamView ? 'All employees shown' : currentUser.name)],
+    headers: exportHeaders,
+    rows: exportRows(),
+    fileName,
+    columnWidths: teamView ? [7, 14, 12, 12, 7, 10, 5, 6, 6, 7, 13, 18] : [14, 7, 9, 9, 10, 20, 31],
   });
 
-  // Table Column Sort State
-  const [sortField, setSortField] = useState<'date' | 'employee' | 'reportingManager' | 'shift' | 'in' | 'out' | 'hours' | 'status'>('date');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
-
-  const handleSort = (field: 'date' | 'employee' | 'reportingManager' | 'shift' | 'in' | 'out' | 'hours' | 'status') => {
-    if (sortField === field) {
-      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
-    } else {
-      setSortField(field);
-      setSortOrder('asc');
+  // ---- Month view --------------------------------------------------------------------
+  const singlePerson = new Set(visible.map((r) => r.userId)).size === 1;
+  const monthGrid = () => {
+    const [y, m] = month.split('-').map(Number);
+    const first = new Date(y, m - 1, 1).getDay();
+    const days = new Date(y, m, 0).getDate();
+    const cells: React.ReactNode[] = [];
+    for (let i = 0; i < first; i++) cells.push(<div key={`b${i}`} />);
+    for (let d = 1; d <= days; d++) {
+      const date = `${month}-${String(d).padStart(2, '0')}`;
+      const items = visible.filter((r) => r.date === date);
+      const isToday = date === today;
+      cells.push(
+        <div key={date} className={`min-h-[78px] rounded-xl border p-2 flex flex-col gap-1 ${isToday ? 'border-primary/60 bg-primary/5' : 'border-slate-200 bg-white'}`}>
+          <span className={`text-[11px] font-bold ${isToday ? 'text-primary' : 'text-slate-500'}`}>{d}</span>
+          {singlePerson && items[0] ? (
+            <>
+              <span className={`self-start px-1.5 py-0.5 rounded-md border text-[10px] font-bold font-mono ${STATUS_META[items[0].status].pill}`} title={STATUS_META[items[0].status].label}>{items[0].status}</span>
+              {items[0].clockIn && <span className="text-[10px] font-mono text-slate-600">{items[0].clockIn}{items[0].clockOut ? `–${items[0].clockOut}` : ''}</span>}
+            </>
+          ) : items.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {(['PP', 'PA', 'AP', 'AA'] as const).map((s) => {
+                const n = items.filter((r) => r.status === s || (s === 'PP' && (r.status === 'WW#' || r.status === 'HH#'))).length;
+                return n ? <span key={s} title={STATUS_META[s].label} className={`px-1.5 py-0.5 rounded-md border text-[10px] font-bold ${STATUS_META[s].pill}`}>{s} {n}</span> : null;
+              })}
+              {items.every((r) => r.status === 'WW' || r.status === 'GH') && (
+                <span className={`px-1.5 py-0.5 rounded-md border text-[10px] font-bold ${STATUS_META[items[0].status].pill}`}>{items[0].status}</span>
+              )}
+            </div>
+          ) : null}
+        </div>,
+      );
     }
+    return cells;
   };
-
-  // Sort records dynamically by active sort field and order
-  const sortedRecords = [...filteredRecords].sort((a, b) => {
-    let cmp = 0;
-    if (sortField === 'date') {
-      cmp = a.date.localeCompare(b.date);
-    } else if (sortField === 'employee') {
-      const userA = users.find((u) => u.id === a.userId)?.name || '';
-      const userB = users.find((u) => u.id === b.userId)?.name || '';
-      cmp = userA.localeCompare(userB);
-    } else if (sortField === 'reportingManager') {
-      const uA = users.find((u) => u.id === a.userId);
-      const uB = users.find((u) => u.id === b.userId);
-      const mgrA = uA?.reportingManagerId ? (users.find((m) => m.id === uA.reportingManagerId)?.name || '') : '';
-      const mgrB = uB?.reportingManagerId ? (users.find((m) => m.id === uB.reportingManagerId)?.name || '') : '';
-      cmp = mgrA.localeCompare(mgrB);
-    } else if (sortField === 'shift') {
-      cmp = (a.shiftCode || '').localeCompare(b.shiftCode || '');
-    } else if (sortField === 'in') {
-      cmp = (a.inTime || '').localeCompare(b.inTime || '');
-    } else if (sortField === 'out') {
-      cmp = (a.outTime || '').localeCompare(b.outTime || '');
-    } else if (sortField === 'hours') {
-      cmp = (a.totalHours || 0) - (b.totalHours || 0);
-    } else if (sortField === 'status') {
-      cmp = (a.status || '').localeCompare(b.status || '');
-    }
-    return sortOrder === 'asc' ? cmp : -cmp;
-  });
-
-  const [attPage, setAttPage] = useState(1);
-  const [attPageSize, setAttPageSize] = useState(25);
-
-  const paginatedRecords = useMemo(() => {
-    const start = (attPage - 1) * attPageSize;
-    return sortedRecords.slice(start, start + attPageSize);
-  }, [sortedRecords, attPage, attPageSize]);
-
-  // Summary Metrics based on normalized codes
-  const presentCount = sortedRecords.filter((r) => {
-    const c = getNormalizedStatusCode(r.status);
-    return c === 'PP' || c === 'PA' || c === 'AP';
-  }).length;
-  const absentCount = sortedRecords.filter((r) => getNormalizedStatusCode(r.status) === 'AA').length;
-  const odCount = sortedRecords.filter((r) => getNormalizedStatusCode(r.status) === 'OD').length;
-  const leaveCount = sortedRecords.filter((r) => getNormalizedStatusCode(r.status) === 'ST').length;
-
-  // Resolves attendance status code, styling, and application tracking per specifications:
-  // a. Present to green + PP
-  // b. Half day / absent to red + AP / PA / AA
-  // c. Weekend / holiday to Blue + WW / GH / approved RH
-  // Application status: code + Yellow if pending, Red if rejected, Green/Blue if approved
-  const resolveRecordStatusDisplay = (rec: AttendanceRecord) => {
-    const matchingOD = odRequests.find(
-      (od) => od.userId === rec.userId && rec.date >= od.startDate && rec.date <= od.endDate
-    );
-    const matchingManual = manualAttendanceRequests.find(
-      (m) => m.userId === rec.userId && m.date === rec.date
-    );
-    const matchingLeave = leaveRequests.find(
-      (lv) =>
-        lv.userId === rec.userId &&
-        rec.date >= lv.startDate &&
-        rec.date <= lv.endDate &&
-        lv.status !== 'cancelled'
-    );
-
-    // 1. Leave application present
-    if (matchingLeave) {
-      let code = 'LV';
-      let typeLabel = 'Leave';
-      const lt = matchingLeave.leaveType?.toLowerCase() || '';
-      const ltName = matchingLeave.leaveTypeName?.toLowerCase() || '';
-
-      if (lt === 'restricted' || ltName.includes('restricted')) {
-        code = 'RH';
-        typeLabel = 'RH';
-      } else if (lt === 'station' || ltName.includes('station')) {
-        code = 'ST';
-        typeLabel = 'Station';
-      } else if (lt === 'casual') {
-        code = 'CL';
-        typeLabel = 'Casual';
-      } else if (lt === 'earned') {
-        code = 'EL';
-        typeLabel = 'Earned';
-      } else if (lt === 'medical') {
-        code = 'ML';
-        typeLabel = 'Medical';
-      } else if (lt === 'paternity') {
-        code = 'PL';
-        typeLabel = 'Paternity';
-      } else if (lt === 'maternity') {
-        code = 'MAT';
-        typeLabel = 'Maternity';
-      } else if (lt === 'lwp' || lt.includes('without')) {
-        code = 'LW';
-        typeLabel = 'LWP';
-      } else {
-        code = matchingLeave.leaveType?.toUpperCase() || 'LV';
-        typeLabel = matchingLeave.leaveTypeName || 'Leave';
-      }
-
-      const isPending = matchingLeave.status?.startsWith('pending');
-      const isRejected = matchingLeave.status === 'rejected';
-      const isApproved = matchingLeave.status === 'approved';
-
-      let badgeStyle = 'bg-emerald-50 text-emerald-700 border-emerald-300';
-      let tagStyle = 'bg-emerald-100 text-emerald-800 border-emerald-300';
-
-      if (isPending) {
-        badgeStyle = 'bg-amber-50 text-amber-800 border-amber-300 font-black';
-        tagStyle = 'bg-amber-100 text-amber-900 border-amber-300 font-bold';
-      } else if (isRejected) {
-        badgeStyle = 'bg-rose-50 text-rose-700 border-rose-300 font-black';
-        tagStyle = 'bg-rose-100 text-rose-800 border-rose-300 font-bold';
-      } else if (isApproved && code === 'RH') {
-        badgeStyle = 'bg-blue-50 text-blue-700 border-blue-300 font-black';
-        tagStyle = 'bg-blue-100 text-blue-800 border-blue-300 font-bold';
-      }
-
-      const statusText = isPending ? 'Pending' : isRejected ? 'Rejected' : 'Approved';
-
-      return {
-        code,
-        label: `${typeLabel} (${statusText})`,
-        badgeStyle,
-        appTag: {
-          text: `${typeLabel}: ${statusText}`,
-          style: tagStyle
-        }
-      };
-    }
-
-    // 2. OD application present
-    if (matchingOD) {
-      const isPending = matchingOD.status?.startsWith('pending');
-      const isRejected = matchingOD.status === 'rejected';
-
-      let badgeStyle = 'bg-emerald-50 text-emerald-700 border-emerald-300';
-      let tagStyle = 'bg-emerald-100 text-emerald-800 border-emerald-300';
-
-      if (isPending) {
-        badgeStyle = 'bg-amber-50 text-amber-800 border-amber-300 font-black';
-        tagStyle = 'bg-amber-100 text-amber-900 border-amber-300 font-bold';
-      } else if (isRejected) {
-        badgeStyle = 'bg-rose-50 text-rose-700 border-rose-300 font-black';
-        tagStyle = 'bg-rose-100 text-rose-800 border-rose-300 font-bold';
-      }
-
-      const statusText = isPending ? 'Pending' : isRejected ? 'Rejected' : 'Approved';
-
-      return {
-        code: 'OD',
-        label: `Outdoor Duty (${statusText})`,
-        badgeStyle,
-        appTag: {
-          text: `OD: ${statusText}`,
-          style: tagStyle
-        }
-      };
-    }
-
-    // 3. Manual attendance application present
-    if (matchingManual) {
-      const isPending = matchingManual.status?.startsWith('pending');
-      const isRejected = matchingManual.status === 'rejected';
-
-      let badgeStyle = 'bg-emerald-50 text-emerald-700 border-emerald-300';
-      let tagStyle = 'bg-emerald-100 text-emerald-800 border-emerald-300';
-
-      if (isPending) {
-        badgeStyle = 'bg-amber-50 text-amber-800 border-amber-300 font-black';
-        tagStyle = 'bg-amber-100 text-amber-900 border-amber-300 font-bold';
-      } else if (isRejected) {
-        badgeStyle = 'bg-rose-50 text-rose-700 border-rose-300 font-black';
-        tagStyle = 'bg-rose-100 text-rose-800 border-rose-300 font-bold';
-      }
-
-      const statusText = isPending ? 'Pending' : isRejected ? 'Rejected' : 'Approved';
-
-      return {
-        code: 'PP',
-        label: `Manual Attendance (${statusText})`,
-        badgeStyle,
-        appTag: {
-          text: `Manual: ${statusText}`,
-          style: tagStyle
-        }
-      };
-    }
-
-    // 4. Regular attendance records without application
-    // a. Present -> Green + PP
-    // b. Half day / Absent -> Red + AP / PA / AA
-    // c. Weekend / Holiday -> Blue + WW / GH / approved RH
-    const code = getNormalizedStatusCode(rec.status);
-    const def = ATTENDANCE_STATUS_MAP[code] || ATTENDANCE_STATUS_MAP.PP;
-
-    let badgeStyle = def.badgeStyle;
-    if (code === 'PP') {
-      badgeStyle = 'bg-emerald-50 text-emerald-700 border-emerald-300';
-    } else if (code === 'AP' || code === 'PA' || code === 'AA' || code === 'LW') {
-      badgeStyle = 'bg-rose-50 text-rose-700 border-rose-300';
-    } else if (code === 'WW' || code === 'WW#' || code === 'GH' || code === 'HH' || code === 'HH#' || code === 'RH') {
-      badgeStyle = 'bg-blue-50 text-blue-700 border-blue-300';
-    }
-
-    return {
-      code,
-      label: def.label,
-      badgeStyle,
-      appTag: null
-    };
+  const shiftMonth = (delta: number) => {
+    const [y, m] = month.split('-').map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
   };
+  const [my, mm] = month.split('-').map(Number);
 
-  // Status Badge Component: Strictly displays 2-character / short code
-  const renderStatusBadge = (status: AttendanceStatus | string) => {
-    const code = getNormalizedStatusCode(status);
-    const def = ATTENDANCE_STATUS_MAP[code] || ATTENDANCE_STATUS_MAP.PP;
+  // ---- Notices -----------------------------------------------------------------------
+  const notice = error
+    ?? (data && !data.machinesConfigured ? 'No attendance machine is registered yet. Add the machines with their serial numbers in Master Settings → Biometric Machines.' : null);
 
-    let badgeStyle = def.badgeStyle;
-    if (code === 'PP') {
-      badgeStyle = 'bg-emerald-50 text-emerald-700 border-emerald-300';
-    } else if (code === 'AP' || code === 'PA' || code === 'AA' || code === 'LW') {
-      badgeStyle = 'bg-rose-50 text-rose-700 border-rose-300';
-    } else if (code === 'WW' || code === 'WW#' || code === 'GH' || code === 'HH' || code === 'HH#' || code === 'RH') {
-      badgeStyle = 'bg-blue-50 text-blue-700 border-blue-300';
-    }
-
-    return (
-      <span
-        title={`${code} - ${def.label}`}
-        className={`inline-flex items-center justify-center font-mono font-black px-2 py-0.5 rounded text-[11px] uppercase tracking-wider border shadow-2xs min-w-[38px] text-center ${badgeStyle}`}
-      >
-        {code}
-      </span>
-    );
-  };
-
-  // Helper to compile active selectors & export dataset
-  const getAttendanceExportConfig = () => {
-    const activeFiltersList: HRMSFilterTag[] = [
-      { label: 'Date Range', value: `${formatDateAndDay(startDate)} to ${formatDateAndDay(endDate)}` },
-      { label: 'Status', value: selectedStatusFilter.includes('all') ? 'All Statuses' : selectedStatusFilter.join(', ') },
-      { label: 'Shift', value: selectedShiftFilter.includes('all') ? 'All Shifts' : selectedShiftFilter.join(', ') }
-    ];
-
-    if (canSeeTeamFilters) {
-      if (!selectedUserFilter.includes('all')) {
-        const empNames = selectedUserFilter.map((id) => users.find((u) => u.id === id)?.name || id).join(', ');
-        activeFiltersList.push({ label: 'Employee', value: empNames });
-      }
-      if (!selectedDeptFilter.includes('all')) {
-        activeFiltersList.push({ label: 'Department', value: selectedDeptFilter.join(', ') });
-      }
-      if (!selectedPostFilter.includes('all')) {
-        activeFiltersList.push({ label: 'Designation', value: selectedPostFilter.join(', ') });
-      }
-    }
-
-    if (searchTerm.trim()) {
-      activeFiltersList.push({ label: 'Search Query', value: searchTerm.trim() });
-    }
-
-    const columns: HRMSExportColumn[] = [
-      { header: '#', key: 'sno', width: 10, align: 'center' },
-      { header: 'Date & Day', key: 'dateStr', width: 32 },
-      { header: 'Employee ID', key: 'empId', width: 22 },
-      { header: 'Employee Name', key: 'empName', width: 36 },
-      { header: 'Department', key: 'dept', width: 28 },
-      { header: 'Shift', key: 'shift', width: 18 },
-      { header: 'Timings', key: 'timings', width: 24 },
-      { header: 'In Time', key: 'inTime', width: 16, align: 'center' },
-      { header: 'Out Time', key: 'outTime', width: 16, align: 'center' },
-      { header: 'Hours', key: 'hours', width: 16, align: 'center' },
-      { header: 'Status', key: 'statusCode', width: 22, align: 'center' },
-      { header: 'Biometric Remark', key: 'remark', width: 38 }
-    ];
-
-    const exportData = sortedRecords.map((rec, index) => {
-      const u = users.find((usr) => usr.id === rec.userId);
-      const userShift = shifts.find((s) => s.code === rec.shiftCode) || getUserShift(rec.userId);
-      const dateAndDay = formatDateAndDay(rec.date);
-      const code = getNormalizedStatusCode(rec.status);
-      const label = getStatusLabel(code);
-      return {
-        sno: index + 1,
-        dateStr: dateAndDay,
-        empId: u?.id || rec.userId,
-        empName: u?.name || rec.userId,
-        dept: u?.department || '-',
-        shift: rec.shiftCode || userShift?.code || 'GEN-01',
-        timings: userShift ? `${userShift.startTime} - ${userShift.endTime}` : '-',
-        inTime: formatTo24H(rec.clockIn),
-        outTime: formatTo24H(rec.clockOut),
-        hours: rec.totalHours ? `${rec.totalHours} hrs` : '-',
-        statusCode: `${code} (${label})`,
-        remark: rec.remark || rec.notes || '-'
-      };
-    });
-
-    return {
-      title: 'Biometric Attendance Register',
-      subtitle: 'Official Biometric Machine Punch Records & Employee Attendance Register',
-      category: 'Leave & Attendance Management (LAMS 2.0)',
-      institution: 'WILDLIFE INSTITUTE OF INDIA (WII)',
-      generatedBy: {
-        name: currentUser.name,
-        designation: currentUser.designation,
-        department: currentUser.department,
-        email: currentUser.email
-      },
-      filters: activeFiltersList,
-      summaryItems: [
-        { label: 'Present', value: presentCount },
-        { label: 'Absent', value: absentCount },
-        { label: 'OD / Tour', value: odCount },
-        { label: 'Station Leave', value: leaveCount }
-      ],
-      columns,
-      data: exportData,
-      fileName: `Biometric_Attendance_Register_${currentUser.name.replace(/\s+/g, '_')}_${startDate}_to_${endDate}`
-    };
-  };
-
-  // CSV Export Handler
-  const handleExportCSV = () => {
-    const config = getAttendanceExportConfig();
-    exportHRMSToCSV(config);
-    showToast('Biometric attendance exported to CSV successfully.', 'success');
-  };
-
-  // PDF Export Handler
-  const handleExportPDF = () => {
-    const config = getAttendanceExportConfig();
-    exportHRMSToPDF({
-      ...config,
-      orientation: 'landscape'
-    });
-    showToast('Biometric attendance PDF report generated successfully.', 'success');
-  };
+  const opt = (values: string[], label: (v: string) => string = (v) => v) => values.map((v) => ({ label: label(v), value: v }));
+  const employeeOptions = [...new Map(rows.map((r) => [r.userId, `${r.name} (${r.biometricId})`])).entries()]
+    .sort((a, b) => a[1].localeCompare(b[1])).map(([value, label]) => ({ label, value }));
 
   return (
-    <div className="w-full min-w-0 space-y-6 pb-6">
-      {/* Toast Alert */}
-      {toastMessage && (
-        <div
-          className={`fixed top-4 right-4 z-50 flex items-center space-x-2 px-4 py-3 rounded-xl shadow-lg border text-xs font-bold animate-bounce transition-all ${
-            toastMessage.type === 'success'
-              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-              : 'bg-rose-50 text-rose-800 border-rose-200'
-          }`}
-        >
-          {toastMessage.type === 'success' ? (
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-          ) : (
-            <AlertCircle className="w-4 h-4 text-rose-600" />
-          )}
-          <span>{toastMessage.text}</span>
-        </div>
-      )}
-
-      {/* Page Header Banner */}
+    <div className="space-y-5 pb-6">
       <PageHeader
-        icon={Clock}
-        title="Biometric Attendance Register"
-        subtitle={
-          isAdmin
-            ? "Organization-wide biometric machine attendance records & employee log console"
-            : isManager
-            ? "Team biometric machine punch records & department attendance register"
-            : "My daily biometric machine punch records & attendance logs"
-        }
+        icon={CalendarDays}
+        title="Biometric Attendance"
+        subtitle={isAdminOrAudit ? 'Daily attendance of all employees from the biometric machines'
+          : isManager ? 'Your attendance and your team’s, from the biometric machines' : 'Your daily attendance from the biometric machines'}
       />
 
-      {/* Attendance Summary Stat Cards: Original 4 Cards placed immediately below PageHeader */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {/* 1. Present */}
-        <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {statCards.map(({ label, value, note, icon: Icon, tone }) => (
+          <div key={label} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex items-start gap-3 min-w-0">
+            <span className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${tone}`}><Icon className="w-4 h-4" /></span>
             <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 truncate">Present</p>
-              <p className="text-xl sm:text-2xl font-black text-emerald-900 mt-0.5">{presentCount}</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-100 border border-emerald-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <CheckCircle2 className="w-4 h-4 text-emerald-700" />
+              <p className="text-[11px] font-semibold text-slate-500">{label}</p>
+              <p className="text-lg font-extrabold text-slate-900">{loading ? '…' : value}</p>
+              <p className="text-[11px] text-slate-500 truncate" title={note}>{note}</p>
             </div>
           </div>
-          <div className="mt-1.5 pt-1.5 border-t border-emerald-200/60 text-[10px] sm:text-[11px] font-semibold text-emerald-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            {startDate === endDate ? `Today (${formatDateAndDay(startDate)})` : `${startDate.split('-').reverse().join('/')} - ${endDate.split('-').reverse().join('/')}`}
-          </div>
-        </div>
-
-        {/* 2. Absent */}
-        <div className="bg-rose-50/70 border border-rose-200/90 rounded-xl p-3.5 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-rose-800 truncate">Absent</p>
-              <p className="text-xl sm:text-2xl font-black text-rose-900 mt-0.5">{absentCount}</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-rose-100 border border-rose-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <XCircle className="w-4 h-4 text-rose-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-rose-200/60 text-[10px] sm:text-[11px] font-semibold text-rose-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            {startDate === endDate ? `Today (${formatDateAndDay(startDate)})` : `${startDate.split('-').reverse().join('/')} - ${endDate.split('-').reverse().join('/')}`}
-          </div>
-        </div>
-
-        {/* 3. Outdoor */}
-        <div className="bg-blue-50/70 border border-blue-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-blue-800 truncate">Outdoor</p>
-              <p className="text-xl sm:text-2xl font-black text-blue-900 mt-0.5">{odCount}</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-100 border border-blue-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <Building className="w-4 h-4 text-blue-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-blue-200/60 text-[10px] sm:text-[11px] font-semibold text-blue-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            {startDate === endDate ? `Today (${formatDateAndDay(startDate)})` : `${startDate.split('-').reverse().join('/')} - ${endDate.split('-').reverse().join('/')}`}
-          </div>
-        </div>
-
-        {/* 4. On Leave */}
-        <div className="bg-purple-50/70 border border-purple-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-purple-800 truncate">On Leave</p>
-              <p className="text-xl sm:text-2xl font-black text-purple-900 mt-0.5">{leaveCount}</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-purple-100 border border-purple-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <Calendar className="w-4 h-4 text-purple-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-purple-200/60 text-[10px] sm:text-[11px] font-semibold text-purple-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            {startDate === endDate ? `Today (${formatDateAndDay(startDate)})` : `${startDate.split('-').reverse().join('/')} - ${endDate.split('-').reverse().join('/')}`}
-          </div>
-        </div>
+        ))}
       </div>
 
-      {/* Professional Date Range & Related Filters Control Bar */}
-      <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3.5">
-        {(attendanceError || attendanceLoading || attendance?.machinesConfigured === false) && (
-          <div role="status" className={`mb-3 px-3.5 py-2.5 rounded-xl border text-xs font-semibold ${
-            attendanceError ? 'bg-error-subtle border-error/30 text-error' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
-            {attendanceError
-              ?? (attendanceLoading ? 'Loading biometric attendance…'
-                : 'No attendance machine is registered yet. Add the machines (with their serial numbers) in Master Settings → Biometric Machines.')}
-          </div>
-        )}
-
-        {/* Top Bar: Clean Themed Date Pickers & Presets & Export Buttons */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3.5 border-b border-slate-100 pb-3">
-          {/* Row 1 on mobile (Left on tab/desktop): Date Pickers & Presets */}
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <div className="flex items-center space-x-1.5 flex-1 sm:flex-initial min-w-0">
-              <div className="flex-1 sm:flex-initial min-w-0">
-                <AppDatePicker
-                  size="sm"
-                  placeholder="From Date"
-                  value={startDate}
-                  onChange={(dStr) => setStartDate(dStr)}
-                />
-              </div>
-
-              <span className="text-slate-300 font-bold shrink-0">—</span>
-
-              <div className="flex-1 sm:flex-initial min-w-0">
-                <AppDatePicker
-                  size="sm"
-                  placeholder="To Date"
-                  value={endDate}
-                  onChange={(dStr) => setEndDate(dStr)}
-                  isRightColumn={true}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Row 2 on mobile (Right on tab/desktop): Export Buttons (CSV & PDF) - Right aligned */}
-          <div className="flex items-center justify-end gap-2 shrink-0 w-full sm:w-auto ml-auto">
-            <button
-              onClick={handleExportCSV}
-              className="h-9 px-3 bg-white hover:bg-slate-50 text-slate-800 border border-slate-200/90 rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer shadow-2xs shrink-0"
-              title="Export records to CSV"
-            >
-              <Download className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span>Export CSV</span>
-            </button>
-
-            <button
-              onClick={handleExportPDF}
-              className="h-9 px-3 bg-slate-900 hover:bg-slate-800 text-white border border-slate-900 rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer shadow-2xs shrink-0"
-              title="Export records to PDF"
-            >
-              <FileText className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-              <span>Export PDF</span>
-            </button>
-          </div>
+      {notice && (
+        <div role="status" className={`px-4 py-3 rounded-2xl border text-xs font-semibold ${error ? 'bg-error-subtle border-error-border text-error' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+          {notice}
         </div>
-
-        {/* Bottom Bar: Search Keyword, Filters & View Toggle Switch */}
-        <div className="flex flex-col gap-3">
-          {/* Row: Search box + Reset Filters (Icon Only) + View Mode Toggle in ONE Single Row */}
-          <div className="flex items-center gap-2 w-full">
-            {/* Search Box */}
-            <div className="relative flex-1 min-w-0">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Search employee, designation, date..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="h-9 w-full pl-9 pr-8 bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200/80 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 transition-all shadow-2xs"
-              />
-              {searchTerm && (
-                <button
-                  onClick={() => setSearchTerm('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-200 transition-colors cursor-pointer"
-                  title="Clear search"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-
-            {/* Reset Filters (Only Icon - Appears ONLY when any filter or search query is active) */}
-            {hasActiveFilters && (
-              <button
-                onClick={handleResetFilters}
-                className="h-9 w-9 rounded-xl border bg-blue-50/90 hover:bg-blue-100 text-blue-700 border-blue-200/90 flex items-center justify-center shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95 animate-in fade-in zoom-in-95 duration-150"
-                title="Reset active filters and search"
-              >
-                <RotateCcw className="w-4 h-4 text-blue-600" />
-              </button>
-            )}
-
-            {/* View Mode Toggle (Table / Card) */}
-            <div className="h-9 flex items-center p-1 bg-slate-100/90 border border-slate-200/90 rounded-xl gap-1 shrink-0">
-              <button
-                onClick={() => setViewMode('table')}
-                title="Table View"
-                className={`h-7 px-2 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
-                  viewMode === 'table'
-                    ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
-                    : 'text-slate-400 hover:text-slate-700'
-                }`}
-              >
-                <TableIcon className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setViewMode('grid')}
-                title="Card View"
-                className={`h-7 px-2 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
-                  viewMode === 'grid'
-                    ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
-                    : 'text-slate-400 hover:text-slate-700'
-                }`}
-              >
-                <LayoutGrid className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          {/* Filter Dropdowns Uniform Flex Wrap */}
-          <div className="pt-2 border-t border-slate-100">
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 flex-nowrap responsive-filter-row">
-              {/* 1. Employee Dropdown (Reporting Manager / PI, Reviewing Manager, Admin) */}
-              {canSeeTeamFilters && (
-                <div className="flex-1 min-w-[125px] max-w-[200px] shrink-0 sm:shrink">
-                  <MultiSelectFilter
-                    label="Employee"
-                    icon={<UserIcon className="w-3.5 h-3.5" />}
-                    selectedValues={selectedUserFilter}
-                    onChange={setSelectedUserFilter}
-                    options={accessibleUsers.map((u) => ({ label: u.name, value: u.id }))}
-                  />
-                </div>
-              )}
-
-              {/* 2. Designation Filter (Reporting Manager / PI, Reviewing Manager, Admin) */}
-              {canSeeTeamFilters && (
-                <div className="flex-1 min-w-[125px] max-w-[200px] shrink-0 sm:shrink">
-                  <MultiSelectFilter
-                    label="Designation"
-                    icon={<Briefcase className="w-3.5 h-3.5" />}
-                    selectedValues={selectedPostFilter}
-                    onChange={setSelectedPostFilter}
-                    options={designationList.map((post) => ({ label: post, value: post }))}
-                  />
-                </div>
-              )}
-
-              {/* 3. Department Filter (Reporting Manager / PI, Reviewing Manager, Admin) */}
-              {canSeeTeamFilters && (
-                <div className="flex-1 min-w-[125px] max-w-[200px] shrink-0 sm:shrink">
-                  <MultiSelectFilter
-                    label="Department"
-                    icon={<Building className="w-3.5 h-3.5" />}
-                    selectedValues={selectedDeptFilter}
-                    onChange={setSelectedDeptFilter}
-                    options={departmentList.map((dept) => ({ label: dept, value: dept }))}
-                  />
-                </div>
-              )}
-
-              {/* 4. Shift Filter (Team/Manager/Admin Roles) */}
-              {canSeeTeamFilters && (
-                <div className="flex-1 min-w-[95px] max-w-[125px] shrink-0 sm:shrink">
-                  <MultiSelectFilter
-                    label="Shift"
-                    icon={<Clock className="w-3.5 h-3.5" />}
-                    selectedValues={selectedShiftFilter}
-                    onChange={setSelectedShiftFilter}
-                    options={shifts.map((s) => ({ label: s.code, value: s.code }))}
-                  />
-                </div>
-              )}
-
-              {/* 5. Reporting Manager Filter (Reviewing Manager & Administrator) */}
-              {canSeeReportingManagerFilter && (
-                <div className="flex-1 min-w-[125px] max-w-[200px] shrink-0 sm:shrink">
-                  <MultiSelectFilter
-                    label="Reporting Manager"
-                    icon={<UserCheck className="w-3.5 h-3.5" />}
-                    selectedValues={selectedRepManagerFilter}
-                    onChange={setSelectedRepManagerFilter}
-                    options={reportingManagerList.map((mgr) => ({ label: mgr.name, value: mgr.id }))}
-                  />
-                </div>
-              )}
-
-              {/* 6. Type (Employment Type) Filter (Reporting Manager / PI, Reviewing Manager, Admin) */}
-              {canSeeTeamFilters && (
-                <div className="flex-1 min-w-[125px] max-w-[200px] shrink-0 sm:shrink">
-                  <MultiSelectFilter
-                    label="Employment Type"
-                    icon={<Layers className="w-3.5 h-3.5" />}
-                    selectedValues={selectedEmpTypeFilter}
-                    onChange={setSelectedEmpTypeFilter}
-                    options={[
-                      { label: 'Permanent', value: 'permanent' },
-                      { label: 'Contractual', value: 'contractual' },
-                      { label: 'Researcher', value: 'researcher' },
-                      { label: 'Trainee / Student', value: 'trainee_student' }
-                    ]}
-                  />
-                </div>
-              )}
-
-              {/* 7. Status Filter (Available for ALL Roles) */}
-              <div className="flex-1 min-w-[105px] max-w-[135px] shrink-0 sm:shrink">
-                <MultiSelectFilter
-                  label="Status"
-                  icon={<Filter className="w-3.5 h-3.5" />}
-                  selectedValues={selectedStatusFilter}
-                  onChange={setSelectedStatusFilter}
-                  options={ALL_STATUS_CODES.map((item) => ({ label: `${item.code} - ${item.label}`, value: item.code }))}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Attendance Data Display (Table View vs Grid View) */}
-      <div className="w-full min-w-0 bg-white border border-slate-200 rounded-2xl shadow-2xs relative">
-        {/* Table Title Bar */}
-        <div className="p-3.5 bg-slate-50 border-b border-slate-200 rounded-t-2xl flex flex-wrap items-center justify-between gap-3 min-h-[50px]">
-          <div className="flex items-center space-x-3">
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-              Attendance Records ({sortedRecords.length})
-            </span>
-          </div>
-        </div>
-
-        {/* VIEW 1: ROW TABLE VIEW (Theme aligned layout) */}
-        {viewMode === 'table' ? (
-          <div className="w-full min-w-0 overflow-x-auto custom-table-scrollbar pb-1">
-            <table className={`w-full text-left text-xs border-collapse ${canSeeTeamFilters ? 'min-w-[1080px]' : 'min-w-[640px]'}`}>
-              <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 text-[11px] shadow-2xs">
-                <tr className="h-10">
-                  <th
-                    onClick={() => handleSort('date')}
-                    className="py-3 px-4 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle min-w-[140px]"
-                    title="Click to sort by Date"
-                  >
-                    <div className="flex items-center space-x-1">
-                      <span>Date (Day)</span>
-                      {sortField === 'date' ? (
-                        sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-600 shrink-0" /> : <ArrowDown className="w-3 h-3 text-indigo-600 shrink-0" />
-                      ) : (
-                        <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-40 shrink-0" />
-                      )}
-                    </div>
-                  </th>
-
-                  {/* Employee Column - Shown ONLY for Team / Manager / Admin Views */}
-                  {canSeeTeamFilters && (
-                    <th
-                      onClick={() => handleSort('employee')}
-                      className="py-3 px-4 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle min-w-[210px]"
-                      title="Click to sort by Employee"
-                    >
-                      <div className="flex items-center space-x-1">
-                        <span>Employee</span>
-                        {sortField === 'employee' ? (
-                          sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-600 shrink-0" /> : <ArrowDown className="w-3 h-3 text-indigo-600 shrink-0" />
-                        ) : (
-                          <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-40 shrink-0" />
-                        )}
-                      </div>
-                    </th>
-                  )}
-
-                  {/* Shift Column - Shown for Manager / Admin / HoD, removed ONLY for User role */}
-                  {showShiftColumn && (
-                    <th
-                      onClick={() => handleSort('shift')}
-                      className="py-3 px-4 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle min-w-[130px]"
-                      title="Click to sort by Shift"
-                    >
-                      <div className="flex items-center space-x-1">
-                        <span>Shift</span>
-                        {sortField === 'shift' ? (
-                          sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-600 shrink-0" /> : <ArrowDown className="w-3 h-3 text-indigo-600 shrink-0" />
-                        ) : (
-                          <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-40 shrink-0" />
-                        )}
-                      </div>
-                    </th>
-                  )}
-                  <th
-                    onClick={() => handleSort('in')}
-                    className="py-3 px-3.5 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle min-w-[85px]"
-                    title="Click to sort by In Time"
-                  >
-                    <div className="flex items-center space-x-1">
-                      <span>In</span>
-                      {sortField === 'in' ? (
-                        sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-600 shrink-0" /> : <ArrowDown className="w-3 h-3 text-indigo-600 shrink-0" />
-                      ) : (
-                        <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-40 shrink-0" />
-                      )}
-                    </div>
-                  </th>
-                  <th
-                    onClick={() => handleSort('out')}
-                    className="py-3 px-3.5 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle min-w-[85px]"
-                    title="Click to sort by Out Time"
-                  >
-                    <div className="flex items-center space-x-1">
-                      <span>Out</span>
-                      {sortField === 'out' ? (
-                        sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-600 shrink-0" /> : <ArrowDown className="w-3 h-3 text-indigo-600 shrink-0" />
-                      ) : (
-                        <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-40 shrink-0" />
-                      )}
-                    </div>
-                  </th>
-                  <th
-                    onClick={() => handleSort('hours')}
-                    className="py-3 px-3.5 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle min-w-[85px]"
-                    title="Click to sort by Hours"
-                  >
-                    <div className="flex items-center space-x-1">
-                      <span>Hours</span>
-                      {sortField === 'hours' ? (
-                        sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-600 shrink-0" /> : <ArrowDown className="w-3 h-3 text-indigo-600 shrink-0" />
-                      ) : (
-                        <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-40 shrink-0" />
-                      )}
-                    </div>
-                  </th>
-                  <th
-                    onClick={() => handleSort('status')}
-                    className="py-3 px-4 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle min-w-[115px]"
-                    title="Click to sort by Status"
-                  >
-                    <div className="flex items-center space-x-1">
-                      <span>Status</span>
-                      {sortField === 'status' ? (
-                        sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-600 shrink-0" /> : <ArrowDown className="w-3 h-3 text-indigo-600 shrink-0" />
-                      ) : (
-                        <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-40 shrink-0" />
-                      )}
-                    </div>
-                  </th>
-                  <th className="py-3 px-4 font-bold whitespace-nowrap align-middle w-[200px] min-w-[200px] max-w-[200px]">
-                    Remark
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {sortedRecords.length === 0 ? (
-                  <tr>
-                    <td colSpan={5 + (canSeeTeamFilters ? 1 : 0) + (showShiftColumn ? 1 : 0)} className="text-center py-10 text-slate-400">
-                      <div className="max-w-xs mx-auto space-y-2">
-                        <Clock className="w-8 h-8 mx-auto text-slate-300" />
-                        <p className="text-xs font-semibold text-slate-600">No attendance logs found for this date range.</p>
-                        <button
-                          onClick={handleResetFilters}
-                          className="text-xs text-blue-600 font-bold hover:underline cursor-pointer"
-                        >
-                          Reset filters to {isManagerOrAdmin ? 'today' : 'current month'}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  paginatedRecords.map((rec) => {
-                    const u = users.find((usr) => usr.id === rec.userId);
-                    const dateAndDayFormatted = formatDateAndDay(rec.date);
-                    const remarkText = rec.remark || rec.notes || '-';
-                    const isLongRemark = remarkText.length > 35;
-
-                    return (
-                      <tr key={rec.id} className="hover:bg-indigo-50/40 transition-colors">
-                        {/* 1. Date */}
-                        <td className="py-3 px-4 font-semibold text-slate-900 whitespace-nowrap text-xs min-w-[140px]">
-                          {dateAndDayFormatted}
-                        </td>
-
-                        {/* 2. Employee Details (Only in Team/Manager/Admin views, hidden for General Staff) */}
-                        {canSeeTeamFilters && (
-                          <td className="py-3 px-4 min-w-[210px]">
-                            <div className="flex items-start space-x-2.5 min-w-0">
-                              <UserAvatar name={u?.name} src={u?.avatar} className="w-7 h-7 rounded-full shrink-0 border border-slate-200 mt-0.5 shadow-2xs" />
-                              <div className="min-w-0 flex-1">
-                                <span className="font-bold text-slate-900 block leading-tight truncate text-xs">{u?.name || rec.userId}</span>
-                                <span className="text-[11px] text-slate-500 font-medium block leading-tight truncate mt-0.5">
-                                  {u?.designation || 'Staff'}
-                                </span>
-                                <span className="text-[10px] text-slate-400 font-mono tracking-tight block leading-tight mt-0.5">
-                                  {u?.biometricId ? `Bio ID: ${u.biometricId}` : (rec.userId ? `Bio ID: ${rec.userId}` : 'Bio ID: N/A')}
-                                </span>
-                              </div>
-                            </div>
-                          </td>
-                        )}
-
-                        {/* 3. Shift Code & Timings (Removed ONLY for User role, visible for Manager/Admin/HoD - No tags/badges) */}
-                        {showShiftColumn && (
-                          <td className="py-3 px-4 whitespace-nowrap min-w-[130px]">
-                            {(() => {
-                              const userShift = shifts.find((s) => s.code === rec.shiftCode) || getUserShift(rec.userId);
-                              const rawCode = rec.shiftCode || userShift.code || 'GEN-01';
-                              const cleanCode = rawCode.split('(')[0].trim();
-                              const formattedCode = cleanCode.includes('-') && !cleanCode.includes(' - ')
-                                ? cleanCode.replace('-', ' - ')
-                                : cleanCode;
-                              return (
-                                <div className="flex flex-col items-start text-left space-y-0.5">
-                                  <span className="font-mono text-[11px] font-extrabold text-slate-800">
-                                    {formattedCode}
-                                  </span>
-                                  <span className="text-[10px] text-slate-500 font-mono font-medium">
-                                    {userShift.startTime} - {userShift.endTime}
-                                  </span>
-                                </div>
-                              );
-                            })()}
-                          </td>
-                        )}
-
-                        {/* 4. In */}
-                        <td className="py-3 px-3.5 font-mono font-bold text-slate-900 whitespace-nowrap text-xs min-w-[85px]">
-                          {formatTo24H(rec.clockIn)}
-                        </td>
-
-                        {/* 5. Out */}
-                        <td className="py-3 px-3.5 font-mono font-bold text-slate-900 whitespace-nowrap text-xs min-w-[85px]">
-                          {formatTo24H(rec.clockOut)}
-                        </td>
-
-                        {/* 6. Hours */}
-                        <td className="py-3 px-3.5 font-mono text-slate-800 font-bold whitespace-nowrap text-xs min-w-[85px]">
-                          {rec.totalHours ? `${rec.totalHours} hrs` : '-'}
-                        </td>
-
-                        {/* 7. Status Column (Role-based status rules & application code tracking) */}
-                        <td className="py-3 px-4 whitespace-nowrap min-w-[115px]">
-                          {(() => {
-                            const statusInfo = resolveRecordStatusDisplay(rec);
-
-                            return (
-                              <div className="flex flex-col items-start space-y-1">
-                                <span
-                                  title={`${statusInfo.code} - ${statusInfo.label}`}
-                                  className={`inline-flex items-center justify-center font-mono font-black px-2 py-0.5 rounded text-[11px] uppercase tracking-wider border shadow-2xs min-w-[38px] text-center ${statusInfo.badgeStyle}`}
-                                >
-                                  {statusInfo.code}
-                                </span>
-
-                                {statusInfo.appTag && (
-                                  <span
-                                    className={`inline-flex items-center text-[9px] px-1.5 py-0.5 rounded border leading-none tracking-tight font-extrabold ${statusInfo.appTag.style}`}
-                                  >
-                                    {statusInfo.appTag.text}
-                                  </span>
-                                )}
-                              </div>
-                            );
-                          })()}
-                        </td>
-
-                        {/* 8. Remark Column - Perfectly uniform width across all rows */}
-                        <td className="py-3 px-4 text-slate-700 text-xs w-[200px] min-w-[200px] max-w-[200px]">
-                          <div className="w-[170px] max-w-[170px] flex items-center justify-between gap-1.5">
-                            <span className="truncate text-xs text-slate-700 font-medium flex-1 min-w-0" title={remarkText}>
-                              {remarkText}
-                            </span>
-                            {isLongRemark && (
-                              <button
-                                onClick={() =>
-                                  setActiveRemarkModal({
-                                    dateAndDay: dateAndDayFormatted,
-                                    employeeName: u?.name || rec.userId,
-                                    remark: remarkText
-                                  })
-                                }
-                                className="text-blue-600 hover:text-blue-800 font-bold inline-flex items-center space-x-0.5 cursor-pointer shrink-0 ml-0.5 text-[10px] hover:underline"
-                                title="View full remark"
-                              >
-                                <span>More</span>
-                                <Eye className="w-2.5 h-2.5 shrink-0" />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          /* VIEW 2: GRID / CALENDAR CARD VIEW (Minimal cards layout) */
-          <div className="p-4 bg-slate-50/50">
-            {sortedRecords.length === 0 ? (
-              <div className="text-center py-10 text-slate-400">
-                <Clock className="w-8 h-8 mx-auto text-slate-300 mb-2" />
-                <p className="text-xs font-semibold text-slate-600">No attendance logs found for this date range.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                {sortedRecords.map((rec) => {
-                  const u = users.find((usr) => usr.id === rec.userId);
-                  const dateAndDayFormatted = formatDateAndDay(rec.date);
-                  const remarkText = rec.remark || rec.notes || '-';
-                  const isLongRemark = remarkText.length > 35;
-
-                  return (
-                    <div
-                      key={rec.id}
-                      className="bg-white border border-slate-200 rounded-xl p-3 shadow-2xs hover:border-slate-300 transition-all flex flex-col justify-between space-y-2.5"
-                    >
-                      {/* Top: Date & Status */}
-                      <div className="flex items-start justify-between border-b border-slate-100 pb-2">
-                        <span className="font-bold text-slate-900 text-xs mt-0.5">{dateAndDayFormatted}</span>
-                        {(() => {
-                          const statusInfo = resolveRecordStatusDisplay(rec);
-
-                          return (
-                            <div className="flex flex-col items-end space-y-1">
-                              <span
-                                title={`${statusInfo.code} - ${statusInfo.label}`}
-                                className={`inline-flex items-center justify-center font-mono font-black px-2 py-0.5 rounded text-[11px] uppercase tracking-wider border shadow-2xs min-w-[38px] text-center ${statusInfo.badgeStyle}`}
-                              >
-                                {statusInfo.code}
-                              </span>
-
-                              {statusInfo.appTag && (
-                                <span
-                                  className={`text-[9px] px-1.5 py-0.2 rounded border leading-none tracking-tight font-extrabold ${statusInfo.appTag.style}`}
-                                >
-                                  {statusInfo.appTag.text}
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })()}
-                      </div>
-
-                      {/* Middle: Minimal Punch Time Info */}
-                      <div className="space-y-1 text-xs">
-                        {(isAdmin || isManager) && (
-                          <div className="flex items-start space-x-1.5 text-slate-700 font-semibold mb-1 pb-1 border-b border-slate-100">
-                            <UserAvatar name={u?.name} src={u?.avatar} className="w-5 h-5 rounded-full shrink-0 mt-0.5" />
-                            <div className="min-w-0 flex-1">
-                              <span className="truncate text-[11px] font-bold text-slate-900 block leading-tight">{u?.name}</span>
-                              {u?.designation && (
-                                <span className="text-[10px] text-slate-500 font-normal block leading-tight truncate">
-                                  {u.designation}
-                                </span>
-                              )}
-                              {u?.reportingManagerId && (
-                                <span className="text-[10px] text-indigo-600 font-semibold block leading-tight truncate">
-                                  RM: {users.find((m) => m.id === u.reportingManagerId)?.name}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {showShiftColumn && (() => {
-                          const userShift = shifts.find((s) => s.code === rec.shiftCode) || getUserShift(rec.userId);
-                          const rawCode = rec.shiftCode || userShift.code || 'GEN-01';
-                          const cleanCode = rawCode.split('(')[0].trim();
-                          const formattedCode = cleanCode.includes('-') && !cleanCode.includes(' - ') ? cleanCode.replace('-', ' - ') : cleanCode;
-                          return (
-                            <div className="flex justify-between items-center text-slate-600 text-[11px]">
-                              <span>Shift:</span>
-                              <span className="font-mono font-bold text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 text-[10px]">
-                                {formattedCode}
-                              </span>
-                            </div>
-                          );
-                        })()}
-
-                        <div className="flex justify-between items-center text-slate-600 text-[11px]">
-                          <span>In / Out:</span>
-                          <span className="font-mono font-bold text-slate-900">
-                            {formatTo24H(rec.clockIn)} - {formatTo24H(rec.clockOut)}
-                          </span>
-                        </div>
-
-                        <div className="flex justify-between items-center text-slate-600 text-[11px]">
-                          <span>Duration:</span>
-                          <span className="font-mono font-bold text-slate-800">
-                            {rec.totalHours ? `${rec.totalHours} hrs` : '-'}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Bottom: Minimal Remark - uniform width across cards */}
-                      <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-500 flex items-center justify-between gap-1.5 w-full">
-                        <span className="font-semibold text-slate-400 shrink-0">Remark:</span>
-                        <div className="flex-1 min-w-0 flex items-center justify-end gap-1">
-                          <span className="truncate text-right text-slate-700 font-medium text-[11px] flex-1 min-w-0" title={remarkText}>
-                            {remarkText}
-                          </span>
-                          {isLongRemark && (
-                            <button
-                              onClick={() =>
-                                setActiveRemarkModal({
-                                  dateAndDay: dateAndDayFormatted,
-                                  employeeName: u?.name || rec.userId,
-                                  remark: remarkText
-                                })
-                              }
-                              className="text-blue-600 hover:text-blue-800 font-bold inline-flex items-center space-x-0.5 ml-0.5 cursor-pointer shrink-0 text-[10px] hover:underline"
-                              title="View full remark"
-                            >
-                              <span>More</span>
-                              <Eye className="w-2.5 h-2.5 shrink-0" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Stable Full-Width Footer & Pagination (Fixed at bottom of card, outside horizontal scroll) */}
-        <div className="w-full border-t border-slate-200/90 bg-white rounded-b-2xl">
-          <TablePagination
-            currentPage={attPage}
-            totalPages={Math.ceil(sortedRecords.length / attPageSize)}
-            totalItems={sortedRecords.length}
-            pageSize={attPageSize}
-            onPageChange={setAttPage}
-            onPageSizeChange={setAttPageSize}
-          />
-        </div>
-      </div>
-
-      {/* Remark Modal for Reading Full Long Remarks */}
-      {activeRemarkModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="px-5 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white flex items-center justify-between shrink-0">
-              <div className="flex items-center space-x-3 min-w-0">
-                <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
-                  <FileText className="w-5 h-5 text-blue-400" />
-                </div>
-                <h3 className="text-base font-bold text-white tracking-tight">Full Biometric Punch Remark</h3>
-              </div>
-              <button
-                onClick={() => setActiveRemarkModal(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-                aria-label="Close dialog"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-5 space-y-4">
-
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-xs text-slate-800 leading-relaxed font-sans">
-              {activeRemarkModal.remark}
-            </div>
-
-            <div className="flex justify-end">
-              <button
-                onClick={() => setActiveRemarkModal(null)}
-                className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-4 py-1.5 rounded-lg text-xs cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
       )}
 
-      {/* Shift Inspector Modal */}
-      {activeShiftModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-xl w-full border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
-            {/* Modal Header */}
-            <div className="px-5 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white flex items-center justify-between shrink-0">
-              <div className="flex items-center space-x-3 min-w-0">
-                <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
-                  <Clock className="w-5 h-5 text-blue-400" />
-                </div>
-                <h3 className="text-base font-bold text-white tracking-tight">
-                  Shift Timing &amp; Attendance Evaluation
-                </h3>
+      <FilterToolbar
+        start={viewMode === 'month' ? (
+          <span className="text-xs font-bold text-slate-700">{MONTHS[mm - 1]} {my}</span>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <div className="w-36"><AppDatePicker size="sm" placeholder="From date" value={from} onChange={setFrom} /></div>
+            <span className="text-slate-300 font-bold">—</span>
+            <div className="w-36"><AppDatePicker size="sm" placeholder="To date" value={to} onChange={setTo} isRightColumn /></div>
+          </div>
+        )}
+        exports={{
+          onCsv: downloadCsv, onPdf: downloadPdf, disabled: sorted.length === 0,
+          csvTitle: 'Download the attendance shown below as CSV', pdfTitle: 'Download the attendance shown below as PDF',
+        }}
+        search={{ value: search, onChange: setSearch, placeholder: teamView ? 'Search employee, date, remark…' : 'Search date, day, remark…' }}
+        onReset={filtered ? resetAll : null}
+        view={{
+          value: viewMode,
+          onChange: (v) => { if (v === 'month') setMonth((from || today).slice(0, 7)); setViewMode(v); },
+          options: [{ value: 'table', label: 'Table view', icon: List }, { value: 'month', label: 'Month view', icon: LayoutGrid }],
+        }}
+        filters={[
+          teamView && <MultiSelectFilter key="emp" label="Employee" options={employeeOptions} selectedValues={employees} onChange={setEmployees} />,
+          teamView && <MultiSelectFilter key="dept" label="Department" options={opt(distinct((r) => r.department))} selectedValues={departments} onChange={setDepartments} />,
+          teamView && <MultiSelectFilter key="desig" label="Designation" options={opt(distinct((r) => r.designation))} selectedValues={designations} onChange={setDesignations} />,
+          teamView && <MultiSelectFilter key="type" label="Employee type" options={opt(distinct((r) => r.employmentType), typeName)} selectedValues={types} onChange={setTypes} />,
+          showManagerFilter && <MultiSelectFilter key="mgr" label="Reporting manager" options={opt(distinct((r) => r.reportingManagerId), (id) => userById.get(id)?.name ?? id)} selectedValues={managers} onChange={setManagers} />,
+          teamView && <MultiSelectFilter key="shift" label="Shift" options={opt(distinct((r) => r.shiftCode))} selectedValues={shiftsFilter} onChange={setShiftsFilter} />,
+          <MultiSelectFilter key="status" label="Status" options={STATUSES.map((s) => ({ label: `${s} – ${STATUS_META[s].label}`, value: s }))} selectedValues={statuses} onChange={setStatuses} />,
+        ].filter(Boolean) as React.ReactNode[]}
+      />
+
+      {viewMode === 'table' ? (
+        <DataTable
+          columns={columns}
+          data={pageRows}
+          loading={loading}
+          keyExtractor={(r) => `${r.userId}-${r.date}`}
+          sortColumn={sort.key}
+          sortDirection={sort.dir}
+          onSort={(key) => setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }))}
+          emptyTitle={rows.length ? 'No attendance matches these filters' : 'No attendance for these dates'}
+          emptyDescription={rows.length ? 'Change the filters or search.' : 'Choose other dates, or check that the machines are sending punches.'}
+          pagination={sorted.length > PAGE_SIZES[0] ? {
+            currentPage: page, totalPages, totalItems: sorted.length, pageSize,
+            onPageChange: setPage, onPageSizeChange: setPageSize, pageSizeOptions: PAGE_SIZES,
+          } : undefined}
+        />
+      ) : (
+        <section className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
+          <div className="flex items-center justify-between">
+            <button type="button" onClick={() => shiftMonth(-1)} aria-label="Previous month"
+              className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-600 hover:text-primary cursor-pointer"><ChevronLeft className="w-4 h-4" /></button>
+            <h3 className="text-sm font-bold text-slate-900">{MONTHS[mm - 1]} {my}</h3>
+            <button type="button" onClick={() => shiftMonth(1)} disabled={month >= today.slice(0, 7)} aria-label="Next month"
+              className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-600 hover:text-primary cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"><ChevronRight className="w-4 h-4" /></button>
+          </div>
+          <div className="overflow-x-auto">
+            <div className="min-w-[640px]">
+              <div className="grid grid-cols-7 gap-2 mb-2">
+                {WEEKDAYS.map((d, i) => <div key={d} className={`text-center text-[11px] font-bold uppercase tracking-wide ${i === 0 ? 'text-rose-600' : 'text-slate-500'}`}>{d}</div>)}
               </div>
-              <button
-                onClick={() => setActiveShiftModal(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-                aria-label="Close dialog"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-5 overflow-y-auto flex-1">
-
-            {/* Shift Rules Definition */}
-            <div className="bg-slate-50/90 rounded-xl p-4 border border-slate-200/90 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <span className="font-mono text-xs font-black bg-indigo-100 text-indigo-900 border border-indigo-300 px-2 py-0.5 rounded">
-                    {activeShiftModal.shift.code}
-                  </span>
-                  <span className="font-bold text-slate-900 text-sm">
-                    {activeShiftModal.shift.name}
-                  </span>
-                </div>
-                {activeShiftModal.shift.isDefault && (
-                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
-                    Default Shift
-                  </span>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1 text-xs">
-                <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Shift Hours</span>
-                  <span className="font-mono font-bold text-slate-800">
-                    {activeShiftModal.shift.startTime} - {activeShiftModal.shift.endTime}
-                  </span>
-                </div>
-                <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Grace Window</span>
-                  <span className="font-mono font-bold text-amber-700">
-                    +{activeShiftModal.shift.gracePeriodMins} mins
-                  </span>
-                </div>
-                <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Half-Day Cutoff</span>
-                  <span className="font-mono font-bold text-rose-700">
-                    {activeShiftModal.shift.halfDayCutoffTime}
-                  </span>
-                </div>
-                <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Min Hours</span>
-                  <span className="font-mono font-bold text-slate-800">
-                    {activeShiftModal.shift.fullDayHours ?? activeShiftModal.shift.minFullDayHours ?? 7.5}h / {activeShiftModal.shift.halfDayHours ?? activeShiftModal.shift.minHalfDayHours ?? 4.0}h
-                  </span>
-                </div>
-              </div>
-
-              {activeShiftModal.shift.description && (
-                <p className="text-[11px] text-slate-500 italic">
-                  {activeShiftModal.shift.description}
-                </p>
-              )}
-            </div>
-
-            {/* Daily Biometric Punch Record */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                Biometric Punch Record & Calculated Outcome
-              </h4>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
-                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Biometric In</span>
-                  <span className="font-mono font-bold text-slate-900">
-                    {formatTo24H(activeShiftModal.clockIn)}
-                  </span>
-                </div>
-                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Biometric Out</span>
-                  <span className="font-mono font-bold text-slate-900">
-                    {formatTo24H(activeShiftModal.clockOut)}
-                  </span>
-                </div>
-                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Work Hours</span>
-                  <span className="font-mono font-bold text-slate-900">
-                    {activeShiftModal.totalHours ? `${activeShiftModal.totalHours} hrs` : '-'}
-                  </span>
-                </div>
-                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Evaluated Status</span>
-                  <span className="mt-0.5 inline-block">
-                    {renderStatusBadge(activeShiftModal.status)}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Shift Audit Remark */}
-            <div className="space-y-1.5">
-              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                Biometric Audit Log & Rules Compliance Note
-              </h4>
-              <div className="bg-blue-50/70 border border-blue-200/90 rounded-xl p-3.5 text-xs text-blue-950 leading-relaxed font-sans">
-                {activeShiftModal.remark || 'Regular attendance logged according to shift schedule.'}
-              </div>
-            </div>
-
-            {/* Modal Actions */}
-            <div className="flex justify-end pt-2 border-t border-slate-100">
-              <button
-                onClick={() => setActiveShiftModal(null)}
-                className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-4 py-2 rounded-xl text-xs cursor-pointer transition-colors shadow-2xs"
-              >
-                Close Inspector
-              </button>
+              <div className="grid grid-cols-7 gap-2">{monthGrid()}</div>
             </div>
           </div>
-        </div>
-      </div>
+          <div className="flex flex-wrap gap-3 pt-1">
+            {STATUSES.map((s) => (
+              <span key={s} className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-600">
+                <span className={`w-2 h-2 rounded-full ${STATUS_META[s].dot}`} />{STATUS_META[s].label} ({s})
+              </span>
+            ))}
+          </div>
+        </section>
       )}
     </div>
   );
 };
-

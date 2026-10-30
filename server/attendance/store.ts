@@ -6,7 +6,7 @@ import type { RoleId } from '../lib/roles';
 import { DayRecord, Punch, ShiftRule, buildDay, datesBetween, normalizeEmployeeCode, shiftRule } from './compute';
 
 /**
- * Attendance read from the biometric punch log (`Atten`), which the machine
+ * Attendance read from the biometric punch log (table `Attendance`), which the machine
  * software fills. The portal never writes to that table.
  *
  * Who sees whom: administrators and auditors everyone; reporting managers /
@@ -146,7 +146,7 @@ async function loadPunches(from: string, to: string, machines: Map<string, strin
   try {
     found = await rows(
       `SELECT EmployeeCode, DATE_FORMAT(LogDate, '%Y-%m-%d') AS d, DATE_FORMAT(LogDateTime, '%H:%i:%s') AS t, DeviceSR
-         FROM Atten
+         FROM Attendance
         WHERE LogDate BETWEEN ? AND ?${variants ? ` AND EmployeeCode IN (${variants.map(() => '?').join(', ')})` : ''}`,
       [from, to, ...(variants ?? [])],
     );

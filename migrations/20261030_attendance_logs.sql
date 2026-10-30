@@ -1,4 +1,4 @@
--- Migration: biometric punch log (table `Atten`). Safe to re-run.
+-- Migration: biometric punch log (table `Attendance`). Safe to re-run.
 --
 -- The biometric machine software (on its own server) exports every punch in
 -- parallel into this table. The portal only READS it: daily attendance (first
@@ -8,7 +8,7 @@
 --
 -- Column names follow the export format, so the software can write here without changes.
 
-CREATE TABLE IF NOT EXISTS `Atten` (
+CREATE TABLE IF NOT EXISTS `Attendance` (
   `id`           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `EmployeeCode` VARCHAR(50)  NOT NULL,
   `LogDateTime`  DATETIME(6)  NOT NULL,
@@ -28,8 +28,9 @@ CREATE TABLE IF NOT EXISTS `Atten` (
 -- software server's address instead of '%'):
 --
 --   CREATE USER 'biometric_export'@'%' IDENTIFIED BY '<strong password>';
---   GRANT SELECT, INSERT ON lams_db.`Atten` TO 'biometric_export'@'%';
+--   GRANT SELECT, INSERT ON lams_db.`Attendance` TO 'biometric_export'@'%';
 --
 -- Old punches from the previous server can be copied once, e.g.:
---   mysqldump --no-create-info old_db Atten > atten.sql   (on the old server)
---   mysql lams_db < atten.sql                             (here)
+-- (the old table is named `Atten`, so rename it in the dump before loading):
+--   mysqldump --no-create-info --skip-triggers old_db Atten > atten.sql        (on the old server)
+--   sed 's/`Atten`/`Attendance`/g' atten.sql | mysql lams_db                   (here)
