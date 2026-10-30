@@ -97,6 +97,8 @@ export async function employeeDirectoryCsv(req: Request, viewer: Viewer): Promis
  * share all the code below; only the scope differs.
  */
 export interface ActivityScope {
+  /** Wording for actions that mean something else in this area (e.g. STATUS = approved / rejected). */
+  actionLabels?: Record<string, string>;
   keys: readonly string[];
   areaLabels: Record<string, string>;
   /** master_key used when a download of this log is itself recorded. */
@@ -230,7 +232,7 @@ export async function activityTable(req: Request, f: ActivityFilter, format: Exp
   const items = rows.map(toActivity);
   const headers = ['When (UTC)', 'Area', 'Action', 'Record', 'Biometric ID / ref', 'Changes', 'Reason', 'Done by', 'Done by (B.I.)', 'Role'];
   const out = items.map((r) => [
-    r.at, scope.areaLabels[r.area] ?? r.area, ACTION_LABELS[r.action] ?? r.action, r.recordLabel, r.recordId, describeChange(r), r.reason,
+    r.at, scope.areaLabels[r.area] ?? r.area, (scope.actionLabels ?? {})[r.action] ?? ACTION_LABELS[r.action] ?? r.action, r.recordLabel, r.recordId, describeChange(r), r.reason,
     r.actor.name, r.actor.biometricId, r.actor.role ? ROLE_LABELS[r.actor.role as RoleId] ?? r.actor.role : null,
   ]);
   await writeMasterAuditSql(pool, req, {
