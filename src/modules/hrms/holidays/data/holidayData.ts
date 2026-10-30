@@ -4,13 +4,16 @@ export interface HolidayItem {
   hindiName?: string;
   date: string; // YYYY-MM-DD
   dayOfWeek: string;
-  type: 'gazetted' | 'restricted' | 'local';
+  /** gazetted = office closed; restricted = optional (RH); event = official event, office open. */
+  type: 'gazetted' | 'restricted' | 'event';
   category: 'National' | 'Religious' | 'Cultural' | 'Institutional' | 'International' | 'Other';
   description: string;
   year: number;
   month: number; // 1-12
-  isLongWeekend?: boolean;
 }
+
+/** Days the office is closed (or optionally closed): every type except official events. */
+export const isDayOff = (h: Pick<HolidayItem, 'type'>): boolean => h.type !== 'event';
 
 // Holidays live in the database (table `holidays`, migration 20261030_holidays.sql) and are
 // loaded through AppContext / holidayApi. There is no built-in list any more.

@@ -10,10 +10,11 @@ import type { ActivityScope } from '../employees/activity';
 /**
  * Holiday calendar (table `holidays`). Everyone signed in reads it; only
  * administrators change it, and every change is audited (master_key 'holiday').
- * Day of week and "long weekend" are worked out here from the date, never typed.
+ * The day of week is worked out here from the date, never typed.
  */
 
-export const HOLIDAY_TYPES = ['gazetted', 'restricted', 'local'] as const;
+/** gazetted = office closed; restricted = optional (RH); event = official event / observance, office open. */
+export const HOLIDAY_TYPES = ['gazetted', 'restricted', 'event'] as const;
 export const HOLIDAY_CATEGORIES = ['National', 'Religious', 'Cultural', 'Institutional', 'International', 'Other'] as const;
 export type HolidayType = (typeof HOLIDAY_TYPES)[number];
 
@@ -40,8 +41,6 @@ export interface Holiday {
   dayOfWeek: string;
   year: number;
   month: number;
-  /** Friday or Monday: joins a weekend into three days off. */
-  isLongWeekend: boolean;
   updatedAt: string | null;
 }
 
@@ -63,11 +62,11 @@ function dateOnly(value: unknown): string {
   return String(value).slice(0, 10);
 }
 
-/** Day name and long-weekend flag for a YYYY-MM-DD date. */
-export function describeDate(date: string): { dayOfWeek: string; isLongWeekend: boolean; year: number; month: number } {
+/** Day name, year and month for a YYYY-MM-DD date. */
+export function describeDate(date: string): { dayOfWeek: string; year: number; month: number } {
   const [y, m, d] = date.split('-').map(Number);
   const day = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
-  return { dayOfWeek: DAYS[day], isLongWeekend: day === 1 || day === 5, year: y, month: m };
+  return { dayOfWeek: DAYS[day], year: y, month: m };
 }
 
 function toHoliday(row: RowDataPacket): Holiday {

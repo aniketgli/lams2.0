@@ -3,7 +3,7 @@
 --
 --   holidays   one row per holiday; managed by administrators on the Holiday Calendar page,
 --              every change written to master_audit_logs (master_key = 'holiday').
---   type       gazetted | restricted | local
+--   type       gazetted | restricted | event (office open; see 20261030_holiday_types.sql)
 --   category   National | Religious | Cultural | Institutional | International | Other
 
 CREATE TABLE IF NOT EXISTS holidays (
@@ -41,7 +41,7 @@ INSERT IGNORE INTO holidays (holiday_date, name, hindi_name, type, category, des
   ('2026-11-08', 'Diwali (Deepavali)', 'दीपावली', 'gazetted', 'Cultural', 'Hindu festival of lights symbolizing spiritual victory of light over darkness.'),
   ('2026-11-24', 'Guru Nanak Jayanti', 'गुरु नानक जयंती', 'gazetted', 'Religious', 'Gurpurab celebrating the birth of the first Sikh Guru, Guru Nanak Dev Ji.'),
   ('2026-12-25', 'Christmas Day', 'क्रिसमस', 'gazetted', 'Religious', 'Annual Christian festival celebrating the birth of Jesus Christ.'),
-  ('2026-11-09', 'Uttarakhand State Foundation Day', 'उत्तराखंड राज्य स्थापना दिवस', 'local', 'Institutional', 'Dehradun Institute / Regional holiday commemorating the formation of Uttarakhand state.'),
+  ('2026-11-09', 'Uttarakhand State Foundation Day', 'उत्तराखंड राज्य स्थापना दिवस', 'gazetted', 'Institutional', 'Dehradun Institute / Regional holiday commemorating the formation of Uttarakhand state.'),
   ('2026-01-01', 'New Year’s Day', 'नव वर्ष दिवस', 'restricted', 'Cultural', 'First day of the Gregorian year.'),
   ('2026-01-14', 'Makar Sankranti / Pongal / Magha Bihu', 'मकर संक्रांति / पोंगल', 'restricted', 'Cultural', 'Sun transition into Capricorn; harvest festival across Indian states.'),
   ('2026-02-02', 'Guru Ravidas Jayanti', 'गुरु रविदास जयंती', 'restricted', 'Religious', 'Birthday of mystic poet-sant Ravidas.'),

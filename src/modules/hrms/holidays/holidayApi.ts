@@ -14,7 +14,6 @@ export interface HolidayRecord {
   dayOfWeek: string;
   year: number;
   month: number;
-  isLongWeekend: boolean;
   updatedAt: string | null;
 }
 
@@ -41,7 +40,6 @@ export const toHolidayItem = (h: HolidayRecord): HolidayItem => ({
   description: h.description ?? '',
   year: h.year,
   month: h.month,
-  isLongWeekend: h.isLongWeekend,
 });
 
 export const holidayApi = {
