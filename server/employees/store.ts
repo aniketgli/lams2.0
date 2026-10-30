@@ -76,6 +76,8 @@ export interface EmployeeRecord {
   joiningDate: string | null;
   phone: string | null;
   officeLocation: string | null;
+  /** Institute code (WII, SACON, …). */
+  institute: string | null;
   shiftId: string | null;
   /** JSON text, kept as a string for older screens that parse it themselves. */
   profileData: string;
@@ -91,7 +93,7 @@ export interface EmployeeRecord {
 const SELECT_EMPLOYEES = `
   SELECT u.id, u.biometric_id, u.name, u.email, u.status, u.valid_upto,
          p.suffix, p.department, p.designation, p.employment_type, p.joining_date,
-         p.phone, p.office_location, p.shift_id, p.profile_data
+         p.phone, p.office_location, p.institute, p.shift_id, p.profile_data
     FROM users u
     LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id`;
 
@@ -136,6 +138,7 @@ function toRecord(row: RowDataPacket, grants: { moduleId: string; roleId: string
     joiningDate: dateText(row.joining_date),
     phone: row.phone ?? null,
     officeLocation: row.office_location ?? null,
+    institute: row.institute ?? null,
     shiftId: row.shift_id === null || row.shift_id === undefined ? null : String(row.shift_id),
     profileData: JSON.stringify(data),
     moduleRoles,
@@ -204,7 +207,7 @@ function auditView(record: EmployeeRecord): Record<string, unknown> {
     biometricId: record.biometricId, name: record.name, email: record.email, status: record.status,
     validUpto: record.validUpto, salutation: record.suffix, department: record.department,
     designation: record.designation, employmentType: record.employmentType, joiningDate: record.joiningDate,
-    phone: record.phone, officeLocation: record.officeLocation, shiftId: record.shiftId,
+    phone: record.phone, officeLocation: record.officeLocation, institute: record.institute, shiftId: record.shiftId,
   };
   // Every form key is listed (null when empty) so a cleared field shows up as a change.
   for (const key of PROFILE_DATA_KEYS) view[key] = data[key] === undefined || data[key] === '' ? null : data[key];
@@ -261,7 +264,7 @@ function profileColumns(input: EmployeeInput, data: Record<string, unknown>) {
     employment_type: input.employmentType,
     joining_date: input.joiningDate,
     phone: input.phone,
-    office_location: input.officeLocation,
+    institute: input.institute,
     shift_id: input.shiftId,
     profile_data: JSON.stringify(data),
   };
@@ -383,7 +386,7 @@ export async function updateEmployee(req: Request, id: number, body: unknown): P
       // Work out the change before writing, so an unchanged save writes nothing.
       const preview = toRecord({
         id: before.id, biometric_id: before.biometricId, name: input.name, email: input.email, status: before.status,
-        valid_upto: validUpto, ...columns,
+        valid_upto: validUpto, office_location: before.officeLocation, ...columns,
       } as unknown as RowDataPacket, []);
       const changed = changedFields(auditView(before), auditView(preview));
       if (changed.length === 0) return { record: before, changed };

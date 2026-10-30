@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Briefcase, Camera, CheckCircle2, Clock, Fingerprint, History as HistoryIcon, Loader2, Mail, MapPin, Network, Phone,
+  Briefcase, Camera, CheckCircle2, Clock, Fingerprint, History as HistoryIcon, Building2, Loader2, Mail, Network, Phone,
   ShieldCheck, Trash2, Upload, UserRound, XCircle,
 } from 'lucide-react';
 import { Alert } from '../../../../shared/components';
@@ -27,7 +27,7 @@ const CONTACT: { key: string; icon: IconType }[] = [
   { key: 'email', icon: Mail },
   { key: 'phone', icon: Phone },
   { key: 'biometricId', icon: Fingerprint },
-  { key: 'officeLocation', icon: MapPin },
+  { key: 'institute', icon: Building2 },
 ];
 const CONTACT_KEYS = new Set(CONTACT.map((c) => c.key));
 

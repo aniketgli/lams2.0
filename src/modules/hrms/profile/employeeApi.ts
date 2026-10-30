@@ -17,6 +17,7 @@ export interface EmployeeRow {
   joiningDate: string | null;
   phone: string | null;
   officeLocation: string | null;
+  institute: string | null;
   shiftId: string | null;
   profileData: string;
   moduleRoles: Record<string, string[]>;
@@ -47,7 +48,7 @@ export function employeePayload(user: Partial<User>): Record<string, unknown> {
     shiftId: user.shiftId,
     leaveCycle: user.leaveCycle,
     joiningDate: user.joiningDate,
-    officeLocation: user.officeLocation,
+    institute: user.institute,
     department: user.department,
     designation: user.designation,
     employeeCategory: user.employeeCategory,
@@ -71,7 +72,7 @@ export function employeePayload(user: Partial<User>): Record<string, unknown> {
 export const EMPLOYEE_FIELD_LABELS: Record<string, string> = {
   biometricId: 'Biometric ID', suffix: 'Salutation', name: 'Full name', email: 'Email', gender: 'Gender', dob: 'Date of birth',
   phone: 'Mobile number', employmentType: 'Employee type', shiftId: 'Shift', leaveCycle: 'Leave year type',
-  joiningDate: 'Date of joining', officeLocation: 'Office location', department: 'Department / project',
+  joiningDate: 'Date of joining', institute: 'Organization', department: 'Department / project',
   designation: 'Designation', employeeCategory: 'Category', permanentEmploymentType: 'Direct / Deputation',
   reportingManagerId: 'Reporting manager', reviewingManagerId: 'HoD', validUntilDate: 'Valid up to',
   probationEndDate: 'Probation end date', courseProgram: 'Course', courseBatch: 'Batch', enrolledThrough: 'Enrolled through',

@@ -223,6 +223,10 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const salutationOptions = (masterOptions.salutation ?? []).map((r) => ({ label: r.name, value: r.code }));
   const genderOptions = (masterOptions.gender ?? []).map((r) => ({ label: r.name, value: r.code }));
   const employeeTypeOptions = (masterOptions.employeeType ?? []).map((r) => ({ label: r.name, value: r.code }));
+  const instituteOptions = (masterOptions.institute ?? []).map((r) => ({ label: r.name, value: r.code }));
+  /** Active departments / cells of one organization (institute), for the employee form. */
+  const formDepartments = (institute: string): string[] =>
+    institute ? (masterOptions.organizations ?? []).filter((r) => (r.fields.institute || '') === institute).map((r) => r.name) : [];
   /** The form layout behind an employee type (types are admin-defined; layouts are fixed). */
   const layoutOf = (employeeType?: string | null): string =>
     (masterOptions.employeeType ?? []).find((r) => r.code === employeeType)?.fields.formLayout || String(employeeType || '');
@@ -595,6 +599,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     employeeCategory: '',
     isPhDEnrolled: false,
     officeLocation: '',
+    institute: '',
     reportingManagerId: '',
     reviewingManagerId: '',
     joiningDate: '',
@@ -1226,6 +1231,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       employeeCategory: u.employeeCategory || '',
       isPhDEnrolled: Boolean(u.isPhDEnrolled),
       officeLocation: u.officeLocation || '',
+      institute: u.institute || '',
       reportingManagerId: u.reportingManagerId || '',
       reviewingManagerId: u.reviewingManagerId || users.find((m) => m.name === u.hodName)?.id || '',
       joiningDate: u.joiningDate || '',
@@ -1261,6 +1267,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     if (!newUserForm.phone?.trim()) missingFields.push('Mobile Number');
     if (!newUserForm.email?.trim()) missingFields.push('Email Address');
     if (!/^\d{4}$/.test(newUserForm.biometricId?.trim() || '')) missingFields.push('Biometric ID (4 digits)');
+    if (!newUserForm.institute) missingFields.push('Organization');
     if (!newUserForm.employmentType) missingFields.push('Employee Type');
     if (!newUserForm.shiftId?.trim()) missingFields.push('Shift');
     if (!newUserForm.leaveCycle) missingFields.push('Leave Year Type');
@@ -1373,6 +1380,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       employeeCategory: '',
       isPhDEnrolled: false,
       officeLocation: '',
+      institute: '',
       reportingManagerId: '',
       reviewingManagerId: '',
       joiningDate: '',
@@ -3608,15 +3616,36 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                         inputMode="numeric"
                         maxLength={4}
                         readOnly={Boolean(editingEmployeeId)}
-                        title={editingEmployeeId ? 'The biometric ID cannot be changed after the employee is created.' : undefined}
                         value={newUserForm.biometricId}
                         onChange={(e) => setField('biometricId', e.target.value.replace(/\D/g, '').slice(0, 4))}
                         placeholder="4-digit biometric ID"
                         aria-invalid={Boolean(errorOf('biometricId'))}
-                        title={errorOf('biometricId') || undefined}
+                        title={errorOf('biometricId') || (editingEmployeeId ? 'The biometric ID cannot be changed after the employee is created.' : undefined)}
                         className={inputClass('biometricId', Boolean(editingEmployeeId))}
                       />
                       {fieldError('biometricId')}
+                    </div>
+
+                    {/* Organization (institute) */}
+                    <div>
+                      <label className="block text-slate-700 font-bold mb-1 text-xs">
+                        Organization <span className="text-blue-600 font-bold ml-0.5">*</span>
+                      </label>
+                      <div className={controlBox('institute')} title={errorOf('institute') || undefined}>
+                        <AppSelect
+                          value={newUserForm.institute}
+                          placeholder="Select Organization"
+                          onChange={(val) => {
+                            // Departments belong to an organization: clear one that is not in the new one.
+                            const keepDept = !val || formDepartments(val).includes(newUserForm.department) || projectsMaster.includes(newUserForm.department);
+                            setNewUserForm((f) => ({ ...f, institute: val, department: keepDept ? f.department : '' }));
+                            setFormErrors((e) => (e.institute ? { ...e, institute: '' } : e));
+                          }}
+                          options={[{ label: 'Select Organization', value: '' }, ...instituteOptions]}
+                          className="w-full"
+                        />
+                      </div>
+                      {fieldError('institute')}
                     </div>
 
                     {/* Employee Type Selection */}
@@ -3711,8 +3740,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             placeholder="Select Department / Section / Cell"
                             onChange={(val) => setNewUserForm({ ...newUserForm, department: val })}
                             options={[
-                              { label: 'Select Department / Section / Cell', value: '' },
-                              ...departmentsMaster.map((dept) => ({ label: dept, value: dept }))
+                              { label: newUserForm.institute ? 'Select Department / Section / Cell' : 'Select the organization first', value: '' },
+                              ...formDepartments(newUserForm.institute).map((dept) => ({ label: dept, value: dept }))
                             ]}
                             className="w-full"
                             searchable={true}
@@ -3922,8 +3951,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             placeholder="Select Department / Section / Cell"
                             onChange={(val) => setNewUserForm({ ...newUserForm, department: val })}
                             options={[
-                              { label: 'Select Department / Section / Cell', value: '' },
-                              ...departmentsMaster.map((dept) => ({ label: dept, value: dept }))
+                              { label: newUserForm.institute ? 'Select Department / Section / Cell' : 'Select the organization first', value: '' },
+                              ...formDepartments(newUserForm.institute).map((dept) => ({ label: dept, value: dept }))
                             ]}
                             className="w-full"
                             searchable={true}
@@ -4590,7 +4619,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, department: val })}
                             options={[
                               { label: 'Select Project / Department / Section / Cell', value: '' },
-                              ...departmentsMaster.map((dept) => ({ label: `[Dept/Cell] ${dept}`, value: dept })),
+                              ...formDepartments(newUserForm.institute).map((dept) => ({ label: `[Dept/Cell] ${dept}`, value: dept })),
                               ...projectsMaster.map((proj) => ({ label: `[Project] ${proj}`, value: proj }))
                             ]}
                             className="w-full"

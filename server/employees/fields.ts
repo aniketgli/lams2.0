@@ -60,7 +60,8 @@ export interface EmployeeInput {
   shiftId: string;
   leaveCycle: 'CY' | 'FY';
   joiningDate: string;
-  officeLocation: string | null;
+  /** Institute code (lookup 'institute'), e.g. WII or SACON. */
+  institute: string;
   department: string | null;
   designation: string | null;
   employeeCategory: string | null;
@@ -144,7 +145,7 @@ export function parseEmployeeInput(body: unknown, layout: FormLayout | null, tod
   else if (!ID_PATTERN.test(shiftId)) v.errors.shiftId ||= 'Choose a shift from the list.';
   const leaveCycle = v.oneOf('leaveCycle', ['CY', 'FY'] as const);
   const joiningDate = v.date('joiningDate');
-  const officeLocation = v.optionalString('officeLocation', { max: 255 });
+  const institute = v.string('institute', { max: 50 });
 
   if (dob && dob >= today) v.errors.dob ||= 'Date of birth must be in the past.';
   if (dob && joiningDate && joiningDate <= dob) v.errors.joiningDate ||= 'Date of joining must be after the date of birth.';
@@ -184,7 +185,7 @@ export function parseEmployeeInput(body: unknown, layout: FormLayout | null, tod
 
   return {
     biometricId, salutation, name, email: email!, gender, dob: dob!, phone: phone!, employmentType, shiftId,
-    leaveCycle: leaveCycle!, joiningDate: joiningDate!, officeLocation, department, designation, employeeCategory,
+    leaveCycle: leaveCycle!, joiningDate: joiningDate!, institute, department, designation, employeeCategory,
     permanentEmploymentType, reportingManagerId, reviewingManagerId, hodName, validUntilDate, isOnProbation,
     probationEndDate, isPhDEnrolled, piName, courseProgram, courseBatch, enrolledThrough, guideSupervisor,
   };
@@ -206,6 +207,6 @@ export const PROFILE_DATA_KEYS = [
 /** Keys never kept in profile_data (they live in real columns or must not be stored there). */
 export const PROFILE_DATA_FORBIDDEN = new Set([
   'id', 'name', 'email', 'role', 'roles', 'baseRole', 'moduleRoles', 'biometricId', 'biometric_id', 'suffix',
-  'department', 'designation', 'employmentType', 'joiningDate', 'phone', 'officeLocation', 'shiftId',
+  'department', 'designation', 'employmentType', 'joiningDate', 'phone', 'officeLocation', 'institute', 'shiftId',
   'password', 'passwordHash', 'tempPassword', 'emergencyContactPhone', 'status',
 ]);

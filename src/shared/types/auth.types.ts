@@ -39,6 +39,8 @@ export interface User {
   phone?: string;
   gender?: string;
   officeLocation?: string;
+  /** Institute code (WII, SACON, …) from Master Settings. */
+  institute?: string;
   joiningDate?: string;
   dob?: string;
   isOnProbation?: boolean;
