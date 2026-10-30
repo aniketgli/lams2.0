@@ -6,6 +6,8 @@ import {
 import { Alert } from '../../../../shared/components';
 import { UserAvatar } from '../../../../shared/components/UserAvatar';
 import { ApiError } from '../../../../shared/services/api';
+import { ExportButtons } from '../../../../shared/components/ExportButtons';
+import { downloadCsvText, downloadTablePdf, printedAt, toCsvText } from '../../../../shared/services/printTable';
 import { CareerEntry, MyProfile, ProfileField, employeeProfileApi, myProfileApi } from '../employeeApi';
 
 /**
@@ -95,6 +97,30 @@ async function preparePhoto(file: File): Promise<string> {
 }
 
 const shownValue = (field: ProfileField): string | null => (field.kind === 'date' ? formatDate(field.value) : field.value);
+
+/** Profile as Section / Detail / Value rows, appointment history included. Data is what the server sent. */
+function downloadProfile(profile: MyProfile, format: 'csv' | 'pdf') {
+  const name = [profile.salutation, profile.name].filter(Boolean).join(' ');
+  const rows: string[][] = [];
+  for (const section of profile.sections) {
+    for (const field of section.fields) rows.push([section.title, field.label, shownValue(field) ?? 'Not recorded']);
+  }
+  for (const entry of profile.career) {
+    const range = entry.startDate ? `${formatDate(entry.startDate)} – ${entry.isCurrent ? 'Present' : formatDate(entry.endDate) ?? '—'}` : '';
+    rows.push(['Appointment history', entry.title, [range, entry.organisation, ...entry.details].filter(Boolean).join(' · ')]);
+  }
+  const headers = ['Section', 'Detail', 'Value'];
+  const fileName = `WII_Profile_${profile.biometricId}_${profile.name.replace(/\s+/g, '_')}`;
+  if (format === 'csv') {
+    downloadCsvText(toCsvText(headers, rows), fileName);
+  } else {
+    downloadTablePdf({
+      title: `Employee profile — ${name}`,
+      subtitle: [[`B.I. ${profile.biometricId}`, profile.headline, profile.subline].filter(Boolean).join(' · '), `Generated ${printedAt(new Date().toISOString())}`],
+      headers, rows, fileName, landscape: false, columnWidths: [22, 28, 50],
+    });
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Building blocks
@@ -402,9 +428,17 @@ const ProfileView: React.FC<{ source: ProfileSource; onBack?: () => void; onPhot
             )}
           </div>
 
-          <div className="min-w-0 sm:pb-1">
+          <div className="min-w-0 sm:pb-1 flex-1">
             <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 truncate">{displayName}</h2>
             {subtitle && <p className="text-sm text-slate-600 mt-0.5">{subtitle}</p>}
+          </div>
+          <div className="sm:pb-1 shrink-0">
+            <ExportButtons
+              onCsv={() => downloadProfile(profile, 'csv')}
+              onPdf={() => downloadProfile(profile, 'pdf')}
+              csvTitle="Download this profile as CSV"
+              pdfTitle="Download this profile as PDF"
+            />
           </div>
         </div>
       </section>

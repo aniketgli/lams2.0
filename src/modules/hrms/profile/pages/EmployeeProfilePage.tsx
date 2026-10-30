@@ -17,7 +17,7 @@ import { EmployeeActivityLog } from '../components/EmployeeActivityLog';
 import { DirectoryTable } from '../components/DirectoryTable';
 import { auditorApi } from '../employeeApi';
 import { FilterToolbar } from '../../../../shared/components/FilterToolbar';
-import { printTable, printedAt } from '../../../../shared/services/printTable';
+import { downloadTablePdf, printedAt } from '../../../../shared/services/printTable';
 import { useSession } from '../../../../auth/SessionContext';
 import { MultiSelectFilter, matchesMultiSelect } from '../../../../shared/components/MultiSelectFilter';
 import { AppSelect } from '../../../../shared/components/AppSelect';
@@ -450,8 +450,9 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   // Export Handlers for Personnel Directory
   // Auditor: the server builds the files from the database and logs every download.
   const [exportingDirectory, setExportingDirectory] = useState<'csv' | 'pdf' | null>(null);
+  const canExportDirectory = isAdmin || isAudit || isManager;
   const handleExportCSV = async () => {
-    if (!isAudit || exportingDirectory) return;
+    if (!canExportDirectory || exportingDirectory) return;
     setExportingDirectory('csv');
     try {
       await auditorApi.downloadDirectory();
@@ -464,11 +465,18 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   };
 
   const handleExportPDF = async () => {
-    if (!isAudit || exportingDirectory) return;
+    if (!canExportDirectory || exportingDirectory) return;
     setExportingDirectory('pdf');
     try {
       const table = await auditorApi.directoryForPdf();
-      printTable({ title: 'Employee directory', subtitle: [`Generated ${printedAt(table.generatedAt)}`], headers: table.headers, rows: table.rows });
+      const title = isManager ? 'My team' : 'Employee directory';
+      downloadTablePdf({
+        title,
+        subtitle: [`Generated ${printedAt(table.generatedAt)}`],
+        headers: table.headers,
+        rows: table.rows,
+        fileName: `WII_${title.replace(/\s+/g, '_')}_${table.generatedAt.slice(0, 10)}`,
+      });
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'The PDF could not be prepared.');
     } finally {
@@ -2111,10 +2119,10 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
           {(isAdmin || isAudit || isManager) && (
             <FilterToolbar
               start={isAudit ? auditorSwitch : null}
-              exports={isAudit ? {
+              exports={canExportDirectory ? {
                 onCsv: () => void handleExportCSV(), onPdf: () => void handleExportPDF(), busy: exportingDirectory,
-                csvTitle: 'Download all employee records as CSV (the download is logged)',
-                pdfTitle: 'Print / save all employee records as PDF (the download is logged)',
+                csvTitle: isManager ? 'Download your team as CSV (the download is logged)' : 'Download employee records as CSV (the download is logged)',
+                pdfTitle: isManager ? 'Download your team as PDF (the download is logged)' : 'Download employee records as PDF (the download is logged)',
               } : null}
               search={{ value: profileSearchQuery, onChange: setProfileSearchQuery, placeholder: 'Search staff, department, designation, biometric ID…' }}
               onReset={directoryFiltered ? resetDirectoryFilters : null}
@@ -2150,7 +2158,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
               onChange={setSelectedDepartmentFilter}
               options={departmentsMaster.map((dept) => ({ label: dept, value: dept }))}
               />,
-              <MultiSelectFilter key="manager"
+              !isManager && <MultiSelectFilter key="manager"
               label="Reporting Manager"
               icon={<UserIcon className="w-3.5 h-3.5" />}
               selectedValues={selectedReportingMgrFilter}

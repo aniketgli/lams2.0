@@ -1,69 +1,126 @@
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+
 /**
- * Prints a table as a clean, themed document (the browser's print dialog
- * offers "Save as PDF"). Used for PDF exports so the page chrome — sidebar,
- * header, buttons — never ends up in the file. Every value is HTML-escaped.
+ * Downloads a table as a themed PDF file (no print dialog): navy title band,
+ * navy header row, striped rows and "Page x of y" on every page.
+ *
+ * The built-in PDF fonts cover Latin text only, so other scripts (e.g. Hindi
+ * names) should be left out of PDF columns; CSV downloads keep them.
  */
 
-export interface PrintTableOptions {
+export interface PdfTableOptions {
   title: string;
-  /** Small lines under the title (organisation, filters, generated time). */
+  /** Small lines under the title (filters, generated time). */
   subtitle?: string[];
   headers: string[];
   rows: unknown[][];
-  /** Landscape suits wide tables. */
+  /** File name without extension. */
+  fileName: string;
   landscape?: boolean;
+  /** Relative column widths (same length as headers); omitted = automatic. */
+  columnWidths?: number[];
 }
 
-const escapeHtml = (value: unknown): string =>
-  String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+const NAVY: [number, number, number] = [32, 64, 136]; // --color-primary #204088
+const INK: [number, number, number] = [15, 23, 42];
 
-export function buildPrintHtml({ title, subtitle = [], headers, rows, landscape = true }: PrintTableOptions): string {
-  const head = headers.map((h) => `<th>${escapeHtml(h)}</th>`).join('');
-  const body = rows.length
-    ? rows.map((r) => `<tr>${r.map((c) => `<td>${escapeHtml(c === null || c === undefined || c === '' ? '—' : c)}</td>`).join('')}</tr>`).join('')
-    : `<tr><td colspan="${headers.length}" class="empty">No records.</td></tr>`;
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
-<style>
-  @page { size: A4 ${landscape ? 'landscape' : 'portrait'}; margin: 12mm; }
-  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  body { font-family: Inter, "Segoe UI", system-ui, -apple-system, sans-serif; color: #0f172a; margin: 0; font-size: 9.5px; }
-  .band { background: linear-gradient(90deg, #0f172a, #1c3577 50%, #0f172a); color: #fff; padding: 10px 14px; border-radius: 8px; }
-  .band h1 { margin: 0; font-size: 15px; letter-spacing: -0.01em; }
-  .band p { margin: 2px 0 0; font-size: 9.5px; color: #cbd5e1; }
-  table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 10px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
-  thead th { background: #204088; color: #fff; text-align: left; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.04em; padding: 6px 7px; }
-  tbody td { padding: 5px 7px; border-top: 1px solid #e2e8f0; vertical-align: top; word-break: break-word; }
-  tbody tr:nth-child(even) td { background: #f8fafc; }
-  thead { display: table-header-group; }
-  tr { page-break-inside: avoid; }
-  .empty { text-align: center; color: #94a3b8; padding: 16px; }
-  .foot { margin-top: 8px; color: #64748b; font-size: 8.5px; }
-</style></head><body>
-<div class="band"><h1>${escapeHtml(title)}</h1>${subtitle.map((s) => `<p>${escapeHtml(s)}</p>`).join('')}</div>
-<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
-<p class="foot">${rows.length} record${rows.length === 1 ? '' : 's'}</p>
-</body></html>`;
+/** Text the standard PDF fonts can draw: arrows become "->", unsupported characters are dropped. */
+export function pdfText(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '—';
+  return String(value)
+    .replace(/→/g, '->')
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/[^\x20-\x7E -ÿ–—•…\n]/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim() || '—';
 }
 
-export function printTable(options: PrintTableOptions): void {
-  const frame = document.createElement('iframe');
-  frame.setAttribute('aria-hidden', 'true');
-  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
-  document.body.appendChild(frame);
-  const doc = frame.contentDocument;
-  const win = frame.contentWindow;
-  if (!doc || !win) { frame.remove(); return; }
-  doc.open();
-  doc.write(buildPrintHtml(options));
-  doc.close();
-  win.addEventListener('afterprint', () => window.setTimeout(() => frame.remove(), 500), { once: true });
-  window.setTimeout(() => { win.focus(); win.print(); }, 150);
-  // Safety net if afterprint never fires.
-  window.setTimeout(() => { if (frame.isConnected) frame.remove(); }, 60_000);
+export function downloadTablePdf({ title, subtitle = [], headers, rows, fileName, landscape = true, columnWidths }: PdfTableOptions): void {
+  const doc = new jsPDF({ orientation: landscape ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 12;
+
+  // Title band
+  const bandHeight = 14 + subtitle.length * 4.5;
+  doc.setFillColor(...INK);
+  doc.roundedRect(margin, margin, pageWidth - margin * 2, bandHeight, 2, 2, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.text(pdfText(title), margin + 5, margin + 8);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(203, 213, 225);
+  subtitle.forEach((line, i) => doc.text(pdfText(line), margin + 5, margin + 13 + i * 4.5));
+
+  const usable = pageWidth - margin * 2;
+  const total = columnWidths?.reduce((a, b) => a + b, 0) ?? 0;
+  const columnStyles = columnWidths && total > 0
+    ? Object.fromEntries(columnWidths.map((w, i) => [i, { cellWidth: (w / total) * usable }]))
+    : undefined;
+
+  autoTable(doc, {
+    startY: margin + bandHeight + 4,
+    margin: { left: margin, right: margin, bottom: 14 },
+    head: [headers.map(pdfText)],
+    body: rows.length ? rows.map((r) => r.map(pdfText)) : [[{ content: 'No records.', colSpan: headers.length, styles: { halign: 'center' as const, textColor: [148, 163, 184] as [number, number, number] } }]],
+    theme: 'grid',
+    styles: { font: 'helvetica', fontSize: 8, cellPadding: 2, textColor: INK, lineColor: [226, 232, 240], lineWidth: 0.2, overflow: 'linebreak', valign: 'top' },
+    headStyles: { fillColor: NAVY, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7.5 },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles,
+    didDrawPage: () => {
+      const page = doc.getCurrentPageInfo().pageNumber;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(100, 116, 139);
+      doc.text('Wildlife Institute of India · WII Enterprise Portal', margin, pageHeight - 7);
+      doc.text(`Page ${page}`, pageWidth - margin, pageHeight - 7, { align: 'right' });
+    },
+  });
+
+  // "Page x of y" now that the total is known.
+  const pages = doc.getNumberOfPages();
+  for (let i = 1; i <= pages; i++) {
+    doc.setPage(i);
+    doc.setFillColor(255, 255, 255);
+    doc.rect(pageWidth - margin - 30, pageHeight - 10, 30, 5, 'F');
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`Page ${i} of ${pages}`, pageWidth - margin, pageHeight - 7, { align: 'right' });
+  }
+
+  doc.save(`${fileName.replace(/[^\w.-]+/g, '_')}.pdf`);
 }
 
 /** "30 Oct 2026, 11:05" in the viewer's locale. */
 export function printedAt(iso: string): string {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+/** Saves CSV text as a file (UTF-8 with BOM so Excel shows names correctly). */
+export function downloadCsvText(csv: string, fileName: string): void {
+  const url = URL.createObjectURL(new Blob([csv.startsWith('﻿') ? csv : `﻿${csv}`], { type: 'text/csv;charset=utf-8' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${fileName.replace(/[^\w.-]+/g, '_')}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+/** One CSV cell; values a spreadsheet would run as formulas are prefixed with a quote. */
+export function csvCell(value: unknown): string {
+  let text = value === null || value === undefined ? '' : String(value);
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+export function toCsvText(headers: string[], rows: unknown[][]): string {
+  return `${[headers, ...rows].map((r) => r.map(csvCell).join(',')).join('\r\n')}\r\n`;
 }
