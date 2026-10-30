@@ -277,8 +277,8 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
                 onChange={(e) => setForm({ ...form, name: e.target.value })} containerClassName="sm:col-span-2" />
               <Input label="Code" required maxLength={def.kind === 'lookup' ? 50 : 100} value={form.code} error={err('code')}
                 disabled={def.kind === 'lookup' && Boolean(editing)}
-                helperText={def.kind === 'lookup' ? (editing ? 'The code is stored on records and cannot be changed.' : 'Stored on records; it cannot be changed later.') : 'Saved in capital letters.'}
-                onChange={(e) => setForm({ ...form, code: e.target.value })} />
+                title={def.kind === 'lookup' ? (editing ? 'The code is stored on records and cannot be changed.' : 'Stored on records; it cannot be changed later.') : undefined}
+                onChange={(e) => setForm({ ...form, code: def.kind === 'lookup' ? e.target.value : e.target.value.toUpperCase() })} />
               <Select label="Status" required value={form.status} error={err('status')}
                 onChange={(v: MasterStatus) => setForm({ ...form, status: v })}
                 options={[{ label: 'Active', value: 'ACTIVE' }, { label: 'Inactive', value: 'INACTIVE' }]} />
@@ -300,7 +300,7 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
               })}
               {def.kind === 'lookup' && (
                 <Input label="Display order" type="number" min={0} max={100000} value={String(form.sortOrder ?? 0)} error={err('sortOrder')}
-                  helperText="Lower numbers appear first in dropdowns."
+                  title="Lower numbers appear first in dropdowns."
                   onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) })} />
               )}
             </div>

@@ -65,6 +65,8 @@ export const employee_profiles = mysqlTable('employee_profiles', {
   joiningDate: varchar('joining_date', { length: 10 }),
   phone: varchar('phone', { length: 20 }),
   officeLocation: varchar('office_location', { length: 255 }),
+  /** Institute code (lookup 'institute'): WII, SACON, … */
+  institute: varchar('institute', { length: 50 }),
   shiftId: varchar('shift_id', { length: 36 }),
   profileData: text('profile_data'),
 });
@@ -132,6 +134,8 @@ export const organization_units = mysqlTable('organization_units', {
   name: varchar('name', { length: 255 }).notNull(),
   code: varchar('code', { length: 80 }).notNull().unique(),
   type: varchar('type', { length: 50 }).notNull().default('Department'),
+  /** Institute code (lookup 'institute'). */
+  institute: varchar('institute', { length: 50 }),
   status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),

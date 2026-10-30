@@ -87,9 +87,12 @@ export const MASTERS: MasterDef[] = [
   {
     kind: 'table', key: 'organizations', table: 'organization_units', group: 'profile', codeMaxLength: 80, hasMetadata: false,
     label: 'Organizations', noun: 'Organization unit',
-    description: 'Departments, divisions, cells and units.',
-    columnFields: { type: 'type' },
-    fields: [{ key: 'type', label: 'Type', type: 'lookup', lookupType: 'org_unit_type', required: true }],
+    description: 'Departments, divisions, cells and units, each under its institute.',
+    columnFields: { institute: 'institute', type: 'type' },
+    fields: [
+      { key: 'institute', label: 'Institute', type: 'lookup', lookupType: 'institute', required: true },
+      { key: 'type', label: 'Type', type: 'lookup', lookupType: 'org_unit_type', required: true },
+    ],
     usage: [
       { what: 'employee profiles', sql: PROFILE_COLUMN('department'), by: 'name' },
     ],
@@ -164,6 +167,16 @@ export const MASTERS: MasterDef[] = [
   },
 
   // ---- Employee-form lists (lookup_values) ------------------------------------
+  {
+    kind: 'lookup', key: 'institute', lookupType: 'institute', group: 'lists',
+    label: 'Institutes', noun: 'Institute',
+    description: 'Wildlife Institute of India, WII - SACON, … Each employee and organization unit belongs to one.',
+    fields: [],
+    usage: [
+      { what: 'organization units', sql: 'SELECT COUNT(*) AS n FROM organization_units WHERE institute = ?', by: 'code' },
+      { what: 'employee profiles', sql: PROFILE_COLUMN('institute'), by: 'code' },
+    ],
+  },
   {
     kind: 'lookup', key: 'salutation', lookupType: 'salutation', group: 'lists',
     label: 'Salutations', noun: 'Salutation', description: 'Shown before names (Mr., Dr., …).',

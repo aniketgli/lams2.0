@@ -74,6 +74,7 @@ export async function checkReferences(q: Querier, input: EmployeeInput, layout: 
 
   if (!await activeLookup(q, 'salutation', input.salutation)) errors.suffix = 'Choose a salutation from the list.';
   if (!await activeLookup(q, 'gender', input.gender)) errors.gender = 'Choose a gender from the list.';
+  if (!await activeLookup(q, 'institute', input.institute)) errors.institute = 'Choose an organization from the list.';
 
   const [shift] = await rows(q, 'SELECT id, status FROM shifts WHERE id = ? LIMIT 1', [Number(input.shiftId)]);
   if (!shift || String(shift.status).toLowerCase() !== 'active') errors.shiftId = 'Choose an active shift.';
@@ -90,6 +91,14 @@ export async function checkReferences(q: Querier, input: EmployeeInput, layout: 
     const value = input[field];
     if (!ref || typeof value !== 'string') continue;
     if (!await activeMasterValue(q, ref, value)) errors[field] = `Choose an active ${noun} from Master Settings.`;
+  }
+
+  // A department / cell must belong to the employee's institute (projects are shared).
+  if (rules.department && input.department && !errors.department && !errors.institute) {
+    const [unit] = await rows(q, "SELECT institute FROM organization_units WHERE name = ? AND UPPER(status) = 'ACTIVE' LIMIT 1", [input.department]);
+    if (unit && unit.institute && String(unit.institute) !== input.institute) {
+      errors.department = 'This department belongs to another organization. Choose one from the selected organization.';
+    }
   }
 
   const activeAccount = async (id: string) => {

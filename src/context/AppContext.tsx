@@ -631,6 +631,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       joiningDate: row.joiningDate ?? undefined,
       phone: row.phone ?? undefined,
       officeLocation: row.officeLocation ?? undefined,
+      institute: row.institute ?? undefined,
       shiftId: row.shiftId ?? undefined,
       moduleRoles: row.moduleRoles as UserModuleRoles,
       // Photos are served by the server; old avatar values inside profile_data are ignored.
