@@ -7,11 +7,13 @@ export type MasterStatus = 'ACTIVE' | 'INACTIVE';
 export interface MasterFieldDef {
   key: string;
   label: string;
-  type: 'text' | 'lookup' | 'master' | 'layout';
+  /** choice = one value of `choices`; multi = several values (of `choices` or a lookup), stored comma-separated. */
+  type: 'text' | 'lookup' | 'master' | 'choice' | 'multi' | 'layout';
   required?: boolean;
   maxLength?: number;
   lookupType?: string;
   masterKey?: string;
+  choices?: string[];
   placeholder?: string;
   /** Not shown in the master screen (kept as stored). */
   hidden?: boolean;

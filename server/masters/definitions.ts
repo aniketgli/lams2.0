@@ -1,5 +1,6 @@
 import type { RowDataPacket } from 'mysql2';
 import { pool } from '../../src/db';
+import { CADRES } from '../employees/lists';
 
 /**
  * Registry of every simple master (name + code + status + a few extra fields).
@@ -22,7 +23,13 @@ export const FORM_LAYOUTS = [
   { code: 'intern', name: 'Intern (department)' },
 ] as const;
 
-export type FieldType = 'text' | 'lookup' | 'master' | 'layout';
+/**
+ * text    free text
+ * lookup  one lookup_values code      master  one name from another master
+ * choice  one value of a fixed list    multi   several values (fixed list or lookup codes), stored comma-separated
+ * layout  a form layout code
+ */
+export type FieldType = 'text' | 'lookup' | 'master' | 'choice' | 'multi' | 'layout';
 
 export interface FieldDef {
   key: string;
@@ -34,6 +41,8 @@ export interface FieldDef {
   lookupType?: string;
   /** For type 'master': another master supplying the options (stored by name). */
   masterKey?: string;
+  /** For types 'choice' and 'multi': the fixed options. A 'multi' field without choices uses lookupType. */
+  choices?: readonly string[];
   placeholder?: string;
   /** Not shown in the master screen; an existing value is kept as it is on update. */
   hidden?: boolean;
@@ -91,13 +100,16 @@ const METADATA_JSON = (table: string, path: string): string =>
 export const MASTERS: MasterDef[] = [
   // ---- Profile masters --------------------------------------------------------
   {
-    kind: 'table', key: 'organizations', table: 'organization_units', group: 'profile', codeMaxLength: 80, hasMetadata: false,
+    kind: 'table', key: 'organizations', table: 'organization_units', group: 'profile', codeMaxLength: 80, hasMetadata: true,
     label: 'Institute Units', noun: 'Institute unit',
     description: 'Departments, divisions, cells and units, each under its institute.',
     columnFields: { institute: 'institute', type: 'type' },
     fields: [
       { key: 'institute', label: 'Institute', type: 'lookup', lookupType: 'institute', required: true },
       { key: 'type', label: 'Type', type: 'lookup', lookupType: 'org_unit_type', required: true },
+      // Empty = offered for every employee type / cadre on the employee form.
+      { key: 'empTypes', label: 'Employee types', type: 'multi', lookupType: 'employee_type', allowedLayouts: ['permanent', 'contractual', 'intern'] },
+      { key: 'cadres', label: 'Cadres', type: 'multi', choices: CADRES },
     ],
     usage: [
       { what: 'employee profiles', sql: PROFILE_COLUMN('department'), by: 'name' },
@@ -107,7 +119,10 @@ export const MASTERS: MasterDef[] = [
     kind: 'table', key: 'designations', table: 'designations', group: 'profile', codeMaxLength: 100, hasMetadata: true,
     label: 'Designations', noun: 'Designation',
     description: 'Job titles and positions.',
-    fields: [{ key: 'empType', label: 'Employment type', type: 'lookup', lookupType: 'employee_type', allowedLayouts: ['permanent', 'contractual', 'researcher'] }],
+    fields: [
+      { key: 'empType', label: 'Employment type', type: 'lookup', lookupType: 'employee_type', allowedLayouts: ['permanent', 'contractual', 'researcher'] },
+      { key: 'cadre', label: 'Cadre', type: 'choice', choices: CADRES },
+    ],
     usage: [{ what: 'employee profiles', sql: PROFILE_COLUMN('designation'), by: 'name' }],
   },
   {

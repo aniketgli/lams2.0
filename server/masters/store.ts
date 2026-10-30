@@ -159,7 +159,11 @@ async function validate(def: MasterDef, body: unknown, existing: MasterRecord | 
       if (!fields[field.key] && field.required) errors[`fields.${field.key}`] = `${field.label} is required.`;
       continue;
     }
-    const value = typeof rawFields[field.key] === 'string' ? (rawFields[field.key] as string).trim() : '';
+    let value = typeof rawFields[field.key] === 'string' ? (rawFields[field.key] as string).trim() : '';
+    if (field.type === 'multi') {
+      // Several values, stored comma-separated without repeats.
+      value = [...new Set(value.split(',').map((v) => v.trim()).filter(Boolean))].join(',');
+    }
     fields[field.key] = value;
     if (!value) {
       if (field.required) errors[`fields.${field.key}`] = `${field.label} is required.`;
@@ -169,6 +173,17 @@ async function validate(def: MasterDef, body: unknown, existing: MasterRecord | 
     const unchanged = existing?.fields[field.key] === value;
     if (field.type === 'text' && value.length > (field.maxLength ?? 255)) {
       errors[`fields.${field.key}`] = `${field.label} must be at most ${field.maxLength ?? 255} characters.`;
+    } else if (field.type === 'choice' && !field.choices?.includes(value)) {
+      errors[`fields.${field.key}`] = `Choose a ${field.label.toLowerCase()} from the list.`;
+    } else if (field.type === 'multi') {
+      const before = new Set((existing?.fields[field.key] ?? '').split(',').filter(Boolean));
+      for (const item of value.split(',')) {
+        if (before.has(item)) continue; // kept even if since deactivated
+        const ok = field.choices
+          ? field.choices.includes(item)
+          : (await lookupCodeExists(field.lookupType!, item)) && (!field.allowedLayouts || await lookupHasLayout(field.lookupType!, item, field.allowedLayouts));
+        if (!ok) { errors[`fields.${field.key}`] = `"${item}" cannot be chosen for ${field.label.toLowerCase()}.`; break; }
+      }
     } else if (field.type === 'layout' && !FORM_LAYOUTS.some((l) => l.code === value)) {
       errors[`fields.${field.key}`] = 'Choose a form layout from the list.';
     } else if (field.type === 'lookup' && !unchanged && !(await lookupCodeExists(field.lookupType!, value))) {
@@ -234,6 +249,18 @@ function storageValues(def: MasterDef, input: CleanInput): { columns: string[]; 
 
 const tableOf = (def: MasterDef) => (def.kind === 'lookup' ? 'lookup_values' : def.table);
 
+/** A write that names a column the database does not have yet means a migration was not run. */
+async function missingColumnHint<T>(work: Promise<T>): Promise<T> {
+  try {
+    return await work;
+  } catch (error) {
+    if ((error as { code?: string })?.code === 'ER_BAD_FIELD_ERROR') {
+      throw new HttpError(503, 'The database is missing a column for this master. Ask the administrator to run the latest migrations.', 'NOT_CONFIGURED');
+    }
+    throw error;
+  }
+}
+
 function assertNotFixed(def: MasterDef, verb: string): void {
   if (def.fixedRecords) throw new HttpError(409, `${def.label} are a fixed set and cannot be ${verb}. Rename or deactivate them instead.`, 'FIXED_SET');
 }
@@ -242,7 +269,7 @@ export async function createRecord(def: MasterDef, body: unknown, req: Request):
   assertNotFixed(def, 'added');
   const input = await validate(def, body, null);
   const { columns, values } = storageValues(def, input);
-  return inTransaction(async (conn) => {
+  return missingColumnHint(inTransaction(async (conn) => {
     // Lists keep their order without anyone typing it: a new value goes to the end.
     if (def.kind === 'lookup' && (body as { sortOrder?: unknown } | null)?.sortOrder === undefined) {
       const [[last]] = await conn.query<RowDataPacket[]>('SELECT COALESCE(MAX(sort_order), 0) AS n FROM lookup_values WHERE lookup_type = ?', [def.lookupType]);
@@ -258,7 +285,7 @@ export async function createRecord(def: MasterDef, body: unknown, req: Request):
       action: 'CREATE', after: auditView(saved), reason: reasonOf(body),
     });
     return saved;
-  });
+  }));
 }
 
 export async function updateRecord(def: MasterDef, id: number, body: unknown, req: Request): Promise<MasterRecord> {
@@ -278,7 +305,7 @@ export async function updateRecord(def: MasterDef, id: number, body: unknown, re
   }
 
   const { columns, values } = storageValues(def, input);
-  return inTransaction(async (conn) => {
+  return missingColumnHint(inTransaction(async (conn) => {
     const sets = columns.filter((c) => c !== 'lookup_type').map((c) => `${c} = ?`);
     const vals = def.kind === 'lookup' ? values.slice(1) : values;
     await conn.query(`UPDATE ${tableOf(def)} SET ${sets.join(', ')} WHERE id = ?`, [...vals, id]);
@@ -289,7 +316,7 @@ export async function updateRecord(def: MasterDef, id: number, body: unknown, re
       before: auditView(existing), after: auditView(saved), reason: reasonOf(body),
     });
     return saved;
-  });
+  }));
 }
 
 export async function setStatus(def: MasterDef, id: number, status: unknown, req: Request, reason?: unknown): Promise<MasterRecord> {

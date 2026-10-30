@@ -141,8 +141,8 @@ export function buildSections(
       work.push(
         f('department', 'Department / Section / Cell', record.department),
         f('designation', 'Designation', record.designation),
-        f('employeeCategory', 'Category', data.employeeCategory),
-        f('permanentEmploymentType', 'Recruitment', data.permanentEmploymentType),
+        f('permanentEmploymentType', 'Category', data.permanentEmploymentType),
+        f('employeeCategory', 'Cadre', data.employeeCategory),
         f('joiningDate', 'Date of joining', record.joiningDate, 'date'),
         deputation
           ? f('validUpto', 'Deputation valid up to', record.validUpto, 'date')
@@ -158,7 +158,7 @@ export function buildSections(
       work.push(
         f('department', 'Department / Section / Cell', record.department),
         f('designation', 'Designation', record.designation),
-        f('employeeCategory', 'Category', data.employeeCategory),
+        f('employeeCategory', 'Cadre', data.employeeCategory),
         f('joiningDate', 'Date of joining', record.joiningDate, 'date'),
         { ...validUpto, label: 'Contract valid up to' },
         f('probation', 'Probation', data.isOnProbation

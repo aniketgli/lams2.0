@@ -194,8 +194,8 @@ export interface EmployeeProfilePageProps {
   initialTab?: 'profile' | 'user_controls' | 'transfers';
 }
 
-/** Staff category of permanent / contractual staff (fixed list, no master). */
-const STAFF_CATEGORIES = ['Scientific', 'Technical', 'Support', 'Administrative', 'Finance', 'Stenographer', 'Driver', 'Multi Tasking Staff'];
+/** Cadre of permanent / contractual staff (fixed list, no master; same list as the server's CADRES). */
+const CADRES = ['Scientific', 'Technical', 'Support', 'Administrative', 'Finance', 'Stenographer', 'Driver', 'Multi Tasking Staff'];
 
 export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initialTab = 'profile' }) => {
   const {
@@ -226,9 +226,6 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const genderOptions = (masterOptions.gender ?? []).map((r) => ({ label: r.name, value: r.code }));
   const employeeTypeOptions = (masterOptions.employeeType ?? []).map((r) => ({ label: r.name, value: r.code }));
   const instituteOptions = (masterOptions.institute ?? []).map((r) => ({ label: r.name, value: r.code }));
-  /** Active departments / cells of one organization (institute), for the employee form. */
-  const formDepartments = (institute: string): string[] =>
-    institute ? (masterOptions.organizations ?? []).filter((r) => (r.fields.institute || '') === institute).map((r) => r.name) : [];
   /** The form layout behind an employee type (types are admin-defined; layouts are fixed). */
   const layoutOf = (employeeType?: string | null): string =>
     (masterOptions.employeeType ?? []).find((r) => r.code === employeeType)?.fields.formLayout || String(employeeType || '');
@@ -240,8 +237,19 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     value && !options.some((o) => o.value === value) ? [...options, { label: `${value} (inactive)`, value }] : options;
   const toOpts = (names: string[]): Opt[] => names.map((n) => ({ label: n, value: n }));
   /** Designations of this employee type (a designation without a type fits every staff type). */
-  const designationOptionsFor = (employeeType: string): Opt[] =>
-    toOpts((masterOptions.designations ?? []).filter((r) => !r.fields.empType || r.fields.empType === employeeType).map((r) => r.name));
+  const designationOptionsFor = (employeeType: string, cadre = ''): Opt[] =>
+    toOpts((masterOptions.designations ?? []).filter((r) =>
+      (!r.fields.empType || r.fields.empType === employeeType) && (!cadre || !r.fields.cadre || r.fields.cadre === cadre)).map((r) => r.name));
+  /** Comma-separated master value as a list ("" = applies to all). */
+  const listOf = (v?: string) => (v || '').split(',').map((x) => x.trim()).filter(Boolean);
+  /** Units of the organization offered for this employee type and cadre (a unit with no limits is offered to all). */
+  const departmentsFor = (institute: string, employeeType: string, cadre = ''): string[] =>
+    institute ? (masterOptions.organizations ?? []).filter((r) => {
+      if ((r.fields.institute || '') !== institute) return false;
+      const types = listOf(r.fields.empTypes);
+      const cadres = listOf(r.fields.cadres);
+      return (!types.length || types.includes(employeeType)) && (!cadre || !cadres.length || cadres.includes(cadre));
+    }).map((r) => r.name) : [];
   /** Trainees pick a training course, M.Sc students a stream. */
   const courseOptionsFor = (layout: string): Opt[] =>
     toOpts(optionNames(layout === 'bsc_msc_student' ? 'mscStreams' : 'courses'));
@@ -255,8 +263,15 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const projectOptions = toOpts(optionNames('projects'));
   const enrollmentOptions = toOpts(optionNames('phdEnrollment'));
   const shiftOptions: Opt[] = (masterOptions.shifts ?? []).map((sh) => ({ label: `${sh.code} - ${sh.name}${sh.isDefault ? ' (Default)' : ''}`, value: sh.id }));
-  const staffCategoryOptions = toOpts(STAFF_CATEGORIES);
-  const recruitmentOptions = toOpts(['Direct', 'Deputation']);
+  const cadreOptions = toOpts(CADRES);
+  const recruitmentCategoryOptions = toOpts(['Direct', 'Deputation']);
+  /** Cadre changed: keep designation / department only if they still fit. */
+  const changeCadre = (cadre: string) => setNewUserForm((f) => ({
+    ...f,
+    employeeCategory: cadre,
+    designation: designationOptionsFor(f.employmentType, cadre).some((o) => o.value === f.designation) ? f.designation : '',
+    department: departmentsFor(f.institute, f.employmentType, cadre).includes(f.department) ? f.department : '',
+  }));
 
   // Role Checks
   const isAdmin = currentUser.role === 'administrator';
@@ -1349,8 +1364,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     if (!newUserForm.joiningDate?.trim()) missingFields.push('Date of Joining');
 
     if (layoutOf(newUserForm.employmentType) === 'permanent') {
-      if (!newUserForm.permanentEmploymentType?.trim()) missingFields.push('Recruitment');
-      if (!newUserForm.employeeCategory?.trim()) missingFields.push('Category');
+      if (!newUserForm.permanentEmploymentType?.trim()) missingFields.push('Category');
+      if (!newUserForm.employeeCategory?.trim()) missingFields.push('Cadre');
       if (!newUserForm.designation?.trim()) missingFields.push('Designation');
       if (!newUserForm.department?.trim()) missingFields.push('Department / Section / Cell');
       if (!newUserForm.reportingManagerId?.trim()) missingFields.push('Reporting Manager');
@@ -1360,7 +1375,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       }
       if (newUserForm.isOnProbation && !newUserForm.probationEndDate?.trim()) missingFields.push('Tentative Probation End Date');
     } else if (layoutOf(newUserForm.employmentType) === 'contractual') {
-      if (!newUserForm.employeeCategory?.trim()) missingFields.push('Category');
+      if (!newUserForm.employeeCategory?.trim()) missingFields.push('Cadre');
       if (!newUserForm.designation?.trim()) missingFields.push('Designation');
       if (!newUserForm.department?.trim()) missingFields.push('Department / Section / Cell');
       if (!newUserForm.reportingManagerId?.trim()) missingFields.push('Reporting Manager');
@@ -3243,7 +3258,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                           onChange={(val) => {
                             // Departments belong to an organization: clear one that is not in the new one.
                             // Departments and managers belong to an organization: clear the ones that are not in the new one.
-                            const keepDept = !val || formDepartments(val).includes(newUserForm.department) || optionNames('projects').includes(newUserForm.department);
+                            const keepDept = !val || departmentsFor(val, newUserForm.employmentType, newUserForm.employeeCategory).includes(newUserForm.department) || optionNames('projects').includes(newUserForm.department);
                             const inInstitute = (id: string) => !id || !val || (users.find((u) => u.id === id)?.institute ?? val) === val;
                             setNewUserForm((f) => ({
                               ...f, institute: val, department: keepDept ? f.department : '',
@@ -3294,35 +3309,35 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                     {/* PERMANENT */}
                     {layoutOf(newUserForm.employmentType) === 'permanent' && (
                       <>
-                        {/* Recruitment: Direct / Deputation */}
-                        <div>
-                          <label className="block text-slate-700 font-bold mb-1 text-xs">
-                            Recruitment <span className="text-blue-600 font-bold ml-0.5">*</span>
-                          </label>
-                          <AppSelect
-                            value={newUserForm.permanentEmploymentType}
-                            placeholder="Select Recruitment"
-                            onChange={(val) => setNewUserForm({ ...newUserForm, permanentEmploymentType: val as any })}
-                            options={[
-                              { label: 'Select Recruitment', value: '' },
-                              ...recruitmentOptions
-                            ]}
-                            className="w-full"
-                          />
-                        </div>
-
-                        {/* Category (fixed list) */}
+                        {/* Category: Direct / Deputation */}
                         <div>
                           <label className="block text-slate-700 font-bold mb-1 text-xs">
                             Category <span className="text-blue-600 font-bold ml-0.5">*</span>
                           </label>
                           <AppSelect
-                            value={newUserForm.employeeCategory}
+                            value={newUserForm.permanentEmploymentType}
                             placeholder="Select Category"
-                            onChange={(val) => setNewUserForm({ ...newUserForm, employeeCategory: val })}
+                            onChange={(val) => setNewUserForm({ ...newUserForm, permanentEmploymentType: val as any })}
                             options={[
                               { label: 'Select Category', value: '' },
-                              ...withCurrent(staffCategoryOptions, newUserForm.employeeCategory)
+                              ...recruitmentCategoryOptions
+                            ]}
+                            className="w-full"
+                          />
+                        </div>
+
+                        {/* Cadre (fixed list) */}
+                        <div>
+                          <label className="block text-slate-700 font-bold mb-1 text-xs">
+                            Cadre <span className="text-blue-600 font-bold ml-0.5">*</span>
+                          </label>
+                          <AppSelect
+                            value={newUserForm.employeeCategory}
+                            placeholder="Select Cadre"
+                            onChange={changeCadre}
+                            options={[
+                              { label: 'Select Cadre', value: '' },
+                              ...withCurrent(cadreOptions, newUserForm.employeeCategory)
                             ]}
                             className="w-full"
                           />
@@ -3339,7 +3354,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, designation: val })}
                             options={[
                               { label: 'Select Designation', value: '' },
-                              ...withCurrent(designationOptionsFor(newUserForm.employmentType), newUserForm.designation)
+                              ...withCurrent(designationOptionsFor(newUserForm.employmentType, newUserForm.employeeCategory), newUserForm.designation)
                             ]}
                             className="w-full"
                             searchable={true}
@@ -3358,7 +3373,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, department: val })}
                             options={[
                               { label: newUserForm.institute ? 'Select Department / Section / Cell' : 'Select the organization first', value: '' },
-                              ...formDepartments(newUserForm.institute).map((dept) => ({ label: dept, value: dept }))
+                              ...withCurrent(toOpts(departmentsFor(newUserForm.institute, newUserForm.employmentType, newUserForm.employeeCategory)), newUserForm.department)
                             ]}
                             className="w-full"
                             searchable={true}
@@ -3519,18 +3534,18 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                     {/* CONTRACTUAL */}
                     {layoutOf(newUserForm.employmentType) === 'contractual' && (
                       <>
-                        {/* Category: Administrative / Scientific / Technical */}
+                        {/* Cadre (fixed list) */}
                         <div>
                           <label className="block text-slate-700 font-bold mb-1 text-xs">
-                            Category <span className="text-blue-600 font-bold ml-0.5">*</span>
+                            Cadre <span className="text-blue-600 font-bold ml-0.5">*</span>
                           </label>
                           <AppSelect
                             value={newUserForm.employeeCategory}
-                            placeholder="Select Category"
-                            onChange={(val) => setNewUserForm({ ...newUserForm, employeeCategory: val })}
+                            placeholder="Select Cadre"
+                            onChange={changeCadre}
                             options={[
-                              { label: 'Select Category', value: '' },
-                              ...withCurrent(staffCategoryOptions, newUserForm.employeeCategory)
+                              { label: 'Select Cadre', value: '' },
+                              ...withCurrent(cadreOptions, newUserForm.employeeCategory)
                             ]}
                             className="w-full"
                           />
@@ -3547,7 +3562,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, designation: val })}
                             options={[
                               { label: 'Select Designation', value: '' },
-                              ...withCurrent(designationOptionsFor(newUserForm.employmentType), newUserForm.designation)
+                              ...withCurrent(designationOptionsFor(newUserForm.employmentType, newUserForm.employeeCategory), newUserForm.designation)
                             ]}
                             className="w-full"
                             searchable={true}
@@ -3566,7 +3581,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, department: val })}
                             options={[
                               { label: newUserForm.institute ? 'Select Department / Section / Cell' : 'Select the organization first', value: '' },
-                              ...formDepartments(newUserForm.institute).map((dept) => ({ label: dept, value: dept }))
+                              ...withCurrent(toOpts(departmentsFor(newUserForm.institute, newUserForm.employmentType, newUserForm.employeeCategory)), newUserForm.department)
                             ]}
                             className="w-full"
                             searchable={true}
@@ -3680,7 +3695,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, designation: val })}
                             options={[
                               { label: 'Select Designation', value: '' },
-                              ...withCurrent(designationOptionsFor(newUserForm.employmentType), newUserForm.designation)
+                              ...withCurrent(designationOptionsFor(newUserForm.employmentType, newUserForm.employeeCategory), newUserForm.designation)
                             ]}
                             className="w-full"
                             searchable={true}
@@ -4218,7 +4233,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, department: val })}
                             options={[
                               { label: 'Select Project / Department / Section / Cell', value: '' },
-                              ...formDepartments(newUserForm.institute).map((dept) => ({ label: `[Dept/Cell] ${dept}`, value: dept })),
+                              ...departmentsFor(newUserForm.institute, newUserForm.employmentType).map((dept) => ({ label: `[Dept/Cell] ${dept}`, value: dept })),
                               ...projectOptions.map((o) => ({ label: `[Project] ${o.label}`, value: o.value }))
                             ]}
                             className="w-full"
