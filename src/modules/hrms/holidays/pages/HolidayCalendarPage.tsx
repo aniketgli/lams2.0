@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  CalendarCheck, CalendarClock, CalendarDays, ChevronLeft, ChevronRight, LayoutGrid, List, Pencil, Plus, Search, SunMedium, Tag, Trash2,
+  CalendarCheck, CalendarClock, CalendarDays, ChevronLeft, ChevronRight, LayoutGrid, List, Pencil, Plus, Sparkles, Tag, Trash2,
 } from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
 import { PageHeader } from '../../../../shared/components/PageHeader';
@@ -10,7 +10,7 @@ import { Textarea } from '../../../../shared/components/forms/Textarea';
 import { AppDatePicker } from '../../../../shared/components/AppDatePicker';
 import { AppSelect } from '../../../../shared/components/AppSelect';
 import { MultiSelectFilter, matchesMultiSelect } from '../../../../shared/components/MultiSelectFilter';
-import { ExportButtons } from '../../../../shared/components/ExportButtons';
+import { FilterToolbar } from '../../../../shared/components/FilterToolbar';
 import { ActivityLogPanel, ActivitySource } from '../../../../shared/components/ActivityLogPanel';
 import { ApiError } from '../../../../shared/services/api';
 import { activityEndpoints } from '../../../../shared/services/activityApi';
@@ -21,6 +21,9 @@ import { HolidayInput, holidayApi } from '../holidayApi';
 
 /**
  * Holiday Calendar.
+ * Types: Gazetted (office closed), Restricted (optional, RH) and Official Event
+ * (observance such as Earth Day or Global Tiger Day — the office stays open).
+ *
  *   User / Reporting Manager / HoD : view and download (CSV / PDF)
  *   Administrator                  : view, add, edit, delete (audited on the server)
  *   Auditor                        : view and download, plus the holiday activity log
@@ -30,7 +33,7 @@ import { HolidayInput, holidayApi } from '../holidayApi';
 const TYPE_META: Record<HolidayItem['type'], { short: string; label: string; pill: string; dot: string }> = {
   gazetted: { short: 'GH', label: 'Gazetted', pill: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-600' },
   restricted: { short: 'RH', label: 'Restricted', pill: 'bg-amber-50 text-amber-800 border-amber-200', dot: 'bg-amber-500' },
-  local: { short: 'LH', label: 'Local', pill: 'bg-indigo-50 text-indigo-700 border-indigo-200', dot: 'bg-indigo-600' },
+  event: { short: 'OE', label: 'Official Event', pill: 'bg-sky-50 text-sky-700 border-sky-200', dot: 'bg-sky-600' },
 };
 const TYPES = Object.keys(TYPE_META) as HolidayItem['type'][];
 const CATEGORIES = ['National', 'Religious', 'Cultural', 'Institutional', 'International', 'Other'];
@@ -90,6 +93,7 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = () => {
   const [month, setMonth] = useState<number>(new Date().getMonth() + 1);
 
   const yearHolidays = useMemo(() => holidays.filter((h) => h.year === year), [holidays, year]);
+  const filtered = Boolean(search.trim()) || !types.includes('all') || !categories.includes('all');
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     return yearHolidays
@@ -103,15 +107,15 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = () => {
     return {
       gazetted: yearHolidays.filter((h) => h.type === 'gazetted').length,
       restricted: yearHolidays.filter((h) => h.type === 'restricted').length,
-      longWeekends: yearHolidays.filter((h) => h.isLongWeekend && h.type === 'gazetted').length,
+      events: yearHolidays.filter((h) => h.type === 'event').length,
       next: holidays.filter((h) => h.date >= today && h.type === 'gazetted').sort((a, b) => a.date.localeCompare(b.date))[0] ?? null,
     };
   }, [yearHolidays, holidays]);
 
   // ---- Downloads (everyone) ---------------------------------------------------
-  const exportHeaders = ['Date', 'Day', 'Holiday', 'Hindi name', 'Type', 'Category', 'Long weekend', 'Description'];
+  const exportHeaders = ['Date', 'Day', 'Holiday', 'Hindi name', 'Type', 'Category', 'Description'];
   const exportRows = () => visible.map((h) => [
-    formatDate(h.date), h.dayOfWeek, h.name, h.hindiName ?? '', TYPE_META[h.type]?.label ?? h.type, h.category, h.isLongWeekend ? 'Yes' : 'No', h.description,
+    formatDate(h.date), h.dayOfWeek, h.name, h.hindiName ?? '', TYPE_META[h.type]?.label ?? h.type, h.category, h.description,
   ]);
   const filterLine = () => [
     !types.includes('all') && types.length ? `Type: ${types.map((t) => TYPE_META[t as HolidayItem['type']]?.label ?? t).join(', ')}` : null,
@@ -221,7 +225,7 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = () => {
       ),
     },
     {
-      key: 'name', header: 'Holiday', sortValue: (h) => h.name,
+      key: 'name', header: 'Holiday', width: '260px', sortValue: (h) => h.name,
       render: (h) => (
         <div className="min-w-0">
           <p className="text-[13px] font-semibold text-slate-900">{h.name}</p>
@@ -230,21 +234,18 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = () => {
       ),
     },
     {
-      key: 'type', header: 'Type', width: '130px', sortValue: (h) => h.type,
+      key: 'type', header: 'Type', width: '150px', sortValue: (h) => h.type,
       render: (h) => (
         <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-bold ${TYPE_META[h.type]?.pill}`}>
           <span className={`w-1.5 h-1.5 rounded-full ${TYPE_META[h.type]?.dot}`} />{TYPE_META[h.type]?.label ?? h.type}
         </span>
       ),
     },
-    { key: 'category', header: 'Category', width: '130px', sortValue: (h) => h.category, render: (h) => <span className="text-[13px] text-slate-700">{h.category}</span> },
+    { key: 'category', header: 'Category', width: '140px', sortValue: (h) => h.category, render: (h) => <span className="text-[13px] text-slate-700">{h.category}</span> },
     {
-      key: 'weekend', header: 'Long weekend', width: '130px', sortValue: (h) => (h.isLongWeekend ? 1 : 0),
-      render: (h) => (h.isLongWeekend
-        ? <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-700"><SunMedium className="w-3 h-3" />Yes</span>
-        : <span className="text-[13px] text-slate-400">—</span>),
+      key: 'description', header: 'Description', width: '280px',
+      render: (h) => <p className="text-xs text-slate-600 whitespace-normal line-clamp-2 max-w-[280px]" title={h.description || undefined}>{h.description || '—'}</p>,
     },
-    { key: 'description', header: 'Description', render: (h) => <span className="text-xs text-slate-600 line-clamp-2">{h.description || '—'}</span> },
     ...(isAdmin ? [{
       key: 'actions', header: 'Actions', width: '100px', align: 'right' as const,
       render: (h: HolidayItem) => (
@@ -316,7 +317,7 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = () => {
   const statCards = [
     { label: 'Gazetted holidays', value: stats.gazetted, note: `Offices closed in ${year}`, icon: CalendarCheck, tone: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
     { label: 'Restricted holidays', value: stats.restricted, note: `Optional list for ${year}`, icon: Tag, tone: 'text-amber-700 bg-amber-50 border-amber-200' },
-    { label: 'Long weekends', value: stats.longWeekends, note: 'Gazetted holiday on a Friday or Monday', icon: SunMedium, tone: 'text-rose-700 bg-rose-50 border-rose-200' },
+    { label: 'Official events', value: stats.events, note: 'Observances — office stays open', icon: Sparkles, tone: 'text-sky-700 bg-sky-50 border-sky-200' },
     {
       label: 'Next holiday', value: stats.next ? stats.next.name : '—',
       note: stats.next ? `${formatDate(stats.next.date)} · ${stats.next.dayOfWeek}` : 'No upcoming gazetted holiday listed', icon: CalendarClock, tone: 'text-primary bg-primary/10 border-primary/20',
@@ -356,44 +357,29 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = () => {
             ))}
           </div>
 
-          <section className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3.5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
-              <div className="flex flex-wrap items-center gap-2">
-                {auditorSwitch}
-                <div className="w-32">
-                  <AppSelect value={String(year)} onChange={(v) => setYear(Number(v))} options={years.map((y) => ({ label: `Year ${y}`, value: String(y) }))} />
-                </div>
+          <FilterToolbar
+            start={<>
+              {auditorSwitch}
+              <div className="w-32">
+                <AppSelect value={String(year)} onChange={(v) => setYear(Number(v))} options={years.map((y) => ({ label: `Year ${y}`, value: String(y) }))} />
               </div>
-              <ExportButtons onCsv={downloadCsv} onPdf={downloadPdf} disabled={visible.length === 0}
-                csvTitle={`Download the ${year} holidays shown below as CSV`} pdfTitle={`Print / save the ${year} holidays shown below as PDF`} />
-            </div>
-
-            <div className="flex flex-col lg:flex-row lg:items-center gap-2.5">
-              <div className="relative flex-1 min-w-[220px]">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search holiday, date or day…"
-                  maxLength={100}
-                  className="h-9 w-full pl-10 pr-3 bg-slate-50/70 focus:bg-white border border-slate-200/80 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50"
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-44"><MultiSelectFilter label="Type" options={TYPES.map((t) => ({ label: TYPE_META[t].label, value: t }))} selectedValues={types} onChange={setTypes} /></div>
-                <div className="w-48"><MultiSelectFilter label="Category" options={CATEGORIES.map((c) => ({ label: c, value: c }))} selectedValues={categories} onChange={setCategories} /></div>
-                <div className="h-9 flex items-center p-1 bg-slate-100/90 border border-slate-200/90 rounded-xl gap-1 shrink-0">
-                  {([['table', List, 'Table view'], ['month', LayoutGrid, 'Month view']] as const).map(([mode, Icon, title]) => (
-                    <button key={mode} type="button" onClick={() => setViewMode(mode)} title={title} aria-label={title}
-                      className={`h-7 px-2 flex items-center justify-center rounded-lg cursor-pointer ${viewMode === mode ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80' : 'text-slate-400 hover:text-slate-700'}`}>
-                      <Icon className="w-4 h-4" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </section>
+            </>}
+            exports={{
+              onCsv: downloadCsv, onPdf: downloadPdf, disabled: visible.length === 0,
+              csvTitle: `Download the ${year} holidays shown below as CSV`, pdfTitle: `Print / save the ${year} holidays shown below as PDF`,
+            }}
+            search={{ value: search, onChange: setSearch, placeholder: 'Search holiday, date or day…' }}
+            onReset={filtered ? () => { setSearch(''); setTypes(['all']); setCategories(['all']); } : null}
+            view={{
+              value: viewMode,
+              onChange: setViewMode,
+              options: [{ value: 'table', label: 'Table view', icon: List }, { value: 'month', label: 'Month view', icon: LayoutGrid }],
+            }}
+            filters={[
+              <MultiSelectFilter key="type" label="Type" options={TYPES.map((t) => ({ label: TYPE_META[t].label, value: t }))} selectedValues={types} onChange={setTypes} />,
+              <MultiSelectFilter key="category" label="Category" options={CATEGORIES.map((c) => ({ label: c, value: c }))} selectedValues={categories} onChange={setCategories} />,
+            ]}
+          />
 
           {viewMode === 'table' ? (
             <DataTable

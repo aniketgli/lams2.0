@@ -1,9 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { RotateCcw, Search } from 'lucide-react';
 import { DataTable } from './Table';
-import { Input } from './forms/Input';
-import { Select } from './Select';
-import { ExportButtons } from './ExportButtons';
+import { AppSelect } from './AppSelect';
+import { FilterToolbar } from './FilterToolbar';
 import { AppDatePicker } from './AppDatePicker';
 import type { ColumnDef } from './Table';
 import { printTable, printedAt } from '../services/printTable';
@@ -190,59 +188,42 @@ export const ActivityLogPanel: React.FC<{ source: ActivitySource; toolbarStart?:
   ];
 
   return (
-    <section className="bg-white border border-slate-200/90 rounded-2xl shadow-xs">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-5 pt-4 sm:pt-5 pb-3.5 mx-0 border-b border-slate-100">
-        <div className="min-w-0">{toolbarStart}</div>
-        <ExportButtons
-          onCsv={() => void exportCsv()}
-          onPdf={() => void exportPdf()}
-          busy={exporting}
-          disabled={data.total === 0}
-          csvTitle="Download the filtered log as CSV (the download is logged)"
-          pdfTitle="Print / save the filtered log as PDF (the download is logged)"
-        />
-      </div>
+    <div className="space-y-4">
+      <FilterToolbar
+        start={toolbarStart}
+        exports={{
+          onCsv: () => void exportCsv(), onPdf: () => void exportPdf(), busy: exporting, disabled: data.total === 0,
+          csvTitle: 'Download the filtered log as CSV (the download is logged)',
+          pdfTitle: 'Print / save the filtered log as PDF (the download is logged)',
+        }}
+        search={{ value: filters.search ?? '', onChange: (v) => set('search', v), placeholder: source.searchPlaceholder ?? 'Search record, done by, reason…' }}
+        onReset={filtered ? () => setFilters(EMPTY) : null}
+        filters={[
+          <AppSelect key="area" value={filters.area ?? 'all'} options={AREAS} onChange={(v) => set('area', v)} />,
+          <AppSelect key="action" value={filters.action ?? 'all'} options={ACTIONS} onChange={(v) => set('action', v)} />,
+          <AppDatePicker key="from" value={filters.from ?? ''} maxDate={filters.to || undefined} placeholder="From date" onChange={(v) => set('from', v)} className="w-full" />,
+          <AppDatePicker key="to" value={filters.to ?? ''} minDate={filters.from || undefined} placeholder="To date" onChange={(v) => set('to', v)} className="w-full" />,
+        ]}
+      />
 
-      <div className="px-5 py-4 grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-        <Input label="Search" leftIcon={Search} value={filters.search} placeholder={source.searchPlaceholder ?? 'Record, done by, reason…'}
-          onChange={(e) => set('search', e.target.value)} containerClassName="md:col-span-4" maxLength={100} />
-        <Select label="Area" value={filters.area} options={AREAS} onChange={(v: string) => set('area', v)} containerClassName="md:col-span-2" />
-        <Select label="Action" value={filters.action} options={ACTIONS} onChange={(v: string) => set('action', v)} containerClassName="md:col-span-2" />
-        <div className="md:col-span-2">
-          <AppDatePicker label="From" value={filters.from ?? ''} maxDate={filters.to || undefined} placeholder="Any date" onChange={(v) => set('from', v)} className="w-full" />
-        </div>
-        <div className="md:col-span-2">
-          <AppDatePicker label="To" value={filters.to ?? ''} minDate={filters.from || undefined} placeholder="Any date" onChange={(v) => set('to', v)} className="w-full" />
-        </div>
-        {filtered && (
-          <div className="md:col-span-12">
-            <button type="button" onClick={() => setFilters(EMPTY)} className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline cursor-pointer">
-              <RotateCcw className="w-3.5 h-3.5" /> Clear filters
-            </button>
-          </div>
-        )}
-      </div>
-
-      <div className="px-5 pb-5">
-        <DataTable
-          columns={columns}
-          data={data.rows}
-          loading={loading}
-          error={error ?? undefined}
-          keyExtractor={(r) => r.id}
-          emptyTitle="No activity found"
-          emptyDescription={filtered ? 'Nothing matches these filters.' : 'No employee changes have been recorded yet.'}
-          pagination={{
-            currentPage: page,
-            totalPages: Math.max(1, Math.ceil(data.total / pageSize)),
-            totalItems: data.total,
-            pageSize,
-            onPageChange: setPage,
-            onPageSizeChange: (n) => { setPageSize(n); setPage(1); },
-            pageSizeOptions: [25, 50, 100],
-          }}
-        />
-      </div>
-    </section>
+      <DataTable
+        columns={columns}
+        data={data.rows}
+        loading={loading}
+        error={error ?? undefined}
+        keyExtractor={(r) => r.id}
+        emptyTitle="No activity found"
+        emptyDescription={filtered ? 'Nothing matches these filters.' : 'No changes have been recorded yet.'}
+        pagination={{
+          currentPage: page,
+          totalPages: Math.max(1, Math.ceil(data.total / pageSize)),
+          totalItems: data.total,
+          pageSize,
+          onPageChange: setPage,
+          onPageSizeChange: (n) => { setPageSize(n); setPage(1); },
+          pageSizeOptions: [25, 50, 100],
+        }}
+      />
+    </div>
   );
 };

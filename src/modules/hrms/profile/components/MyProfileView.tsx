@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft, Briefcase, Camera, CheckCircle2, Clock, Fingerprint, History as HistoryIcon, Building2, Loader2, Mail, Network, Phone,
-  ShieldCheck, Trash2, Upload, UserRound, XCircle,
+  Trash2, Upload, UserRound, XCircle,
 } from 'lucide-react';
 import { Alert } from '../../../../shared/components';
 import { UserAvatar } from '../../../../shared/components/UserAvatar';
@@ -149,7 +149,7 @@ const CareerTimeline: React.FC<{ entries: CareerEntry[] }> = ({ entries }) => {
             >
               <span className={`w-2 h-2 rounded-full ${entry.isCurrent ? 'bg-emerald-500' : 'bg-slate-300'}`} />
             </span>
-            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1 sm:gap-4">
+            <div className="flex flex-col gap-1">
               <div className="min-w-0">
                 <p className="text-sm font-bold text-slate-900">
                   {entry.title}
@@ -161,7 +161,7 @@ const CareerTimeline: React.FC<{ entries: CareerEntry[] }> = ({ entries }) => {
                 {entry.remarks && <p className="text-xs text-slate-500 mt-0.5">{entry.remarks}</p>}
               </div>
               {range && (
-                <div className="sm:text-right shrink-0">
+                <div>
                   <p className="text-xs font-semibold text-slate-700">{range}</p>
                   {length && <p className="text-[11px] text-slate-500 mt-0.5">{length}</p>}
                 </div>
@@ -431,16 +431,8 @@ const ProfileView: React.FC<{ source: ProfileSource; onBack?: () => void; onPhot
             </ul>
           </Card>
 
-          <Card title="HRMS access" icon={ShieldCheck}>
-            <ul className="px-5 pb-5 pt-1 space-y-2">
-              {profile.roles.length
-                ? profile.roles.map((role) => (
-                  <li key={role} className="flex items-center gap-2 text-sm font-medium text-slate-800">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" aria-hidden="true" /> {role}
-                  </li>
-                ))
-                : <li className="text-sm text-slate-400">No active HRMS role.</li>}
-            </ul>
+          <Card title="Appointment history" icon={HistoryIcon}>
+            <CareerTimeline entries={profile.career} />
           </Card>
         </div>
 
@@ -451,10 +443,6 @@ const ProfileView: React.FC<{ source: ProfileSource; onBack?: () => void; onPhot
               <FieldGrid fields={section.fields} />
             </Card>
           ))}
-
-          <Card title="Appointment history" icon={HistoryIcon}>
-            <CareerTimeline entries={profile.career} />
-          </Card>
         </div>
       </div>
 

@@ -16,7 +16,7 @@ import { EmployeeProfileView, MyProfileView } from '../components/MyProfileView'
 import { EmployeeActivityLog } from '../components/EmployeeActivityLog';
 import { DirectoryTable } from '../components/DirectoryTable';
 import { auditorApi } from '../employeeApi';
-import { ExportButtons } from '../../../../shared/components/ExportButtons';
+import { FilterToolbar } from '../../../../shared/components/FilterToolbar';
 import { printTable, printedAt } from '../../../../shared/services/printTable';
 import { useSession } from '../../../../auth/SessionContext';
 import { MultiSelectFilter, matchesMultiSelect } from '../../../../shared/components/MultiSelectFilter';
@@ -430,6 +430,19 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     selectedStatusFilter,
     profileSearchQuery,
   ]);
+
+  const directoryFiltered = !selectedEmployeeFilter.includes('all') || !selectedDesignationFilter.includes('all') ||
+    !selectedDepartmentFilter.includes('all') || !selectedReportingMgrFilter.includes('all') ||
+    !selectedCategoryFilter.includes('all') || !selectedStatusFilter.includes('all') || profileSearchQuery !== '';
+  const resetDirectoryFilters = () => {
+    setSelectedEmployeeFilter(['all']);
+    setSelectedDesignationFilter(['all']);
+    setSelectedDepartmentFilter(['all']);
+    setSelectedReportingMgrFilter(['all']);
+    setSelectedCategoryFilter(['all']);
+    setSelectedStatusFilter(['all']);
+    setProfileSearchQuery('');
+  };
 
   // Legacy alias for existing dropdown compatibility
   const filteredProfiles = categoryFilteredProfiles;
@@ -2094,195 +2107,84 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
       {!showMyProfile && !(isAudit && auditorView === 'activity') && (activeTab === 'profile' || (!isAdmin && !isAudit)) && (
         <div className="space-y-5">
-          {/* Category Filter & Directory View Mode Switcher Console (Admin, Audit & Managers) */}
+          {/* Search / filter / export bar (same layout on every page) */}
           {(isAdmin || isAudit || isManager) && (
-            <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3.5">
-              {/* Auditor: view switch on the left, downloads (server-generated, logged) on the right */}
-              {isAudit && (
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
-                {auditorSwitch}
-                <ExportButtons
-                  onCsv={() => void handleExportCSV()}
-                  onPdf={() => void handleExportPDF()}
-                  busy={exportingDirectory}
-                  csvTitle="Download all employee records as CSV (the download is logged)"
-                  pdfTitle="Print / save all employee records as PDF (the download is logged)"
-                />
-              </div>
-              )}
-
-              {/* Second Row: Search Input on Left, Reset and View Mode on Right */}
-              <div className="flex flex-col gap-3">
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-                  {/* Search Box */}
-                  <div className="relative flex-1 min-w-[240px]">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    <input
-                      type="text"
-                      placeholder="Search staff, department, designation, biometric ID..."
-                      value={profileSearchQuery}
-                      onChange={(e) => setProfileSearchQuery(e.target.value)}
-                      className="h-9 w-full pl-10 pr-9 bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200/80 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 transition-all shadow-2xs"
-                    />
-                    {profileSearchQuery && (
-                      <button
-                        onClick={() => setProfileSearchQuery('')}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-200 transition-colors cursor-pointer"
-                        title="Clear search"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Right Controls: Reset All Filters + View Switcher */}
-                  <div className="flex items-center space-x-2 shrink-0 self-end sm:self-auto">
-                    {/* Reset All Filters Pill Button */}
-                    {(!selectedEmployeeFilter.includes('all') ||
-                      !selectedDesignationFilter.includes('all') ||
-                      !selectedDepartmentFilter.includes('all') ||
-                      !selectedReportingMgrFilter.includes('all') ||
-                      !selectedCategoryFilter.includes('all') ||
-                      !selectedStatusFilter.includes('all') ||
-                      profileSearchQuery !== '') && (
-                      <button
-                        onClick={() => {
-                          setSelectedEmployeeFilter(['all']);
-                          setSelectedDesignationFilter(['all']);
-                          setSelectedDepartmentFilter(['all']);
-                          setSelectedReportingMgrFilter(['all']);
-                          setSelectedCategoryFilter(['all']);
-                          setSelectedStatusFilter(['all']);
-                          setProfileSearchQuery('');
-                        }}
-                        className="h-9 px-3.5 bg-blue-50/90 hover:bg-blue-100 text-blue-900 border border-blue-200/90 rounded-xl text-xs font-bold flex items-center space-x-1.5 shrink-0 transition-all cursor-pointer shadow-2xs"
-                        title="Reset all search and filter selections"
-                      >
-                        <RotateCcw className="w-3.5 h-3.5 text-blue-600" />
-                        <span>Reset All Filters</span>
-                      </button>
-                    )}
-
-                    {/* View Switcher Icons Container */}
-                    <div className="h-9 flex items-center p-1 bg-slate-100/90 border border-slate-200/90 rounded-xl gap-1 shrink-0">
-                      <button
-                        onClick={() => setDirectoryViewMode('table')}
-                        className={`h-7 px-2 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
-                          directoryViewMode !== 'grid'
-                            ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
-                            : 'text-slate-400 hover:text-slate-700'
-                        }`}
-                        title="Table view"
-                        aria-label="Table view"
-                      >
-                        <List className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => setDirectoryViewMode('grid')}
-                        className={`h-7 px-2 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
-                          directoryViewMode === 'grid'
-                            ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
-                            : 'text-slate-400 hover:text-slate-700'
-                        }`}
-                        title="Card view"
-                        aria-label="Card view"
-                      >
-                        <LayoutGrid className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Third Row: Filters Row */}
-                <div className="pt-2 border-t border-slate-100">
-                {/* Single-line Filter Bar - All filters in one line */}
-                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 flex-nowrap">
-                  {/* 1. Employee Dropdown Pill */}
-                  <div className="flex-1 min-w-[130px] max-w-[210px] shrink-0 sm:shrink">
-                    <MultiSelectFilter
-                      label="Employee"
-                      icon={<UserIcon className="w-3.5 h-3.5" />}
-                      selectedValues={selectedEmployeeFilter}
-                      onChange={(newVals) => {
-                        setSelectedEmployeeFilter(newVals);
-                        if (newVals.length === 1 && newVals[0] !== 'all') {
-                          setSelectedUserId(newVals[0]);
-                        }
-                      }}
-                      options={accessibleProfiles.map((u) => ({ label: u.name, value: u.id }))}
-                    />
-                  </div>
-
-                  {/* 2. Designation Dropdown Pill */}
-                  <div className="flex-1 min-w-[130px] max-w-[210px] shrink-0 sm:shrink">
-                    <MultiSelectFilter
-                      label="Designation"
-                      icon={<Filter className="w-3.5 h-3.5" />}
-                      selectedValues={selectedDesignationFilter}
-                      onChange={setSelectedDesignationFilter}
-                      options={designationsList.map((desig) => ({ label: desig, value: desig }))}
-                    />
-                  </div>
-
-                  {/* 3. Department Dropdown Pill */}
-                  <div className="flex-1 min-w-[130px] max-w-[210px] shrink-0 sm:shrink">
-                    <MultiSelectFilter
-                      label="Department"
-                      icon={<Building2 className="w-3.5 h-3.5" />}
-                      selectedValues={selectedDepartmentFilter}
-                      onChange={setSelectedDepartmentFilter}
-                      options={departmentsMaster.map((dept) => ({ label: dept, value: dept }))}
-                    />
-                  </div>
-
-                  {/* 4. Reporting Mgr Dropdown Pill */}
-                  <div className="flex-1 min-w-[130px] max-w-[210px] shrink-0 sm:shrink">
-                    <MultiSelectFilter
-                      label="Reporting Manager"
-                      icon={<UserIcon className="w-3.5 h-3.5" />}
-                      selectedValues={selectedReportingMgrFilter}
-                      onChange={setSelectedReportingMgrFilter}
-                      options={reportingMgrsList.map((mgr) => ({ label: mgr.name, value: mgr.id }))}
-                    />
-                  </div>
-
-                  {/* 5. Type (Category) Dropdown Pill */}
-                  <div className="flex-1 min-w-[130px] max-w-[210px] shrink-0 sm:shrink">
-                    <MultiSelectFilter
-                      label="Employment Type"
-                      icon={<Filter className="w-3.5 h-3.5" />}
-                      selectedValues={selectedCategoryFilter}
-                      onChange={setSelectedCategoryFilter}
-                      options={[
-                        { label: `Permanent (${categoryCounts.permanent})`, value: 'permanent' },
-                        { label: `Contractual (${categoryCounts.contractual})`, value: 'contractual' },
-                        { label: `Researchers / Project Staff (${categoryCounts.researcher})`, value: 'researcher' },
-                        { label: `Diploma Trainee (${categoryCounts.diploma_trainee})`, value: 'diploma_trainee' },
-                        { label: `Interns (${categoryCounts.intern})`, value: 'intern' },
-                        { label: `BSc / MSc Students (${categoryCounts.bsc_msc_student})`, value: 'bsc_msc_student' },
-                        { label: `PhD Students (${categoryCounts.phd_student})`, value: 'phd_student' }
-                      ]}
-                    />
-                  </div>
-
-                  {/* 6. Status Dropdown Pill */}
-                  <div className="flex-1 min-w-[120px] max-w-[180px] shrink-0 sm:shrink">
-                    <MultiSelectFilter
-                      label="Status"
-                      icon={<Clock className="w-3.5 h-3.5" />}
-                      selectedValues={selectedStatusFilter}
-                      onChange={setSelectedStatusFilter}
-                      options={[
-                        { label: 'Active', value: 'active' },
-                        { label: 'Deactivated', value: 'deactivated' }
-                      ]}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+            <FilterToolbar
+              start={isAudit ? auditorSwitch : null}
+              exports={isAudit ? {
+                onCsv: () => void handleExportCSV(), onPdf: () => void handleExportPDF(), busy: exportingDirectory,
+                csvTitle: 'Download all employee records as CSV (the download is logged)',
+                pdfTitle: 'Print / save all employee records as PDF (the download is logged)',
+              } : null}
+              search={{ value: profileSearchQuery, onChange: setProfileSearchQuery, placeholder: 'Search staff, department, designation, biometric ID…' }}
+              onReset={directoryFiltered ? resetDirectoryFilters : null}
+              view={{
+                value: directoryViewMode === 'grid' ? 'grid' : 'table',
+                onChange: (v) => setDirectoryViewMode(v),
+                options: [{ value: 'table', label: 'Table view', icon: List }, { value: 'grid', label: 'Card view', icon: LayoutGrid }],
+              }}
+              filters={[
+              <MultiSelectFilter key="employee"
+              label="Employee"
+              icon={<UserIcon className="w-3.5 h-3.5" />}
+              selectedValues={selectedEmployeeFilter}
+              onChange={(newVals) => {
+              setSelectedEmployeeFilter(newVals);
+              if (newVals.length === 1 && newVals[0] !== 'all') {
+              setSelectedUserId(newVals[0]);
+              }
+              }}
+              options={accessibleProfiles.map((u) => ({ label: u.name, value: u.id }))}
+              />,
+              <MultiSelectFilter key="designation"
+              label="Designation"
+              icon={<Filter className="w-3.5 h-3.5" />}
+              selectedValues={selectedDesignationFilter}
+              onChange={setSelectedDesignationFilter}
+              options={designationsList.map((desig) => ({ label: desig, value: desig }))}
+              />,
+              <MultiSelectFilter key="department"
+              label="Department"
+              icon={<Building2 className="w-3.5 h-3.5" />}
+              selectedValues={selectedDepartmentFilter}
+              onChange={setSelectedDepartmentFilter}
+              options={departmentsMaster.map((dept) => ({ label: dept, value: dept }))}
+              />,
+              <MultiSelectFilter key="manager"
+              label="Reporting Manager"
+              icon={<UserIcon className="w-3.5 h-3.5" />}
+              selectedValues={selectedReportingMgrFilter}
+              onChange={setSelectedReportingMgrFilter}
+              options={reportingMgrsList.map((mgr) => ({ label: mgr.name, value: mgr.id }))}
+              />,
+              <MultiSelectFilter key="type"
+              label="Employment Type"
+              icon={<Filter className="w-3.5 h-3.5" />}
+              selectedValues={selectedCategoryFilter}
+              onChange={setSelectedCategoryFilter}
+              options={[
+              { label: `Permanent (${categoryCounts.permanent})`, value: 'permanent' },
+              { label: `Contractual (${categoryCounts.contractual})`, value: 'contractual' },
+              { label: `Researchers / Project Staff (${categoryCounts.researcher})`, value: 'researcher' },
+              { label: `Diploma Trainee (${categoryCounts.diploma_trainee})`, value: 'diploma_trainee' },
+              { label: `Interns (${categoryCounts.intern})`, value: 'intern' },
+              { label: `BSc / MSc Students (${categoryCounts.bsc_msc_student})`, value: 'bsc_msc_student' },
+              { label: `PhD Students (${categoryCounts.phd_student})`, value: 'phd_student' }
+              ]}
+              />,
+              <MultiSelectFilter key="status"
+              label="Status"
+              icon={<Clock className="w-3.5 h-3.5" />}
+              selectedValues={selectedStatusFilter}
+              onChange={setSelectedStatusFilter}
+              options={[
+              { label: 'Active', value: 'active' },
+              { label: 'Deactivated', value: 'deactivated' }
+              ]}
+              />,
+              ]}
+            />
+          )}
 
           {/* Directory Rendering Switcher */}
           {((isAdmin || isAudit || isManager) && directoryViewMode !== 'detail') ? (
@@ -2505,134 +2407,54 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       {/* ==================================================================== */}
       {activeTab === 'user_controls' && (
         <div className="space-y-4">
-          {/* Category Filter Console for User Controls (Pic 2 Layout) */}
-          <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3.5">
-            {/* Top Bar: Clean Themed Scope & Export Action Buttons */}
-            <div className="flex items-center justify-between gap-3.5 border-b border-slate-100 pb-3.5">
-              {/* Left: Blank as requested */}
-              <div />
-
-              {/* Right: Export CSV & PDF Action Buttons */}
-              <div className="flex items-center space-x-2 shrink-0">
-                <button
-                  onClick={handleExportUserControlsCSV}
-                  className="h-9 px-3.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer shadow-2xs"
-                  title="Export User Permissions Register to CSV"
-                >
-                  <Download className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Export CSV</span>
-                </button>
-                <button
-                  onClick={handleExportUserControlsPDF}
-                  className="h-9 px-3.5 bg-slate-900 hover:bg-slate-800 text-white border border-slate-900 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer shadow-2xs"
-                  title="Print / Export User Permissions Register to PDF"
-                >
-                  <FileText className="w-3.5 h-3.5 text-rose-400" />
-                  <span>Export PDF</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Second Row: Search Input on Left, Reset on Right */}
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-                {/* Search Box */}
-                <div className="relative flex-1 min-w-[240px]">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  <input
-                    type="text"
-                    placeholder="Search user name, email, department, designation..."
-                    value={userSearchTerm}
-                    onChange={(e) => setUserSearchTerm(e.target.value)}
-                    className="h-9 w-full pl-10 pr-9 bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200/80 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 transition-all shadow-2xs"
-                  />
-                  {userSearchTerm && (
-                    <button
-                      onClick={() => setUserSearchTerm('')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-200 transition-colors cursor-pointer"
-                      title="Clear search"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-
-                {/* Right Controls: Reset All Filters */}
-                {(!userControlsModuleFilter.includes('all') ||
-                  !userControlsRoleFilter.includes('all') ||
-                  !userControlsStatusFilter.includes('all') ||
-                  userSearchTerm !== '') && (
-                  <div className="flex items-center space-x-2 shrink-0 self-end sm:self-auto">
-                    <button
-                      onClick={() => {
-                        setUserControlsModuleFilter(['all']);
-                        setUserControlsRoleFilter(['all']);
-                        setUserControlsStatusFilter(['all']);
-                        setUserSearchTerm('');
-                      }}
-                      className="h-9 px-3.5 bg-blue-50/90 hover:bg-blue-100 text-blue-900 border border-blue-200/90 rounded-xl text-xs font-bold flex items-center space-x-1.5 shrink-0 transition-all cursor-pointer shadow-2xs"
-                      title="Reset all search and filter selections"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5 text-blue-600" />
-                      <span>Reset All Filters</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Third Row: FILTERS */}
-              <div className="pt-2 border-t border-slate-100">
-              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 flex-nowrap">
-                {/* 1. Module Filter Pill */}
-                <div className="flex-1 min-w-[150px] max-w-[240px] shrink-0 sm:shrink">
-                  <MultiSelectFilter
-                    label="Module"
-                    icon={<Building2 className="w-3.5 h-3.5" />}
-                    selectedValues={userControlsModuleFilter}
-                    onChange={setUserControlsModuleFilter}
-                    options={[
-                      { label: 'HRMS (Leave & Attendance)', value: 'hrms' },
-                      { label: 'PMS (Project Management)', value: 'pms' },
-                      { label: 'Stock & Inventory (SIMS)', value: 'stock' },
-                      { label: 'Facility Management (FMS)', value: 'facility' },
-                      { label: 'Finance & Budget', value: 'finance' }
-                    ]}
-                  />
-                </div>
-
-                {/* 2. System Role Dropdown Pill */}
-                <div className="flex-1 min-w-[130px] max-w-[200px] shrink-0 sm:shrink">
-                  <MultiSelectFilter
-                    label="Role"
-                    icon={<Shield className="w-3.5 h-3.5" />}
-                    selectedValues={userControlsRoleFilter}
-                    onChange={setUserControlsRoleFilter}
-                    options={[
-                      { label: 'Administrator', value: 'administrator' },
-                      { label: 'Reporting Manager', value: 'reporting_manager' },
-                      { label: 'HoD', value: 'reviewing_manager' },
-                      { label: 'user', value: 'general_staff' }
-                    ]}
-                  />
-                </div>
-
-                {/* 3. Account Status Dropdown Pill */}
-                <div className="flex-1 min-w-[120px] max-w-[180px] shrink-0 sm:shrink">
-                  <MultiSelectFilter
-                    label="Status"
-                    icon={<Clock className="w-3.5 h-3.5" />}
-                    selectedValues={userControlsStatusFilter}
-                    onChange={setUserControlsStatusFilter}
-                    options={[
-                      { label: 'Active', value: 'active' },
-                      { label: 'Inactive / Suspended', value: 'inactive' }
-                    ]}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+          {/* Search / filter / export bar (same layout on every page) */}
+          <FilterToolbar
+            exports={{
+              onCsv: handleExportUserControlsCSV, onPdf: handleExportUserControlsPDF,
+              csvTitle: 'Export the user permissions register as CSV', pdfTitle: 'Export the user permissions register as PDF',
+            }}
+            search={{ value: userSearchTerm, onChange: setUserSearchTerm, placeholder: 'Search user name, email, department, designation…' }}
+            onReset={(!userControlsModuleFilter.includes('all') || !userControlsRoleFilter.includes('all') || !userControlsStatusFilter.includes('all') || userSearchTerm !== '')
+              ? () => { setUserControlsModuleFilter(['all']); setUserControlsRoleFilter(['all']); setUserControlsStatusFilter(['all']); setUserSearchTerm(''); }
+              : null}
+            filters={[
+            <MultiSelectFilter key="module"
+            label="Module"
+            icon={<Building2 className="w-3.5 h-3.5" />}
+            selectedValues={userControlsModuleFilter}
+            onChange={setUserControlsModuleFilter}
+            options={[
+            { label: 'HRMS (Leave & Attendance)', value: 'hrms' },
+            { label: 'PMS (Project Management)', value: 'pms' },
+            { label: 'Stock & Inventory (SIMS)', value: 'stock' },
+            { label: 'Facility Management (FMS)', value: 'facility' },
+            { label: 'Finance & Budget', value: 'finance' }
+            ]}
+            />,
+            <MultiSelectFilter key="role"
+            label="Role"
+            icon={<Shield className="w-3.5 h-3.5" />}
+            selectedValues={userControlsRoleFilter}
+            onChange={setUserControlsRoleFilter}
+            options={[
+            { label: 'Administrator', value: 'administrator' },
+            { label: 'Reporting Manager', value: 'reporting_manager' },
+            { label: 'HoD', value: 'reviewing_manager' },
+            { label: 'User', value: 'general_staff' }
+            ]}
+            />,
+            <MultiSelectFilter key="status"
+            label="Status"
+            icon={<Clock className="w-3.5 h-3.5" />}
+            selectedValues={userControlsStatusFilter}
+            onChange={setUserControlsStatusFilter}
+            options={[
+            { label: 'Active', value: 'active' },
+            { label: 'Inactive / Suspended', value: 'inactive' }
+            ]}
+            />,
+            ]}
+          />
 
         {/* User Controls Table */}
           <div className="bg-white border border-slate-200/90 rounded-2xl shadow-2xs overflow-hidden">

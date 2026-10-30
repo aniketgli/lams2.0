@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useApp } from '../../../../context/AppContext';
+import { isDayOff } from '../../holidays/data/holidayData';
 import { LeaveType, LeaveRequest } from '../../../../types';
 import { PageHeader } from '../../../../shared/components/PageHeader';
 import { Button } from '../../../../shared/components/Button';
@@ -246,7 +247,8 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
     const isUserAdmin = currentUser.role === 'administrator';
     const targetUid = isUserAdmin && applyTargetUserId ? applyTargetUserId : currentUser.id;
     const userAtt = (attendanceRecords || []).filter((a) => a.userId === targetUid);
-    const holidayDates = new Set(holidays.map((h) => h.date));
+    // Official events are working days, so they do not count as holidays here.
+    const holidayDates = new Set(holidays.filter(isDayOff).map((h) => h.date));
 
     const workedOnOffDays = userAtt.filter((rec) => {
       if (!rec.date) return false;
@@ -260,7 +262,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
     });
 
     const mapped = workedOnOffDays.map((rec) => {
-      const hol = holidays.find((h) => h.date === rec.date);
+      const hol = holidays.find((h) => h.date === rec.date && isDayOff(h));
       const dObj = new Date(`${rec.date}T10:00:00`);
       const dayName = dObj.toLocaleDateString('en-US', { weekday: 'long' });
       const label = hol ? hol.name : `${dayName} Duty`;
@@ -375,7 +377,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ onNavi
     const e = new Date(endDate);
     if (isNaN(s.getTime()) || isNaN(e.getTime()) || e < s) return 0;
 
-    const holidaySet = new Set(holidays.map((h) => h.date));
+    const holidaySet = new Set(holidays.filter(isDayOff).map((h) => h.date));
     let count = 0;
     const curr = new Date(s);
     while (curr <= e) {
