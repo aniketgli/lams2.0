@@ -82,10 +82,26 @@ export async function loadPhoto(biometricId: string): Promise<{ mime: PhotoMime;
   }
 }
 
+export interface PhotoOwner { biometricId: string; name: string }
+
 /** Saves the signed-in user's own photo (new or replacement) and audits it. Returns the new address. */
-export async function saveOwnPhoto(req: Request, body: unknown): Promise<string> {
+export function saveOwnPhoto(req: Request, body: unknown): Promise<string> {
+  return savePhotoFor(req, req.auth!.account, body);
+}
+
+/** Removes the signed-in user's own photo. Returns false if there was none. */
+export function deleteOwnPhoto(req: Request): Promise<boolean> {
+  return deletePhotoFor(req, req.auth!.account);
+}
+
+/**
+ * Saves `owner`'s photo. Callers decide who may do this (the employee
+ * themselves, or an administrator); the audit log records who did it.
+ */
+export async function savePhotoFor(req: Request, owner: PhotoOwner, body: unknown): Promise<string> {
   const { bytes, mime } = parsePhotoUpload(body);
-  const account = req.auth!.account;
+  const account = owner;
+  const actor = req.auth!.account.biometricId;
   try {
     return await inTransaction(async (conn) => {
       const [existing] = await conn.query<RowDataPacket[]>('SELECT byte_size, mime_type FROM employee_photos WHERE biometric_id = ? FOR UPDATE', [account.biometricId]);
@@ -93,7 +109,7 @@ export async function saveOwnPhoto(req: Request, body: unknown): Promise<string>
       await conn.query(
         `INSERT INTO employee_photos (biometric_id, mime_type, byte_size, data, updated_by) VALUES (?, ?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE mime_type = VALUES(mime_type), byte_size = VALUES(byte_size), data = VALUES(data), updated_by = VALUES(updated_by)`,
-        [account.biometricId, mime, bytes.length, bytes, account.biometricId],
+        [account.biometricId, mime, bytes.length, bytes, actor],
       );
       // Only a description of the photo is audited, never the image itself.
       await writeMasterAuditSql(conn, req, {
@@ -113,9 +129,9 @@ export async function saveOwnPhoto(req: Request, body: unknown): Promise<string>
   }
 }
 
-/** Removes the signed-in user's own photo. Returns false if there was none. */
-export async function deleteOwnPhoto(req: Request): Promise<boolean> {
-  const account = req.auth!.account;
+/** Removes `owner`'s photo. Returns false if there was none. */
+export async function deletePhotoFor(req: Request, owner: PhotoOwner): Promise<boolean> {
+  const account = owner;
   try {
     return await inTransaction(async (conn) => {
       const [existing] = await conn.query<RowDataPacket[]>('SELECT byte_size, mime_type FROM employee_photos WHERE biometric_id = ? FOR UPDATE', [account.biometricId]);

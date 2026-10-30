@@ -9,7 +9,8 @@ import { master_audit_logs } from '../../src/db/schema';
  */
 
 /** RESET = a password reset (only who/when/how is recorded, never the password). */
-export type AuditAction = 'CREATE' | 'UPDATE' | 'STATUS' | 'DELETE' | 'RESET';
+/** EXPORT = someone downloaded data (who, when, what filter). */
+export type AuditAction = 'CREATE' | 'UPDATE' | 'STATUS' | 'DELETE' | 'RESET' | 'EXPORT';
 type Executor = Pick<typeof db, 'insert'>;
 
 export interface AuditEntry {

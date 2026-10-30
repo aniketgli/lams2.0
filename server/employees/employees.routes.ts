@@ -4,7 +4,7 @@ import { randomInt } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { db } from '../../src/db';
 import { user_project_histories, users } from '../../src/db/schema';
-import { isAdmin, isAuthenticated } from '../middleware/auth.middleware';
+import { isAdmin, isAuthenticated, requireActiveRole, requireAuth } from '../middleware/auth.middleware';
 import { EmailService } from '../integrations/email/email.service';
 import { HttpError, asyncHandler, badRequest, notFound } from '../lib/http';
 import { passwordProblem } from '../lib/passwordPolicy';
@@ -16,8 +16,9 @@ import {
   Grant, Viewer, auditPasswordReset, createEmployee, deleteEmployee, getEmployee, listEmployees,
   replaceRoleGrants, setEmployeeStatus, updateEmployee,
 } from './store';
-import { deleteOwnPhoto, loadPhoto, saveOwnPhoto } from './photos';
-import { getMyProfile } from './myProfile';
+import { deleteOwnPhoto, deletePhotoFor, loadPhoto, saveOwnPhoto, savePhotoFor } from './photos';
+import { activityCsv, employeeDirectoryCsv, listActivity, parseActivityFilter } from './activity';
+import { getMyProfile, getProfileFor } from './myProfile';
 
 /**
  * Employee accounts and profiles (/api/hrms/employees). Reading is open to
@@ -66,6 +67,53 @@ router.get('/photos/:biometricId', isAuthenticated, asyncHandler(async (req, res
   res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
   if (req.get('if-none-match') === etag) return res.status(304).end();
   res.type(photo.mime).send(photo.data);
+}));
+
+// ---------------------------------------------------------------------------
+// Auditor: directory download and employee activity log (read-only).
+// ---------------------------------------------------------------------------
+const isAuditor = [requireAuth, requireActiveRole('hrms', 'audit')];
+
+function sendCsv(res: import('express').Response, file: { filename: string; csv: string }) {
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+  res.send(file.csv);
+}
+
+router.get('/employees/export.csv', ...isAuditor, asyncHandler(async (req, res) => {
+  sendCsv(res, await employeeDirectoryCsv(req, viewerOf(req)));
+}));
+
+router.get('/employees/activity', ...isAuditor, asyncHandler(async (req, res) => {
+  res.json(await listActivity(parseActivityFilter(req.query as Record<string, unknown>)));
+}));
+
+router.get('/employees/activity.csv', ...isAuditor, asyncHandler(async (req, res) => {
+  sendCsv(res, await activityCsv(req, parseActivityFilter(req.query as Record<string, unknown>)));
+}));
+
+/** One employee's profile, laid out for their type. Allowed: self, admin, auditor, their manager / HoD. */
+router.get('/employees/:userId/profile', isAuthenticated, asyncHandler(async (req, res) => {
+  res.json(await getProfileFor(viewerOf(req), accountId(req.params.userId)));
+}));
+
+/** Administrator: set or remove any employee's photo (audited with the administrator as the actor). */
+async function photoOwner(raw: unknown) {
+  const biometricId = String(raw ?? '').trim();
+  if (!PATTERNS.biometricId.test(biometricId)) throw badRequest('A valid 4-digit biometric ID is required.');
+  const [target] = await db.select({ biometricId: users.biometricId, name: users.name }).from(users).where(eq(users.biometricId, biometricId)).limit(1);
+  if (!target) throw notFound('Employee not found.');
+  return target;
+}
+
+router.put('/employees/:biometricId/photo', isAdmin, asyncHandler(async (req, res) => {
+  const photoUrl = await savePhotoFor(req, await photoOwner(req.params.biometricId), req.body);
+  res.json({ photoUrl, message: 'Profile photo saved.' });
+}));
+
+router.delete('/employees/:biometricId/photo', isAdmin, asyncHandler(async (req, res) => {
+  const removed = await deletePhotoFor(req, await photoOwner(req.params.biometricId));
+  res.json({ photoUrl: null, message: removed ? 'Profile photo removed.' : 'There was no photo to remove.' });
 }));
 
 router.get('/employees', isAuthenticated, asyncHandler(async (req, res) => {

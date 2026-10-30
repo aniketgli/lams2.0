@@ -6,7 +6,7 @@ import {
 import { Alert } from '../../../../shared/components';
 import { UserAvatar } from '../../../../shared/components/UserAvatar';
 import { ApiError } from '../../../../shared/services/api';
-import { CareerEntry, MyProfile, ProfileField, myProfileApi } from '../employeeApi';
+import { CareerEntry, MyProfile, ProfileField, employeeProfileApi, myProfileApi } from '../employeeApi';
 
 /**
  * "Profile" for the signed-in employee. Everything comes from the server,
@@ -178,7 +178,47 @@ const CareerTimeline: React.FC<{ entries: CareerEntry[] }> = ({ entries }) => {
 // Page
 // ---------------------------------------------------------------------------
 
-export const MyProfileView: React.FC<{ onPhotoChanged?: () => void | Promise<void> }> = ({ onPhotoChanged }) => {
+/** Where a profile comes from and, when allowed, how its photo is changed. */
+export interface ProfileSource {
+  /** Changes whenever a different profile should be loaded. */
+  key: string;
+  load: () => Promise<MyProfile>;
+  photo: {
+    save: (image: string, profile: MyProfile) => Promise<{ photoUrl: string; message: string }>;
+    remove: (profile: MyProfile) => Promise<{ photoUrl: null; message: string }>;
+  } | null;
+}
+
+const OWN_PROFILE: ProfileSource = {
+  key: 'me',
+  load: () => myProfileApi.get(),
+  photo: { save: (image) => myProfileApi.savePhoto(image), remove: () => myProfileApi.deletePhoto() },
+};
+
+/** The signed-in employee's own profile; they may change their own photo. */
+export const MyProfileView: React.FC<{ onPhotoChanged?: () => void | Promise<void> }> = ({ onPhotoChanged }) => (
+  <ProfileView source={OWN_PROFILE} onPhotoChanged={onPhotoChanged} />
+);
+
+/**
+ * Another employee's profile. The server decides whether the viewer may see it;
+ * `canEditPhoto` (administrators) adds the camera button, which the server checks again.
+ */
+export const EmployeeProfileView: React.FC<{ userId: string; canEditPhoto: boolean; onPhotoChanged?: () => void | Promise<void> }> = ({ userId, canEditPhoto, onPhotoChanged }) => {
+  const source = React.useMemo<ProfileSource>(() => ({
+    key: `employee:${userId}:${canEditPhoto}`,
+    load: () => employeeProfileApi.get(userId),
+    photo: canEditPhoto
+      ? {
+        save: (image, p) => employeeProfileApi.savePhoto(p.biometricId, image),
+        remove: (p) => employeeProfileApi.deletePhoto(p.biometricId),
+      }
+      : null,
+  }), [userId, canEditPhoto]);
+  return <ProfileView source={source} onPhotoChanged={onPhotoChanged} />;
+};
+
+const ProfileView: React.FC<{ source: ProfileSource; onPhotoChanged?: () => void | Promise<void> }> = ({ source, onPhotoChanged }) => {
   const [profile, setProfile] = useState<MyProfile | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
@@ -190,12 +230,14 @@ export const MyProfileView: React.FC<{ onPhotoChanged?: () => void | Promise<voi
 
   const load = useCallback(async () => {
     try {
-      setProfile(await myProfileApi.get());
+      setProfile(await source.load());
       setLoadError(null);
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : 'Your profile could not be loaded.');
+      setLoadError(error instanceof Error ? error.message : 'This profile could not be loaded.');
     }
-  }, []);
+  }, [source]);
+  // A different employee: start fresh.
+  useEffect(() => { setProfile(null); setMenuOpen(false); setConfirmRemove(false); }, [source.key]);
   useEffect(() => { void load(); }, [load]);
 
   // Close the photo menu on an outside click or Escape.
@@ -234,7 +276,8 @@ export const MyProfileView: React.FC<{ onPhotoChanged?: () => void | Promise<voi
     if (!file) return;
     setPhotoBusy(true);
     try {
-      const result = await myProfileApi.savePhoto(await preparePhoto(file));
+      if (!source.photo || !profile) return;
+      const result = await source.photo.save(await preparePhoto(file), profile);
       await done(result.photoUrl, result.message);
     } catch (error) {
       const text = error instanceof ApiError
@@ -251,7 +294,8 @@ export const MyProfileView: React.FC<{ onPhotoChanged?: () => void | Promise<voi
     setConfirmRemove(false);
     setPhotoBusy(true);
     try {
-      const result = await myProfileApi.deletePhoto();
+      if (!source.photo || !profile) return;
+      const result = await source.photo.remove(profile);
       await done(null, result.message);
     } catch (error) {
       setToast({ kind: 'error', text: error instanceof Error ? error.message : 'The photo could not be removed.' });
@@ -296,6 +340,7 @@ export const MyProfileView: React.FC<{ onPhotoChanged?: () => void | Promise<voi
                 <Loader2 className="w-6 h-6 text-white animate-spin" aria-label="Saving photo" />
               </span>
             )}
+            {source.photo && (
             <button
               type="button"
               onClick={onCamera}
@@ -308,6 +353,7 @@ export const MyProfileView: React.FC<{ onPhotoChanged?: () => void | Promise<voi
             >
               <Camera className="w-4 h-4" aria-hidden="true" />
             </button>
+            )}
             <input ref={fileRef} type="file" accept={ACCEPTED.join(',')} className="hidden" onChange={(e) => void onFile(e)} />
 
             {menuOpen && (

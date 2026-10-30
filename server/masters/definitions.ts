@@ -243,6 +243,7 @@ export function auditMasterLabels(): Record<string, string> {
     employee_password: 'Passwords',
     default_password: 'Default Password',
     employee_photo: 'Profile Photos',
+    employee_export: 'Employee Data Downloads',
   };
   for (const def of MASTERS) labels[auditKey(def)] = def.label;
   return labels;

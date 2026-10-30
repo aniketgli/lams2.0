@@ -280,8 +280,17 @@ export function buildCareer(
   return entries;
 }
 
-export async function getMyProfile(viewer: Viewer): Promise<MyProfile> {
-  const record = await getEmployee(viewer, viewer.id);
+export function getMyProfile(viewer: Viewer): Promise<MyProfile> {
+  return getProfileFor(viewer, viewer.id);
+}
+
+/**
+ * Any employee's profile, for a viewer allowed to see it in full
+ * (themselves, administrators, auditors, and their reporting manager / HoD
+ * while acting in that role). getEmployee() refuses everyone else with 403.
+ */
+export async function getProfileFor(viewer: Viewer, id: number): Promise<MyProfile> {
+  const record = await getEmployee(viewer, id);
   let data: Record<string, unknown> = {};
   try {
     const parsed = JSON.parse(record.profileData || '{}');
