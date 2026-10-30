@@ -12,6 +12,7 @@ import accessRoutes from './routes/access.routes';
 import employeeRoutes from './employees/employees.routes';
 import holidayRoutes from './holidays/holidays.routes';
 import attendanceRoutes from './attendance/attendance.routes';
+import manualAttendanceRoutes from './manualAttendance/manualAttendance.routes';
 import mastersRoutes from './masters/masters.routes';
 import settingsRoutes from './masters/settings.routes';
 import { apiNotFound, errorHandler } from './middleware/errorHandler';
@@ -92,6 +93,7 @@ export async function createApp(httpServer?: HttpServer) {
   api.use('/hrms', holidayRoutes); // holiday calendar
   api.use('/hrms', employeeRoutes); // employee accounts, profiles, roles, password resets
   api.use('/hrms', attendanceRoutes); // biometric attendance (read-only, from the Attendance punch table)
+  api.use('/hrms', manualAttendanceRoutes); // manual attendance requests
   api.use(apiNotFound);
   app.use('/api', api);
 

@@ -169,14 +169,51 @@ async function loadPunches(from: string, to: string, machines: Map<string, strin
   return out;
 }
 
+/** Approved manual attendance: user id → date → requested In / Out. A missing table means none. */
+async function approvedManual(from: string, to: string): Promise<Map<string, Map<string, { inTime: string; outTime: string }>>> {
+  const out = new Map<string, Map<string, { inTime: string; outTime: string }>>();
+  try {
+    const found = await rows(
+      "SELECT user_id, DATE_FORMAT(att_date, '%Y-%m-%d') AS d, in_time, out_time FROM manual_attendance_requests WHERE status = 'approved' AND att_date BETWEEN ? AND ?",
+      [from, to],
+    );
+    for (const r of found) {
+      const byDate = out.get(String(r.user_id)) ?? new Map();
+      byDate.set(String(r.d), { inTime: String(r.in_time), outTime: String(r.out_time) });
+      out.set(String(r.user_id), byDate);
+    }
+  } catch (error) {
+    if ((error as { code?: string })?.code !== 'ER_NO_SUCH_TABLE') throw error;
+  }
+  return out;
+}
+
+/** The biometric In (first punch) and Out (last punch) of one employee on one date, or null when none was recorded. */
+export async function biometricInOut(biometricId: string, date: string): Promise<{ inTime: string; outTime: string | null } | null> {
+  const machines = await attendanceMachines();
+  const code = normalizeEmployeeCode(biometricId);
+  let punches: Map<string, Map<string, Punch[]>>;
+  try {
+    punches = await loadPunches(date, date, machines, [code]);
+  } catch (error) {
+    if (error instanceof HttpError) return null;
+    throw error;
+  }
+  const list = [...(punches.get(code)?.get(date) ?? [])].sort((a, b) => a.time.localeCompare(b.time));
+  if (list.length === 0) return null;
+  const first = list[0].time.slice(0, 5);
+  const last = list[list.length - 1].time.slice(0, 5);
+  return { inTime: first, outTime: last > first ? last : null };
+}
+
 export async function listAttendance(viewer: AttendanceViewer, query: { from?: unknown; to?: unknown; userId?: unknown }): Promise<AttendanceResult> {
   const today = todayInIndia();
   const { from, to } = parseRange(query, today);
   const onlyUserId = query.userId ? String(query.userId) : null;
   if (onlyUserId && !/^\d{1,20}$/.test(onlyUserId)) throw badRequest('Invalid employee.');
 
-  const [employees, machines, shifts, holidays] = await Promise.all([
-    employeesInScope(viewer, onlyUserId), attendanceMachines(), shiftRules(), gazettedHolidays(from, to),
+  const [employees, machines, shifts, holidays, manual] = await Promise.all([
+    employeesInScope(viewer, onlyUserId), attendanceMachines(), shiftRules(), gazettedHolidays(from, to), approvedManual(from, to),
   ]);
   const everyone = viewer.role === 'administrator' || viewer.role === 'audit';
   const punches = await loadPunches(from, to, machines, everyone && !onlyUserId ? null : employees.map((e) => e.biometricId));
@@ -190,7 +227,10 @@ export async function listAttendance(viewer: AttendanceViewer, query: { from?: u
     for (const date of dates) {
       if (emp.joining && date < emp.joining) continue;
       if (emp.validUpto && date > emp.validUpto) continue;
-      const day = buildDay({ date, punches: mine?.get(date) ?? [], shift, holiday: holidays.get(date) ?? null, today, nowTime });
+      // An approved manual attendance request counts as an In and an Out punch (device "Manual").
+      const approved = manual.get(emp.userId)?.get(date);
+      const dayPunches = [...(mine?.get(date) ?? []), ...(approved ? [{ time: `${approved.inTime}:00`, device: 'Manual' }, { time: `${approved.outTime}:00`, device: 'Manual' }] : [])];
+      const day = buildDay({ date, punches: dayPunches, shift, holiday: holidays.get(date) ?? null, today, nowTime });
       if (day) records.push({ ...day, userId: emp.userId, biometricId: emp.biometricId });
     }
   }

@@ -24,6 +24,7 @@ mysql lams_db < migrations/20261030_holiday_types.sql
 mysql lams_db < migrations/20261030_org_unit_type_project.sql
 mysql lams_db < migrations/20261030_org_unit_mapping.sql
 mysql lams_db < migrations/20261030_attendance_logs.sql   # biometric punches (Attendance table), filled by the machine software
+mysql lams_db < migrations/20261030_manual_attendance.sql
 npm run dev                   # http://localhost:3000
 npm run lint                  # type-check
 ```

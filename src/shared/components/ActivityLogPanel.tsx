@@ -21,6 +21,8 @@ export interface ActivitySource {
   areas: { value: string; label: string }[];
   /** Actions offered in the Action filter (defaults to all). */
   actions?: string[];
+  /** Wording for actions that mean something else here (e.g. STATUS = Approved / rejected). */
+  actionLabels?: Record<string, string>;
   /** Label of the record column ("Employee / record", "Holiday"). */
   recordLabel?: string;
   searchPlaceholder?: string;
@@ -79,8 +81,9 @@ export const ActivityLogPanel: React.FC<{ source: ActivitySource; toolbarStart?:
   const AREA_LABEL: Record<string, string> = React.useMemo(() => Object.fromEntries(source.areas.map((a) => [a.value, a.label])), [source.areas]);
   const ACTIONS = React.useMemo(() => [
     { value: 'all', label: 'All actions' },
-    ...ALL_ACTIONS.filter((a) => !source.actions || source.actions.includes(a.value)),
-  ], [source.actions]);
+    ...ALL_ACTIONS.filter((a) => !source.actions || source.actions.includes(a.value)).map((a) => ({ ...a, label: source.actionLabels?.[a.value] ?? a.label })),
+  ], [source.actions, source.actionLabels]);
+  const actionName = (a: string) => source.actionLabels?.[a] ?? ACTION_LABEL[a] ?? a;
   const [filters, setFilters] = useState<ActivityQuery>(EMPTY);
   const [applied, setApplied] = useState<ActivityQuery>(EMPTY);
   const [page, setPage] = useState(1);
@@ -133,7 +136,7 @@ export const ActivityLogPanel: React.FC<{ source: ActivitySource; toolbarStart?:
       const table = await source.forPdf(q);
       const filterLine = [
         q.area && `Area: ${AREA_LABEL[q.area] ?? q.area}`,
-        q.action && `Action: ${ACTION_LABEL[q.action] ?? q.action}`,
+        q.action && `Action: ${actionName(q.action)}`,
         q.from && `From ${q.from}`, q.to && `To ${q.to}`, q.search && `Search: “${q.search}”`,
       ].filter(Boolean).join(' · ');
       downloadTablePdf({
@@ -164,7 +167,7 @@ export const ActivityLogPanel: React.FC<{ source: ActivitySource; toolbarStart?:
     },
     {
       key: 'action', header: 'Action', width: '150px', sortValue: (r) => r.action,
-      render: (r) => <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${ACTION_TONE[r.action] ?? ACTION_TONE.EXPORT}`}>{ACTION_LABEL[r.action] ?? r.action}</span>,
+      render: (r) => <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${ACTION_TONE[r.action] ?? ACTION_TONE.EXPORT}`}>{actionName(r.action)}</span>,
     },
     {
       key: 'changes', header: 'Details',

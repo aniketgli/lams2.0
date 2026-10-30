@@ -1,2322 +1,526 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { CalendarCheck, Check, CheckCircle2, ClipboardList, Clock, Pencil, Plus, Trash2, X, XCircle } from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
-import { ManualAttendanceRegularizationRequest, AttendanceRecord } from '../../../../types';
 import { PageHeader } from '../../../../shared/components/PageHeader';
-import { Button } from '../../../../shared/components/Button';
+import { DataTable, Input, Modal, Select } from '../../../../shared/components';
+import type { ColumnDef } from '../../../../shared/components';
+import { Textarea } from '../../../../shared/components/forms/Textarea';
 import { AppDatePicker } from '../../../../shared/components/AppDatePicker';
-import { MultiSelectFilter, matchesMultiSelect } from '../../../../shared/components/MultiSelectFilter';
-import { TablePagination } from '../../../../shared/components/TablePagination';
 import { AppSelect } from '../../../../shared/components/AppSelect';
-import { AppTimePicker } from '../../../../shared/components/AppTimePicker';
-import {
-  Clock,
-  PlusCircle,
-  Calendar,
-  CheckCircle2,
-  XCircle,
-  Search,
-  Filter,
-  User as UserIcon,
-  UserCheck,
-  Download,
-  RotateCcw,
-  Eye,
-  AlertCircle,
-  X,
-  Check,
-  FileText,
-  Building,
-  Briefcase,
-  ShieldCheck,
-  Table as TableIcon,
-  LayoutGrid,
-  Edit2,
-  Trash2,
-  ArrowRight,
-  Info,
-  Sparkles,
-  CheckCheck,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-  ChevronDown
-} from 'lucide-react';
-
-import { exportHRMSToCSV, exportHRMSToPDF, HRMSFilterTag, HRMSExportColumn } from '../../utils/hrmsExportUtils';
+import { MultiSelectFilter, matchesMultiSelect } from '../../../../shared/components/MultiSelectFilter';
+import { FilterToolbar } from '../../../../shared/components/FilterToolbar';
 import { UserAvatar } from '../../../../shared/components/UserAvatar';
+import { ActivityLogPanel, ActivitySource } from '../../../../shared/components/ActivityLogPanel';
+import { ApiError } from '../../../../shared/services/api';
+import { activityEndpoints } from '../../../../shared/services/activityApi';
+import { downloadCsvText, downloadTablePdf, printedAt, toCsvText } from '../../../../shared/services/printTable';
+import { ConfirmDialog, NoticeBar, useNotice } from '../../master/components/masterUi';
+import { ManualInput, ManualList, ManualRequest, ManualStatus, manualAttendanceApi } from '../manualAttendanceApi';
 
-// Standard reason options specified by user
-const REASON_CATEGORIES = [
-  'Forgot to Punch',
-  'Biometric Issue',
-  'Not Registered Yet',
-  'Registration Day',
-  'Urgent OD',
-  'Other'
-] as const;
+/**
+ * Manual Attendance: a request to correct a missed or wrong punch.
+ *
+ *   User                       : applies for themselves and follows the status of their requests
+ *   Reporting Manager          : approves / rejects the requests of the people who report to them
+ *   HoD (reviewing manager)    : sees the requests of the people under them
+ *   Administrator              : applies / edits / deletes for anyone, approves / rejects
+ *   Auditor                    : sees every request, plus the activity log (who did what, when)
+ * An approved request counts as In / Out on the Attendance page. The server checks every rule.
+ */
 
-type ReasonCategory = typeof REASON_CATEGORIES[number];
+const STATUS_META: Record<ManualStatus, { label: string; pill: string }> = {
+  pending: { label: 'Pending', pill: 'bg-amber-50 text-amber-800 border-amber-200' },
+  approved: { label: 'Approved', pill: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  rejected: { label: 'Rejected', pill: 'bg-rose-50 text-rose-700 border-rose-200' },
+};
+const STATUSES = Object.keys(STATUS_META) as ManualStatus[];
+const PAGE_SIZES = [25, 50, 100];
 
-// Helper to format category with styled badges matching application theme
-const formatReasonCategory = (cat?: string): { label: string; badgeClass: string } => {
-  const c = (cat || 'Forgot to Punch').trim();
-  const lower = c.toLowerCase();
-
-  if (lower.includes('face') || lower.includes('fingure') || lower.includes('finger') || lower.includes('biometric')) {
-    return {
-      label: 'Biometric Issue',
-      badgeClass: 'bg-slate-100 text-slate-800 border-slate-300'
-    };
-  }
-  if (lower.includes('urgent od') || lower.includes('field')) {
-    return {
-      label: 'Urgent OD',
-      badgeClass: 'bg-blue-50 text-blue-700 border-blue-200'
-    };
-  }
-  if (lower.includes('registration day')) {
-    return {
-      label: 'Registration Day',
-      badgeClass: 'bg-slate-100 text-slate-700 border-slate-200'
-    };
-  }
-  if (lower.includes('not registered')) {
-    return {
-      label: 'Not Registered Yet',
-      badgeClass: 'bg-slate-100 text-slate-700 border-slate-200'
-    };
-  }
-  if (lower.includes('forget') || lower.includes('forgot')) {
-    return {
-      label: 'Forgot to Punch',
-      badgeClass: 'bg-sky-50 text-sky-700 border-sky-200'
-    };
-  }
-  return {
-    label: c || 'Other',
-    badgeClass: 'bg-slate-100 text-slate-700 border-slate-200'
-  };
+const MANUAL_ACTIVITY: ActivitySource = {
+  title: 'Manual attendance activity log',
+  recordLabel: 'Request',
+  searchPlaceholder: 'Employee, done by, reason…',
+  areas: [{ value: 'manual_attendance', label: 'Manual attendance' }, { value: 'manual_attendance_export', label: 'Log download' }],
+  actions: ['CREATE', 'UPDATE', 'STATUS', 'DELETE', 'EXPORT'],
+  actionLabels: { CREATE: 'Applied', UPDATE: 'Edited', STATUS: 'Approved / rejected', DELETE: 'Deleted', EXPORT: 'Downloaded' },
+  ...activityEndpoints('/hrms/manual-attendance/activity', 'WII_Manual_Attendance_Activity.csv'),
 };
 
-// Helper to format reason description text (rolls back artificial rewrites, returns clean user reason)
-const getFormattedReasonText = (req: ManualAttendanceRegularizationRequest): string => {
-  const rawReason = (req.reason || '').trim();
-  if (rawReason) return rawReason;
-  return req.reasonCategory || 'Manual attendance regularization';
-};
+function localDate(offsetDays = 0): string {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function formatDate(date: string): string {
+  const d = new Date(`${date}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? date : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+const formatStamp = (iso: string | null) => (iso ? new Date(iso).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '');
 
-const getDefaultReasonDescription = (cat: string): string => {
-  const lower = cat.toLowerCase();
-  if (lower.includes('face') || lower.includes('finger') || lower.includes('fingure')) {
-    return 'Biometric facial / fingerprint scanner sensor error during gate punch.';
-  }
-  if (lower.includes('urgent od')) {
-    return 'Urgent official field assignment outside campus perimeter.';
-  }
-  if (lower.includes('not registered')) {
-    return 'Biometric profile enrollment under process with IT division.';
-  }
-  if (lower.includes('registration day')) {
-    return 'Joined on registration day; biometric profile was active mid-day.';
-  }
-  if (lower.includes('forget') || lower.includes('forgot')) {
-    return 'Missed routine biometric punch on entry / exit gate.';
-  }
-  return 'Regularization of past forgotten punch log.';
-};
+const StatusPill: React.FC<{ status: ManualStatus }> = ({ status }) => (
+  <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] font-bold whitespace-nowrap ${STATUS_META[status].pill}`}>{STATUS_META[status].label}</span>
+);
 
-// Helper to convert time strings (e.g., "09:30 AM", "05:45 PM", "14:20") into 24-hr "HH:mm"
-const parseTimeTo24H = (timeStr?: string): string | null => {
-  if (!timeStr || timeStr.trim() === '' || timeStr.trim() === '--:--' || timeStr.trim() === '-') return null;
-  const str = timeStr.trim();
-  const ampmMatch = str.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-  if (ampmMatch) {
-    let hours = parseInt(ampmMatch[1], 10);
-    const minutes = parseInt(ampmMatch[2], 10);
-    const meridiem = ampmMatch[3].toUpperCase();
-    if (meridiem === 'PM' && hours < 12) hours += 12;
-    if (meridiem === 'AM' && hours === 12) hours = 0;
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-  }
-  const match24 = str.match(/^(\d{1,2}):(\d{2})/);
-  if (match24) {
-    const hours = parseInt(match24[1], 10);
-    const minutes = parseInt(match24[2], 10);
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-  }
-  return null;
-};
+const EMPTY_FORM: ManualInput = { userId: '', date: '', inTime: '09:30', outTime: '18:00', category: '', reason: '' };
 
 export const ManualAttendanceView: React.FC = () => {
-  const {
-    currentUser,
-    users,
-    attendanceRecords,
-    manualAttendanceRequests,
-    applyManualAttendance,
-    editManualAttendance,
-    deleteManualAttendance,
-    approveRejectManualAttendance,
-    cancelApprovedManualAttendance
-  } = useApp();
+  const { currentUser, users } = useApp();
+  const role = currentUser.role;
+  const isAdmin = role === 'administrator';
+  const isAudit = role === 'audit';
+  const isManager = role === 'reporting_manager' || role === 'reviewing_manager';
+  const canApply = isAdmin || role === 'general_staff';
+  const teamView = isAdmin || isAudit || isManager;
 
-  // Date boundary: strictly past dates (<= yesterday)
-  const todayObj = new Date();
-  const todayStr = todayObj.toISOString().split('T')[0];
-  const yesterdayObj = new Date(todayObj);
-  yesterdayObj.setDate(todayObj.getDate() - 1);
-  const maxDateStr = yesterdayObj.toISOString().split('T')[0];
+  // ---- Data ---------------------------------------------------------------------
+  const today = localDate();
+  const defaultFrom = localDate(-90);
+  const [from, setFrom] = useState(defaultFrom);
+  const [to, setTo] = useState(today);
+  const [data, setData] = useState<ManualList | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, showNotice, clearNotice] = useNotice();
+  const [auditorView, setAuditorView] = useState<'records' | 'activity'>('records');
 
-  // Role Checks
-  const isAdmin = currentUser.role === 'administrator';
-  const isAudit = currentUser.role === 'audit';
-  const isReportingManager = currentUser.role === 'reporting_manager';
-  const isReviewingManager = currentUser.role === 'reviewing_manager';
-  // Apply permission: User can apply for self; Admin can apply on behalf of others; RM, HoD & Audit CANNOT apply.
-  const canApplyRegularization = !isAudit && (isAdmin || (!isReportingManager && !isReviewingManager));
-
-  // Role Visibility Matrix Flags (per specification table)
-  // 1. General (Staff): Status filter only
-  // 2. Reporting Manager / PI (if user is other than Permanent): Employee, designation, department, Status
-  // 3. Reviewing Manager: Employee, designation, department, Reporting Manager, Status
-  // 4. Administrator & Audit: Employee, designation, department, Reporting Manager, Status
-  const isNonPermanentPI =
-    currentUser.employmentType !== 'permanent' &&
-    (Boolean(currentUser.piName) || users.some((u) => u.reportingManagerId === currentUser.id));
-  const isReportingManagerOrPI = isReportingManager || isNonPermanentPI;
-
-  const canSeeReportingManagerFilter = isAdmin || isAudit || isReviewingManager;
-  const canSeeTeamFilters = isAdmin || isAudit || isReviewingManager || isReportingManagerOrPI;
-
-  // Toast
-  const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
-
-  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
-    setToastMessage({ text, type });
-    setTimeout(() => setToastMessage(null), 4000);
-  };
-
-  // --- MODAL & FORM STATES ---
-  const [showApplyModal, setShowApplyModal] = useState(false);
-  const [editingRequest, setEditingRequest] = useState<ManualAttendanceRegularizationRequest | null>(null);
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-
-  // Form Fields
-  const [formUserId, setFormUserId] = useState<string>(currentUser.id);
-  const [formDate, setFormDate] = useState<string>(maxDateStr);
-  const [formInTime, setFormInTime] = useState<string>('09:30');
-  const [formOutTime, setFormOutTime] = useState<string>('17:30');
-  const [formReasonCategory, setFormReasonCategory] = useState<ReasonCategory>('Forget to punch');
-  const [formReason, setFormReason] = useState<string>('');
-  const [formError, setFormError] = useState<string>('');
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-
-  // Detected punch state for selected employee and date
-  const [detectedInPunch, setDetectedInPunch] = useState<string | null>(null);
-  const [detectedOutPunch, setDetectedOutPunch] = useState<string | null>(null);
-
-  // Approver Action Comments
-  const [approverComments, setApproverComments] = useState<{ [id: string]: string }>({});
-
-  // View Details Modal
-  const [detailModalReq, setDetailModalReq] = useState<ManualAttendanceRegularizationRequest | null>(null);
-
-  // Review & Action Modal Popup
-  const [actionModalReq, setActionModalReq] = useState<ManualAttendanceRegularizationRequest | null>(null);
-  const [actionComments, setActionComments] = useState<string>('');
-
-  // Cancel Approved Manual Attendance Modal Popup
-  const [cancelModalReq, setCancelModalReq] = useState<ManualAttendanceRegularizationRequest | null>(null);
-  const [cancelReason, setCancelReason] = useState<string>('');
-
-  // View Mode ('table' | 'grid') - Default Table
-  const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
-
-  // Sorting State ('employee' | 'forgottenDate' | 'appliedDate' | 'category' | 'reason' | 'status')
-  type SortField = 'employee' | 'forgottenDate' | 'appliedDate' | 'category' | 'reason' | 'status';
-  type SortOrder = 'asc' | 'desc';
-  const [sortField, setSortField] = useState<SortField>('forgottenDate');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
-
-  const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
-    } else {
-      setSortField(field);
-      setSortOrder('asc');
-    }
-  };
-
-  // Tab State Filter ('all' | 'my' | 'pending')
-  const [tabFilter, setTabFilter] = useState<'all' | 'my' | 'pending'>('all');
-
-  // --- FILTERS (Multi-select supported) ---
-  const currentYear = todayObj.getFullYear();
-  const currentMonthStr = (todayObj.getMonth() + 1).toString().padStart(2, '0');
-  const firstDayOfCurrentMonthStr = `${currentYear}-${currentMonthStr}-01`;
-  const lastDayOfCurrentMonthObj = new Date(currentYear, todayObj.getMonth() + 1, 0);
-  const lastDayOfCurrentMonthStr = `${currentYear}-${currentMonthStr}-${lastDayOfCurrentMonthObj.getDate().toString().padStart(2, '0')}`;
-
-  const DEFAULT_START_DATE = '2026-08-01';
-  const DEFAULT_END_DATE = lastDayOfCurrentMonthStr;
-  const [filterStatus, setFilterStatus] = useState<string[]>(['all']);
-  const [filterDept, setFilterDept] = useState<string[]>(['all']);
-  const [filterUser, setFilterUser] = useState<string[]>(['all']);
-  const [filterDesignation, setFilterDesignation] = useState<string[]>(['all']);
-  const [filterReportingManager, setFilterReportingManager] = useState<string[]>(['all']);
-  const [filterReasonCategory, setFilterReasonCategory] = useState<string[]>(['all']);
-  const [filterStartDate, setFilterStartDate] = useState<string>(DEFAULT_START_DATE);
-  const [filterEndDate, setFilterEndDate] = useState<string>(DEFAULT_END_DATE);
-  const [searchTerm, setSearchTerm] = useState<string>('');
-
-  // Check if any filter or search query is currently active
-  const hasActiveFilters = Boolean(
-    searchTerm.trim() !== '' ||
-    filterStartDate !== DEFAULT_START_DATE ||
-    filterEndDate !== DEFAULT_END_DATE ||
-    (!filterStatus.includes('all') && filterStatus.length > 0) ||
-    (!filterDept.includes('all') && filterDept.length > 0) ||
-    (!filterUser.includes('all') && filterUser.length > 0) ||
-    (!filterDesignation.includes('all') && filterDesignation.length > 0) ||
-    (!filterReportingManager.includes('all') && filterReportingManager.length > 0) ||
-    (!filterReasonCategory.includes('all') && filterReasonCategory.length > 0)
-  );
-
-  const handleResetFilters = () => {
-    setFilterStatus(['all']);
-    setFilterDept(['all']);
-    setFilterUser(['all']);
-    setFilterDesignation(['all']);
-    setFilterReportingManager(['all']);
-    setFilterReasonCategory(['all']);
-    setFilterStartDate(DEFAULT_START_DATE);
-    setFilterEndDate(DEFAULT_END_DATE);
-    setSearchTerm('');
-    setTabFilter('all');
-  };
-
-  // Date & Day Formatter e.g. "11/08/2026 (Tue)"
-  const formatDateAndDay = (dateStr: string): string => {
+  const load = useCallback(async (silent = false) => {
+    if (from > to) { setData(null); setError('The From date must be on or before the To date.'); return; }
+    if (!silent) setLoading(true);
+    setError(null);
     try {
-      const parts = dateStr.split('-');
-      if (parts.length !== 3) return dateStr;
-      const year = parseInt(parts[0], 10);
-      const month = parseInt(parts[1], 10) - 1;
-      const day = parseInt(parts[2], 10);
-      const dateObj = new Date(year, month, day);
-      const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
-      const dayStr = parts[2].padStart(2, '0');
-      const monthStr = parts[1].padStart(2, '0');
-      return `${dayStr}/${monthStr}/${year} (${dayName})`;
-    } catch {
-      return dateStr;
+      setData(await manualAttendanceApi.list(from, to));
+    } catch (e) {
+      setData(null);
+      setError(e instanceof ApiError ? e.message : 'Requests could not be loaded. Please try again.');
+    } finally {
+      setLoading(false);
     }
+  }, [from, to]);
+  useEffect(() => { void load(); }, [load, role]);
+
+  const userById = useMemo(() => new Map(users.map((u) => [String(u.id), u])), [users]);
+  const requests = data?.requests ?? [];
+
+  // ---- Filters --------------------------------------------------------------------
+  const [search, setSearch] = useState('');
+  const [statuses, setStatuses] = useState<string[]>(['all']);
+  const [categories, setCategories] = useState<string[]>(['all']);
+  const [employees, setEmployees] = useState<string[]>(['all']);
+  const [departments, setDepartments] = useState<string[]>(['all']);
+  const distinct = (pick: (r: ManualRequest) => string) => [...new Set(requests.map(pick).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const opt = (values: string[]) => values.map((v) => ({ label: v, value: v }));
+  const filtered = Boolean(search.trim()) || [statuses, categories, employees, departments].some((f) => !f.includes('all')) || from !== defaultFrom || to !== today;
+  const resetAll = () => {
+    setSearch(''); [setStatuses, setCategories, setEmployees, setDepartments].forEach((set) => set(['all']));
+    setFrom(defaultFrom); setTo(today);
   };
 
-  // Accessible Users
-  const accessibleUsers = useMemo(() => {
-    if (isAdmin || isReviewingManager) return users;
-    if (isReportingManagerOrPI) {
-      return users.filter(
-        (u) =>
-          u.reportingManagerId === currentUser.id ||
-          u.id === currentUser.id ||
-          (u.piName && u.piName === currentUser.name)
-      );
-    }
-    return users.filter((u) => u.id === currentUser.id);
-  }, [users, currentUser, isAdmin, isReportingManagerOrPI, isReviewingManager]);
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return requests.filter((r) =>
+      matchesMultiSelect(statuses, r.status) && matchesMultiSelect(categories, r.category) &&
+      (!teamView || (matchesMultiSelect(employees, r.userId) && matchesMultiSelect(departments, r.department))) &&
+      (!q || [r.name, r.biometricId, r.department, r.designation, r.date, formatDate(r.date), r.category, r.reason, r.comment, r.managerName, STATUS_META[r.status].label]
+        .some((v) => (v || '').toLowerCase().includes(q))));
+  }, [requests, search, statuses, categories, employees, departments, teamView]);
 
-  const accessibleUserIds = useMemo(() => accessibleUsers.map((u) => u.id), [accessibleUsers]);
+  const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' }>({ key: 'date', dir: 'desc' });
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZES[0]);
+  useEffect(() => setPage(1), [visible.length, pageSize, sort]);
 
-  // Designation List
-  const designationList = useMemo(() => {
-    const desigs = new Set<string>();
-    accessibleUsers.forEach((u) => {
-      if (u.designation) desigs.add(u.designation);
-    });
-    return Array.from(desigs).sort();
-  }, [accessibleUsers]);
+  const stats = useMemo(() => ({
+    approved: visible.filter((r) => r.status === 'approved').length,
+    pending: visible.filter((r) => r.status === 'pending').length,
+    rejected: visible.filter((r) => r.status === 'rejected').length,
+  }), [visible]);
+  const range = `${formatDate(from)} – ${formatDate(to)}`;
+  const statCards = [
+    { label: 'Approved', value: stats.approved, icon: CheckCircle2, tone: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+    { label: 'Pending', value: stats.pending, icon: Clock, tone: 'bg-amber-50 text-amber-700 border-amber-200' },
+    { label: 'Total requests', value: visible.length, icon: CalendarCheck, tone: 'bg-sky-50 text-sky-700 border-sky-200' },
+    { label: 'Rejected', value: stats.rejected, icon: XCircle, tone: 'bg-rose-50 text-rose-700 border-rose-200' },
+  ];
 
-  // Department List
-  const departmentList = useMemo(() => {
-    const depts = new Set<string>();
-    accessibleUsers.forEach((u) => {
-      if (u.department) depts.add(u.department);
-    });
-    return Array.from(depts).sort();
-  }, [accessibleUsers]);
-
-  // Reporting Manager List
-  const reportingManagerList = useMemo(() => {
-    const mgrs = new Map<string, string>();
-    users.forEach((u) => {
-      if (u.role === 'reporting_manager' || u.role === 'administrator') {
-        mgrs.set(u.id, u.name);
-      }
-    });
-    return Array.from(mgrs.entries())
-      .map(([id, name]) => ({ id, name }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [users]);
-
-  // --- CANDIDATE MISSING PUNCH DATES GENERATION ---
-  // Checks past working days (excluding Sundays, up to yesterday) where punch is missing or incomplete,
-  // excluding any dates that already have a pending or approved manual attendance request.
-  const candidateMissingDates = useMemo(() => {
-    const targetUserId = formUserId || (isAdmin ? '' : currentUser.id);
-    if (!targetUserId) return [];
-
-    const candidates: Array<{
-      date: string;
-      label: string;
-      description: string;
-      type: 'missing_both' | 'missing_in' | 'missing_out' | 'irregular';
-      existingRecord?: AttendanceRecord;
-      clockIn?: string;
-      clockOut?: string;
-    }> = [];
-
-    // Check past 60 days up to yesterday
-    for (let i = 1; i <= 60; i++) {
-      const d = new Date(todayObj);
-      d.setDate(todayObj.getDate() - i);
-      const dayOfWeek = d.getDay(); // 0 is Sunday
-      if (dayOfWeek === 0) continue; // Skip Sunday
-
-      const dateStr = d.toISOString().split('T')[0];
-
-      // Exclude dates that already have a pending or approved manual attendance request for targetUserId
-      const existingReq = manualAttendanceRequests.find(
-        (m) => m.userId === targetUserId && m.date === dateStr
-      );
-      if (existingReq && (existingReq.status === 'pending' || existingReq.status === 'approved')) {
-        continue;
-      }
-
-      const record = attendanceRecords.find((a) => a.userId === targetUserId && a.date === dateStr);
-
-      const hasIn = record && record.clockIn && record.clockIn.trim() !== '' && record.clockIn.trim() !== '--:--';
-      const hasOut = record && record.clockOut && record.clockOut.trim() !== '' && record.clockOut.trim() !== '--:--';
-
-      if (!record || record.status === 'absent' || (!hasIn && !hasOut)) {
-        candidates.push({
-          date: dateStr,
-          label: `${dateStr} • Absent / No Punch`,
-          description: 'No Check-In & No Check-Out recorded on this working day',
-          type: 'missing_both',
-          existingRecord: record,
-          clockIn: undefined,
-          clockOut: undefined
-        });
-      } else if (hasIn && !hasOut) {
-        candidates.push({
-          date: dateStr,
-          label: `${dateStr} • In: ${record.clockIn} (Missing Out)`,
-          description: `Checked in at ${record.clockIn} but missed Out punch`,
-          type: 'missing_out',
-          existingRecord: record,
-          clockIn: record.clockIn,
-          clockOut: undefined
-        });
-      } else if (!hasIn && hasOut) {
-        candidates.push({
-          date: dateStr,
-          label: `${dateStr} • Out: ${record.clockOut} (Missing In)`,
-          description: `Checked out at ${record.clockOut} but missed In punch`,
-          type: 'missing_in',
-          existingRecord: record,
-          clockIn: undefined,
-          clockOut: record.clockOut
-        });
-      }
-    }
-
-    return candidates;
-  }, [formUserId, currentUser.id, attendanceRecords, manualAttendanceRequests, todayObj]);
-
-  // Auto-detect punch whenever formDate or formUserId changes
-  const autoDetectPunchForDate = (date: string, userId: string) => {
-    const record = attendanceRecords.find((a) => a.userId === userId && a.date === date);
-    const hasIn = record && record.clockIn && record.clockIn.trim() !== '' && record.clockIn.trim() !== '--:--';
-    const hasOut = record && record.clockOut && record.clockOut.trim() !== '' && record.clockOut.trim() !== '--:--';
-
-    if (hasIn && record?.clockIn) {
-      setDetectedInPunch(record.clockIn);
-      const parsed = parseTimeTo24H(record.clockIn);
-      if (parsed) setFormInTime(parsed);
-    } else {
-      setDetectedInPunch(null);
-      setFormInTime('09:30');
-    }
-
-    if (hasOut && record?.clockOut) {
-      setDetectedOutPunch(record.clockOut);
-      const parsed = parseTimeTo24H(record.clockOut);
-      if (parsed) setFormOutTime(parsed);
-    } else {
-      setDetectedOutPunch(null);
-      setFormOutTime('17:30');
-    }
+  // ---- Apply / edit ------------------------------------------------------------------
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<ManualRequest | null>(null);
+  const [form, setForm] = useState<ManualInput>(EMPTY_FORM);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [formMessage, setFormMessage] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const setField = <K extends keyof ManualInput>(key: K, value: ManualInput[K]) => {
+    setForm((f) => ({ ...f, [key]: value }));
+    setFormErrors((e) => (e[key] ? { ...e, [key]: '' } : e));
   };
-
-  const isBeforeOrOnApplicableDate = (dateStr: string) => {
-    if (!dateStr) return true;
-    return dateStr >= todayStr;
+  const openApply = () => { setEditing(null); setForm({ ...EMPTY_FORM, userId: isAdmin ? '' : String(currentUser.id) }); setFormErrors({}); setFormMessage(null); setFormOpen(true); };
+  const openEdit = (r: ManualRequest) => {
+    setEditing(r);
+    setForm({ userId: r.userId, date: r.date, inTime: r.inTime, outTime: r.outTime, category: r.category, reason: r.reason });
+    setFormErrors({}); setFormMessage(null); setFormOpen(true);
   };
-
-  // Helper Rules Checkers:
-  // 1. User Can Edit/Delete: Allowed ONLY for applicant before approval/forwarding & applicable date, or Admin anytime.
-  const canUserModify = (req: ManualAttendanceRegularizationRequest) => {
-    if (isAudit) return false;
-    if (isAdmin) return true;
-    if (isReviewingManager || isReportingManager) return false; // Managers acting in manager capacity
-    if (req.userId !== currentUser.id) return false;
-    if (req.status !== 'pending') return false;
-    if (!isBeforeOrOnApplicableDate(req.date)) return false; // Only before applicable date
-    return true;
-  };
-
-  // 2. Manager Can Approve / Reject: Reporting Manager of the request or Admin
-  const canManagerAction = (req: ManualAttendanceRegularizationRequest) => {
-    if (isAudit) return false;
-    if (req.status !== 'pending') return false;
-    if (isAdmin || isReportingManager || isReportingManagerOrPI || currentUser.role === 'reporting_manager') {
-      return true;
-    }
-    return false;
-  };
-
-  // 3. Manager Can Cancel / Revoke Approved Attendance: Reporting Manager or Admin
-  const canManagerCancelApproval = (req: ManualAttendanceRegularizationRequest) => {
-    if (isAudit) return false;
-    if (req.status !== 'approved') return false;
-    if (isAdmin || isReportingManager || isReportingManagerOrPI || currentUser.role === 'reporting_manager') {
-      return true;
-    }
-    return false;
-  };
-
-  // Pending Manager Queue for Notification Alert (Only for Reporting Manager & Administrator)
-  const pendingManagerQueue = useMemo(() => {
-    return manualAttendanceRequests.filter((r) => {
-      if (r.status !== 'pending') return false;
-      if (r.userId === currentUser.id) return false;
-      if (isAdmin) return true;
-      if (isReportingManager) {
-        return r.reportingManagerId === currentUser.id || r.reportingManagerName === currentUser.name;
-      }
-      return false;
-    });
-  }, [manualAttendanceRequests, isAdmin, isReportingManager, currentUser.id, currentUser.name]);
-
-  // Filtered Requests
-  const filteredRequests = useMemo(() => {
-    return manualAttendanceRequests.filter((req) => {
-      // Filter out self records for Reporting Manager, HoD, and Administrator roles unless explicitly selected in user filter or 'my' tab
-      const isFilteringSelf = filterUser.includes(currentUser.id);
-      if ((isAdmin || isReportingManager || isReviewingManager || isReportingManagerOrPI) && req.userId === currentUser.id && !isFilteringSelf && tabFilter !== 'my') {
-        return false;
-      }
-
-      // Tab Filtering
-      if (tabFilter === 'my' && req.userId !== currentUser.id) return false;
-      if (tabFilter === 'pending' && req.status !== 'pending') return false;
-
-      // Access Filter
-      if (!isAdmin && !isAudit && !isReviewingManager) {
-        if (isReportingManager) {
-          if (req.userId !== currentUser.id && req.reportingManagerId !== currentUser.id) {
-            return false;
-          }
-        } else {
-          if (req.userId !== currentUser.id) return false;
-        }
-      }
-
-      // User Filter
-      if (!matchesMultiSelect(filterUser, req.userId)) return false;
-
-      // Department Filter
-      if (!matchesMultiSelect(filterDept, req.userDepartment)) return false;
-
-      // Designation Filter
-      const reqUser = users.find((u) => u.id === req.userId);
-      if (!matchesMultiSelect(filterDesignation, reqUser?.designation)) return false;
-
-      // Reporting Manager Filter
-      if (!matchesMultiSelect(filterReportingManager, req.reportingManagerId)) return false;
-
-      // Reason Category Filter
-      if (!matchesMultiSelect(filterReasonCategory, req.reasonCategory)) return false;
-
-      // Status Filter
-      if (!matchesMultiSelect(filterStatus, req.status)) return false;
-
-      // Date Range Filter
-      if (filterStartDate && req.date < filterStartDate) return false;
-      if (filterEndDate && req.date > filterEndDate) return false;
-
-      // Search Query
-      if (searchTerm.trim()) {
-        const query = searchTerm.toLowerCase();
-        const matchesName = req.userName.toLowerCase().includes(query);
-        const matchesDept = req.userDepartment.toLowerCase().includes(query);
-        const matchesReason = req.reason.toLowerCase().includes(query);
-        const matchesCategory = (req.reasonCategory || '').toLowerCase().includes(query);
-        const matchesDate = req.date.includes(query);
-        const matchesManager = req.reportingManagerName.toLowerCase().includes(query);
-        const matchesDesig = (req.userDesignation || '').toLowerCase().includes(query);
-        if (!matchesName && !matchesDept && !matchesReason && !matchesCategory && !matchesDate && !matchesManager && !matchesDesig) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-  }, [
-    manualAttendanceRequests,
-    tabFilter,
-    currentUser,
-    isAdmin,
-    isReportingManager,
-    isReviewingManager,
-    filterUser,
-    filterDept,
-    filterDesignation,
-    filterReportingManager,
-    filterReasonCategory,
-    filterStatus,
-    filterStartDate,
-    filterEndDate,
-    searchTerm,
-    users
-  ]);
-
-  // Sorted Requests based on active Sort Field and Sort Order
-  const sortedRequests = useMemo(() => {
-    return [...filteredRequests].sort((a, b) => {
-      let comparison = 0;
-      if (sortField === 'employee') {
-        comparison = (a.userName || '').localeCompare(b.userName || '');
-      } else if (sortField === 'forgottenDate') {
-        const aVal = `${a.date} ${a.requestedInTime || ''}`;
-        const bVal = `${b.date} ${b.requestedInTime || ''}`;
-        comparison = aVal.localeCompare(bVal);
-      } else if (sortField === 'appliedDate') {
-        const aVal = a.appliedAt || a.date;
-        const bVal = b.appliedAt || b.date;
-        comparison = aVal.localeCompare(bVal);
-      } else if (sortField === 'category') {
-        const aCat = formatReasonCategory(a.reasonCategory).label;
-        const bCat = formatReasonCategory(b.reasonCategory).label;
-        comparison = aCat.localeCompare(bCat);
-      } else if (sortField === 'reason') {
-        const aText = getFormattedReasonText(a);
-        const bText = getFormattedReasonText(b);
-        comparison = aText.localeCompare(bText);
-      } else if (sortField === 'status') {
-        comparison = (a.status || '').localeCompare(b.status || '');
-      }
-      return sortOrder === 'asc' ? comparison : -comparison;
-    });
-  }, [filteredRequests, sortField, sortOrder]);
-
-  const [manualPage, setManualPage] = useState(1);
-  const [manualPageSize, setManualPageSize] = useState(25);
-
-  const paginatedRequests = useMemo(() => {
-    const start = (manualPage - 1) * manualPageSize;
-    return sortedRequests.slice(start, start + manualPageSize);
-  }, [sortedRequests, manualPage, manualPageSize]);
-
-  // Metrics
-  const stats = useMemo(() => {
-    const total = filteredRequests.length;
-    const pending = filteredRequests.filter((r) => r.status === 'pending').length;
-    const approved = filteredRequests.filter((r) => r.status === 'approved').length;
-    const rejected = filteredRequests.filter((r) => r.status === 'rejected').length;
-    return { total, pending, approved, rejected };
-  }, [filteredRequests]);
-
-  // Open Apply Modal
-  const handleOpenApplyModal = (reqToEdit?: ManualAttendanceRegularizationRequest) => {
-    if (!canApplyRegularization && !reqToEdit) return;
-    setFormError('');
-    if (reqToEdit) {
-      setEditingRequest(reqToEdit);
-      setFormUserId(reqToEdit.userId);
-      setFormDate(reqToEdit.date);
-      setFormInTime(reqToEdit.requestedInTime || '09:30');
-      setFormOutTime(reqToEdit.requestedOutTime || '17:30');
-      setFormReasonCategory((reqToEdit.reasonCategory as ReasonCategory) || 'Forgot to Punch');
-      setFormReason(reqToEdit.reason || '');
-      setDetectedInPunch(reqToEdit.originalInTime || null);
-      setDetectedOutPunch(reqToEdit.originalOutTime || null);
-    } else {
-      setEditingRequest(null);
-      if (isAdmin) {
-        setFormUserId(''); // No default employee selected for Administrator
-        setFormDate('');
-      } else {
-        const targetUid = currentUser.id;
-        setFormUserId(targetUid);
-        const initialDate = candidateMissingDates.length > 0 ? candidateMissingDates[0].date : maxDateStr;
-        setFormDate(initialDate);
-        autoDetectPunchForDate(initialDate, targetUid);
-      }
-      setFormReasonCategory('Forgot to Punch');
-      setFormReason('');
-    }
-    setShowApplyModal(true);
-  };
-
-  // Date selection change handler in Modal
-  const handleDateChange = (newDate: string) => {
-    setFormDate(newDate);
-    if (formUserId) {
-      autoDetectPunchForDate(newDate, formUserId);
-    }
-  };
-
-  // User selection change handler (for Admin)
-  const handleUserChange = (newUserId: string) => {
-    setFormUserId(newUserId);
-    setFormDate('');
-    if (newUserId) {
-      autoDetectPunchForDate('', newUserId);
-    }
-  };
-
-  // Form Submit (Create or Edit)
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    setFormError('');
-
-    if (isAdmin && !formUserId && !editingRequest) {
-      setFormError('Please select an employee.');
-      return;
-    }
-
-    if (!formDate) {
-      setFormError('Please select a forgotten attendance date.');
-      return;
-    }
-
-    if (formDate > maxDateStr) {
-      setFormError(`Manual attendance is only allowed for past dates (up to yesterday: ${maxDateStr}).`);
-      return;
-    }
-
-    if (!formInTime || !formOutTime) {
-      setFormError('Please specify both Check-In and Check-Out times.');
-      return;
-    }
-
-    if (formInTime >= formOutTime) {
-      setFormError('Check-Out time must be later than Check-In time.');
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    const fullReason = formReason.trim() ? formReason.trim() : getDefaultReasonDescription(formReasonCategory);
-
-    if (editingRequest) {
-      const res = editManualAttendance(editingRequest.id, {
-        date: formDate,
-        inTime: formInTime,
-        outTime: formOutTime,
-        reasonCategory: formReasonCategory,
-        reason: fullReason,
-        originalInTime: detectedInPunch || undefined,
-        originalOutTime: detectedOutPunch || undefined
-      });
-      setIsSubmitting(false);
-      if (!res.success) {
-        setFormError(res.message);
-        return;
+    if (saving) return;
+    setSaving(true); setFormMessage(null);
+    try {
+      const result = editing ? await manualAttendanceApi.update(editing.id, form) : await manualAttendanceApi.create(form);
+      setFormOpen(false);
+      showNotice('success', result.message);
+      await load(true);
+    } catch (error) {
+      if (error instanceof ApiError) {
+        setFormErrors(error.details ?? {});
+        const first = Object.values(error.details ?? {}).find(Boolean);
+        setFormMessage(first ? `${error.message} ${first}` : error.message);
+      } else {
+        setFormMessage('The request could not be saved.');
       }
-      showToast('Manual attendance request updated successfully.', 'success');
-    } else {
-      const res = applyManualAttendance({
-        date: formDate,
-        inTime: formInTime,
-        outTime: formOutTime,
-        reasonCategory: formReasonCategory,
-        reason: fullReason,
-        targetUserId: isAdmin ? formUserId : currentUser.id,
-        originalInTime: detectedInPunch || undefined,
-        originalOutTime: detectedOutPunch || undefined
-      });
-      setIsSubmitting(false);
-      if (!res.success) {
-        setFormError(res.message);
-        return;
-      }
-      // Auto-expand date bounds if newly applied request is outside current filter range
-      if (filterStartDate && formDate < filterStartDate) {
-        setFilterStartDate(formDate);
-      }
-      if (filterEndDate && formDate > filterEndDate) {
-        setFilterEndDate(formDate);
-      }
-      showToast(res.message, 'success');
-    }
-
-    setShowApplyModal(false);
-  };
-
-  // Approve / Reject Handlers
-  const handleApprove = (id: string, customComment?: string) => {
-    const comment = customComment !== undefined ? customComment : (approverComments[id] || '');
-    const res = approveRejectManualAttendance(id, 'approve', comment);
-    if (res.success) {
-      showToast(res.message, 'success');
-      setApproverComments((prev) => ({ ...prev, [id]: '' }));
-    } else {
-      showToast(res.message, 'error');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleReject = (id: string, customComment?: string) => {
-    const comment = customComment !== undefined ? customComment : (approverComments[id] || '');
-    const res = approveRejectManualAttendance(id, 'reject', comment);
-    if (res.success) {
-      showToast(res.message, 'success');
-      setApproverComments((prev) => ({ ...prev, [id]: '' }));
-    } else {
-      showToast(res.message, 'error');
+  // ---- Approve / reject / delete ---------------------------------------------------------
+  const [deciding, setDeciding] = useState<{ request: ManualRequest; action: 'approve' | 'reject' } | null>(null);
+  const [comment, setComment] = useState('');
+  const [decideBusy, setDecideBusy] = useState(false);
+  const [decideError, setDecideError] = useState<string | null>(null);
+  const openDecide = (request: ManualRequest, action: 'approve' | 'reject') => { setDeciding({ request, action }); setComment(''); setDecideError(null); };
+  const confirmDecide = async () => {
+    if (!deciding || decideBusy) return;
+    if (deciding.action === 'reject' && comment.trim().length < 3) { setDecideError('Say why the request is rejected.'); return; }
+    setDecideBusy(true); setDecideError(null);
+    try {
+      const result = await manualAttendanceApi.decide(deciding.request.id, deciding.action, comment.trim());
+      setDeciding(null);
+      showNotice('success', result.message);
+      await load(true);
+    } catch (error) {
+      setDecideError(error instanceof ApiError ? [error.message, ...Object.values(error.details ?? {})].filter(Boolean).join(' ') : 'The decision could not be saved.');
+    } finally {
+      setDecideBusy(false);
     }
   };
 
-  // Delete Handler
-  const handleDelete = (id: string) => {
-    const res = deleteManualAttendance(id);
-    if (res.success) {
-      showToast(res.message, 'success');
-      setDeleteConfirmId(null);
-    } else {
-      showToast(res.message, 'error');
+  const [deleting, setDeleting] = useState<ManualRequest | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const confirmDelete = async (reason: string) => {
+    if (!deleting) return;
+    setDeleteBusy(true); setDeleteError(null);
+    try {
+      const result = await manualAttendanceApi.remove(deleting.id, reason);
+      setDeleting(null);
+      showNotice('success', result.message);
+      await load(true);
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : 'The request could not be deleted.');
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
-  // Cancel Approved Manual Attendance Handler
-  const handleCancelApproval = (id: string, reason?: string) => {
-    const res = cancelApprovedManualAttendance(id, reason);
-    if (res.success) {
-      showToast(res.message, 'success');
-      setCancelModalReq(null);
-      setCancelReason('');
-    } else {
-      showToast(res.message, 'error');
-    }
-  };
+  // ---- Table ---------------------------------------------------------------------------------
+  const hasActions = visible.some((r) => r.canDecide || r.canEdit || r.canDelete);
+  const columns: ColumnDef<ManualRequest>[] = [
+    {
+      key: 'date', header: 'Date', width: teamView ? '9%' : '11%', sortValue: (r) => r.date,
+      render: (r) => (
+        <div className="leading-tight">
+          <div className="font-semibold text-slate-900 whitespace-nowrap">{formatDate(r.date)}</div>
+          <div className="text-[11px] text-slate-500 whitespace-nowrap">Applied {formatDate(r.appliedAt.slice(0, 10))}</div>
+        </div>
+      ),
+    },
+    ...(teamView ? [{
+      key: 'employee', header: 'Employee', width: '17%', sortValue: (r: ManualRequest) => r.name,
+      render: (r: ManualRequest) => (
+        <div className="flex items-center gap-2.5 min-w-0">
+          <UserAvatar name={r.name} src={(userById.get(r.userId) as { avatar?: string } | undefined)?.avatar || null} className="w-8 h-8 rounded-full shrink-0" />
+          <div className="min-w-0 leading-tight">
+            <div className="font-semibold text-slate-900 truncate">{r.name}</div>
+            <div className="text-[11px] text-slate-500 truncate">B.I. {r.biometricId}{r.designation ? ` · ${r.designation}` : ''}</div>
+          </div>
+        </div>
+      ),
+    } as ColumnDef<ManualRequest>] : []),
+    {
+      key: 'requested', header: 'Requested In / Out', width: teamView ? '11%' : '15%', align: 'center', sortValue: (r) => r.inTime,
+      render: (r) => <span className="font-mono font-semibold text-slate-800 whitespace-nowrap">{r.inTime} – {r.outTime}</span>,
+    },
+    {
+      key: 'original', header: 'Biometric In / Out', width: teamView ? '10%' : '13%', align: 'center', sortValue: (r) => r.originalIn ?? '',
+      render: (r) => <span className="font-mono text-slate-600 whitespace-nowrap">{r.originalIn || r.originalOut ? `${r.originalIn ?? '—'} – ${r.originalOut ?? '—'}` : 'No punch'}</span>,
+    },
+    {
+      key: 'reason', header: 'Category & reason', width: teamView ? '21%' : '24%', sortValue: (r) => r.category,
+      render: (r) => (
+        <div className="whitespace-normal leading-snug min-w-[160px]">
+          <div className="font-semibold text-slate-800">{r.category}</div>
+          <div className="text-[11px] text-slate-500">{r.reason}</div>
+        </div>
+      ),
+    },
+    { key: 'status', header: 'Status', width: '9%', sortValue: (r) => r.status, render: (r) => <StatusPill status={r.status} /> },
+    {
+      key: 'decision', header: 'Reporting manager / decision', width: teamView ? '17%' : '20%', sortValue: (r) => r.actionByName ?? r.managerName ?? '',
+      render: (r) => (
+        <div className="whitespace-normal leading-snug min-w-[140px]">
+          {r.status === 'pending' ? (
+            <span className="text-slate-600">{r.managerName ? `Waiting for ${r.managerName}` : 'Waiting for an administrator'}</span>
+          ) : (
+            <>
+              <span className="text-slate-700">{r.status === 'approved' ? 'Approved' : 'Rejected'} by {r.actionByName ?? '—'}</span>
+              <div className="text-[11px] text-slate-400">{formatStamp(r.actionAt)}</div>
+              {r.comment && <div className="text-[11px] text-slate-500">“{r.comment}”</div>}
+            </>
+          )}
+        </div>
+      ),
+    },
+    ...(hasActions ? [{
+      key: 'actions', header: 'Actions', width: '120px', align: 'center',
+      render: (r: ManualRequest) => (
+        <div className="flex items-center justify-center gap-1">
+          {r.canDecide && (
+            <>
+              <button type="button" onClick={() => openDecide(r, 'approve')} title="Approve" aria-label={`Approve ${r.name}`}
+                className="w-8 h-8 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 flex items-center justify-center cursor-pointer"><Check className="w-3.5 h-3.5" /></button>
+              <button type="button" onClick={() => openDecide(r, 'reject')} title="Reject" aria-label={`Reject ${r.name}`}
+                className="w-8 h-8 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 flex items-center justify-center cursor-pointer"><X className="w-3.5 h-3.5" /></button>
+            </>
+          )}
+          {r.canEdit && (
+            <button type="button" onClick={() => openEdit(r)} title="Edit" aria-label={`Edit ${r.name}`}
+              className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 hover:text-primary hover:bg-slate-50 flex items-center justify-center cursor-pointer"><Pencil className="w-3.5 h-3.5" /></button>
+          )}
+          {r.canDelete && (
+            <button type="button" onClick={() => { setDeleting(r); setDeleteError(null); }} title="Delete" aria-label={`Delete ${r.name}`}
+              className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 hover:text-error hover:bg-error-subtle flex items-center justify-center cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
+          )}
+        </div>
+      ),
+    } as ColumnDef<ManualRequest>] : []),
+  ];
 
-  // Helper to compile active selectors & export dataset
-  const getManualAttendanceExportConfig = () => {
-    const activeFiltersList: HRMSFilterTag[] = [
-      { label: 'Date Range', value: `${filterStartDate} to ${filterEndDate}` },
-      { label: 'Status', value: filterStatus.includes('all') ? 'All Statuses' : filterStatus.join(', ').toUpperCase() },
-      { label: 'Category', value: filterReasonCategory.includes('all') ? 'All Categories' : filterReasonCategory.join(', ') }
-    ];
+  const sorted = useMemo(() => {
+    const value = columns.find((c) => c.key === sort.key)?.sortValue ?? ((r: ManualRequest) => r.date);
+    const dir = sort.dir === 'asc' ? 1 : -1;
+    const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
+    return [...visible].sort((a, b) => collator.compare(String(value(a) ?? ''), String(value(b) ?? '')) * dir || b.date.localeCompare(a.date) || Number(b.id) - Number(a.id));
+    // columns are rebuilt each render; their sort values depend only on the row
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, sort]);
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const pageRows = sorted.slice((page - 1) * pageSize, page * pageSize);
 
-    if (canSeeTeamFilters) {
-      if (!filterDept.includes('all')) {
-        activeFiltersList.push({ label: 'Department', value: filterDept.join(', ') });
-      }
-      if (!filterUser.includes('all')) {
-        const empNames = filterUser.map((id) => users.find((u) => u.id === id)?.name || id).join(', ');
-        activeFiltersList.push({ label: 'Employee', value: empNames });
-      }
-      if (!filterDesignation.includes('all')) {
-        activeFiltersList.push({ label: 'Designation', value: filterDesignation.join(', ') });
-      }
-      if (!filterReportingManager.includes('all')) {
-        const mgrNames = filterReportingManager.map((id) => users.find((u) => u.id === id)?.name || id).join(', ');
-        activeFiltersList.push({ label: 'Reporting Manager', value: mgrNames });
-      }
-    }
+  // ---- Downloads -------------------------------------------------------------------------------
+  const exportHeaders = [...(teamView ? ['Biometric ID', 'Employee', 'Department'] : []), 'Date', 'Requested In', 'Requested Out', 'Biometric In', 'Biometric Out', 'Category', 'Reason', 'Status', 'Decided by', 'Comment'];
+  const exportRows = () => sorted.map((r) => [
+    ...(teamView ? [r.biometricId, r.name, r.department] : []),
+    formatDate(r.date), r.inTime, r.outTime, r.originalIn ?? '', r.originalOut ?? '', r.category, r.reason,
+    STATUS_META[r.status].label, r.actionByName ?? '', r.comment ?? '',
+  ]);
+  const fileName = `WII_Manual_Attendance_${from}_to_${to}`;
+  const downloadCsv = () => downloadCsvText(toCsvText(exportHeaders, exportRows()), fileName);
+  const downloadPdf = () => downloadTablePdf({
+    title: 'Manual Attendance',
+    subtitle: [`${range} · Generated ${printedAt(new Date().toISOString())}`, teamView ? 'All requests shown' : currentUser.name],
+    headers: exportHeaders,
+    rows: exportRows(),
+    fileName,
+    columnWidths: teamView ? [6, 11, 9, 8, 5, 5, 5, 5, 9, 17, 7, 7, 6] : [9, 7, 7, 7, 7, 13, 26, 9, 8, 7],
+  });
 
-    if (searchTerm.trim()) {
-      activeFiltersList.push({ label: 'Search Query', value: searchTerm.trim() });
-    }
+  const employeeOptions = [...new Map(requests.map((r) => [r.userId, `${r.name} (${r.biometricId})`])).entries()]
+    .sort((a, b) => a[1].localeCompare(b[1])).map(([value, label]) => ({ label, value }));
 
-    const columns: HRMSExportColumn[] = [
-      { header: '#', key: 'sno', width: 10, align: 'center' },
-      { header: 'Employee Name', key: 'userName', width: 34 },
-      { header: 'Department', key: 'userDepartment', width: 26 },
-      { header: 'Designation', key: 'userDesignation', width: 28 },
-      { header: 'Forgotten Date', key: 'date', width: 24 },
-      { header: 'Requested In-Out', key: 'reqTimings', width: 26 },
-      { header: 'Original In-Out', key: 'origTimings', width: 24 },
-      { header: 'Reason Category', key: 'categoryLabel', width: 26 },
-      { header: 'Reason Details', key: 'reasonDetails', width: 36 },
-      { header: 'Status', key: 'statusStr', width: 18, align: 'center' }
-    ];
+  const auditorSwitch = isAudit ? (
+    <div role="tablist" aria-label="Auditor view" className="inline-flex items-center gap-0.5 p-0.5 rounded-xl bg-slate-100 border border-slate-200">
+      {([['records', 'Requests'], ['activity', 'Activity log']] as const).map(([key, text]) => (
+        <button key={key} type="button" role="tab" aria-selected={auditorView === key} onClick={() => setAuditorView(key)}
+          className={`h-7 px-3.5 rounded-lg text-xs font-bold cursor-pointer transition-colors ${auditorView === key ? 'bg-white text-primary shadow-2xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'}`}>
+          {text}
+        </button>
+      ))}
+    </div>
+  ) : null;
 
-    const exportData = sortedRequests.map((r, i) => {
-      const formattedReason = getFormattedReasonText(r);
-      return {
-        sno: i + 1,
-        userName: r.userName,
-        userDepartment: r.userDepartment,
-        userDesignation: r.userDesignation || '-',
-        date: r.date,
-        reqTimings: `${r.requestedInTime} - ${r.requestedOutTime}`,
-        origTimings: `${r.originalInTime || '--'} - ${r.originalOutTime || '--'}`,
-        categoryLabel: formatReasonCategory(r.reasonCategory).label,
-        reasonDetails: formattedReason,
-        statusStr: r.status.toUpperCase()
-      };
-    });
-
-    return {
-      title: 'Manual Attendance Rectification Register',
-      subtitle: 'Central Staff Forgotten Punch Logs & Manual Attendance Approvals',
-      category: 'Leave & Attendance Management (LAMS 2.0)',
-      institution: 'WILDLIFE INSTITUTE OF INDIA (WII)',
-      generatedBy: {
-        name: currentUser.name,
-        designation: currentUser.designation,
-        department: currentUser.department,
-        email: currentUser.email
-      },
-      filters: activeFiltersList,
-      summaryItems: [
-        { label: 'Total Requisitions', value: sortedRequests.length },
-        { label: 'Pending', value: stats.pending },
-        { label: 'Approved', value: stats.approved },
-        { label: 'Rejected', value: stats.rejected }
-      ],
-      columns,
-      data: exportData,
-      fileName: `Manual_Attendance_Register_${todayStr}`
-    };
-  };
-
-  // --- EXPORT TO CSV ---
-  const handleExportCSV = () => {
-    if (sortedRequests.length === 0) {
-      showToast('No records available to export.', 'error');
-      return;
-    }
-    const config = getManualAttendanceExportConfig();
-    exportHRMSToCSV(config);
-    showToast('Manual attendance report downloaded successfully.', 'success');
-  };
-
-  // --- EXPORT TO PDF ---
-  const handleExportPDF = () => {
-    if (sortedRequests.length === 0) {
-      showToast('No records available to export.', 'error');
-      return;
-    }
-    const config = getManualAttendanceExportConfig();
-    exportHRMSToPDF({
-      ...config,
-      orientation: 'landscape'
-    });
-    showToast('Manual attendance PDF report generated successfully.', 'success');
-  };
-
-  const handlePresetCurrentMonth = () => {
-    setFilterStartDate(DEFAULT_START_DATE);
-    setFilterEndDate(DEFAULT_END_DATE);
-  };
+  const subtitle = isAdmin ? 'Apply, edit, approve and reject manual attendance of all employees'
+    : isAudit ? 'All manual attendance requests, and the log of who did what'
+    : role === 'reporting_manager' ? 'Your requests, and your team’s requests to approve or reject'
+    : role === 'reviewing_manager' ? 'Your requests, and the requests of the people under you'
+    : 'Apply for a missed punch and follow the status of your requests';
 
   return (
-    <div className="w-full min-w-0 space-y-6 pb-6">
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div
-          className={`fixed bottom-5 right-5 z-50 px-4 py-3 rounded-xl shadow-xl flex items-center space-x-2 text-xs font-bold transition-all animate-in fade-in duration-200 border ${
-            toastMessage.type === 'success'
-              ? 'bg-emerald-900 text-white border-emerald-700'
-              : 'bg-rose-900 text-white border-rose-700'
-          }`}
-        >
-          {toastMessage.type === 'success' ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <AlertCircle className="w-4 h-4 text-rose-400" />}
-          <span>{toastMessage.text}</span>
-        </div>
-      )}
-
-      {/* Top Banner & Header */}
+    <div className="space-y-5 pb-6">
       <PageHeader
-        icon={Clock}
+        icon={ClipboardList}
         title="Manual Attendance"
-        rightAction={
-          canApplyRegularization ? (
-            <div className="flex items-center justify-end space-x-2 ml-auto">
-              <Button
-                variant="primary"
-                size="md"
-                onClick={() => handleOpenApplyModal()}
-                leftIcon={<PlusCircle className="w-4 h-4" />}
-              >
-                Apply Manual Attendance
-              </Button>
-            </div>
-          ) : undefined
-        }
+        subtitle={subtitle}
+        rightAction={canApply ? (
+          <button type="button" onClick={openApply}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-xl inline-flex items-center gap-1.5 shadow-2xs cursor-pointer">
+            <Plus className="w-4 h-4" /> Apply manual attendance
+          </button>
+        ) : undefined}
       />
 
-      {/* Summary Stat Metrics: Exactly 4 Uniform Cards matching Attendance theme */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {/* 1. Approved */}
-        <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 truncate">Approved</p>
-              <p className="text-xl sm:text-2xl font-black text-emerald-900 mt-0.5">{stats.approved}</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-100 border border-emerald-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <CheckCircle2 className="w-4 h-4 text-emerald-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-emerald-200/60 text-[10px] sm:text-[11px] font-semibold text-emerald-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            {filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${filterStartDate.split('-').reverse().join('/')} - ${filterEndDate.split('-').reverse().join('/')}`}
-          </div>
-        </div>
+      <NoticeBar notice={notice} onClose={clearNotice} />
 
-        {/* 2. Pending Approvals */}
-        <div className="bg-amber-50/70 border border-amber-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800 truncate">Pending</p>
-              <p className="text-xl sm:text-2xl font-black text-amber-900 mt-0.5">{stats.pending}</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-100 border border-amber-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <Clock className="w-4 h-4 text-amber-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-amber-200/60 text-[10px] sm:text-[11px] font-semibold text-amber-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            {filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${filterStartDate.split('-').reverse().join('/')} - ${filterEndDate.split('-').reverse().join('/')}`}
-          </div>
-        </div>
-
-        {/* 3. Total Applications */}
-        <div className="bg-blue-50/70 border border-blue-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-blue-800 truncate" title="Total Applications">Total Applied</p>
-              <p className="text-xl sm:text-2xl font-black text-blue-900 mt-0.5">{stats.total}</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-100 border border-blue-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <FileText className="w-4 h-4 text-blue-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-blue-200/60 text-[10px] sm:text-[11px] font-semibold text-blue-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            {filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${filterStartDate.split('-').reverse().join('/')} - ${filterEndDate.split('-').reverse().join('/')}`}
-          </div>
-        </div>
-
-        {/* 4. Rejected / Cancelled */}
-        <div className="bg-rose-50/70 border border-rose-200/90 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col justify-between min-h-[92px]">
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-rose-800 truncate">Rejected</p>
-              <p className="text-xl sm:text-2xl font-black text-rose-900 mt-0.5">{stats.rejected}</p>
-            </div>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-rose-100 border border-rose-300/80 flex items-center justify-center shrink-0 -mt-0.5 -mr-0.5 shadow-2xs">
-              <XCircle className="w-4 h-4 text-rose-700" />
-            </div>
-          </div>
-          <div className="mt-1.5 pt-1.5 border-t border-rose-200/60 text-[10px] sm:text-[11px] font-semibold text-rose-700 whitespace-nowrap overflow-hidden text-ellipsis">
-            {filterStartDate === filterEndDate ? `Today (${formatDateAndDay(filterStartDate)})` : `${filterStartDate.split('-').reverse().join('/')} - ${filterEndDate.split('-').reverse().join('/')}`}
-          </div>
-        </div>
-      </div>
-
-      {/* Main Filter & Search Control Bar */}
-      <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3.5">
-        {/* Top Bar: Clean Themed Date Pickers & Presets & Export Buttons */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3.5 border-b border-slate-100 pb-3">
-          {/* Row 1 on mobile (Left on tab/desktop): Date Pickers & Presets */}
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <div className="flex items-center space-x-1.5 flex-1 sm:flex-initial min-w-0">
-              <div className="flex-1 sm:flex-initial min-w-0">
-                <AppDatePicker
-                  size="sm"
-                  placeholder="From Date"
-                  value={filterStartDate}
-                  onChange={(dStr) => setFilterStartDate(dStr)}
-                />
+      {isAudit && auditorView === 'activity' ? (
+        <ActivityLogPanel source={MANUAL_ACTIVITY} toolbarStart={auditorSwitch} />
+      ) : (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {statCards.map(({ label, value, icon: Icon, tone }) => (
+              <div key={label} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex items-start gap-3 min-w-0">
+                <span className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${tone}`}><Icon className="w-4 h-4" /></span>
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold text-slate-500">{label}</p>
+                  <p className="text-lg font-extrabold text-slate-900">{loading ? '…' : value}</p>
+                  <p className="text-[11px] text-slate-500 truncate" title={range}>{range}</p>
+                </div>
               </div>
+            ))}
+          </div>
 
-              <span className="text-slate-300 font-bold shrink-0">—</span>
+          {error && (
+            <div role="alert" className="px-4 py-3 rounded-2xl border text-xs font-semibold bg-error-subtle border-error-border text-error">{error}</div>
+          )}
 
-              <div className="flex-1 sm:flex-initial min-w-0">
-                <AppDatePicker
-                  size="sm"
-                  placeholder="To Date"
-                  value={filterEndDate}
-                  onChange={(dStr) => setFilterEndDate(dStr)}
-                  isRightColumn={true}
-                />
+          <FilterToolbar
+            start={auditorSwitch ?? (
+              <div className="flex items-center gap-1.5">
+                <div className="w-36"><AppDatePicker size="sm" placeholder="From date" value={from} onChange={setFrom} /></div>
+                <span className="text-slate-300 font-bold">—</span>
+                <div className="w-36"><AppDatePicker size="sm" placeholder="To date" value={to} onChange={setTo} isRightColumn /></div>
               </div>
-            </div>
-          </div>
-
-          {/* Row 2 on mobile (Right on tab/desktop): Export Buttons (CSV & PDF) - Right aligned */}
-          <div className="flex items-center justify-end gap-2 shrink-0 w-full sm:w-auto ml-auto">
-            <button
-              onClick={handleExportCSV}
-              className="h-9 px-3 bg-white hover:bg-slate-50 text-slate-800 border border-slate-200/90 rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer shadow-2xs shrink-0"
-              title="Export records to CSV"
-            >
-              <Download className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span>Export CSV</span>
-            </button>
-
-            <button
-              onClick={handleExportPDF}
-              className="h-9 px-3 bg-slate-900 hover:bg-slate-800 text-white border border-slate-900 rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer shadow-2xs shrink-0"
-              title="Export records to PDF"
-            >
-              <FileText className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-              <span>Export PDF</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Second Row: Search Keyword, Reset (Icon Only) & View Toggle Switch */}
-        <div className="flex flex-col gap-3">
-          {/* Row: Search box + Reset Filters (Icon Only) + View Mode Toggle in ONE Single Row */}
-          <div className="flex items-center gap-2 w-full">
-            {/* Search Box */}
-            <div className="relative flex-1 min-w-0">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Search employee, department, reason, date..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="h-9 w-full pl-9 pr-8 bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200/80 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-500 transition-all shadow-2xs"
-              />
-              {searchTerm && (
-                <button
-                  onClick={() => setSearchTerm('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-200 transition-colors cursor-pointer"
-                  title="Clear search"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-
-            {/* Reset Filters (Only Icon - Appears ONLY when any filter or search query is active) */}
-            {hasActiveFilters && (
-              <button
-                onClick={handleResetFilters}
-                className="h-9 w-9 rounded-xl border bg-blue-50/90 hover:bg-blue-100 text-blue-700 border-blue-200/90 flex items-center justify-center shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95 animate-in fade-in zoom-in-95 duration-150"
-                title="Reset active filters and search"
-              >
-                <RotateCcw className="w-4 h-4 text-blue-600" />
-              </button>
             )}
-
-            {/* View Mode Toggle */}
-            <div className="h-9 flex items-center p-1 bg-slate-100/90 border border-slate-200/90 rounded-xl gap-1 shrink-0">
-              <button
-                onClick={() => setViewMode('table')}
-                title="Table View"
-                className={`h-7 px-2 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
-                  viewMode === 'table'
-                    ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
-                    : 'text-slate-400 hover:text-slate-700'
-                }`}
-              >
-                <TableIcon className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setViewMode('grid')}
-                title="Grid View"
-                className={`h-7 px-2 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
-                  viewMode === 'grid'
-                    ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
-                    : 'text-slate-400 hover:text-slate-700'
-                }`}
-              >
-                <LayoutGrid className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          {/* Third Row: Filter Dropdowns Uniform Flex Wrap */}
-          <div className="pt-2 border-t border-slate-100">
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 flex-nowrap responsive-filter-row">
-              {/* 1. Employee Filter (Reporting Manager / PI, Reviewing Manager, Admin) */}
-              {canSeeTeamFilters && (
-                <div className="flex-1 min-w-[130px] max-w-[200px] shrink-0 sm:shrink">
-                  <MultiSelectFilter
-                    label="Employee"
-                    icon={<UserIcon className="w-3.5 h-3.5" />}
-                    selectedValues={filterUser}
-                    onChange={setFilterUser}
-                    options={accessibleUsers.map((u) => ({ label: u.name, value: u.id }))}
-                  />
-                </div>
-              )}
-
-              {/* 2. Designation Filter (Reporting Manager / PI, Reviewing Manager, Admin) */}
-              {canSeeTeamFilters && (
-                <div className="flex-1 min-w-[130px] max-w-[200px] shrink-0 sm:shrink">
-                  <MultiSelectFilter
-                    label="Designation"
-                    icon={<Briefcase className="w-3.5 h-3.5" />}
-                    selectedValues={filterDesignation}
-                    onChange={setFilterDesignation}
-                    options={designationList.map((d) => ({ label: d, value: d }))}
-                  />
-                </div>
-              )}
-
-              {/* 3. Department Filter (Reporting Manager / PI, Reviewing Manager, Admin) */}
-              {canSeeTeamFilters && (
-                <div className="flex-1 min-w-[130px] max-w-[200px] shrink-0 sm:shrink">
-                  <MultiSelectFilter
-                    label="Department"
-                    icon={<Building className="w-3.5 h-3.5" />}
-                    selectedValues={filterDept}
-                    onChange={setFilterDept}
-                    options={departmentList.map((d) => ({ label: d, value: d }))}
-                  />
-                </div>
-              )}
-
-              {/* 4. Reporting Manager Filter (Reviewing Manager, Admin) */}
-              {canSeeReportingManagerFilter && (
-                <div className="flex-1 min-w-[130px] max-w-[200px] shrink-0 sm:shrink">
-                  <MultiSelectFilter
-                    label="Reporting Manager"
-                    icon={<UserCheck className="w-3.5 h-3.5" />}
-                    selectedValues={filterReportingManager}
-                    onChange={setFilterReportingManager}
-                    options={reportingManagerList.map((m) => ({ label: m.name, value: m.id }))}
-                  />
-                </div>
-              )}
-
-              {/* 5. Category Filter */}
-              <div className="flex-1 min-w-[115px] max-w-[180px] shrink-0 sm:shrink">
-                <MultiSelectFilter
-                  label="Category"
-                  icon={<Filter className="w-3.5 h-3.5" />}
-                  selectedValues={filterReasonCategory}
-                  onChange={setFilterReasonCategory}
-                  options={REASON_CATEGORIES.map((cat) => ({ label: cat, value: cat }))}
-                />
-              </div>
-
-              {/* 6. Status / Scope Filter (All Roles) */}
-              <div className="flex-1 min-w-[115px] max-w-[170px] shrink-0 sm:shrink">
-                <MultiSelectFilter
-                  label="Status"
-                  icon={<Clock className="w-3.5 h-3.5" />}
-                  selectedValues={filterStatus}
-                  onChange={setFilterStatus}
-                  options={[
-                    { label: 'Pending', value: 'pending' },
-                    { label: 'Approved', value: 'approved' },
-                    { label: 'Rejected', value: 'rejected' }
-                  ]}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Pending Manager Queue Alert Banner */}
-      {(isReportingManager || isAdmin) && pendingManagerQueue.length > 0 && (
-        <div className="bg-[#fefce8] border border-amber-300/80 rounded-2xl p-4 shadow-2xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-full bg-amber-100/90 border border-amber-300 text-amber-800 flex items-center justify-center shrink-0">
-              <Clock className="w-4.5 h-4.5 text-amber-700" />
-            </div>
-            <div>
-              <h3 className="text-xs font-bold text-amber-950">
-                Action Required: {pendingManagerQueue.length} Pending Manual Attendance Request{pendingManagerQueue.length > 1 ? 's' : ''}
-              </h3>
-              <p className="text-[11px] text-amber-800/90 mt-0.5">
-                Staff members have submitted missing past punches requiring your review and authorization.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => {
-              setTabFilter('pending');
-              setFilterStatus(['pending']);
-              if (pendingManagerQueue.length > 0) {
-                const dates = pendingManagerQueue.map((r) => r.date).filter(Boolean);
-                if (dates.length > 0) {
-                  const sortedDates = [...dates].sort();
-                  const minPendingDate = sortedDates[0];
-                  const maxPendingDate = sortedDates[sortedDates.length - 1];
-                  setFilterStartDate((prevStart) => (prevStart < minPendingDate ? prevStart : minPendingDate));
-                  setFilterEndDate((prevEnd) => (prevEnd > maxPendingDate ? prevEnd : maxPendingDate));
-                }
-              }
+            exports={{
+              onCsv: downloadCsv, onPdf: downloadPdf, disabled: sorted.length === 0,
+              csvTitle: 'Download the requests shown below as CSV', pdfTitle: 'Download the requests shown below as PDF',
             }}
-            className="bg-primary hover:bg-primary-hover active:bg-brand-active text-white font-bold text-xs px-4 py-2 rounded-xl shadow-xs transition-all cursor-pointer shrink-0 flex items-center space-x-1.5"
-          >
-            <span>Review Queue ({pendingManagerQueue.length})</span>
-          </button>
-        </div>
+            search={{ value: search, onChange: setSearch, placeholder: teamView ? 'Search employee, reason, comment…' : 'Search date, reason, comment…' }}
+            onReset={filtered ? resetAll : null}
+            filters={[
+              isAudit && (
+                <div key="range" className="flex items-center gap-1.5">
+                  <div className="w-36"><AppDatePicker size="sm" placeholder="From date" value={from} onChange={setFrom} /></div>
+                  <span className="text-slate-300 font-bold">—</span>
+                  <div className="w-36"><AppDatePicker size="sm" placeholder="To date" value={to} onChange={setTo} isRightColumn /></div>
+                </div>
+              ),
+              teamView && <MultiSelectFilter key="emp" label="Employee" options={employeeOptions} selectedValues={employees} onChange={setEmployees} />,
+              teamView && <MultiSelectFilter key="dept" label="Department" options={opt(distinct((r) => r.department))} selectedValues={departments} onChange={setDepartments} />,
+              <MultiSelectFilter key="cat" label="Category" options={opt(data?.categories ?? distinct((r) => r.category))} selectedValues={categories} onChange={setCategories} />,
+              <MultiSelectFilter key="status" label="Status" options={STATUSES.map((s) => ({ label: STATUS_META[s].label, value: s }))} selectedValues={statuses} onChange={setStatuses} />,
+            ].filter(Boolean) as React.ReactNode[]}
+          />
+
+          <DataTable
+            columns={columns}
+            data={pageRows}
+            loading={loading}
+            keyExtractor={(r) => r.id}
+            className={teamView ? 'min-w-[1150px]' : 'min-w-[820px]'}
+            sortColumn={sort.key}
+            sortDirection={sort.dir}
+            onSort={(key) => setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }))}
+            emptyTitle={requests.length ? 'No requests match these filters' : 'No manual attendance requests'}
+            emptyDescription={requests.length ? 'Change the filters or search.' : canApply ? 'Choose other dates, or apply for a missed punch.' : 'Choose other dates.'}
+            pagination={sorted.length > PAGE_SIZES[0] ? {
+              currentPage: page, totalPages, totalItems: sorted.length, pageSize,
+              onPageChange: setPage, onPageSizeChange: setPageSize, pageSizeOptions: PAGE_SIZES,
+            } : undefined}
+          />
+        </>
       )}
 
-      {/* Main Table / Grid Container */}
-      <div className="w-full min-w-0 bg-white border border-slate-200 rounded-2xl shadow-2xs overflow-hidden">
-        {/* Table Title Bar */}
-        <div className="p-3.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 min-h-[50px]">
-          <div className="flex items-center space-x-3">
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-              Manual Attendance Records ({filteredRequests.length})
-            </span>
-          </div>
-        </div>
-
-        {filteredRequests.length === 0 ? (
-          <div className="text-center py-12 text-slate-400 bg-white space-y-2">
-            <Clock className="w-10 h-10 mx-auto text-indigo-300" />
-            <p className="text-xs font-semibold">No manual attendance records match the active filters.</p>
-            {canApplyRegularization && (
-              <button
-                onClick={() => handleOpenApplyModal()}
-                className="text-xs font-bold text-blue-600 hover:underline cursor-pointer"
-              >
-                Click here to apply for manual attendance
+      {canApply && (
+        <Modal
+          isOpen={formOpen}
+          onClose={() => setFormOpen(false)}
+          size="lg"
+          title={editing ? 'Edit manual attendance' : 'Apply manual attendance'}
+          subtitle={editing ? `${editing.name} · ${formatDate(editing.date)}` : 'Only past dates, up to yesterday'}
+          footer={(
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setFormOpen(false)} className="h-9 px-4 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer">Cancel</button>
+              <button type="submit" form="manual-form" disabled={saving} className="h-9 px-4 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary/90 cursor-pointer disabled:opacity-60">
+                {saving ? 'Saving…' : editing ? 'Save changes' : 'Submit request'}
               </button>
-            )}
-          </div>
-        ) : viewMode === 'table' ? (
-          /* Table View */
-          <div className="w-full min-w-0 overflow-x-auto custom-table-scrollbar pb-1">
-            <table className={`w-full text-left text-xs border-collapse table-auto ${canSeeTeamFilters ? 'min-w-[950px]' : 'min-w-[780px]'}`}>
-              <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200 text-[11px]">
-                <tr className="h-10">
-                  {/* Employee Column - Visible for Team/Manager/Admin */}
-                  {canSeeTeamFilters && (
-                    <th
-                      onClick={() => handleSort('employee')}
-                      className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[18%]"
-                      title="Click to sort by Employee"
-                    >
-                      <div className="flex items-center space-x-1.5">
-                        <span>Employee</span>
-                        {sortField === 'employee' ? (
-                          sortOrder === 'asc' ? (
-                            <ArrowUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                          ) : (
-                            <ArrowDown className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                          )
-                        ) : (
-                          <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-40 shrink-0" />
-                        )}
-                      </div>
-                    </th>
-                  )}
-
-                  {/* Forget Column */}
-                  <th
-                    onClick={() => handleSort('forgottenDate')}
-                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[18%]"
-                    title="Click to sort by Forget"
-                  >
-                    <div className="flex items-center space-x-1.5">
-                      <span>Forget</span>
-                      {sortField === 'forgottenDate' ? (
-                        sortOrder === 'asc' ? (
-                          <ArrowUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                        ) : (
-                          <ArrowDown className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                        )
-                      ) : (
-                        <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-40 shrink-0" />
-                      )}
-                    </div>
-                  </th>
-
-                  {/* Applied Date Column */}
-                  <th
-                    onClick={() => handleSort('appliedDate')}
-                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[10%]"
-                    title="Click to sort by Applied Date"
-                  >
-                    <div className="flex items-center space-x-1.5">
-                      <span>Applied Date</span>
-                      {sortField === 'appliedDate' ? (
-                        sortOrder === 'asc' ? (
-                          <ArrowUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                        ) : (
-                          <ArrowDown className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                        )
-                      ) : (
-                        <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-40 shrink-0" />
-                      )}
-                    </div>
-                  </th>
-
-                  {/* Category Column */}
-                  <th
-                    onClick={() => handleSort('category')}
-                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[11%]"
-                    title="Click to sort by Category"
-                  >
-                    <div className="flex items-center space-x-1.5">
-                      <span>Category</span>
-                      {sortField === 'category' ? (
-                        sortOrder === 'asc' ? (
-                          <ArrowUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                        ) : (
-                          <ArrowDown className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                        )
-                      ) : (
-                        <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-40 shrink-0" />
-                      )}
-                    </div>
-                  </th>
-
-                  {/* Reason / Details Column */}
-                  <th
-                    onClick={() => handleSort('reason')}
-                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[16%]"
-                    title="Click to sort by Reason / Details"
-                  >
-                    <div className="flex items-center space-x-1.5">
-                      <span>Reason / Details</span>
-                      {sortField === 'reason' ? (
-                        sortOrder === 'asc' ? (
-                          <ArrowUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                        ) : (
-                          <ArrowDown className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                        )
-                      ) : (
-                        <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-40 shrink-0" />
-                      )}
-                    </div>
-                  </th>
-
-                  {/* Status Column */}
-                  <th
-                    onClick={() => handleSort('status')}
-                    className="py-2.5 px-3 font-bold whitespace-nowrap cursor-pointer select-none hover:bg-slate-200/70 transition-colors align-middle w-[12%]"
-                    title="Click to sort by Status"
-                  >
-                    <div className="flex items-center space-x-1.5">
-                      <span>Status</span>
-                      {sortField === 'status' ? (
-                        sortOrder === 'asc' ? (
-                          <ArrowUp className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                        ) : (
-                          <ArrowDown className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                        )
-                      ) : (
-                        <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-40 shrink-0" />
-                      )}
-                    </div>
-                  </th>
-
-                  {/* Actions Column */}
-                  <th className="py-2.5 px-3 text-right font-bold whitespace-nowrap align-middle w-[17%]">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {paginatedRequests.map((req) => {
-                  const editable = canUserModify(req);
-                  const canAct = canManagerAction(req);
-                  const canCancel = canManagerCancelApproval(req);
-                  const catInfo = formatReasonCategory(req.reasonCategory);
-                  const reasonText = getFormattedReasonText(req);
-
-                  const targetUser = users.find((u) => u.id === req.userId);
-
-                  return (
-                    <tr key={req.id} className="hover:bg-slate-50 transition-colors">
-                      {canSeeTeamFilters && (
-                        <td className="py-2.5 px-3 align-middle">
-                          <div className="flex items-center space-x-2.5 min-w-0">
-                            <UserAvatar name={req.userName} src={targetUser?.avatar} className="w-8 h-8 rounded-full border border-slate-200 shrink-0 shadow-2xs" />
-                            <div className="min-w-0 flex-1">
-                              <span className="font-bold text-slate-900 block truncate max-w-[160px] text-xs">{req.userName}</span>
-                              <span className="text-[11px] text-slate-500 font-medium block truncate max-w-[160px] mt-0.5">
-                                {req.userDesignation || targetUser?.designation || 'Staff'}
-                              </span>
-                              <span className="text-[10px] text-slate-400 font-mono tracking-tight block truncate max-w-[160px] mt-0.5">
-                                {targetUser?.biometricId ? `Bio ID: ${targetUser.biometricId}` : (req.userId ? `Bio ID: ${req.userId}` : 'Bio ID: N/A')}
-                              </span>
-                            </div>
-                          </div>
-                        </td>
-                      )}
-                      <td className="py-2.5 px-3 whitespace-nowrap align-middle">
-                        <div className="font-bold text-slate-900 flex items-center space-x-1.5">
-                          <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                          <span>{req.date}</span>
-                        </div>
-                        <div className="text-[10px] font-mono text-slate-600 mt-0.5 flex items-center space-x-1">
-                          <Clock className="w-3 h-3 text-slate-400 shrink-0" />
-                          <span>{req.requestedInTime} - {req.requestedOutTime}</span>
-                        </div>
-                      </td>
-                      <td className="py-2.5 px-2.5 whitespace-nowrap align-middle text-slate-700 text-xs">
-                        <div className="flex items-center space-x-1 text-slate-600">
-                          <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span className="font-medium">{req.appliedAt || req.date}</span>
-                        </div>
-                      </td>
-                      <td className="py-2.5 px-2.5 whitespace-nowrap align-middle">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold inline-block border ${catInfo.badgeClass}`}>
-                          {catInfo.label}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3 align-middle">
-                        <p className="text-slate-700 text-[11px] line-clamp-2 leading-snug max-w-[200px]" title={reasonText}>
-                          {reasonText}
-                        </p>
-                      </td>
-                      <td className="py-2.5 px-2.5 whitespace-nowrap align-middle">
-                        <div className="flex flex-col items-start space-y-1">
-                          {req.status === 'approved' && (
-                            <span className="inline-flex items-center space-x-1 bg-emerald-100 text-emerald-800 font-bold px-2.5 py-0.5 rounded text-[10px] border border-emerald-200">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                              <span>Approved</span>
-                            </span>
-                          )}
-                          {req.status === 'pending' && (
-                            <span className="inline-flex items-center space-x-1 bg-amber-100 text-amber-800 font-bold px-2.5 py-0.5 rounded text-[10px] border border-amber-200">
-                              <Clock className="w-3 h-3 text-amber-600 animate-spin" />
-                              <span>Pending</span>
-                            </span>
-                          )}
-                          {req.status === 'rejected' && (
-                            <span className="inline-flex items-center space-x-1 bg-rose-100 text-rose-800 font-bold px-2.5 py-0.5 rounded text-[10px] border border-rose-200">
-                              <XCircle className="w-3 h-3 text-rose-600" />
-                              <span>Rejected</span>
-                            </span>
-                          )}
-                          <span className="text-[10px] text-slate-500 font-semibold block truncate max-w-[120px]">
-                            by {req.status === 'pending' ? req.userName : (req.actionBy || req.reportingManagerName || req.userName)}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-2.5 px-3 text-right whitespace-nowrap align-middle">
-                        <div className="flex items-center justify-end space-x-1">
-                          {/* View details - Color indicator: Gray for Pending, Green for Approved, Red for Rejected */}
-                          <button
-                            onClick={() => setDetailModalReq(req)}
-                            className={`w-7 h-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 inline-flex items-center justify-center border rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95 ${
-                              req.status === 'pending'
-                                ? 'bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200'
-                                : req.status === 'approved'
-                                ? 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100'
-                                : 'bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100'
-                            }`}
-                            title="View Full Details"
-                          >
-                            <Eye className="w-3.5 h-3.5 stroke-[2]" />
-                          </button>
-
-                          {/* Edit button (Admin only) */}
-                          {isAdmin && editable && (
-                            <button
-                              onClick={() => handleOpenApplyModal(req)}
-                              className="w-7 h-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 inline-flex items-center justify-center text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95"
-                              title="Edit Application"
-                            >
-                              <Edit2 className="w-3.5 h-3.5 text-blue-600 stroke-[2]" />
-                            </button>
-                          )}
-
-                          {/* Delete button (Admin only) */}
-                          {isAdmin && editable && (
-                            <button
-                              onClick={() => setDeleteConfirmId(req.id)}
-                              className="w-7 h-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 inline-flex items-center justify-center text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95"
-                              title="Delete Application"
-                            >
-                              <Trash2 className="w-3.5 h-3.5 text-rose-600 stroke-[2]" />
-                            </button>
-                          )}
-
-                          {/* Approve / Reject Action Buttons for Pending (Reporting Manager & Admin) */}
-                          {canAct && (
-                            <>
-                              <button
-                                onClick={() => {
-                                  setActionModalReq(req);
-                                  setActionComments(approverComments[req.id] || '');
-                                }}
-                                className="w-7 h-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 inline-flex items-center justify-center text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95"
-                                title="Approve Regularization"
-                              >
-                                <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[2]" />
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActionModalReq(req);
-                                  setActionComments(approverComments[req.id] || '');
-                                }}
-                                className="w-7 h-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 inline-flex items-center justify-center text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95"
-                                title="Reject Regularization"
-                              >
-                                <X className="w-3.5 h-3.5 text-rose-600 stroke-[2]" />
-                              </button>
-                            </>
-                          )}
-
-                          {/* Cancel Approval Button for Approved Record (Reporting Manager & Admin) */}
-                          {canCancel && (
-                            <button
-                              onClick={() => {
-                                setCancelModalReq(req);
-                                setCancelReason('');
-                              }}
-                              className="w-7 h-7 min-w-[28px] max-w-[28px] min-h-[28px] max-h-[28px] shrink-0 inline-flex items-center justify-center text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95"
-                              title="Cancel / Revoke Approved Attendance"
-                            >
-                              <RotateCcw className="w-3.5 h-3.5 text-rose-600 stroke-[2]" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          /* Grid View */
-          <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {sortedRequests.map((req) => {
-              const editable = canUserModify(req);
-              const canAct = canManagerAction(req);
-              const canCancel = canManagerCancelApproval(req);
-              const catInfo = formatReasonCategory(req.reasonCategory);
-              const reasonText = getFormattedReasonText(req);
-
-              return (
-                <div
-                  key={req.id}
-                  className="bg-white border border-slate-200 hover:border-blue-300 rounded-2xl p-4 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between space-y-3"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="truncate pr-2">
-                      <span className="font-bold text-slate-900 text-xs block truncate">{req.userName}</span>
-                      <span className="text-[10px] text-slate-500 font-medium">{req.userDepartment} {req.userDesignation ? `• ${req.userDesignation}` : ''}</span>
-                    </div>
-
-                    <div className="shrink-0 flex flex-col items-end space-y-1">
-                      {req.status === 'approved' && (
-                        <span className="inline-flex items-center space-x-1 bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded text-[10px] border border-emerald-200">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                          <span>Approved</span>
-                        </span>
-                      )}
-                      {req.status === 'pending' && (
-                        <span className="inline-flex items-center space-x-1 bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded text-[10px] border border-amber-200">
-                          <Clock className="w-3 h-3 text-amber-600 animate-spin" />
-                          <span>Pending</span>
-                        </span>
-                      )}
-                      {req.status === 'rejected' && (
-                        <span className="inline-flex items-center space-x-1 bg-rose-100 text-rose-800 font-bold px-2 py-0.5 rounded text-[10px] border border-rose-200">
-                          <XCircle className="w-3 h-3 text-rose-600" />
-                          <span>Rejected</span>
-                        </span>
-                      )}
-                      <span className="text-[10px] text-slate-500 font-semibold block truncate max-w-[120px]">
-                        by {req.status === 'pending' ? req.userName : (req.actionBy || req.reportingManagerName || req.userName)}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="p-2.5 bg-slate-50 rounded-xl space-y-1.5 text-xs">
-                    <div className="flex items-center justify-between text-slate-700 font-semibold">
-                      <span className="text-slate-500 text-[11px]">Forgotten Date:</span>
-                      <span className="font-bold text-slate-900 flex items-center space-x-1">
-                        <Calendar className="w-3.5 h-3.5 text-blue-600" />
-                        <span>{req.date}</span>
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-slate-700 font-semibold">
-                      <span className="text-slate-500 text-[11px]">Requested Punch:</span>
-                      <span className="font-bold text-blue-700">{req.requestedInTime} - {req.requestedOutTime}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-slate-700 font-semibold">
-                      <span className="text-slate-500 text-[11px]">Applied Date:</span>
-                      <span className="font-semibold text-slate-700 text-[11px]">{req.appliedAt || req.date}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-slate-700 font-semibold">
-                      <span className="text-slate-500 text-[11px]">Category:</span>
-                      <span className={`font-bold border px-2 py-0.5 rounded text-[10px] ${catInfo.badgeClass}`}>
-                        {catInfo.label}
-                      </span>
-                    </div>
-                  </div>
-
-                  <p className="text-xs text-slate-700 bg-slate-50/50 p-2.5 rounded-xl border border-slate-100 line-clamp-2 leading-relaxed" title={reasonText}>
-                    "{reasonText}"
-                  </p>
-
-                  <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
-                    <span className="text-slate-500 text-[11px]">
-                      RM: <strong className="text-slate-800">{req.reportingManagerName}</strong>
-                    </span>
-                    <div className="flex items-center space-x-1.5">
-                      <button
-                        onClick={() => setDetailModalReq(req)}
-                        className={`w-7 h-7 flex items-center justify-center border rounded-lg transition-all cursor-pointer shadow-2xs ${
-                          req.status === 'pending'
-                            ? 'bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200'
-                            : req.status === 'approved'
-                            ? 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100'
-                            : 'bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100'
-                        }`}
-                        title="View Full Details"
-                      >
-                        <Eye className="w-3.5 h-3.5 stroke-[2]" />
-                      </button>
-                      {isAdmin && editable && (
-                        <button
-                          onClick={() => handleOpenApplyModal(req)}
-                          className="w-7 h-7 flex items-center justify-center text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-all cursor-pointer shadow-2xs"
-                          title="Edit Application"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                      {isAdmin && editable && (
-                        <button
-                          onClick={() => setDeleteConfirmId(req.id)}
-                          className="w-7 h-7 flex items-center justify-center text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-all cursor-pointer shadow-2xs"
-                          title="Delete Application"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {canAct && (
-                    <div className="pt-2 border-t border-slate-100 space-y-2">
-                      <input
-                        type="text"
-                        placeholder="Manager note (optional)..."
-                        value={approverComments[req.id] || ''}
-                        onChange={(e) =>
-                          setApproverComments({ ...approverComments, [req.id]: e.target.value })
-                        }
-                        className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-600"
-                      />
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          onClick={() => handleApprove(req.id)}
-                          className="py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs transition-all shadow-2xs cursor-pointer flex items-center justify-center space-x-1"
-                        >
-                          <Check className="w-3.5 h-3.5" />
-                          <span>Approve</span>
-                        </button>
-                        <button
-                          onClick={() => handleReject(req.id)}
-                          className="py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-xs transition-all shadow-2xs cursor-pointer flex items-center justify-center space-x-1"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                          <span>Reject</span>
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {canCancel && (
-                    <div className="pt-2 border-t border-slate-100">
-                      <button
-                        onClick={() => {
-                          setCancelModalReq(req);
-                          setCancelReason('');
-                        }}
-                        className="w-full py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl font-bold text-xs transition-all shadow-2xs cursor-pointer flex items-center justify-center space-x-1.5"
-                      >
-                        <RotateCcw className="w-3.5 h-3.5" />
-                        <span>Cancel Approved Attendance</span>
-                      </button>
-                    </div>
-                  )}
+            </div>
+          )}
+        >
+          <form id="manual-form" onSubmit={save} noValidate className="space-y-4">
+            {formMessage && <NoticeBar notice={{ kind: 'error', text: formMessage }} onClose={() => setFormMessage(null)} />}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {isAdmin ? (
+                <div className={`sm:col-span-2 ${formErrors.userId ? 'rounded-xl ring-2 ring-rose-400' : ''}`} title={formErrors.userId || undefined}>
+                  <label className="block font-bold text-slate-800 text-xs tracking-tight mb-1">Employee *</label>
+                  <AppSelect value={form.userId} onChange={(v) => setField('userId', v)} disabled={Boolean(editing)} searchable placeholder="Select employee"
+                    options={(data?.employees ?? []).map((e) => ({ label: `${e.name} (${e.biometricId})${e.designation ? ` · ${e.designation}` : ''}`, value: e.id }))} />
                 </div>
-              );
-            })}
+              ) : null}
+              <div className={formErrors.date ? 'rounded-xl ring-2 ring-rose-400' : ''} title={formErrors.date || undefined}>
+                <AppDatePicker label="Date *" value={form.date} placeholder="Select date" maxDate={localDate(-1)} onChange={(v) => setField('date', v)} className="w-full" />
+              </div>
+              <Select label="Category" required value={form.category} error={Boolean(formErrors.category)}
+                options={(data?.categories ?? []).map((c) => ({ label: c, value: c }))} onChange={(v: string) => setField('category', v)} />
+              <Input label="Check-In" type="time" required value={form.inTime} error={Boolean(formErrors.inTime)} title={formErrors.inTime || undefined}
+                onChange={(e) => setField('inTime', e.target.value)} />
+              <Input label="Check-Out" type="time" required value={form.outTime} error={Boolean(formErrors.outTime)} title={formErrors.outTime || undefined}
+                onChange={(e) => setField('outTime', e.target.value)} />
+            </div>
+            <Textarea label="Reason *" rows={3} maxLength={500} value={form.reason} error={Boolean(formErrors.reason)}
+              onChange={(e) => setField('reason', e.target.value)} />
+          </form>
+        </Modal>
+      )}
+
+      <Modal
+        isOpen={Boolean(deciding)}
+        onClose={() => setDeciding(null)}
+        size="sm"
+        title={deciding?.action === 'approve' ? 'Approve request' : 'Reject request'}
+        subtitle={deciding ? `${deciding.request.name} · ${formatDate(deciding.request.date)} · ${deciding.request.inTime} – ${deciding.request.outTime}` : undefined}
+        footer={(
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setDeciding(null)} disabled={decideBusy} className="h-9 px-4 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer">Cancel</button>
+            <button type="button" onClick={() => void confirmDecide()} disabled={decideBusy}
+              className={`h-9 px-4 rounded-xl text-white text-xs font-bold cursor-pointer disabled:opacity-60 ${deciding?.action === 'approve' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'}`}>
+              {decideBusy ? 'Saving…' : deciding?.action === 'approve' ? 'Approve' : 'Reject'}
+            </button>
           </div>
         )}
-
-        {/* Stable Full-Width Footer & Pagination (Fixed at bottom of card, outside horizontal scroll) */}
-        <div className="w-full border-t border-slate-200/90 bg-white rounded-b-2xl">
-          <TablePagination
-            currentPage={manualPage}
-            totalPages={Math.ceil(sortedRequests.length / manualPageSize)}
-            totalItems={sortedRequests.length}
-            pageSize={manualPageSize}
-            onPageChange={setManualPage}
-            onPageSizeChange={setManualPageSize}
-          />
+      >
+        <div className="space-y-3">
+          {deciding && (
+            <p className="text-xs text-slate-600 leading-relaxed">
+              {deciding.request.category}: {deciding.request.reason}
+              {(deciding.request.originalIn || deciding.request.originalOut) && <> · Biometric: {deciding.request.originalIn ?? '—'} – {deciding.request.originalOut ?? '—'}</>}
+            </p>
+          )}
+          <Textarea label={deciding?.action === 'reject' ? 'Reason for rejecting *' : 'Comment (optional)'} rows={3} maxLength={500} value={comment}
+            error={Boolean(decideError)} onChange={(e) => { setComment(e.target.value); setDecideError(null); }} />
+          {decideError && <p role="alert" className="text-xs text-error">{decideError}</p>}
         </div>
-      </div>
+      </Modal>
 
-      {/* --- APPLY / EDIT MODAL --- */}
-      {showApplyModal && (
-        <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-150 my-8">
-            {/* Modal Header */}
-            <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white shrink-0 rounded-t-2xl">
-              <div className="flex items-center space-x-3 min-w-0">
-                <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
-                  <Clock className="w-5 h-5 text-blue-400" />
-                </div>
-                <div className="min-w-0">
-                  <h2 className="text-base font-bold text-white tracking-tight truncate">
-                    {editingRequest ? 'Edit Manual Attendance Requisition' : 'Apply for Manual Attendance Regularization'}
-                  </h2>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowApplyModal(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
-                aria-label="Close dialog"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleFormSubmit} className="p-4 sm:p-6 space-y-3.5 max-h-[82vh] overflow-y-auto">
-              {formError && (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center space-x-2 text-xs text-rose-800">
-                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                  <span>{formError}</span>
-                </div>
-              )}
-
-              {/* Admin Target Employee Selector */}
-              {isAdmin && !editingRequest && (
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Employee *
-                  </label>
-                  <AppSelect
-                    value={formUserId}
-                    onChange={(val) => handleUserChange(val)}
-                    options={users
-                      .filter((u) => u.id !== currentUser.id && u.role !== 'administrator')
-                      .map((u) => ({
-                        label: u.name,
-                        value: u.id,
-                        description: `${u.department} - ${u.designation || 'Staff'}`
-                      }))}
-                    placeholder="Select Employee..."
-                    showSearch={true}
-                  />
-                </div>
-              )}
-
-              {/* Candidate Missing Punch Dates Selector */}
-              {isAdmin && !formUserId && !editingRequest ? (
-                <div className="p-4 bg-amber-50/80 border border-amber-200/90 rounded-xl text-center text-xs text-amber-900 font-semibold flex items-center justify-center space-x-2">
-                  <UserIcon className="w-4 h-4 text-amber-600 shrink-0" />
-                  <span>Please select an employee above to view their available missing punch dates.</span>
-                </div>
-              ) : (
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs font-bold text-slate-700 flex items-center space-x-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                      <span>Forget punch date *</span>
-                    </label>
-                    <span className="text-[11px] font-semibold text-blue-600 shrink-0">
-                      {candidateMissingDates.length} Missing Dates
-                    </span>
-                  </div>
-
-                  {candidateMissingDates.length > 0 ? (
-                    <div className="grid grid-cols-1 gap-1.5 max-h-48 overflow-y-auto p-1.5 bg-slate-50 border border-slate-200 rounded-xl">
-                      {candidateMissingDates.map((cand) => {
-                        const isSelected = formDate === cand.date;
-                        return (
-                          <button
-                            key={cand.date}
-                            type="button"
-                            onClick={() => handleDateChange(cand.date)}
-                            className={`w-full text-left p-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-between gap-1.5 cursor-pointer select-none ${
-                              isSelected
-                                ? 'bg-blue-600 text-white shadow-xs'
-                                : 'bg-white text-slate-800 hover:bg-blue-50 border border-slate-200/80'
-                            }`}
-                          >
-                            <div className="flex items-center space-x-1.5 min-w-0 flex-1 truncate">
-                              <Calendar className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-white' : 'text-blue-600'}`} />
-                              <span className="font-mono text-xs shrink-0 whitespace-nowrap">{cand.date}</span>
-                              <span
-                                className={`text-[9.5px] px-1.5 py-0.5 rounded font-bold shrink-0 whitespace-nowrap ${
-                                  isSelected
-                                    ? 'bg-blue-700 text-blue-100'
-                                    : cand.type === 'missing_both'
-                                    ? 'bg-rose-100 text-rose-800'
-                                    : 'bg-amber-100 text-amber-800'
-                                }`}
-                              >
-                                {cand.type === 'missing_both'
-                                  ? 'Absent / No Punch'
-                                  : cand.type === 'missing_out'
-                                  ? `In: ${cand.clockIn}`
-                                  : `Out: ${cand.clockOut}`}
-                              </span>
-                            </div>
-                            <span className={`text-[10px] font-medium shrink-0 whitespace-nowrap ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
-                              {isSelected ? 'Selected' : 'Pick'}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div>
-                      <AppDatePicker
-                        value={formDate}
-                        maxDate={maxDateStr}
-                        onChange={(dStr) => handleDateChange(dStr)}
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Timings */}
-              <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
-                <AppTimePicker
-                  label="Punch In Time"
-                  required={true}
-                  value={formInTime}
-                  onChange={(val) => setFormInTime(val)}
-                  presets={['09:00', '09:30', '10:00', '10:30']}
-                />
-                <AppTimePicker
-                  label="Punch Out Time"
-                  required={true}
-                  value={formOutTime}
-                  onChange={(val) => setFormOutTime(val)}
-                  presets={['17:00', '17:30', '18:00', '18:30']}
-                  align="right"
-                />
-              </div>
-
-              {/* Reason Dropdown (Standard Options) */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Category *
-                </label>
-                <AppSelect
-                  value={formReasonCategory}
-                  onChange={(val) => setFormReasonCategory(val as ReasonCategory)}
-                  options={[...REASON_CATEGORIES]}
-                />
-              </div>
-
-              {/* Specific Remarks / Explanation */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Remark
-                </label>
-                <textarea
-                  value={formReason}
-                  onChange={(e) => setFormReason(e.target.value)}
-                  placeholder="e.g., Biometric facial scanner hardware error during morning punch; lab specimen transfer in evening."
-                  rows={2}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white resize-none"
-                />
-              </div>
-
-              {/* Actions */}
-              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setShowApplyModal(false)}
-                  className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all disabled:opacity-50 cursor-pointer flex items-center space-x-1.5"
-                >
-                  <CheckCheck className="w-4 h-4" />
-                  <span>{isSubmitting ? 'Submitting...' : editingRequest ? 'Update' : 'Submit'}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* --- DELETE CONFIRMATION MODAL --- */}
-      {deleteConfirmId && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="px-5 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white flex items-center justify-between shrink-0">
-              <div className="flex items-center space-x-3 min-w-0">
-                <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
-                  <Trash2 className="w-5 h-5 text-blue-400" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-white tracking-tight">Delete Attendance Request</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">This action cannot be undone</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setDeleteConfirmId(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-                aria-label="Close dialog"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-5 space-y-4">
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Are you sure you want to permanently delete this manual attendance regularisation request?
-              </p>
-
-              <div className="flex items-center space-x-2 pt-2">
-                <button
-                  onClick={() => setDeleteConfirmId(null)}
-                  className="flex-1 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => handleDelete(deleteConfirmId)}
-                  className="flex-1 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
-                >
-                  Yes, Delete
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* --- DETAIL MODAL --- */}
-      {detailModalReq && (
-        <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150">
-            <div className="px-5 py-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white flex items-center justify-between shrink-0 rounded-t-2xl">
-              <div className="flex items-center space-x-3 min-w-0">
-                <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
-                  <Clock className="w-5 h-5 text-blue-400" />
-                </div>
-                <div className="min-w-0">
-                  <h3 className="text-base font-bold text-white tracking-tight truncate">Manual Attendance Details</h3>
-                </div>
-              </div>
-              <button
-                onClick={() => setDetailModalReq(null)}
-                className="p-1.5 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer shrink-0"
-                aria-label="Close dialog"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6 space-y-3 text-xs text-slate-700 max-h-[80vh] overflow-y-auto">
-              <div className="flex justify-between border-b border-slate-100 pb-2">
-                <span className="font-bold text-slate-500">Employee:</span>
-                <span className="font-bold text-slate-900">{detailModalReq.userName}</span>
-              </div>
-              <div className="flex justify-between border-b border-slate-100 pb-2">
-                <span className="font-bold text-slate-500">Department:</span>
-                <span>{detailModalReq.userDepartment} {detailModalReq.userDesignation ? `• ${detailModalReq.userDesignation}` : ''}</span>
-              </div>
-              <div className="flex justify-between border-b border-slate-100 pb-2">
-                <span className="font-bold text-slate-500">Forgotten Date:</span>
-                <span className="font-bold text-blue-900 flex items-center space-x-1">
-                  <Calendar className="w-3.5 h-3.5 text-blue-600" />
-                  <span>{detailModalReq.date}</span>
-                </span>
-              </div>
-              <div className="flex justify-between border-b border-slate-100 pb-2">
-                <span className="font-bold text-slate-500">Category:</span>
-                {(() => {
-                  const catInfo = formatReasonCategory(detailModalReq.reasonCategory);
-                  return (
-                    <span className={`font-bold px-2 py-0.5 rounded border text-[10px] ${catInfo.badgeClass}`}>
-                      {catInfo.label}
-                    </span>
-                  );
-                })()}
-              </div>
-              <div className="flex justify-between border-b border-slate-100 pb-2">
-                <span className="font-bold text-slate-500">Requested Punch:</span>
-                <span className="font-bold text-blue-700">{detailModalReq.requestedInTime} - {detailModalReq.requestedOutTime}</span>
-              </div>
-              {(detailModalReq.originalInTime || detailModalReq.originalOutTime) && (
-                <div className="flex justify-between border-b border-slate-100 pb-2">
-                  <span className="font-bold text-slate-500">Original Punch:</span>
-                  <span className="font-semibold text-slate-700">
-                    In: {parseTimeTo24H(detailModalReq.originalInTime) || detailModalReq.originalInTime || 'Missing'} | Out: {parseTimeTo24H(detailModalReq.originalOutTime) || detailModalReq.originalOutTime || 'Missing'}
-                  </span>
-                </div>
-              )}
-              <div className="flex justify-between border-b border-slate-100 pb-2">
-                <span className="font-bold text-slate-500">Reporting Boss:</span>
-                <span className="font-semibold text-slate-900">{detailModalReq.reportingManagerName}</span>
-              </div>
-              <div className="flex justify-between border-b border-slate-100 pb-2">
-                <span className="font-bold text-slate-500">Status:</span>
-                <span
-                  className={`font-bold uppercase text-[11px] px-2 py-0.5 rounded ${
-                    detailModalReq.status === 'approved'
-                      ? 'bg-emerald-100 text-emerald-800'
-                      : detailModalReq.status === 'pending'
-                      ? 'bg-amber-100 text-amber-800'
-                      : 'bg-rose-100 text-rose-800'
-                  }`}
-                >
-                  {detailModalReq.status}
-                </span>
-              </div>
-              <div className="flex justify-between border-b border-slate-100 pb-2">
-                <span className="font-bold text-slate-500">Applied Date:</span>
-                <span>{detailModalReq.appliedAt || detailModalReq.date}</span>
-              </div>
-              {detailModalReq.actionDate && (
-                <div className="flex justify-between border-b border-slate-100 pb-2">
-                  <span className="font-bold text-slate-500">Decision Date / By:</span>
-                  <span>{detailModalReq.actionDate} {detailModalReq.actionBy ? `by ${detailModalReq.actionBy}` : ''}</span>
-                </div>
-              )}
-              <div>
-                <span className="font-bold text-slate-500 block mb-1">Reason Details:</span>
-                <p className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-slate-800 leading-relaxed">
-                  {getFormattedReasonText(detailModalReq)}
-                </p>
-              </div>
-              {detailModalReq.managerComment && (
-                <div>
-                  <span className="font-bold text-slate-500 block mb-1">Manager Remarks:</span>
-                  <p className="bg-blue-50 p-2.5 rounded-lg border border-blue-100 text-blue-900 font-medium">
-                    {detailModalReq.managerComment}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Modal Footer with Actions */}
-            <div className="shrink-0 bg-slate-50 border-t border-slate-200 p-4 flex items-center justify-between">
-              <button
-                onClick={() => setDetailModalReq(null)}
-                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl transition-all cursor-pointer text-xs"
-              >
-                Close
-              </button>
-              <div className="flex items-center space-x-2">
-                {canManagerAction(detailModalReq) && (
-                  <>
-                    <button
-                      onClick={() => {
-                        const req = detailModalReq;
-                        setDetailModalReq(null);
-                        setActionModalReq(req);
-                        setActionComments(approverComments[req.id] || '');
-                      }}
-                      className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl transition-all cursor-pointer flex items-center space-x-1.5 text-xs"
-                    >
-                      <X className="w-3.5 h-3.5 text-rose-600" />
-                      <span>Reject</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        const req = detailModalReq;
-                        setDetailModalReq(null);
-                        setActionModalReq(req);
-                        setActionComments(approverComments[req.id] || '');
-                      }}
-                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-all shadow-2xs cursor-pointer flex items-center space-x-1.5 text-xs"
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                      <span>Approve</span>
-                    </button>
-                  </>
-                )}
-                {canManagerCancelApproval(detailModalReq) && (
-                  <button
-                    onClick={() => {
-                      const req = detailModalReq;
-                      setDetailModalReq(null);
-                      setCancelModalReq(req);
-                      setCancelReason('');
-                    }}
-                    className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl transition-all cursor-pointer flex items-center space-x-1.5 text-xs"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
-                    <span>Cancel Approval</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Cancel Approved Manual Attendance Modal */}
-      {cancelModalReq && (
-        <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] flex flex-col shadow-xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-150 text-xs">
-            {/* Header */}
-            <div className="shrink-0 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white px-5 py-4 flex items-center justify-between border-b border-slate-800 rounded-t-2xl">
-              <div className="flex items-center space-x-3 min-w-0">
-                <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
-                  <RotateCcw className="w-5 h-5 text-blue-400" />
-                </div>
-                <div className="min-w-0">
-                  <h3 className="font-bold text-base text-white tracking-tight truncate">Cancel Approved Attendance</h3>
-                </div>
-              </div>
-              <button
-                onClick={() => setCancelModalReq(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
-                aria-label="Close dialog"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Body */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-4">
-              <div className="bg-rose-50/70 border border-rose-200 p-3.5 rounded-2xl space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-900 text-sm">{cancelModalReq.userName}</span>
-                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded border border-emerald-200">
-                    Currently Approved
-                  </span>
-                </div>
-                <div className="text-slate-700 space-y-1 pt-1 text-[11px]">
-                  <p>🗓️ Date: <strong className="text-slate-900">{cancelModalReq.date}</strong></p>
-                  <p>⏰ Regularized Timings: <strong className="text-slate-900">{cancelModalReq.requestedInTime} - {cancelModalReq.requestedOutTime}</strong></p>
-                  <p>🏷️ Category: <strong className="text-slate-900">{cancelModalReq.reasonCategory || 'Forget to punch'}</strong></p>
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="block font-bold text-slate-700">
-                  Cancellation Reason / Remarks <span className="text-rose-500">*</span>
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="e.g. Regularized erroneously, Biometric record verified, Employee on leave..."
-                  value={cancelReason}
-                  onChange={(e) => setCancelReason(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs focus:bg-white focus:outline-none focus:border-rose-600 transition-all"
-                />
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="shrink-0 bg-slate-50 border-t border-slate-200 p-4 flex items-center justify-end space-x-2.5">
-              <button
-                onClick={() => setCancelModalReq(null)}
-                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl transition-all cursor-pointer text-xs"
-              >
-                Keep Approved
-              </button>
-              <button
-                onClick={() => handleCancelApproval(cancelModalReq.id, cancelReason)}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl transition-all shadow-2xs cursor-pointer flex items-center space-x-1.5 text-xs"
-              >
-                <RotateCcw className="w-4 h-4" />
-                <span>Confirm Cancel Approval</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {actionModalReq && (
-        <div className="fixed inset-0 bg-slate-900/55 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] flex flex-col shadow-xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-150 text-xs">
-            {/* Header */}
-            <div className="shrink-0 bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 text-white px-5 py-4 flex items-center justify-between border-b border-slate-800 rounded-t-2xl">
-              <div className="flex items-center space-x-3 min-w-0">
-                <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0 shadow-xs">
-                  <ShieldCheck className="w-5 h-5 text-blue-400" />
-                </div>
-                <div className="min-w-0">
-                  <h3 className="font-bold text-base text-white tracking-tight truncate">Review Manual Attendance</h3>
-                </div>
-              </div>
-              <button
-                onClick={() => setActionModalReq(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
-                aria-label="Close dialog"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Body */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-4">
-              {/* Applicant Details */}
-              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-900 text-sm">{actionModalReq.userName}</span>
-                  <span className="text-[10px] bg-indigo-100 text-indigo-900 font-bold px-2 py-0.5 rounded border border-indigo-200">
-                    {actionModalReq.userDepartment}
-                  </span>
-                </div>
-                <div className="text-slate-700 space-y-1 pt-1">
-                  <p>🗓️ Date: <strong className="text-slate-900">{actionModalReq.date}</strong></p>
-                  <p>⏰ Requested Timings: <strong className="text-blue-700">{actionModalReq.requestedInTime} - {actionModalReq.requestedOutTime}</strong></p>
-                  <p>🏷️ Category: <strong className="text-slate-900">{actionModalReq.reasonCategory || 'Forget to punch'}</strong></p>
-                </div>
-                <div className="bg-white p-2.5 rounded-xl border border-slate-200 text-slate-700 italic">
-                  "{actionModalReq.reason}"
-                </div>
-              </div>
-
-              {/* Approver Comments */}
-              <div className="space-y-1.5">
-                <label className="block font-bold text-slate-700">Approver Remarks (Optional)</label>
-                <textarea
-                  rows={2}
-                  placeholder="Enter approval notes or reason for rejection..."
-                  value={actionComments}
-                  onChange={(e) => setActionComments(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs focus:bg-white focus:outline-none focus:border-indigo-600 transition-all"
-                />
-              </div>
-            </div>
-
-            {/* Sticky Footer */}
-            <div className="shrink-0 bg-slate-50 border-t border-slate-200 p-4 flex items-center justify-end space-x-2.5">
-              <button
-                onClick={() => {
-                  handleReject(actionModalReq.id, actionComments);
-                  setActionModalReq(null);
-                }}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl transition-all shadow-2xs cursor-pointer flex items-center space-x-1.5"
-              >
-                <X className="w-4 h-4" />
-                <span>Reject</span>
-              </button>
-              <button
-                onClick={() => {
-                  handleApprove(actionModalReq.id, actionComments);
-                  setActionModalReq(null);
-                }}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-all shadow-2xs cursor-pointer flex items-center space-x-1.5"
-              >
-                <Check className="w-4 h-4" />
-                <span>Approve</span>
-              </button>
-            </div>
-          </div>
-        </div>
+      {isAdmin && (
+        <ConfirmDialog
+          open={Boolean(deleting)}
+          title="Delete request"
+          message={deleting ? <>Delete the {STATUS_META[deleting.status].label.toLowerCase()} request of <strong>{deleting.name}</strong> for {formatDate(deleting.date)}?{deleting.status === 'approved' ? ' The day goes back to the biometric punches.' : ''} This is recorded in the audit log.</> : ''}
+          confirmLabel="Delete"
+          danger
+          busy={deleteBusy}
+          error={deleteError}
+          onConfirm={(reason) => void confirmDelete(reason)}
+          onCancel={() => setDeleting(null)}
+        />
       )}
     </div>
   );

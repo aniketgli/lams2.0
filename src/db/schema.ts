@@ -337,3 +337,25 @@ export const attendance_punches = mysqlTable('Attendance', {
   byDateEmp: index('idx_atten_date_emp').on(t.logDate, t.employeeCode),
   byEmpDate: index('idx_atten_emp_date').on(t.employeeCode, t.logDate),
 }));
+
+// Manual attendance requests (missed / wrong punches); approved ones count on the Attendance page.
+export const manual_attendance_requests = mysqlTable('manual_attendance_requests', {
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  userId: bigint('user_id', { mode: 'number', unsigned: true }).notNull(),
+  attDate: date('att_date').notNull(),
+  inTime: varchar('in_time', { length: 5 }).notNull(),
+  outTime: varchar('out_time', { length: 5 }).notNull(),
+  originalIn: varchar('original_in', { length: 5 }),
+  originalOut: varchar('original_out', { length: 5 }),
+  category: varchar('category', { length: 40 }).notNull(),
+  reason: varchar('reason', { length: 500 }).notNull(),
+  status: varchar('status', { length: 16 }).notNull().default('pending'),
+  appliedBy: bigint('applied_by', { mode: 'number', unsigned: true }).notNull(),
+  managerId: bigint('manager_id', { mode: 'number', unsigned: true }),
+  actionBy: bigint('action_by', { mode: 'number', unsigned: true }),
+  actionAt: datetime('action_at', { fsp: 3 }),
+  managerComment: varchar('manager_comment', { length: 500 }),
+  createdAt: datetime('created_at', { fsp: 3 }),
+  updatedAt: datetime('updated_at', { fsp: 3 }),
+});
+
