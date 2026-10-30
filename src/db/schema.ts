@@ -355,6 +355,7 @@ export const manual_attendance_requests = mysqlTable('manual_attendance_requests
   actionBy: bigint('action_by', { mode: 'number', unsigned: true }),
   actionAt: datetime('action_at', { fsp: 3 }),
   managerComment: varchar('manager_comment', { length: 500 }),
+  undoCount: int('undo_count').notNull().default(0),
   createdAt: datetime('created_at', { fsp: 3 }),
   updatedAt: datetime('updated_at', { fsp: 3 }),
 });
