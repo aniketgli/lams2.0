@@ -14,7 +14,7 @@ import { FilterToolbar } from '../../../../shared/components/FilterToolbar';
 import { ActivityLogPanel, ActivitySource } from '../../../../shared/components/ActivityLogPanel';
 import { ApiError } from '../../../../shared/services/api';
 import { activityEndpoints } from '../../../../shared/services/activityApi';
-import { printTable, printedAt } from '../../../../shared/services/printTable';
+import { downloadCsvText, downloadTablePdf, printedAt, toCsvText } from '../../../../shared/services/printTable';
 import { ConfirmDialog, NoticeBar, useNotice } from '../../master/components/masterUi';
 import { HolidayItem, MONTH_NAMES } from '../data/holidayData';
 import { HolidayInput, holidayApi } from '../holidayApi';
@@ -58,12 +58,6 @@ function todayIso(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/** CSV cell; values a spreadsheet would run as formulas are prefixed with a quote. */
-function csvCell(value: unknown): string {
-  let text = value === null || value === undefined ? '' : String(value);
-  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
-  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
 
 const EMPTY_FORM: HolidayInput = { date: '', name: '', hindiName: '', type: 'gazetted', category: 'National', description: '' };
 
@@ -123,23 +117,19 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = () => {
     search.trim() ? `Search: “${search.trim()}”` : null,
   ].filter(Boolean).join(' · ');
 
-  const downloadCsv = () => {
-    const csv = `﻿${[exportHeaders, ...exportRows()].map((r) => r.map(csvCell).join(',')).join('\r\n')}\r\n`;
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `WII_Holiday_Calendar_${year}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+  const downloadCsv = () => downloadCsvText(toCsvText(exportHeaders, exportRows()), `WII_Holiday_Calendar_${year}`);
+  // PDF fonts cannot draw Devanagari, so the Hindi name stays in the CSV only.
+  const downloadPdf = () => {
+    const hindi = exportHeaders.indexOf('Hindi name');
+    downloadTablePdf({
+      title: `Holiday Calendar ${year}`,
+      subtitle: [`Generated ${printedAt(new Date().toISOString())}`, filterLine() || 'All holidays'],
+      headers: exportHeaders.filter((_, i) => i !== hindi),
+      rows: exportRows().map((r) => r.filter((_, i) => i !== hindi)),
+      fileName: `WII_Holiday_Calendar_${year}`,
+      columnWidths: [12, 10, 22, 12, 12, 32],
+    });
   };
-  const downloadPdf = () => printTable({
-    title: `Holiday Calendar ${year}`,
-    subtitle: [`Generated ${printedAt(new Date().toISOString())}`, filterLine() || 'All holidays'],
-    headers: exportHeaders,
-    rows: exportRows(),
-  });
 
   // ---- Administrator: add / edit / delete ------------------------------------
   const [editing, setEditing] = useState<HolidayItem | null>(null);
@@ -243,8 +233,9 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = () => {
     },
     { key: 'category', header: 'Category', width: '140px', sortValue: (h) => h.category, render: (h) => <span className="text-[13px] text-slate-700">{h.category}</span> },
     {
-      key: 'description', header: 'Description', width: '280px',
-      render: (h) => <p className="text-xs text-slate-600 whitespace-normal line-clamp-2 max-w-[280px]" title={h.description || undefined}>{h.description || '—'}</p>,
+      // Takes the remaining width; long text wraps to two lines with the full text on hover.
+      key: 'description', header: 'Description',
+      render: (h) => <p className="text-xs text-slate-600 whitespace-normal line-clamp-2 min-w-[220px]" title={h.description || undefined}>{h.description || '—'}</p>,
     },
     ...(isAdmin ? [{
       key: 'actions', header: 'Actions', width: '100px', align: 'right' as const,

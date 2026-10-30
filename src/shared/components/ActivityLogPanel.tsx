@@ -4,7 +4,7 @@ import { AppSelect } from './AppSelect';
 import { FilterToolbar } from './FilterToolbar';
 import { AppDatePicker } from './AppDatePicker';
 import type { ColumnDef } from './Table';
-import { printTable, printedAt } from '../services/printTable';
+import { downloadTablePdf, printedAt } from '../services/printTable';
 import type { ActivityQuery, ActivityRow, PrintableTable } from '../services/activityApi';
 
 /**
@@ -136,11 +136,13 @@ export const ActivityLogPanel: React.FC<{ source: ActivitySource; toolbarStart?:
         q.action && `Action: ${ACTION_LABEL[q.action] ?? q.action}`,
         q.from && `From ${q.from}`, q.to && `To ${q.to}`, q.search && `Search: “${q.search}”`,
       ].filter(Boolean).join(' · ');
-      printTable({
+      downloadTablePdf({
         title: source.title,
         subtitle: [`Generated ${printedAt(table.generatedAt)}`, filterLine || 'All activity'],
-        headers: table.headers,
+        headers: table.headers.map((h) => (h === 'When (UTC)' ? 'When' : h)),
         rows: table.rows.map((r) => [printedAt(String(r[0])), ...r.slice(1)]),
+        fileName: `WII_${source.title.replace(/\s+/g, '_')}_${table.generatedAt.slice(0, 10)}`,
+        columnWidths: [11, 9, 9, 12, 7, 30, 12, 11, 6, 9],
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'The PDF could not be prepared.');

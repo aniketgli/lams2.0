@@ -5,7 +5,7 @@ import { badRequest } from '../lib/http';
 import { isValidIsoDate } from '../lib/validate';
 import { writeMasterAuditSql } from '../masters/audit';
 import { ROLE_LABELS, RoleId } from '../lib/roles';
-import { EmployeeRecord, Viewer, listEmployees } from './store';
+import { EmployeeRecord, Viewer, canSeeFullProfile, listEmployees } from './store';
 
 /**
  * Auditor tools for employee records: a CSV download of the directory and
@@ -53,7 +53,10 @@ export type ExportFormat = 'csv' | 'pdf';
 
 /** Directory as a table (headers + rows), logged as a download in `format`. */
 export async function employeeDirectoryTable(req: Request, viewer: Viewer, format: ExportFormat): Promise<{ headers: string[]; rows: unknown[][] }> {
-  const records: EmployeeRecord[] = await listEmployees(viewer);
+  // Only people the viewer may see in full: everyone for administrators and auditors,
+  // their own team for a reporting manager / HoD.
+  const records: EmployeeRecord[] = (await listEmployees(viewer))
+    .filter((r) => canSeeFullProfile(viewer, r) && (viewer.role === 'administrator' || viewer.role === 'audit' || r.id !== String(viewer.id)));
   const [types, institutes] = await Promise.all([lookupNames('employee_type'), lookupNames('institute')]);
   const nameById = new Map(records.map((r) => [r.id, `${r.name} (${r.biometricId})`]));
 
@@ -72,7 +75,8 @@ export async function employeeDirectoryTable(req: Request, viewer: Viewer, forma
   });
 
   await writeMasterAuditSql(pool, req, {
-    masterKey: 'employee_export', recordId: 'directory', recordLabel: `Employee directory (${format.toUpperCase()})`, action: 'EXPORT',
+    masterKey: 'employee_export', recordId: 'directory',
+    recordLabel: `${viewer.role === 'administrator' || viewer.role === 'audit' ? 'Employee directory' : 'My team'} (${format.toUpperCase()})`, action: 'EXPORT',
     after: { rows: rows.length, format },
   });
   return { headers, rows };

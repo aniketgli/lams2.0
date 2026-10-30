@@ -73,6 +73,8 @@ router.get('/photos/:biometricId', isAuthenticated, asyncHandler(async (req, res
 // Auditor: directory download and employee activity log (read-only).
 // ---------------------------------------------------------------------------
 const isAuditor = [requireAuth, requireActiveRole('hrms', 'audit')];
+/** Directory downloads: everyone who has a directory (each gets only the people they may see). */
+const canExportDirectory = [requireAuth, requireActiveRole('hrms', 'administrator', 'audit', 'reporting_manager', 'reviewing_manager')];
 
 function sendCsv(res: import('express').Response, file: { filename: string; csv: string }) {
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -80,12 +82,12 @@ function sendCsv(res: import('express').Response, file: { filename: string; csv:
   res.send(file.csv);
 }
 
-router.get('/employees/export.csv', ...isAuditor, asyncHandler(async (req, res) => {
+router.get('/employees/export.csv', ...canExportDirectory, asyncHandler(async (req, res) => {
   sendCsv(res, await employeeDirectoryCsv(req, viewerOf(req)));
 }));
 
 /** Rows for a printable PDF (the browser lays it out); logged like the CSV download. */
-router.get('/employees/export-pdf', ...isAuditor, asyncHandler(async (req, res) => {
+router.get('/employees/export-pdf', ...canExportDirectory, asyncHandler(async (req, res) => {
   res.json({ generatedAt: new Date().toISOString(), ...(await employeeDirectoryTable(req, viewerOf(req), 'pdf')) });
 }));
 
