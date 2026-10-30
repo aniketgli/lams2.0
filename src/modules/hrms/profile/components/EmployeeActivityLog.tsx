@@ -67,7 +67,8 @@ const ROLE_LABEL: Record<string, string> = {
   administrator: 'Administrator', audit: 'Auditor', reviewing_manager: 'HoD', reporting_manager: 'Reporting Manager', general_staff: 'User',
 };
 
-export const EmployeeActivityLog: React.FC = () => {
+/** `toolbar` is shown at the top of the card (the auditor's directory / logs switch). */
+export const EmployeeActivityLog: React.FC<{ toolbar?: React.ReactNode }> = ({ toolbar }) => {
   const [filters, setFilters] = useState<ActivityQuery>(EMPTY);
   const [applied, setApplied] = useState<ActivityQuery>(EMPTY);
   const [page, setPage] = useState(1);
@@ -152,11 +153,8 @@ export const EmployeeActivityLog: React.FC = () => {
 
   return (
     <section className="bg-white border border-slate-200/90 rounded-2xl shadow-xs">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4 border-b border-slate-100">
-        <div>
-          <h3 className="text-sm font-bold text-slate-900">Employee activity log</h3>
-          <p className="text-xs text-slate-500 mt-0.5">Every change to employee records, roles, passwords and photos, and every data download.</p>
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-slate-100">
+        {toolbar ?? <h3 className="text-sm font-bold text-slate-900">Employee activity log</h3>}
         <Button variant="outline" size="sm" leftIcon={Download} loading={exporting} onClick={() => void exportCsv()} disabled={data.total === 0}>
           Export CSV
         </Button>

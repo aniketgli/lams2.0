@@ -12,7 +12,9 @@ import {
 import { PageHeader } from '../../../../shared/components/PageHeader';
 import { TablePagination } from '../../../../shared/components/TablePagination';
 import { UserProjectHistoryModal } from '../components/UserProjectHistoryModal';
-import { EmployeeProfileView, MyProfileView } from '../components/MyProfileView';
+import { EmployeeProfileView, MyProfileView, formatDate } from '../components/MyProfileView';
+import { DataTable } from '../../../../shared/components';
+import type { ColumnDef } from '../../../../shared/components';
 import { EmployeeActivityLog } from '../components/EmployeeActivityLog';
 import { auditorApi } from '../employeeApi';
 import { useSession } from '../../../../auth/SessionContext';
@@ -406,6 +408,89 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
   // Legacy alias for existing dropdown compatibility
   const filteredProfiles = categoryFilteredProfiles;
+
+  // ---- Directory table ---------------------------------------------------
+  const [directoryPage, setDirectoryPage] = useState(1);
+  const [directoryPageSize, setDirectoryPageSize] = useState(25);
+  useEffect(() => { setDirectoryPage(1); }, [categoryFilteredProfiles.length]);
+  const directoryPages = Math.max(1, Math.ceil(categoryFilteredProfiles.length / directoryPageSize));
+  const pagedProfiles = useMemo(() => {
+    const page = Math.min(directoryPage, directoryPages);
+    return categoryFilteredProfiles.slice((page - 1) * directoryPageSize, page * directoryPageSize);
+  }, [categoryFilteredProfiles, directoryPage, directoryPages, directoryPageSize]);
+
+  const typeLabel = (code?: string) => employeeTypeOptions.find((o) => o.value === code)?.label ?? (code || '');
+  const instituteLabel = (code?: string) => instituteOptions.find((o) => o.value === code)?.label ?? (code || '');
+  const openProfile = (u: UserType) => { setSelectedUserId(u.id); setDirectoryViewMode('detail'); };
+
+  const directoryColumns: ColumnDef<UserType>[] = [
+    {
+      key: 'name', header: 'Employee', width: '260px', sortValue: (u) => u.name,
+      render: (u) => (
+        <div className="flex items-center gap-3 min-w-0">
+          <UserAvatar name={u.name} src={u.avatar} className="w-9 h-9 rounded-full shrink-0" />
+          <div className="min-w-0">
+            <p className="text-[13px] font-semibold text-slate-900 truncate">{[u.suffix, u.name].filter(Boolean).join(' ')}</p>
+            <p className="text-[11px] text-slate-500 truncate">B.I. {u.biometricId || '—'} · {u.email}</p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'designation', header: 'Designation', width: '170px', sortValue: (u) => u.designation || u.courseProgram || '',
+      render: (u) => <span className="text-[13px] text-slate-800">{u.designation || u.courseProgram || '—'}</span>,
+    },
+    {
+      key: 'department', header: 'Department / Project', width: '190px', sortValue: (u) => u.department || u.courseBatch || '',
+      render: (u) => <span className="text-[13px] text-slate-800">{u.department || u.courseBatch || '—'}</span>,
+    },
+    {
+      key: 'institute', header: 'Organization', width: '170px', sortValue: (u) => instituteLabel(u.institute),
+      render: (u) => <span className="text-[13px] text-slate-700">{instituteLabel(u.institute) || '—'}</span>,
+    },
+    {
+      key: 'type', header: 'Employee type', width: '140px', sortValue: (u) => typeLabel(u.employmentType),
+      render: (u) => <span className="text-[13px] text-slate-700">{typeLabel(u.employmentType) || '—'}</span>,
+    },
+    {
+      key: 'joining', header: 'Joined', width: '110px', sortValue: (u) => u.joiningDate || '',
+      render: (u) => <span className="text-[13px] text-slate-700 whitespace-nowrap">{formatDate(u.joiningDate) ?? '—'}</span>,
+    },
+    {
+      key: 'status', header: 'Status', width: '100px', sortValue: (u) => (u.status === 'deactivated' ? 'Inactive' : 'Active'),
+      render: (u) => (
+        <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-bold ${
+          u.status === 'deactivated' ? 'bg-slate-100 text-slate-600 border-slate-200' : 'bg-success-subtle text-success border-success-border'
+        }`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${u.status === 'deactivated' ? 'bg-slate-400' : 'bg-success'}`} />
+          {u.status === 'deactivated' ? 'Inactive' : 'Active'}
+        </span>
+      ),
+    },
+    {
+      key: 'actions', header: 'Actions', width: isAdmin ? '128px' : '64px', align: 'right',
+      render: (u) => (
+        <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+          <button type="button" onClick={() => openProfile(u)} title="View full profile" aria-label={`View ${u.name}'s profile`}
+            className="w-8 h-8 rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-primary hover:border-primary/40 flex items-center justify-center cursor-pointer">
+            <Eye className="w-4 h-4" />
+          </button>
+          {isAdmin && (
+            <>
+              <button type="button" onClick={() => openEditEmployee(u)} title="Edit profile" aria-label={`Edit ${u.name}`}
+                className="w-8 h-8 rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-primary hover:border-primary/40 flex items-center justify-center cursor-pointer">
+                <Edit3 className="w-4 h-4" />
+              </button>
+              <button type="button" onClick={() => setHistoryUser(u)} title="Manage career history" aria-label={`Career history of ${u.name}`}
+                className="w-8 h-8 rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-primary hover:border-primary/40 flex items-center justify-center cursor-pointer">
+                <Briefcase className="w-4 h-4" />
+              </button>
+            </>
+          )}
+        </div>
+      ),
+    },
+  ];
 
   // Export Handlers for Personnel Directory
   // Auditor: the server builds the CSV from the database and logs the download.
@@ -1961,6 +2046,24 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     showToast('User Access Matrix exported to PDF successfully!');
   };
 
+  /** Auditor: directory or activity log, shown above the search in either view. */
+  const auditorSwitch = (
+    <div className="inline-flex p-1 bg-slate-100/90 border border-slate-200/90 rounded-xl gap-1" role="tablist" aria-label="Auditor view">
+      {([['directory', 'Employee directory'], ['activity', 'Activity logs']] as const).map(([key, label]) => (
+        <button
+          key={key}
+          type="button"
+          role="tab"
+          aria-selected={auditorView === key}
+          onClick={() => setAuditorView(key)}
+          className={`h-8 px-3.5 rounded-lg text-xs font-bold cursor-pointer transition-colors ${auditorView === key ? 'bg-white text-primary shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div className="space-y-6 pb-6">
       {/* Page Header */}
@@ -2054,24 +2157,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
         />
       )}
 
-      {/* Auditor: switch between the directory and the activity log */}
-      {isAudit && activeTab === 'profile' && (
-        <div className="inline-flex p-1 bg-slate-100/90 border border-slate-200/90 rounded-xl gap-1" role="tablist" aria-label="Auditor view">
-          {([['directory', 'Employee directory'], ['activity', 'Activity logs']] as const).map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              aria-selected={auditorView === key}
-              onClick={() => setAuditorView(key)}
-              className={`h-8 px-3.5 rounded-lg text-xs font-bold cursor-pointer transition-colors ${auditorView === key ? 'bg-white text-primary shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
-      {isAudit && activeTab === 'profile' && auditorView === 'activity' && <EmployeeActivityLog />}
+      {isAudit && activeTab === 'profile' && auditorView === 'activity' && <EmployeeActivityLog toolbar={auditorSwitch} />}
 
       {!showMyProfile && !(isAudit && auditorView === 'activity') && (activeTab === 'profile' || (!isAdmin && !isAudit)) && (
         <div className="space-y-5">
@@ -2080,7 +2166,9 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
             <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3.5">
               {/* Auditor: download the directory (server-generated, logged) or print it */}
               {isAudit && (
-              <div className="flex items-center justify-end gap-2 border-b border-slate-100 pb-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3.5">
+                {auditorSwitch}
+                <div className="flex items-center gap-2">
                 <button
                   onClick={handleExportCSV}
                   disabled={exportingCsv}
@@ -2098,6 +2186,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                   <FileText className="w-3.5 h-3.5 text-rose-400" />
                   <span>Export PDF</span>
                 </button>
+                </div>
               </div>
               )}
 
@@ -2153,31 +2242,6 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                       </button>
                     )}
 
-                    {/* View Switcher Icons Container */}
-                    <div className="h-9 flex items-center p-1 bg-slate-100/90 border border-slate-200/90 rounded-xl gap-1 shrink-0">
-                      <button
-                        onClick={() => setDirectoryViewMode('grid')}
-                        className={`h-7 px-2 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
-                          directoryViewMode === 'grid'
-                            ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
-                            : 'text-slate-400 hover:text-slate-700'
-                        }`}
-                        title="Grid View"
-                      >
-                        <LayoutGrid className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => setDirectoryViewMode('detail')}
-                        className={`h-7 px-2 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
-                          directoryViewMode === 'detail'
-                            ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
-                            : 'text-slate-400 hover:text-slate-700'
-                        }`}
-                        title="Detailed View"
-                      >
-                        <UserIcon className="w-4 h-4" />
-                      </button>
-                    </div>
                   </div>
                 </div>
 
@@ -2277,199 +2341,25 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
             /* ================================================================ */
             /* VIEW 1: CATEGORY CARDS GRID */
             /* ================================================================ */
-            <div className="space-y-4">
-              <div className="flex items-center justify-between text-xs text-slate-500 font-semibold px-1">
-                <span>Showing <strong>{categoryFilteredProfiles.length}</strong> profile(s) in selected view</span>
-                {selectedCategoryFilter !== 'all' && (
-                  <button
-                    onClick={() => setSelectedCategoryFilter('all')}
-                    className="text-blue-600 hover:text-blue-800 font-bold hover:underline cursor-pointer"
-                  >
-                    Reset Filter (Show All)
-                  </button>
-                )}
-              </div>
-
-              {categoryFilteredProfiles.length === 0 ? (
-                <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center space-y-3">
-                  <UserX className="w-10 h-10 text-slate-300 mx-auto" />
-                  <h4 className="font-bold text-slate-800 text-sm">No profiles match the selected category & search criteria</h4>
-                  
-                  <button
-                    onClick={() => {
-                      setSelectedCategoryFilter('all');
-                      setProfileSearchQuery('');
-                    }}
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-colors cursor-pointer inline-block"
-                  >
-                    Show All Profiles
-                  </button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {categoryFilteredProfiles.map((u) => {
-                    const badge = getCategoryBadge(u);
-                    const IconComp = badge.icon;
-                    return (
-                      <div
-                        key={u.id}
-                        className="bg-white border border-slate-200 hover:border-blue-300 rounded-2xl p-5 shadow-xs hover:shadow-md transition-all space-y-4 flex flex-col justify-between"
-                      >
-                        <div className="space-y-3">
-                          {/* Card Top Header */}
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex items-center space-x-3">
-                              <div className="relative shrink-0">
-                                <UserAvatar name={u.name} src={u?.avatar} className="w-12 h-12 rounded-xl ring-2 ring-slate-100 shadow-2xs" />
-                                <span
-                                  className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-white ${
-                                    u.status === 'deactivated' ? 'bg-slate-400' : 'bg-emerald-500'
-                                  }`}
-                                />
-                              </div>
-                              <div className="min-w-0">
-                                <h4 className="font-black text-slate-900 text-sm truncate">{u.name}</h4>
-                                <p className="text-[11px] font-bold text-blue-600 truncate">{u.designation}</p>
-                                <p className="text-[10px] text-slate-500 truncate">{u.department}</p>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Category Badge Pill */}
-                          <div className="flex flex-wrap gap-1.5 pt-1">
-                            <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider border flex items-center space-x-1 ${badge.badgeClass}`}>
-                              <IconComp className="w-3 h-3 shrink-0" />
-                              <span>{badge.label}</span>
-                            </span>
-
-                            {layoutOf(u.employmentType) === 'researcher' && u.isPhDEnrolled && (
-                              <span className="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider bg-purple-100 text-purple-800 border border-purple-300 flex items-center space-x-1">
-                                <Sparkles className="w-3 h-3 text-purple-600 shrink-0" />
-                                <span>Dual PhD Enrolled</span>
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Category Specific Highlights */}
-                          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-[11px] space-y-1.5 text-slate-700">
-                            {(layoutOf(u.employmentType) === 'msc_student' || layoutOf(u.employmentType) === 'phd_scholar' || u.isPhDEnrolled) && (
-                              <>
-                                {u.courseProgram && (
-                                  <div className="flex justify-between">
-                                    <span className="text-slate-400 font-medium">Degree Program:</span>
-                                    <span className="font-bold text-slate-900 truncate max-w-[170px]">{u.courseProgram}</span>
-                                  </div>
-                                )}
-                                {u.universityName && (
-                                  <div className="flex justify-between">
-                                    <span className="text-slate-400 font-medium">University:</span>
-                                    <span className="font-bold text-slate-800 truncate max-w-[170px]">{u.universityName}</span>
-                                  </div>
-                                )}
-                                {u.phdUniversity && (
-                                  <div className="flex justify-between">
-                                    <span className="text-purple-600 font-semibold">PhD University:</span>
-                                    <span className="font-bold text-purple-900 truncate max-w-[170px]">{u.phdUniversity}</span>
-                                  </div>
-                                )}
-                                {(u.guideSupervisor || u.phdGuide) && (
-                                  <div className="flex justify-between">
-                                    <span className="text-slate-400 font-medium">Supervisor / Guide:</span>
-                                    <span className="font-bold text-slate-800 truncate max-w-[170px]">{u.phdGuide || u.guideSupervisor}</span>
-                                  </div>
-                                )}
-                              </>
-                            )}
-
-                            {(layoutOf(u.employmentType) === 'trainee' || layoutOf(u.employmentType) === 'intern') && (
-                              <>
-                                {u.parentInstitution && (
-                                  <div className="flex justify-between">
-                                    <span className="text-slate-400 font-medium">College / Institution:</span>
-                                    <span className="font-bold text-slate-900 truncate max-w-[170px]">{u.parentInstitution}</span>
-                                  </div>
-                                )}
-                                {u.internshipDuration && (
-                                  <div className="flex justify-between">
-                                    <span className="text-slate-400 font-medium">Tenure Duration:</span>
-                                    <span className="font-bold text-slate-800">{u.internshipDuration}</span>
-                                  </div>
-                                )}
-                                {u.guideSupervisor && (
-                                  <div className="flex justify-between">
-                                    <span className="text-slate-400 font-medium">Mentor Scientist:</span>
-                                    <span className="font-bold text-slate-800 truncate max-w-[170px]">{u.guideSupervisor}</span>
-                                  </div>
-                                )}
-                              </>
-                            )}
-
-                            {(layoutOf(u.employmentType) === 'permanent' || layoutOf(u.employmentType) === 'contractual' || (layoutOf(u.employmentType) === 'researcher' && !u.isPhDEnrolled)) && (
-                              <>
-                                {u.piName && (
-                                  <div className="flex justify-between">
-                                    <span className="text-slate-400 font-medium">PI / Project Lead:</span>
-                                    <span className="font-bold text-slate-900 truncate max-w-[170px]">{u.piName}</span>
-                                  </div>
-                                )}
-                                {u.joiningDate && (
-                                  <div className="flex justify-between">
-                                    <span className="text-slate-400 font-medium">Date of Joining:</span>
-                                    <span className="font-bold text-slate-800">{u.joiningDate}</span>
-                                  </div>
-                                )}
-                                {u.validUntilDate && (
-                                  <div className="flex justify-between">
-                                    <span className="text-slate-400 font-medium">Valid Up To:</span>
-                                    <span className="font-bold text-amber-700">{u.validUntilDate}</span>
-                                  </div>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Action Controls */}
-                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-1.5">
-                          <button
-                            onClick={() => {
-                              setSelectedUserId(u.id);
-                              setDirectoryViewMode('detail');
-                            }}
-                            className="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-extrabold py-2 px-3 rounded-xl text-xs flex items-center justify-center space-x-1 cursor-pointer transition-colors shadow-2xs"
-                          >
-                            <Eye className="w-3.5 h-3.5 text-slate-300" />
-                            <span>View Full Profile</span>
-                          </button>
-
-                          {isAdmin && (
-                            <button
-                              onClick={() => setHistoryUser(u)}
-                              className="bg-purple-50 hover:bg-purple-100 text-purple-700 font-extrabold p-2 rounded-xl text-xs border border-purple-200 cursor-pointer transition-colors"
-                              title="Manage project & career history"
-                            >
-                              <Briefcase className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-
-                          {isAdmin && (
-                            <button
-                              onClick={() => {
-                                openEditEmployee(u);
-                              }}
-                              className="bg-blue-50 hover:bg-blue-100 text-blue-700 font-extrabold p-2 rounded-xl text-xs border border-blue-200 cursor-pointer transition-colors"
-                              title="Edit User Profile"
-                            >
-                              <Edit3 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+            <DataTable<UserType>
+              columns={directoryColumns}
+              data={pagedProfiles}
+              keyExtractor={(u) => u.id}
+              onRowClick={(u) => { setSelectedUserId(u.id); setDirectoryViewMode('detail'); }}
+              emptyTitle="No profiles found"
+              emptyDescription={accessibleProfiles.length === 0
+                ? (isManager ? 'Nobody reports to you yet.' : 'No employee profiles have been added yet.')
+                : 'No profile matches the search and filters.'}
+              pagination={{
+                currentPage: Math.min(directoryPage, directoryPages),
+                totalPages: directoryPages,
+                totalItems: categoryFilteredProfiles.length,
+                pageSize: directoryPageSize,
+                onPageChange: setDirectoryPage,
+                onPageSizeChange: (n) => { setDirectoryPageSize(n); setDirectoryPage(1); },
+                pageSizeOptions: [10, 25, 50, 100],
+              }}
+            />
           ) : (
             /* Full profile of one employee (server checks the viewer may see it). */
             <div className="space-y-4">
