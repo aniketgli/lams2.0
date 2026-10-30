@@ -185,7 +185,7 @@ export const AttendanceView: React.FC = () => {
   };
   const columns: ColumnDef<Row>[] = [
     {
-      key: 'date', header: 'Date', width: '130px', sortValue: (r) => r.date,
+      key: 'date', header: 'Date', width: teamView ? '11%' : '17%', sortValue: (r) => r.date,
       render: (r) => (
         <div className="leading-tight">
           <div className="font-semibold text-slate-900 whitespace-nowrap">{formatDate(r.date)}</div>
@@ -194,7 +194,7 @@ export const AttendanceView: React.FC = () => {
       ),
     },
     ...(teamView ? [{
-      key: 'employee', header: 'Employee', sortValue: (r: Row) => r.name,
+      key: 'employee', header: 'Employee', width: '22%', sortValue: (r: Row) => r.name,
       render: (r: Row) => (
         <div className="flex items-center gap-2.5 min-w-0">
           <UserAvatar name={r.name} src={r.avatar || null} className="w-8 h-8 rounded-full shrink-0" />
@@ -206,7 +206,7 @@ export const AttendanceView: React.FC = () => {
       ),
     } as ColumnDef<Row>] : []),
     ...(teamView ? [{
-      key: 'shift', header: 'Shift', width: '120px', sortValue: (r: Row) => r.shiftCode,
+      key: 'shift', header: 'Shift', width: '10%', sortValue: (r: Row) => r.shiftCode,
       render: (r: Row) => (
         <div className="leading-tight">
           <div className="font-mono text-[11px] font-bold text-slate-800">{r.shiftCode}</div>
@@ -214,12 +214,12 @@ export const AttendanceView: React.FC = () => {
         </div>
       ),
     } as ColumnDef<Row>] : []),
-    { key: 'in', header: 'In', width: '80px', align: 'center', sortValue: (r) => r.clockIn ?? '', render: (r) => <span className={`font-mono font-semibold ${r.lateByMins > 0 ? 'text-rose-600' : 'text-slate-800'}`}>{r.clockIn ?? '—'}</span> },
-    { key: 'out', header: 'Out', width: '80px', align: 'center', sortValue: (r) => r.clockOut ?? '', render: (r) => <span className={`font-mono font-semibold ${r.earlyByMins > 0 ? 'text-rose-600' : 'text-slate-800'}`}>{r.clockOut ?? '—'}</span> },
-    { key: 'hours', header: 'Hours', width: '90px', align: 'center', sortValue: (r) => r.totalHours ?? -1, render: (r) => <span className="font-mono text-slate-700">{hoursText(r.totalHours)}</span> },
-    { key: 'status', header: 'Status', width: '180px', sortValue: (r) => r.status, render: (r) => <StatusPill status={r.status} /> },
+    { key: 'in', header: 'In', width: teamView ? '6%' : '11%', align: 'center', sortValue: (r) => r.clockIn ?? '', render: (r) => <span className={`font-mono font-semibold ${r.lateByMins > 0 ? 'text-rose-600' : 'text-slate-800'}`}>{r.clockIn ?? '—'}</span> },
+    { key: 'out', header: 'Out', width: teamView ? '6%' : '11%', align: 'center', sortValue: (r) => r.clockOut ?? '', render: (r) => <span className={`font-mono font-semibold ${r.earlyByMins > 0 ? 'text-rose-600' : 'text-slate-800'}`}>{r.clockOut ?? '—'}</span> },
+    { key: 'hours', header: 'Hours', width: teamView ? '8%' : '12%', align: 'center', sortValue: (r) => r.totalHours ?? -1, render: (r) => <span className="font-mono text-slate-700">{hoursText(r.totalHours)}</span> },
+    { key: 'status', header: 'Status', width: teamView ? '17%' : '23%', sortValue: (r) => r.status, render: (r) => <StatusPill status={r.status} /> },
     {
-      key: 'remark', header: 'Remark', sortValue: (r) => r.remark,
+      key: 'remark', header: 'Remark', width: teamView ? '20%' : '26%', sortValue: (r) => r.remark,
       render: (r) => (
         <div className="whitespace-normal leading-snug min-w-[140px]">
           <span className="text-slate-700">{r.remark || '—'}</span>
@@ -386,6 +386,7 @@ export const AttendanceView: React.FC = () => {
           data={pageRows}
           loading={loading}
           keyExtractor={(r) => `${r.userId}-${r.date}`}
+          className={teamView ? 'min-w-[1100px]' : 'min-w-[720px]'}
           sortColumn={sort.key}
           sortDirection={sort.dir}
           onSort={(key) => setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }))}
