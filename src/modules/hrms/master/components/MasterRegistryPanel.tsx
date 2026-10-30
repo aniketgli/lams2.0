@@ -32,7 +32,11 @@ const emptyInput = (def: MasterDefinition): MasterInput => ({
 });
 
 export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly }) => {
-  const masters = useMemo(() => catalog.masters.filter((m) => !group || m.group === group), [catalog, group]);
+  // Tabs: only masters the server gives a tab position, in that order. Field dropdowns
+  // below still look up every master in the catalog (e.g. organization unit types).
+  const masters = useMemo(() => catalog.masters
+    .filter((m) => (!group || m.group === group) && m.tab !== null && m.tab !== undefined)
+    .sort((a, b) => (a.tab ?? 0) - (b.tab ?? 0)), [catalog, group]);
   const [activeKey, setActiveKey] = useState(masters[0]?.key ?? '');
   const def = masters.find((m) => m.key === activeKey) ?? masters[0];
 

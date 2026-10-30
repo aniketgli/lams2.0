@@ -21,6 +21,7 @@ mysql lams_db < migrations/20261029_employee_photos.sql
 mysql lams_db < migrations/20261030_institutes.sql
 mysql lams_db < migrations/20261030_holidays.sql
 mysql lams_db < migrations/20261030_holiday_types.sql
+mysql lams_db < migrations/20261030_org_unit_type_project.sql
 npm run dev                   # http://localhost:3000
 npm run lint                  # type-check
 ```

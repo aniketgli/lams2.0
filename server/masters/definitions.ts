@@ -86,7 +86,7 @@ export const MASTERS: MasterDef[] = [
   // ---- Profile masters --------------------------------------------------------
   {
     kind: 'table', key: 'organizations', table: 'organization_units', group: 'profile', codeMaxLength: 80, hasMetadata: false,
-    label: 'Organizations', noun: 'Organization unit',
+    label: 'Organization Units', noun: 'Organization unit',
     description: 'Departments, divisions, cells and units, each under its institute.',
     columnFields: { institute: 'institute', type: 'type' },
     fields: [
@@ -123,7 +123,7 @@ export const MASTERS: MasterDef[] = [
   },
   {
     kind: 'table', key: 'courses', table: 'training_courses', group: 'profile', codeMaxLength: 100, hasMetadata: true,
-    label: 'Courses', noun: 'Course',
+    label: 'Training Courses', noun: 'Training course',
     description: 'Diploma, certificate and training programmes.',
     fields: [],
     usage: [
@@ -133,7 +133,7 @@ export const MASTERS: MasterDef[] = [
   },
   {
     kind: 'table', key: 'traineeBatches', table: 'trainee_batches', group: 'profile', codeMaxLength: 100, hasMetadata: true,
-    label: 'Trainee Batches', noun: 'Trainee batch',
+    label: 'Training Batches', noun: 'Training batch',
     description: 'Trainee cohorts per course.',
     fields: [
       { key: 'parentCourse', label: 'Course', type: 'master', masterKey: 'courses', required: true },
@@ -218,6 +218,21 @@ export const MASTERS: MasterDef[] = [
     usage: [{ what: 'PhD enrollment sources', sql: METADATA_JSON('phd_enrollments', 'category'), by: 'code' }],
   },
 ];
+
+/**
+ * Tabs shown under Master Settings -> Profile Masters, in this order. Masters
+ * not listed (designations, employee categories, organization unit types,
+ * cadre groups) keep their data, API and form dropdowns but get no tab.
+ */
+export const PROFILE_TABS = [
+  'salutation', 'gender', 'institute', 'employeeType', 'organizations', 'projects',
+  'courses', 'traineeBatches', 'mscStreams', 'mscBatches', 'phdEnrollment', 'fundingCategory',
+] as const;
+
+export function tabOrder(key: string): number | null {
+  const i = (PROFILE_TABS as readonly string[]).indexOf(key);
+  return i < 0 ? null : i;
+}
 
 export function findMaster(key: string): MasterDef | undefined {
   return MASTERS.find((m) => m.key === key);
