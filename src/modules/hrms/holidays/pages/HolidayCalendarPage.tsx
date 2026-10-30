@@ -206,7 +206,7 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = () => {
   // ---- Table -----------------------------------------------------------------
   const columns: ColumnDef<HolidayItem>[] = [
     {
-      key: 'date', header: 'Date', width: '150px', sortValue: (h) => h.date,
+      key: 'date', header: 'Date', width: '13%', sortValue: (h) => h.date,
       render: (h) => (
         <div>
           <p className="text-[13px] font-semibold text-slate-900 whitespace-nowrap">{formatDate(h.date)}</p>
@@ -215,7 +215,7 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = () => {
       ),
     },
     {
-      key: 'name', header: 'Holiday', width: '260px', sortValue: (h) => h.name,
+      key: 'name', header: 'Holiday', width: '24%', sortValue: (h) => h.name,
       render: (h) => (
         <div className="min-w-0">
           <p className="text-[13px] font-semibold text-slate-900">{h.name}</p>
@@ -224,21 +224,21 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = () => {
       ),
     },
     {
-      key: 'type', header: 'Type', width: '150px', sortValue: (h) => h.type,
+      key: 'type', header: 'Type', width: '13%', sortValue: (h) => h.type,
       render: (h) => (
         <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-bold ${TYPE_META[h.type]?.pill}`}>
           <span className={`w-1.5 h-1.5 rounded-full ${TYPE_META[h.type]?.dot}`} />{TYPE_META[h.type]?.label ?? h.type}
         </span>
       ),
     },
-    { key: 'category', header: 'Category', width: '140px', sortValue: (h) => h.category, render: (h) => <span className="text-[13px] text-slate-700">{h.category}</span> },
+    { key: 'category', header: 'Category', width: '12%', sortValue: (h) => h.category, render: (h) => <span className="text-[13px] text-slate-700">{h.category}</span> },
     {
       // Takes the remaining width; long text wraps to two lines with the full text on hover.
-      key: 'description', header: 'Description',
-      render: (h) => <p className="text-xs text-slate-600 whitespace-normal line-clamp-2 min-w-[220px]" title={h.description || undefined}>{h.description || '—'}</p>,
+      key: 'description', header: 'Description', width: isAdmin ? '30%' : '38%',
+      render: (h) => <p className="text-xs text-slate-600 whitespace-normal line-clamp-2 min-w-[200px]" title={h.description || undefined}>{h.description || '—'}</p>,
     },
     ...(isAdmin ? [{
-      key: 'actions', header: 'Actions', width: '100px', align: 'right' as const,
+      key: 'actions', header: 'Actions', width: '8%', align: 'right' as const,
       render: (h: HolidayItem) => (
         <div className="flex items-center justify-end gap-1.5">
           <button type="button" onClick={() => openEdit(h)} title="Edit holiday" aria-label={`Edit ${h.name}`}

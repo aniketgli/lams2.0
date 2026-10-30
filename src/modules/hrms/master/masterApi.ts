@@ -25,6 +25,8 @@ export interface MasterDefinition {
   /** For kind 'lookup': the list type other masters' fields refer to. */
   lookupType?: string;
   fields: MasterFieldDef[];
+  /** Position among the Profile Masters tabs; null = no tab (data still used by other dropdowns). */
+  tab?: number | null;
 }
 
 export interface MasterCatalog {

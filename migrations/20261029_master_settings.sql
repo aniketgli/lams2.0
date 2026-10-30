@@ -92,7 +92,6 @@ INSERT IGNORE INTO lookup_values (lookup_type, code, name, sort_order, metadata)
   ('org_unit_type', 'Cell',       'Cell',       20, NULL),
   ('org_unit_type', 'Division',   'Division',   30, NULL),
   ('org_unit_type', 'Unit',       'Unit',       40, NULL),
-  ('org_unit_type', 'Project',    'Project',    50, NULL),
   ('org_unit_type', 'Other',      'Other',      60, NULL),
 
   ('cadre_group', 'Cadre A',           'Cadre A (Administrative)',  10, NULL),
