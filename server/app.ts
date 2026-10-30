@@ -91,7 +91,7 @@ export async function createApp(httpServer?: HttpServer) {
   api.use('/hrms', settingsRoutes); // shifts, biometric machines, organization settings
   api.use('/hrms', holidayRoutes); // holiday calendar
   api.use('/hrms', employeeRoutes); // employee accounts, profiles, roles, password resets
-  api.use('/hrms', attendanceRoutes); // biometric attendance (read-only, from the Atten punch log)
+  api.use('/hrms', attendanceRoutes); // biometric attendance (read-only, from the Attendance punch table)
   api.use(apiNotFound);
   app.use('/api', api);
 

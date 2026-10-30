@@ -323,7 +323,7 @@ export const account_settings = mysqlTable('account_settings', {
 
 // Biometric punch log, filled by the machine software (parallel export). The portal only reads it.
 // Column names follow the export format (migrations/20261030_attendance_logs.sql).
-export const atten = mysqlTable('Atten', {
+export const attendance_punches = mysqlTable('Attendance', {
   id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
   employeeCode: varchar('EmployeeCode', { length: 50 }).notNull(),
   logDateTime: datetime('LogDateTime', { fsp: 6 }).notNull(),
