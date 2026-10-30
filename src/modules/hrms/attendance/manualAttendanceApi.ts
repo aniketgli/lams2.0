@@ -50,11 +50,15 @@ export interface ManualInput {
   reason: string;
 }
 
+export interface PunchGap { date: string; in: string | null; out: string | null }
+
 const base = '/hrms/manual-attendance';
 const one = (id: string) => `${base}/${encodeURIComponent(id)}`;
 
 export const manualAttendanceApi = {
   list: (from: string, to: string) => api<ManualList>(`${base}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+  /** Dates (latest first) with a missing In and / or Out punch and no open request. `userId` is for administrators. */
+  missingPunches: (userId?: string) => api<{ dates: PunchGap[] }>(`${base}/missing-punches${userId ? `?userId=${encodeURIComponent(userId)}` : ''}`),
   create: (input: ManualInput) => api<{ request: ManualRequest; message: string }>(base, { method: 'POST', body: { ...input, userId: input.userId || undefined } }),
   update: (id: string, input: ManualInput) => api<{ request: ManualRequest; changed: string[]; message: string }>(one(id), { method: 'PUT', body: input }),
   decide: (id: string, action: 'approve' | 'reject', comment: string) =>

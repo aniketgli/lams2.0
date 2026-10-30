@@ -3,7 +3,7 @@ import { pool } from '../../src/db';
 import { HttpError, badRequest } from '../lib/http';
 import { isValidIsoDate, todayInIndia } from '../lib/validate';
 import type { RoleId } from '../lib/roles';
-import { DayRecord, Punch, ShiftRule, buildDay, datesBetween, normalizeEmployeeCode, shiftRule } from './compute';
+import { DayRecord, Punch, ShiftRule, buildDay, datesBetween, normalizeEmployeeCode, shiftRule, toMinutes, weekdayOf } from './compute';
 
 /**
  * Attendance read from the biometric punch log (table `Attendance`), which the machine
@@ -188,22 +188,57 @@ async function approvedManual(from: string, to: string): Promise<Map<string, Map
   return out;
 }
 
-/** The biometric In (first punch) and Out (last punch) of one employee on one date, or null when none was recorded. */
-export async function biometricInOut(biometricId: string, date: string): Promise<{ inTime: string; outTime: string | null } | null> {
-  const machines = await attendanceMachines();
+/** What the biometric machines recorded for one day: the In and Out punch, each null when missing. */
+export interface PunchDay { date: string; in: string | null; out: string | null }
+
+/**
+ * One punch is In when it falls in the first half of the shift (at or before the
+ * half-day cutoff), otherwise it is the Out punch. Two or more punches (a minute or
+ * more apart) are In (first) and Out (last).
+ */
+function classifyPunches(times: string[], shift: ShiftRule): { in: string | null; out: string | null } {
+  const list = [...times].sort();
+  if (list.length === 0) return { in: null, out: null };
+  const first = list[0].slice(0, 5);
+  const last = list[list.length - 1].slice(0, 5);
+  if (toMinutes(list[list.length - 1]) - toMinutes(list[0]) >= 1) return { in: first, out: last };
+  return toMinutes(first) <= toMinutes(shift.halfDayCutoff) ? { in: first, out: null } : { in: null, out: first };
+}
+
+async function shiftFor(shiftId: string | null): Promise<ShiftRule> {
+  const shifts = await shiftRules();
+  return (shiftId && shifts.byId.get(shiftId)) || shifts.fallback;
+}
+
+/** The biometric In / Out of one employee on one date (both null when nothing was recorded or the log is unavailable). */
+export async function biometricDay(biometricId: string, shiftId: string | null, date: string): Promise<PunchDay> {
+  const [machines, shift] = await Promise.all([attendanceMachines(), shiftFor(shiftId)]);
   const code = normalizeEmployeeCode(biometricId);
-  let punches: Map<string, Map<string, Punch[]>>;
   try {
-    punches = await loadPunches(date, date, machines, [code]);
+    const punches = await loadPunches(date, date, machines, [code]);
+    return { date, ...classifyPunches((punches.get(code)?.get(date) ?? []).map((p) => p.time), shift) };
   } catch (error) {
-    if (error instanceof HttpError) return null;
+    if (error instanceof HttpError) return { date, in: null, out: null };
     throw error;
   }
-  const list = [...(punches.get(code)?.get(date) ?? [])].sort((a, b) => a.time.localeCompare(b.time));
-  if (list.length === 0) return null;
-  const first = list[0].time.slice(0, 5);
-  const last = list[list.length - 1].time.slice(0, 5);
-  return { inTime: first, outTime: last > first ? last : null };
+}
+
+/**
+ * Working days from `to` backwards (latest first) on which the In and / or Out punch is
+ * missing. Weekly offs, gazetted holidays and days before joining are left out.
+ */
+export async function punchGaps(emp: { biometricId: string; shiftId: string | null; joining: string | null }, from: string, to: string): Promise<PunchDay[]> {
+  const [machines, shift, holidays] = await Promise.all([attendanceMachines(), shiftFor(emp.shiftId), gazettedHolidays(from, to)]);
+  const code = normalizeEmployeeCode(emp.biometricId);
+  const punches = await loadPunches(from, to, machines, [code]);
+  const out: PunchDay[] = [];
+  for (const date of datesBetween(from, to).reverse()) {
+    if (emp.joining && date < emp.joining) continue;
+    if (holidays.has(date) || !shift.workingDays.includes(weekdayOf(date))) continue;
+    const day = classifyPunches((punches.get(code)?.get(date) ?? []).map((p) => p.time), shift);
+    if (day.in === null || day.out === null) out.push({ date, ...day });
+  }
+  return out;
 }
 
 export async function listAttendance(viewer: AttendanceViewer, query: { from?: unknown; to?: unknown; userId?: unknown }): Promise<AttendanceResult> {

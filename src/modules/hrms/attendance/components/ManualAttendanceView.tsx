@@ -15,7 +15,7 @@ import { ApiError } from '../../../../shared/services/api';
 import { activityEndpoints } from '../../../../shared/services/activityApi';
 import { downloadCsvText, downloadTablePdf, printedAt, toCsvText } from '../../../../shared/services/printTable';
 import { ConfirmDialog, NoticeBar, useNotice } from '../../master/components/masterUi';
-import { ManualInput, ManualList, ManualRequest, ManualStatus, manualAttendanceApi } from '../manualAttendanceApi';
+import { ManualInput, ManualList, ManualRequest, ManualStatus, PunchGap, manualAttendanceApi } from '../manualAttendanceApi';
 
 /**
  * Manual Attendance: a request to correct a missed or wrong punch.
@@ -61,7 +61,9 @@ const StatusPill: React.FC<{ status: ManualStatus }> = ({ status }) => (
   <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] font-bold whitespace-nowrap ${STATUS_META[status].pill}`}>{STATUS_META[status].label}</span>
 );
 
-const EMPTY_FORM: ManualInput = { userId: '', date: '', inTime: '09:30', outTime: '18:00', category: '', reason: '' };
+const EMPTY_FORM: ManualInput = { userId: '', date: '', inTime: '', outTime: '', category: '', reason: '' };
+const dayShort = (date: string) => new Date(`${date}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'short' });
+const gapText = (g: PunchGap) => (!g.in && !g.out ? 'No punch' : !g.in ? 'Check-In missing' : 'Check-Out missing');
 
 export const ManualAttendanceView: React.FC = () => {
   const { currentUser, users } = useApp();
@@ -153,7 +155,32 @@ export const ManualAttendanceView: React.FC = () => {
     setForm((f) => ({ ...f, [key]: value }));
     setFormErrors((e) => (e[key] ? { ...e, [key]: '' } : e));
   };
-  const openApply = () => { setEditing(null); setForm({ ...EMPTY_FORM, userId: isAdmin ? '' : String(currentUser.id) }); setFormErrors({}); setFormMessage(null); setFormOpen(true); };
+  // Dates the employee has a missing punch on (latest first). The server works them out from the biometric log.
+  const [gaps, setGaps] = useState<PunchGap[]>([]);
+  const [gapsLoading, setGapsLoading] = useState(false);
+  const [gapsError, setGapsError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!formOpen || (isAdmin && !form.userId)) { setGaps([]); return; }
+    let cancelled = false;
+    setGapsLoading(true); setGapsError(null);
+    manualAttendanceApi.missingPunches(isAdmin ? form.userId : undefined)
+      .then((res) => { if (!cancelled) setGaps(res.dates); })
+      .catch((e) => { if (!cancelled) { setGaps([]); setGapsError(e instanceof ApiError ? e.message : 'Dates could not be loaded.'); } })
+      .finally(() => { if (!cancelled) setGapsLoading(false); });
+    return () => { cancelled = true; };
+  }, [formOpen, form.userId, isAdmin]);
+  // When editing, the request's own date stays selectable.
+  const dateChoices = useMemo(() => {
+    const own: PunchGap[] = editing && editing.userId === form.userId ? [{ date: editing.date, in: editing.originalIn, out: editing.originalOut }] : [];
+    return [...own, ...gaps.filter((g) => !own.some((o) => o.date === g.date))].sort((a, b) => b.date.localeCompare(a.date));
+  }, [gaps, editing, form.userId]);
+  const chosen = dateChoices.find((g) => g.date === form.date) ?? null;
+  const pickDate = (date: string) => {
+    const g = dateChoices.find((x) => x.date === date);
+    setForm((f) => ({ ...f, date, inTime: g?.in ?? '', outTime: g?.out ?? '' }));
+    setFormErrors((e) => ({ ...e, date: '', inTime: '', outTime: '' }));
+  };
+  const openApply = () => { setEditing(null); setForm(EMPTY_FORM); setFormErrors({}); setFormMessage(null); setFormOpen(true); };
   const openEdit = (r: ManualRequest) => {
     setEditing(r);
     setForm({ userId: r.userId, date: r.date, inTime: r.inTime, outTime: r.outTime, category: r.category, reason: r.reason });
@@ -444,7 +471,7 @@ export const ManualAttendanceView: React.FC = () => {
           onClose={() => setFormOpen(false)}
           size="lg"
           title={editing ? 'Edit manual attendance' : 'Apply manual attendance'}
-          subtitle={editing ? `${editing.name} · ${formatDate(editing.date)}` : 'Only past dates, up to yesterday'}
+          subtitle={editing ? `${editing.name} · ${formatDate(editing.date)}` : 'Dates with a missing punch, latest first'}
           footer={(
             <div className="flex justify-end gap-2">
               <button type="button" onClick={() => setFormOpen(false)} className="h-9 px-4 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer">Cancel</button>
@@ -460,18 +487,22 @@ export const ManualAttendanceView: React.FC = () => {
               {isAdmin ? (
                 <div className={`sm:col-span-2 ${formErrors.userId ? 'rounded-xl ring-2 ring-rose-400' : ''}`} title={formErrors.userId || undefined}>
                   <label className="block font-bold text-slate-800 text-xs tracking-tight mb-1">Employee *</label>
-                  <AppSelect value={form.userId} onChange={(v) => setField('userId', v)} disabled={Boolean(editing)} searchable placeholder="Select employee"
+                  <AppSelect value={form.userId} onChange={(v) => setForm((f) => ({ ...f, userId: v, date: '', inTime: '', outTime: '' }))} disabled={Boolean(editing)} searchable placeholder="Select employee"
                     options={(data?.employees ?? []).map((e) => ({ label: `${e.name} (${e.biometricId})${e.designation ? ` · ${e.designation}` : ''}`, value: e.id }))} />
                 </div>
               ) : null}
-              <div className={formErrors.date ? 'rounded-xl ring-2 ring-rose-400' : ''} title={formErrors.date || undefined}>
-                <AppDatePicker label="Date *" value={form.date} placeholder="Select date" maxDate={localDate(-1)} onChange={(v) => setField('date', v)} className="w-full" />
+              <div className={formErrors.date ? 'rounded-xl ring-2 ring-rose-400' : ''} title={formErrors.date || gapsError || undefined}>
+                <label className="block font-bold text-slate-800 text-xs tracking-tight mb-1">Date *</label>
+                <AppSelect value={form.date} onChange={pickDate} searchable={false}
+                  disabled={gapsLoading || (isAdmin && !form.userId) || dateChoices.length === 0}
+                  placeholder={gapsLoading ? 'Loading dates…' : isAdmin && !form.userId ? 'Select employee first' : dateChoices.length === 0 ? 'No date with a missing punch' : 'Select date'}
+                  options={dateChoices.map((g) => ({ label: `${formatDate(g.date)} (${dayShort(g.date)}) · ${gapText(g)}`, value: g.date }))} />
               </div>
               <Select label="Category" required value={form.category} error={Boolean(formErrors.category)}
                 options={(data?.categories ?? []).map((c) => ({ label: c, value: c }))} onChange={(v: string) => setField('category', v)} />
-              <Input label="Check-In" type="time" required value={form.inTime} error={Boolean(formErrors.inTime)} title={formErrors.inTime || undefined}
+              <Input label="Check-In" type="time" required disabled={!chosen || Boolean(chosen.in)} value={form.inTime} error={Boolean(formErrors.inTime)} title={formErrors.inTime || undefined}
                 onChange={(e) => setField('inTime', e.target.value)} />
-              <Input label="Check-Out" type="time" required value={form.outTime} error={Boolean(formErrors.outTime)} title={formErrors.outTime || undefined}
+              <Input label="Check-Out" type="time" required disabled={!chosen || Boolean(chosen.out)} value={form.outTime} error={Boolean(formErrors.outTime)} title={formErrors.outTime || undefined}
                 onChange={(e) => setField('outTime', e.target.value)} />
             </div>
             <Textarea label="Reason *" rows={3} maxLength={500} value={form.reason} error={Boolean(formErrors.reason)}
