@@ -219,6 +219,11 @@ export async function createRecord(def: MasterDef, body: unknown, req: Request):
   const input = await validate(def, body, null);
   const { columns, values } = storageValues(def, input);
   return inTransaction(async (conn) => {
+    // Lists keep their order without anyone typing it: a new value goes to the end.
+    if (def.kind === 'lookup' && (body as { sortOrder?: unknown } | null)?.sortOrder === undefined) {
+      const [[last]] = await conn.query<RowDataPacket[]>('SELECT COALESCE(MAX(sort_order), 0) AS n FROM lookup_values WHERE lookup_type = ?', [def.lookupType]);
+      values[columns.indexOf('sort_order')] = Math.min(100000, Number(last?.n ?? 0) + 10);
+    }
     const [result] = await conn.query<ResultSetHeader>(
       `INSERT INTO ${tableOf(def)} (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`,
       values,

@@ -132,7 +132,6 @@ export const BiometricMachinesPanel: React.FC<{ readOnly: boolean }> = ({ readOn
       <NoticeBar notice={notice} onClose={clearNotice} />
       <PanelCard
         title={<><Cpu className="w-4 h-4 text-primary" />Biometric Machines</>}
-        description="Punch devices. Punches from access-only devices are not counted for attendance."
         count={machines.length}
         actions={!readOnly && <Button variant="primary" size="sm" leftIcon={Plus} onClick={() => open(null)}>Add machine</Button>}
       >
@@ -154,7 +153,6 @@ export const BiometricMachinesPanel: React.FC<{ readOnly: boolean }> = ({ readOn
         onClose={() => !saving && setForm(null)}
         size="md"
         title={editing ? 'Edit biometric machine' : 'Add biometric machine'}
-        subtitle={editing ? `${editing.fullName} · ${editing.id}` : undefined}
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="outline" size="sm" onClick={() => setForm(null)} disabled={saving}>Cancel</Button>
