@@ -35,10 +35,11 @@ EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
 -- Existing units belong to WII until an administrator says otherwise.
-UPDATE organization_units SET institute = 'WII' WHERE institute IS NULL OR institute = '';
+-- "id > 0" keeps MySQL Workbench's Safe Updates mode happy (it needs a key column in WHERE).
+UPDATE organization_units SET institute = 'WII' WHERE id > 0 AND (institute IS NULL OR institute = '');
 
 -- Existing employees: SACON staff are recognised from their old office location; the rest are WII.
 UPDATE employee_profiles SET institute = 'SACON'
- WHERE (institute IS NULL OR institute = '') AND (office_location LIKE '%SACON%' OR office_location LIKE '%Coimbatore%');
+ WHERE id > 0 AND (institute IS NULL OR institute = '') AND (office_location LIKE '%SACON%' OR office_location LIKE '%Coimbatore%');
 UPDATE employee_profiles SET institute = 'WII'
- WHERE institute IS NULL OR institute = '';
+ WHERE id > 0 AND (institute IS NULL OR institute = '');
