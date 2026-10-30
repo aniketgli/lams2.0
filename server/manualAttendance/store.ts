@@ -7,7 +7,7 @@ import { PATTERNS, Validator, isValidIsoDate, todayInIndia } from '../lib/valida
 import { changedFields, writeMasterAuditSql } from '../masters/audit';
 import type { RoleId } from '../lib/roles';
 import type { ActivityScope } from '../employees/activity';
-import { biometricInOut } from '../attendance/store';
+import { biometricDay, punchGaps, type PunchDay } from '../attendance/store';
 
 /**
  * Manual attendance: a request to correct a missed or wrong punch (table
@@ -229,17 +229,28 @@ function checkDate(input: ManualInput, joining: string | null, today = todayInIn
   if (joining && input.date < joining) throw badRequest('Please correct the highlighted fields.', { date: `This is before the employee joined (${joining}).` });
 }
 
-interface Target { id: number; biometricId: string; joining: string | null; reportingManagerId: string | null }
+/** A punch the machine already recorded cannot be changed; only a missing In / Out can be requested. */
+function checkAgainstPunches(input: ManualInput, day: PunchDay): void {
+  const errors: Record<string, string> = {};
+  if (day.in && day.out) errors.date = 'Both punches are already recorded for this date.';
+  else {
+    if (day.in && input.inTime !== day.in) errors.inTime = `Check-In ${day.in} is already recorded and cannot be changed.`;
+    if (day.out && input.outTime !== day.out) errors.outTime = `Check-Out ${day.out} is already recorded and cannot be changed.`;
+  }
+  if (Object.keys(errors).length) throw badRequest('Please correct the highlighted fields.', errors);
+}
+
+interface Target { id: number; biometricId: string; shiftId: string | null; joining: string | null; reportingManagerId: string | null }
 
 async function loadTarget(q: { query: typeof pool.query }, userId: number): Promise<Target> {
   const [row] = await rows(q,
-    `SELECT u.id, u.biometric_id, u.status, p.joining_date, p.profile_data
+    `SELECT u.id, u.biometric_id, u.status, p.joining_date, p.shift_id, p.profile_data
        FROM users u LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE u.id = ? LIMIT 1`, [userId]);
   if (!row) throw badRequest('Please correct the highlighted fields.', { userId: 'Choose an employee from the list.' });
   if (String(row.status).toLowerCase() !== 'active') throw badRequest('Please correct the highlighted fields.', { userId: 'This employee is not active.' });
   const manager = String(profileData(row.profile_data).reportingManagerId ?? '');
   return {
-    id: Number(row.id), biometricId: String(row.biometric_id),
+    id: Number(row.id), biometricId: String(row.biometric_id), shiftId: row.shift_id ? String(row.shift_id) : null,
     joining: row.joining_date ? isoDate(row.joining_date) : null,
     reportingManagerId: /^\d+$/.test(manager) ? manager : null,
   };
@@ -277,7 +288,8 @@ export async function createRequest(req: Request, viewer: Viewer, body: unknown)
   const target = await loadTarget(pool, targetId);
   checkDate(input, target.joining);
   // The biometric punches found for that day, kept for the approver to compare.
-  const original = await biometricInOut(target.biometricId, input.date);
+  const original = await biometricDay(target.biometricId, target.shiftId, input.date);
+  checkAgainstPunches(input, original);
 
   try {
     return await inTransaction(async (conn) => {
@@ -286,7 +298,7 @@ export async function createRequest(req: Request, viewer: Viewer, body: unknown)
         `INSERT INTO manual_attendance_requests
            (user_id, att_date, in_time, out_time, original_in, original_out, category, reason, status, applied_by, manager_id)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
-        [target.id, input.date, input.inTime, input.outTime, original?.inTime ?? null, original?.outTime ?? null, input.category, input.reason, viewer.id, target.reportingManagerId],
+        [target.id, input.date, input.inTime, input.outTime, original.in, original.out, input.category, input.reason, viewer.id, target.reportingManagerId],
       );
       const id = Number((result as { insertId: number }).insertId);
       const created = toRequest(viewer, (await fetchOne(viewer, conn, id))!);
@@ -311,10 +323,11 @@ export async function updateRequest(req: Request, viewer: Viewer, id: number, bo
       const target = await loadTarget(conn, Number(row.user_id));
       checkDate(input, target.joining);
       if (await hasOpenRequest(conn, target.id, input.date, id)) throw duplicate(input.date);
-      const original = input.date === before.date ? { inTime: before.originalIn, outTime: before.originalOut } : await biometricInOut(target.biometricId, input.date);
+      const original = await biometricDay(target.biometricId, target.shiftId, input.date);
+      checkAgainstPunches(input, original);
       await conn.query(
         'UPDATE manual_attendance_requests SET att_date = ?, in_time = ?, out_time = ?, original_in = ?, original_out = ?, category = ?, reason = ? WHERE id = ?',
-        [input.date, input.inTime, input.outTime, original?.inTime ?? null, original?.outTime ?? null, input.category, input.reason, id],
+        [input.date, input.inTime, input.outTime, original.in, original.out, input.category, input.reason, id],
       );
       const after = toRequest(viewer, (await fetchOne(viewer, conn, id))!);
       const changed = changedFields(auditView(before), auditView(after));
@@ -395,4 +408,38 @@ export async function applicableEmployees(viewer: Viewer): Promise<{ id: string;
        LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id
       WHERE LOWER(u.status) = 'active' ORDER BY u.name`);
   return found.map((r) => ({ id: String(r.id), biometricId: String(r.biometric_id), name: String(r.name), designation: String(r.designation ?? '') }));
+}
+
+/** How far back "dates with a missing punch" looks. */
+export const GAP_DAYS = 60;
+
+/** Dates (latest first) on which this employee has no In and / or Out punch and no open request. */
+export async function missingPunchDates(viewer: Viewer, userIdRaw: unknown): Promise<PunchDay[]> {
+  let targetId: number;
+  if (viewer.role === 'administrator') {
+    if (!/^\d{1,20}$/.test(String(userIdRaw ?? ''))) throw badRequest('Choose an employee.');
+    targetId = Number(userIdRaw);
+  } else if (viewer.role === 'general_staff') {
+    if (userIdRaw && Number(userIdRaw) !== viewer.id) throw forbidden('You can only apply for your own attendance.');
+    targetId = viewer.id;
+  } else {
+    throw forbidden('Your current role cannot apply for manual attendance.');
+  }
+  const target = await loadTarget(pool, targetId);
+  const today = todayInIndia();
+  const to = new Date(`${today}T00:00:00Z`);
+  to.setUTCDate(to.getUTCDate() - 1);
+  const from = new Date(to);
+  from.setUTCDate(from.getUTCDate() - (GAP_DAYS - 1));
+  const gaps = await punchGaps(target, from.toISOString().slice(0, 10), to.toISOString().slice(0, 10));
+  let open: RowDataPacket[];
+  try {
+    open = await rows(pool, "SELECT DATE_FORMAT(att_date, '%Y-%m-%d') AS d FROM manual_attendance_requests WHERE user_id = ? AND status <> 'rejected' AND att_date BETWEEN ? AND ?",
+      [target.id, from.toISOString().slice(0, 10), to.toISOString().slice(0, 10)]);
+  } catch (error) {
+    missingTable(error);
+    throw error;
+  }
+  const taken = new Set(open.map((r) => String(r.d)));
+  return gaps.filter((g) => !taken.has(g.date));
 }

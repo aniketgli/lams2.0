@@ -4,7 +4,7 @@ import { Validator } from '../lib/validate';
 import { requireActiveRole, requireAuth } from '../middleware/auth.middleware';
 import { activityCsv, activityTable, listActivity, parseActivityFilter } from '../employees/activity';
 import {
-  MANUAL_SCOPE, REASON_CATEGORIES, applicableEmployees, createRequest, decideRequest, deleteRequest, listRequests, requestId, updateRequest,
+  MANUAL_SCOPE, REASON_CATEGORIES, applicableEmployees, createRequest, decideRequest, deleteRequest, listRequests, missingPunchDates, requestId, updateRequest,
 } from './store';
 
 /**
@@ -24,6 +24,10 @@ router.get('/manual-attendance', requireAuth, asyncHandler(async (req, res) => {
   const viewer = viewerOf(req);
   const [list, employees] = await Promise.all([listRequests(viewer, { from: q.from, to: q.to }), applicableEmployees(viewer)]);
   res.json({ ...list, employees, categories: REASON_CATEGORIES });
+}));
+
+router.get('/manual-attendance/missing-punches', requireAuth, asyncHandler(async (req, res) => {
+  res.json({ dates: await missingPunchDates(viewerOf(req), req.query.userId) });
 }));
 
 // Auditor log routes come before /:id so "activity" is never read as an ID.
