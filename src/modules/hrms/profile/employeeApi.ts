@@ -74,7 +74,7 @@ export const EMPLOYEE_FIELD_LABELS: Record<string, string> = {
   biometricId: 'Biometric ID', suffix: 'Salutation', name: 'Full name', email: 'Email', gender: 'Gender', dob: 'Date of birth',
   phone: 'Mobile number', employmentType: 'Employee type', shiftId: 'Shift', leaveCycle: 'Leave year type',
   joiningDate: 'Date of joining', institute: 'Organization', department: 'Department / project',
-  designation: 'Designation', employeeCategory: 'Category', permanentEmploymentType: 'Direct / Deputation',
+  designation: 'Designation', employeeCategory: 'Category', permanentEmploymentType: 'Recruitment',
   reportingManagerId: 'Reporting manager', reviewingManagerId: 'HoD', validUntilDate: 'Valid up to',
   probationEndDate: 'Probation end date', courseProgram: 'Course', courseBatch: 'Batch', enrolledThrough: 'Enrolled through',
   piName: 'PI name', guideSupervisor: 'Guide / supervisor',

@@ -142,7 +142,7 @@ export function buildSections(
         f('department', 'Department / Section / Cell', record.department),
         f('designation', 'Designation', record.designation),
         f('employeeCategory', 'Category', data.employeeCategory),
-        f('permanentEmploymentType', 'Appointment', data.permanentEmploymentType),
+        f('permanentEmploymentType', 'Recruitment', data.permanentEmploymentType),
         f('joiningDate', 'Date of joining', record.joiningDate, 'date'),
         deputation
           ? f('validUpto', 'Deputation valid up to', record.validUpto, 'date')

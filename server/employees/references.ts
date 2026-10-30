@@ -81,16 +81,39 @@ export async function checkReferences(q: Querier, input: EmployeeInput, layout: 
 
   const masterChecks: [keyof EmployeeInput, MasterRef | undefined, string][] = [
     ['department', rules.department, rules.department === 'projects' ? 'project' : 'department'],
-    ['designation', rules.designation ? 'designations' : undefined, 'designation'],
-    ['employeeCategory', rules.category ? 'categories' : undefined, 'category'],
-    ['courseProgram', rules.course ? 'courses' : undefined, 'course'],
-    ['courseBatch', rules.course ? 'batches' : undefined, 'batch'],
     ['enrolledThrough', rules.enrollment ? 'phdEnrollment' : undefined, 'enrollment source'],
   ];
   for (const [field, ref, noun] of masterChecks) {
     const value = input[field];
     if (!ref || typeof value !== 'string') continue;
     if (!await activeMasterValue(q, ref, value)) errors[field] = `Choose an active ${noun} from Master Settings.`;
+  }
+
+  // A designation may be tied to one employee type; if so it must be this one.
+  if (rules.designation && input.designation) {
+    const [row] = await rows(q,
+      `SELECT JSON_UNQUOTE(JSON_EXTRACT(IF(JSON_VALID(metadata), metadata, '{}'), '$.empType')) AS emp_type
+         FROM designations WHERE name = ? AND UPPER(status) = 'ACTIVE' LIMIT 1`, [input.designation]);
+    if (!row) errors.designation = 'Choose an active designation from Master Settings.';
+    else if (row.emp_type && String(row.emp_type) !== input.employmentType) errors.designation = 'This designation is not for the selected employee type.';
+  }
+
+  // Course and batch: trainees pick a training course and its batch, M.Sc students a stream and its batch.
+  if (rules.course && input.courseProgram) {
+    const msc = layout === 'bsc_msc_student';
+    const courseTable = msc ? 'msc_streams' : 'training_courses';
+    const batchTable = msc ? 'msc_batches' : 'trainee_batches';
+    const parentPath = msc ? '$.parentStream' : '$.parentCourse';
+    const noun = msc ? 'stream' : 'course';
+    const course = await rows(q, `SELECT 1 FROM ${courseTable} WHERE name = ? AND UPPER(status) = 'ACTIVE' LIMIT 1`, [input.courseProgram]);
+    if (!course.length) errors.courseProgram = `Choose an active ${noun} from Master Settings.`;
+    else if (input.courseBatch) {
+      const [batch] = await rows(q,
+        `SELECT JSON_UNQUOTE(JSON_EXTRACT(IF(JSON_VALID(metadata), metadata, '{}'), '${parentPath}')) AS parent
+           FROM ${batchTable} WHERE name = ? AND UPPER(status) = 'ACTIVE' LIMIT 1`, [input.courseBatch]);
+      if (!batch) errors.courseBatch = 'Choose an active batch from Master Settings.';
+      else if (String(batch.parent ?? '') !== input.courseProgram) errors.courseBatch = `This batch is not for the selected ${noun}.`;
+    }
   }
 
   // A department / cell must belong to the employee's institute (projects are shared).
@@ -101,9 +124,14 @@ export async function checkReferences(q: Querier, input: EmployeeInput, layout: 
     }
   }
 
+  // Managers must be active accounts of the same institute (when their institute is recorded).
   const activeAccount = async (id: string) => {
-    const [row] = await rows(q, 'SELECT id, name, status FROM users WHERE id = ? LIMIT 1', [Number(id)]);
-    return row && String(row.status).toLowerCase() === 'active' ? row : null;
+    const [row] = await rows(q,
+      `SELECT u.id, u.name, u.status, p.institute FROM users u
+         LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE u.id = ? LIMIT 1`, [Number(id)]);
+    if (!row || String(row.status).toLowerCase() !== 'active') return null;
+    if (row.institute && input.institute && String(row.institute) !== input.institute) return null;
+    return row;
   };
 
   let reportingManagerName: string | null = null;
@@ -111,7 +139,7 @@ export async function checkReferences(q: Querier, input: EmployeeInput, layout: 
     if (selfId !== null && Number(input.reportingManagerId) === selfId) errors.reportingManagerId = 'An employee cannot report to themselves.';
     else {
       const manager = await activeAccount(input.reportingManagerId);
-      if (!manager) errors.reportingManagerId = 'Choose an active employee as the reporting manager.';
+      if (!manager) errors.reportingManagerId = 'Choose an active employee of the same organization as the reporting manager.';
       else reportingManagerName = String(manager.name);
     }
   }
@@ -129,7 +157,7 @@ export async function checkReferences(q: Querier, input: EmployeeInput, layout: 
       if (selfId !== null && Number(reviewingManagerId) === selfId) errors.reviewingManagerId = 'An employee cannot be their own HoD.';
       else {
         const hod = await activeAccount(reviewingManagerId);
-        if (!hod) errors.reviewingManagerId = 'Choose an active employee as the HoD.';
+        if (!hod) errors.reviewingManagerId = 'Choose an active employee of the same organization as the HoD.';
         else hodName = String(hod.name);
       }
     }

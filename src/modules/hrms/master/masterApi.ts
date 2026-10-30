@@ -13,6 +13,10 @@ export interface MasterFieldDef {
   lookupType?: string;
   masterKey?: string;
   placeholder?: string;
+  /** Not shown in the master screen (kept as stored). */
+  hidden?: boolean;
+  /** For employee-type lookups: only types with one of these form layouts may be chosen. */
+  allowedLayouts?: string[];
 }
 
 export interface MasterDefinition {
@@ -27,6 +31,8 @@ export interface MasterDefinition {
   fields: MasterFieldDef[];
   /** Position among the Profile Masters tabs; null = no tab (data still used by other dropdowns). */
   tab?: number | null;
+  /** Fixed set: records can be renamed or (de)activated, not added or deleted. */
+  fixedRecords?: boolean;
 }
 
 export interface MasterCatalog {

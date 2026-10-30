@@ -194,11 +194,13 @@ export interface EmployeeProfilePageProps {
   initialTab?: 'profile' | 'user_controls' | 'transfers';
 }
 
+/** Staff category of permanent / contractual staff (fixed list, no master). */
+const STAFF_CATEGORIES = ['Scientific', 'Technical', 'Support', 'Administrative', 'Finance', 'Stenographer', 'Driver', 'Multi Tasking Staff'];
+
 export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initialTab = 'profile' }) => {
   const {
     currentUser,
     users,
-    shifts,
     updateUserProfile,
     addUserProfile,
     updateUserRoleAndHierarchy,
@@ -210,12 +212,6 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     bulkReassignManager,
     transferLogs,
     departmentsMaster,
-    designationsMaster,
-    categoriesMaster,
-    projectsMaster,
-    coursesMaster,
-    batchesMaster,
-    phdEnrollmentMaster,
     locationsMaster,
     masterOptions,
     reloadEmployees
@@ -236,6 +232,31 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   /** The form layout behind an employee type (types are admin-defined; layouts are fixed). */
   const layoutOf = (employeeType?: string | null): string =>
     (masterOptions.employeeType ?? []).find((r) => r.code === employeeType)?.fields.formLayout || String(employeeType || '');
+
+  // ---- Add / edit employee form: each list follows the choice made above it ----
+  type Opt = { label: string; value: string };
+  /** Keeps a stored value selectable while editing, even if it is no longer in the list. */
+  const withCurrent = (options: Opt[], value?: string | null): Opt[] =>
+    value && !options.some((o) => o.value === value) ? [...options, { label: `${value} (inactive)`, value }] : options;
+  const toOpts = (names: string[]): Opt[] => names.map((n) => ({ label: n, value: n }));
+  /** Designations of this employee type (a designation without a type fits every staff type). */
+  const designationOptionsFor = (employeeType: string): Opt[] =>
+    toOpts((masterOptions.designations ?? []).filter((r) => !r.fields.empType || r.fields.empType === employeeType).map((r) => r.name));
+  /** Trainees pick a training course, M.Sc students a stream. */
+  const courseOptionsFor = (layout: string): Opt[] =>
+    toOpts(optionNames(layout === 'bsc_msc_student' ? 'mscStreams' : 'courses'));
+  /** Batches of the chosen course / stream only. */
+  const batchOptionsFor = (layout: string, course: string): Opt[] => {
+    if (!course) return [];
+    const msc = layout === 'bsc_msc_student';
+    return toOpts((masterOptions[msc ? 'mscBatches' : 'traineeBatches'] ?? [])
+      .filter((r) => (msc ? r.fields.parentStream : r.fields.parentCourse) === course).map((r) => r.name));
+  };
+  const projectOptions = toOpts(optionNames('projects'));
+  const enrollmentOptions = toOpts(optionNames('phdEnrollment'));
+  const shiftOptions: Opt[] = (masterOptions.shifts ?? []).map((sh) => ({ label: `${sh.code} - ${sh.name}${sh.isDefault ? ' (Default)' : ''}`, value: sh.id }));
+  const staffCategoryOptions = toOpts(STAFF_CATEGORIES);
+  const recruitmentOptions = toOpts(['Direct', 'Deputation']);
 
   // Role Checks
   const isAdmin = currentUser.role === 'administrator';
@@ -1328,8 +1349,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     if (!newUserForm.joiningDate?.trim()) missingFields.push('Date of Joining');
 
     if (layoutOf(newUserForm.employmentType) === 'permanent') {
-      if (!newUserForm.permanentEmploymentType?.trim()) missingFields.push('Category (Direct / Deputation)');
-      if (!newUserForm.employeeCategory?.trim()) missingFields.push('Category (Administrative / Scientific / Technical)');
+      if (!newUserForm.permanentEmploymentType?.trim()) missingFields.push('Recruitment');
+      if (!newUserForm.employeeCategory?.trim()) missingFields.push('Category');
       if (!newUserForm.designation?.trim()) missingFields.push('Designation');
       if (!newUserForm.department?.trim()) missingFields.push('Department / Section / Cell');
       if (!newUserForm.reportingManagerId?.trim()) missingFields.push('Reporting Manager');
@@ -1339,7 +1360,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       }
       if (newUserForm.isOnProbation && !newUserForm.probationEndDate?.trim()) missingFields.push('Tentative Probation End Date');
     } else if (layoutOf(newUserForm.employmentType) === 'contractual') {
-      if (!newUserForm.employeeCategory?.trim()) missingFields.push('Category (Administrative / Scientific / Technical)');
+      if (!newUserForm.employeeCategory?.trim()) missingFields.push('Category');
       if (!newUserForm.designation?.trim()) missingFields.push('Designation');
       if (!newUserForm.department?.trim()) missingFields.push('Department / Section / Cell');
       if (!newUserForm.reportingManagerId?.trim()) missingFields.push('Reporting Manager');
@@ -1588,6 +1609,11 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       return nameMatch || idMatch || deptMatch || desigMatch || emailMatch;
     });
   }, [activeEmployees, transferEmpSearchQuery]);
+
+  /** Reporting manager / HoD choices on the employee form: active employees of the same organization, never the employee themself. */
+  const formManagers = useMemo(() => users.filter((u) =>
+    u.status !== 'deactivated' && u.id !== editingEmployeeId && (!newUserForm.institute || !u.institute || u.institute === newUserForm.institute)),
+  [users, editingEmployeeId, newUserForm.institute]);
 
   // Memoized active managers & HoDs (strictly active only)
   const activeManagersAndHods = useMemo(() => {
@@ -3216,8 +3242,15 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                           placeholder="Select Organization"
                           onChange={(val) => {
                             // Departments belong to an organization: clear one that is not in the new one.
-                            const keepDept = !val || formDepartments(val).includes(newUserForm.department) || projectsMaster.includes(newUserForm.department);
-                            setNewUserForm((f) => ({ ...f, institute: val, department: keepDept ? f.department : '' }));
+                            // Departments and managers belong to an organization: clear the ones that are not in the new one.
+                            const keepDept = !val || formDepartments(val).includes(newUserForm.department) || optionNames('projects').includes(newUserForm.department);
+                            const inInstitute = (id: string) => !id || !val || (users.find((u) => u.id === id)?.institute ?? val) === val;
+                            setNewUserForm((f) => ({
+                              ...f, institute: val, department: keepDept ? f.department : '',
+                              reportingManagerId: inInstitute(f.reportingManagerId) ? f.reportingManagerId : '',
+                              reviewingManagerId: inInstitute(f.reviewingManagerId) ? f.reviewingManagerId : '',
+                              hodName: inInstitute(f.reviewingManagerId) ? f.hodName : '',
+                            }));
                             setFormErrors((e) => (e.institute ? { ...e, institute: '' } : e));
                           }}
                           options={[{ label: 'Select Organization', value: '' }, ...instituteOptions]}
@@ -3237,11 +3270,17 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                         placeholder="Select Employee Type"
                         onChange={(val) => {
                           const newCategory = (val || '') as EmploymentType | '';
+                          // Everything below depends on the type: start those fields again.
                           setNewUserForm({
                             ...newUserForm,
                             employmentType: newCategory,
                             employeeCategory: '',
-                            permanentEmploymentType: ''
+                            permanentEmploymentType: '',
+                            designation: '',
+                            department: '',
+                            courseProgram: '',
+                            courseBatch: '',
+                            enrolledThrough: ''
                           });
                         }}
                         options={[
@@ -3255,36 +3294,35 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                     {/* PERMANENT */}
                     {layoutOf(newUserForm.employmentType) === 'permanent' && (
                       <>
-                        {/* Category: Direct / Deputation */}
+                        {/* Recruitment: Direct / Deputation */}
                         <div>
                           <label className="block text-slate-700 font-bold mb-1 text-xs">
-                            Category <span className="text-blue-600 font-bold ml-0.5">*</span>
+                            Recruitment <span className="text-blue-600 font-bold ml-0.5">*</span>
                           </label>
                           <AppSelect
                             value={newUserForm.permanentEmploymentType}
-                            placeholder="Select Category"
+                            placeholder="Select Recruitment"
                             onChange={(val) => setNewUserForm({ ...newUserForm, permanentEmploymentType: val as any })}
                             options={[
-                              { label: 'Select Category', value: '' },
-                              { label: 'Direct', value: 'Direct' },
-                              { label: 'Deputation', value: 'Deputation' }
+                              { label: 'Select Recruitment', value: '' },
+                              ...recruitmentOptions
                             ]}
                             className="w-full"
                           />
                         </div>
 
-                        {/* Staff Category: Administrative / Scientific / Technical */}
+                        {/* Category (fixed list) */}
                         <div>
                           <label className="block text-slate-700 font-bold mb-1 text-xs">
-                            Staff Category <span className="text-blue-600 font-bold ml-0.5">*</span>
+                            Category <span className="text-blue-600 font-bold ml-0.5">*</span>
                           </label>
                           <AppSelect
                             value={newUserForm.employeeCategory}
-                            placeholder="Select Staff Category"
+                            placeholder="Select Category"
                             onChange={(val) => setNewUserForm({ ...newUserForm, employeeCategory: val })}
                             options={[
-                              { label: 'Select Staff Category', value: '' },
-                              ...categoriesMaster.map((c) => ({ label: c, value: c }))
+                              { label: 'Select Category', value: '' },
+                              ...withCurrent(staffCategoryOptions, newUserForm.employeeCategory)
                             ]}
                             className="w-full"
                           />
@@ -3301,7 +3339,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, designation: val })}
                             options={[
                               { label: 'Select Designation', value: '' },
-                              ...designationsMaster.map((desig) => ({ label: desig, value: desig }))
+                              ...withCurrent(designationOptionsFor(newUserForm.employmentType), newUserForm.designation)
                             ]}
                             className="w-full"
                             searchable={true}
@@ -3339,10 +3377,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, shiftId: val })}
                             options={[
                               { label: 'Select Shift', value: '' },
-                              ...shifts.map((s) => ({
-                                label: `${s.code} - ${s.name} (${s.startTime} - ${s.endTime})${s.isDefault ? ' (Default)' : ''}`,
-                                value: s.id
-                              }))
+                              ...withCurrent(shiftOptions, newUserForm.shiftId)
                             ]}
                             className="w-full"
                           />
@@ -3384,7 +3419,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, reportingManagerId: val })}
                             options={[
                               { label: 'Select Reporting Manager', value: '' },
-                              ...activeManagersAndHods.map((u) => ({
+                              ...formManagers.map((u) => ({
                                 label: `${u.name} (${u.designation || 'Manager'} - ${u.department || 'General'})`,
                                 value: u.id
                               }))
@@ -3406,7 +3441,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, reviewingManagerId: val, hodName: users.find((u) => u.id === val)?.name || '' })}
                             options={[
                               { label: 'Select HoD', value: '' },
-                              ...activeManagersAndHods.map((u) => ({
+                              ...formManagers.map((u) => ({
                                 label: `${u.name} (${u.designation || 'HoD'} - ${u.department || 'General'})`,
                                 value: u.id
                               }))
@@ -3495,7 +3530,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, employeeCategory: val })}
                             options={[
                               { label: 'Select Category', value: '' },
-                              ...categoriesMaster.map((c) => ({ label: c, value: c }))
+                              ...withCurrent(staffCategoryOptions, newUserForm.employeeCategory)
                             ]}
                             className="w-full"
                           />
@@ -3512,7 +3547,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, designation: val })}
                             options={[
                               { label: 'Select Designation', value: '' },
-                              ...designationsMaster.map((desig) => ({ label: desig, value: desig }))
+                              ...withCurrent(designationOptionsFor(newUserForm.employmentType), newUserForm.designation)
                             ]}
                             className="w-full"
                             searchable={true}
@@ -3550,10 +3585,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, shiftId: val })}
                             options={[
                               { label: 'Select Shift', value: '' },
-                              ...shifts.map((s) => ({
-                                label: `${s.code} - ${s.name} (${s.startTime} - ${s.endTime})${s.isDefault ? ' (Default)' : ''}`,
-                                value: s.id
-                              }))
+                              ...withCurrent(shiftOptions, newUserForm.shiftId)
                             ]}
                             className="w-full"
                           />
@@ -3595,7 +3627,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, reportingManagerId: val })}
                             options={[
                               { label: 'Select Reporting Manager', value: '' },
-                              ...activeManagersAndHods.map((u) => ({
+                              ...formManagers.map((u) => ({
                                 label: `${u.name} (${u.designation || 'Manager'} - ${u.department || 'General'})`,
                                 value: u.id
                               }))
@@ -3648,7 +3680,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, designation: val })}
                             options={[
                               { label: 'Select Designation', value: '' },
-                              ...designationsMaster.map((desig) => ({ label: desig, value: desig }))
+                              ...withCurrent(designationOptionsFor(newUserForm.employmentType), newUserForm.designation)
                             ]}
                             className="w-full"
                             searchable={true}
@@ -3667,7 +3699,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, department: val })}
                             options={[
                               { label: 'Select Project', value: '' },
-                              ...projectsMaster.map((proj) => ({ label: proj, value: proj }))
+                              ...withCurrent(projectOptions, newUserForm.department)
                             ]}
                             className="w-full"
                             searchable={true}
@@ -3686,10 +3718,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, shiftId: val })}
                             options={[
                               { label: 'Select Shift', value: '' },
-                              ...shifts.map((s) => ({
-                                label: `${s.code} - ${s.name} (${s.startTime} - ${s.endTime})${s.isDefault ? ' (Default)' : ''}`,
-                                value: s.id
-                              }))
+                              ...withCurrent(shiftOptions, newUserForm.shiftId)
                             ]}
                             className="w-full"
                           />
@@ -3734,7 +3763,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             }}
                             options={[
                               { label: 'Select Reporting Manager', value: '' },
-                              ...activeManagersAndHods.map((u) => ({
+                              ...formManagers.map((u) => ({
                                 label: `${u.name} (${u.designation || 'PI'} - ${u.department || 'General'})`,
                                 value: u.id
                               }))
@@ -3797,10 +3826,10 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                           <AppSelect
                             value={newUserForm.courseProgram}
                             placeholder="Select Course"
-                            onChange={(val) => setNewUserForm({ ...newUserForm, courseProgram: val })}
+                            onChange={(val) => setNewUserForm({ ...newUserForm, courseProgram: val, courseBatch: val === newUserForm.courseProgram ? newUserForm.courseBatch : '' })}
                             options={[
                               { label: 'Select Course', value: '' },
-                              ...coursesMaster.map((c) => ({ label: c, value: c }))
+                              ...withCurrent(courseOptionsFor(layoutOf(newUserForm.employmentType)), newUserForm.courseProgram)
                             ]}
                             className="w-full"
                           />
@@ -3816,8 +3845,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             placeholder="Select Batch"
                             onChange={(val) => setNewUserForm({ ...newUserForm, courseBatch: val })}
                             options={[
-                              { label: 'Select Batch', value: '' },
-                              ...batchesMaster.map((b) => ({ label: b, value: b }))
+                              { label: newUserForm.courseProgram ? 'Select Batch' : 'Select the course first', value: '' },
+                              ...withCurrent(batchOptionsFor(layoutOf(newUserForm.employmentType), newUserForm.courseProgram), newUserForm.courseBatch)
                             ]}
                             className="w-full"
                           />
@@ -3834,10 +3863,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, shiftId: val })}
                             options={[
                               { label: 'Select Shift', value: '' },
-                              ...shifts.map((s) => ({
-                                label: `${s.code} - ${s.name} (${s.startTime} - ${s.endTime})${s.isDefault ? ' (Default)' : ''}`,
-                                value: s.id
-                              }))
+                              ...withCurrent(shiftOptions, newUserForm.shiftId)
                             ]}
                             className="w-full"
                           />
@@ -3879,7 +3905,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, reportingManagerId: val })}
                             options={[
                               { label: 'Select Reporting Manager', value: '' },
-                              ...activeManagersAndHods.map((u) => ({
+                              ...formManagers.map((u) => ({
                                 label: `${u.name} (${u.designation || 'Manager'} - ${u.department || 'General'})`,
                                 value: u.id
                               }))
@@ -3929,10 +3955,10 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                           <AppSelect
                             value={newUserForm.courseProgram}
                             placeholder="Select Course"
-                            onChange={(val) => setNewUserForm({ ...newUserForm, courseProgram: val })}
+                            onChange={(val) => setNewUserForm({ ...newUserForm, courseProgram: val, courseBatch: val === newUserForm.courseProgram ? newUserForm.courseBatch : '' })}
                             options={[
                               { label: 'Select Course', value: '' },
-                              ...coursesMaster.map((c) => ({ label: c, value: c }))
+                              ...withCurrent(courseOptionsFor(layoutOf(newUserForm.employmentType)), newUserForm.courseProgram)
                             ]}
                             className="w-full"
                           />
@@ -3948,8 +3974,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             placeholder="Select Batch"
                             onChange={(val) => setNewUserForm({ ...newUserForm, courseBatch: val })}
                             options={[
-                              { label: 'Select Batch', value: '' },
-                              ...batchesMaster.map((b) => ({ label: b, value: b }))
+                              { label: newUserForm.courseProgram ? 'Select Batch' : 'Select the course first', value: '' },
+                              ...withCurrent(batchOptionsFor(layoutOf(newUserForm.employmentType), newUserForm.courseProgram), newUserForm.courseBatch)
                             ]}
                             className="w-full"
                           />
@@ -3966,10 +3992,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, shiftId: val })}
                             options={[
                               { label: 'Select Shift', value: '' },
-                              ...shifts.map((s) => ({
-                                label: `${s.code} - ${s.name} (${s.startTime} - ${s.endTime})${s.isDefault ? ' (Default)' : ''}`,
-                                value: s.id
-                              }))
+                              ...withCurrent(shiftOptions, newUserForm.shiftId)
                             ]}
                             className="w-full"
                           />
@@ -4011,7 +4034,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, reportingManagerId: val })}
                             options={[
                               { label: 'Select Reporting Manager', value: '' },
-                              ...activeManagersAndHods.map((u) => ({
+                              ...formManagers.map((u) => ({
                                 label: `${u.name} (${u.designation || 'Guide'} - ${u.department || 'General'})`,
                                 value: u.id
                               }))
@@ -4067,7 +4090,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, enrolledThrough: val })}
                             options={[
                               { label: 'Select Enrolled Through', value: '' },
-                              ...phdEnrollmentMaster.map((e) => ({ label: e, value: e }))
+                              ...withCurrent(enrollmentOptions, newUserForm.enrolledThrough)
                             ]}
                             className="w-full"
                           />
@@ -4084,10 +4107,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, shiftId: val })}
                             options={[
                               { label: 'Select Shift', value: '' },
-                              ...shifts.map((s) => ({
-                                label: `${s.code} - ${s.name} (${s.startTime} - ${s.endTime})${s.isDefault ? ' (Default)' : ''}`,
-                                value: s.id
-                              }))
+                              ...withCurrent(shiftOptions, newUserForm.shiftId)
                             ]}
                             className="w-full"
                           />
@@ -4132,7 +4152,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             }}
                             options={[
                               { label: 'Select Reporting Manager', value: '' },
-                              ...activeManagersAndHods.map((u) => ({
+                              ...formManagers.map((u) => ({
                                 label: `${u.name} (${u.designation || 'Guide'} - ${u.department || 'General'})`,
                                 value: u.id
                               }))
@@ -4199,7 +4219,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             options={[
                               { label: 'Select Project / Department / Section / Cell', value: '' },
                               ...formDepartments(newUserForm.institute).map((dept) => ({ label: `[Dept/Cell] ${dept}`, value: dept })),
-                              ...projectsMaster.map((proj) => ({ label: `[Project] ${proj}`, value: proj }))
+                              ...projectOptions.map((o) => ({ label: `[Project] ${o.label}`, value: o.value }))
                             ]}
                             className="w-full"
                             searchable={true}
@@ -4218,10 +4238,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, shiftId: val })}
                             options={[
                               { label: 'Select Shift', value: '' },
-                              ...shifts.map((s) => ({
-                                label: `${s.code} - ${s.name} (${s.startTime} - ${s.endTime})${s.isDefault ? ' (Default)' : ''}`,
-                                value: s.id
-                              }))
+                              ...withCurrent(shiftOptions, newUserForm.shiftId)
                             ]}
                             className="w-full"
                           />
@@ -4263,7 +4280,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, reportingManagerId: val })}
                             options={[
                               { label: 'Select Reporting Manager', value: '' },
-                              ...activeManagersAndHods.map((u) => ({
+                              ...formManagers.map((u) => ({
                                 label: `${u.name} (${u.designation || 'Manager'} - ${u.department || 'General'})`,
                                 value: u.id
                               }))
