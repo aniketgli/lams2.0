@@ -27,7 +27,6 @@ const emptyInput = (def: MasterDefinition): MasterInput => ({
   name: '',
   code: '',
   status: 'ACTIVE',
-  sortOrder: def.kind === 'lookup' ? 0 : undefined,
   fields: Object.fromEntries(def.fields.map((f) => [f.key, ''])),
 });
 
@@ -132,7 +131,6 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
       sortValue: (r) => labelFor(f.key, r.fields[f.key]).replace(/^—$/, ''),
       render: (r) => <span className="text-slate-700">{labelFor(f.key, r.fields[f.key])}</span>,
     })),
-    ...(def.kind === 'lookup' ? [{ key: 'sortOrder', header: 'Order', width: '8%', align: 'center' as const, sortValue: (r: MasterRecord) => r.sortOrder ?? 0, render: (r: MasterRecord) => r.sortOrder ?? 0 }] : []),
     { key: 'status', header: 'Status', width: '11%', sortValue: (r) => r.status, render: (r) => <StatusPill active={r.status === 'ACTIVE'} /> },
     { key: 'updatedAt', header: 'Last updated', width: '15%', sortValue: (r) => r.updatedAt, render: (r) => <span className="text-slate-500 whitespace-nowrap">{formatDateTime(r.updatedAt)}</span> },
     ...(readOnly ? [] : [{
@@ -150,7 +148,7 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
   function openEditor(record: MasterRecord | null) {
     setEditing(record);
     setForm(record
-      ? { name: record.name, code: record.code, status: record.status, sortOrder: record.sortOrder, fields: { ...emptyInput(def).fields, ...record.fields } }
+      ? { name: record.name, code: record.code, status: record.status, fields: { ...emptyInput(def).fields, ...record.fields } }
       : emptyInput(def));
     setFormErrors({});
     setFormMessage(null);
@@ -225,7 +223,6 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
 
       <PanelCard
         title={def.label}
-        description={def.description}
         count={records.length}
         actions={!readOnly && (
           <Button variant="primary" size="sm" leftIcon={Plus} onClick={() => openEditor(null)}>Add {def.noun.toLowerCase()}</Button>
@@ -265,7 +262,6 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
         onClose={() => !saving && setEditorOpen(false)}
         size="md"
         title={editing ? `Edit ${def.noun.toLowerCase()}` : `Add ${def.noun.toLowerCase()}`}
-        subtitle={editing ? `${editing.name} · ${editing.code}` : def.description}
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="outline" size="sm" onClick={() => setEditorOpen(false)} disabled={saving}>Cancel</Button>
@@ -302,11 +298,6 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
                   placeholder={`Select ${f.label.toLowerCase()}`} onChange={(v: string) => setValue(v)} options={options} searchable={options.length > 8}
                   containerClassName={f.type === 'layout' ? 'sm:col-span-2' : undefined} />;
               })}
-              {def.kind === 'lookup' && (
-                <Input label="Display order" type="number" min={0} max={100000} value={String(form.sortOrder ?? 0)} error={err('sortOrder')}
-                  title="Lower numbers appear first in dropdowns."
-                  onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) })} />
-              )}
             </div>
           </form>
         )}

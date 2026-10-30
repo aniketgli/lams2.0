@@ -141,7 +141,6 @@ export const ShiftsPanel: React.FC<{ readOnly: boolean }> = ({ readOnly }) => {
       <NoticeBar notice={notice} onClose={clearNotice} />
       <PanelCard
         title={<><Clock className="w-4 h-4 text-primary" />Shift Master &amp; Timing Rules</>}
-        description="Working hours, grace period and half-day rules used to evaluate attendance."
         count={shifts.length}
         actions={!readOnly && <Button variant="primary" size="sm" leftIcon={Plus} onClick={() => open(null)}>Add shift</Button>}
       >
@@ -154,7 +153,6 @@ export const ShiftsPanel: React.FC<{ readOnly: boolean }> = ({ readOnly }) => {
         onClose={() => !saving && setForm(null)}
         size="lg"
         title={editing ? 'Edit shift' : 'Add shift'}
-        subtitle={editing ? `${editing.name} · ${editing.code}` : 'Timing rules apply to every employee on this shift.'}
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="outline" size="sm" onClick={() => setForm(null)} disabled={saving}>Cancel</Button>

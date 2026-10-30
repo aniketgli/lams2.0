@@ -86,7 +86,7 @@ export const MASTERS: MasterDef[] = [
   // ---- Profile masters --------------------------------------------------------
   {
     kind: 'table', key: 'organizations', table: 'organization_units', group: 'profile', codeMaxLength: 80, hasMetadata: false,
-    label: 'Organization Units', noun: 'Organization unit',
+    label: 'Institute Units', noun: 'Institute unit',
     description: 'Departments, divisions, cells and units, each under its institute.',
     columnFields: { institute: 'institute', type: 'type' },
     fields: [
@@ -221,11 +221,11 @@ export const MASTERS: MasterDef[] = [
 
 /**
  * Tabs shown under Master Settings -> Profile Masters, in this order. Masters
- * not listed (designations, employee categories, organization unit types,
+ * not listed (employee categories, organization unit types,
  * cadre groups) keep their data, API and form dropdowns but get no tab.
  */
 export const PROFILE_TABS = [
-  'salutation', 'gender', 'institute', 'employeeType', 'organizations', 'projects',
+  'salutation', 'gender', 'institute', 'organizations', 'employeeType', 'designations', 'projects',
   'courses', 'traineeBatches', 'mscStreams', 'mscBatches', 'phdEnrollment', 'fundingCategory',
 ] as const;
 
