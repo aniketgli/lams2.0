@@ -35,6 +35,10 @@ export interface FieldDef {
   /** For type 'master': another master supplying the options (stored by name). */
   masterKey?: string;
   placeholder?: string;
+  /** Not shown in the master screen; an existing value is kept as it is on update. */
+  hidden?: boolean;
+  /** For lookupType 'employee_type': only types whose form layout is one of these may be chosen. */
+  allowedLayouts?: string[];
 }
 
 interface UsageCheck {
@@ -55,6 +59,8 @@ interface BaseDef {
   description: string;
   fields: FieldDef[];
   usage: UsageCheck[];
+  /** The set of records is fixed: they can be renamed or (de)activated, never added or deleted. */
+  fixedRecords?: boolean;
 }
 
 export interface TableMasterDef extends BaseDef {
@@ -101,7 +107,7 @@ export const MASTERS: MasterDef[] = [
     kind: 'table', key: 'designations', table: 'designations', group: 'profile', codeMaxLength: 100, hasMetadata: true,
     label: 'Designations', noun: 'Designation',
     description: 'Job titles and positions.',
-    fields: [{ key: 'empType', label: 'Employment type', type: 'lookup', lookupType: 'employee_type' }],
+    fields: [{ key: 'empType', label: 'Employment type', type: 'lookup', lookupType: 'employee_type', allowedLayouts: ['permanent', 'contractual', 'researcher'] }],
     usage: [{ what: 'employee profiles', sql: PROFILE_COLUMN('designation'), by: 'name' }],
   },
   {
@@ -193,7 +199,8 @@ export const MASTERS: MasterDef[] = [
     kind: 'lookup', key: 'employeeType', lookupType: 'employee_type', group: 'lists',
     label: 'Employee Types', noun: 'Employee type',
     description: 'Each type uses one form layout, which decides the fields asked for.',
-    fields: [{ key: 'formLayout', label: 'Form layout', type: 'layout', required: true }],
+    fixedRecords: true,
+    fields: [{ key: 'formLayout', label: 'Form layout', type: 'layout', required: true, hidden: true }],
     usage: [
       { what: 'employee profiles', sql: PROFILE_COLUMN('employment_type'), by: 'code' },
       { what: 'designations', sql: METADATA_JSON('designations', 'empType'), by: 'code' },

@@ -32,6 +32,17 @@ interface LayoutRules {
   validUntil: 'always' | 'deputation';
 }
 
+/** Staff category (no master; fixed list). */
+export const STAFF_CATEGORIES = [
+  'Scientific', 'Technical', 'Support', 'Administrative', 'Finance', 'Stenographer', 'Driver', 'Multi Tasking Staff',
+] as const;
+
+/** Recruitment of permanent staff (no master; fixed list). */
+export const RECRUITMENT_TYPES = ['Direct', 'Deputation'] as const;
+
+/** Layouts whose form asks for a designation (designations may be tied to one of these employee types). */
+export const DESIGNATION_LAYOUTS: FormLayout[] = ['permanent', 'contractual', 'researcher'];
+
 /** What each fixed form layout asks for. Mirrors the client form. */
 export const LAYOUT_RULES: Record<FormLayout, LayoutRules> = {
   permanent: { department: 'organizations', designation: true, category: true, hod: true, probation: true, validUntil: 'deputation' },
@@ -157,11 +168,11 @@ export function parseEmployeeInput(body: unknown, layout: FormLayout | null, tod
 
   const department = rules?.department ? need('department', true) : null;
   const designation = need('designation', rules?.designation);
-  const employeeCategory = need('employeeCategory', rules?.category);
+  const employeeCategory = rules?.category ? v.oneOf('employeeCategory', STAFF_CATEGORIES) : null;
   const courseProgram = need('courseProgram', rules?.course);
   const courseBatch = need('courseBatch', rules?.course);
   const enrolledThrough = need('enrolledThrough', rules?.enrollment);
-  const permanentEmploymentType = layout === 'permanent' ? v.oneOf('permanentEmploymentType', ['Direct', 'Deputation'] as const) : null;
+  const permanentEmploymentType = layout === 'permanent' ? v.oneOf('permanentEmploymentType', RECRUITMENT_TYPES) : null;
 
   const reportingManagerId = optionalId(v, 'reportingManagerId');
   if (layout && !reportingManagerId) v.errors.reportingManagerId ||= 'This field is required.';

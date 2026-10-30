@@ -107,6 +107,17 @@ async function lookupCodeExists(lookupType: string, code: string): Promise<boole
   return rows.length > 0;
 }
 
+/** Whether the active lookup value's form layout (metadata.formLayout) is one of `layouts`. */
+async function lookupHasLayout(lookupType: string, code: string, layouts: string[]): Promise<boolean> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT metadata FROM lookup_values WHERE lookup_type = ? AND code = ? AND UPPER(status) = 'ACTIVE' LIMIT 1",
+    [lookupType, code],
+  );
+  const raw = rows[0]?.metadata;
+  const meta = raw && typeof raw === 'object' ? raw as Record<string, unknown> : parseJson(raw);
+  return typeof meta.formLayout === 'string' && layouts.includes(meta.formLayout);
+}
+
 async function masterNameExists(masterKey: string, name: string): Promise<boolean> {
   const def = findMaster(masterKey);
   if (!def) return false;
@@ -142,6 +153,12 @@ async function validate(def: MasterDef, body: unknown, existing: MasterRecord | 
   const rawFields = (input.fields && typeof input.fields === 'object' ? input.fields : {}) as Record<string, unknown>;
   const fields: Record<string, string> = {};
   for (const field of def.fields) {
+    // Hidden fields are not edited from the master screen: keep what is stored.
+    if (field.hidden) {
+      fields[field.key] = existing?.fields[field.key] ?? '';
+      if (!fields[field.key] && field.required) errors[`fields.${field.key}`] = `${field.label} is required.`;
+      continue;
+    }
     const value = typeof rawFields[field.key] === 'string' ? (rawFields[field.key] as string).trim() : '';
     fields[field.key] = value;
     if (!value) {
@@ -156,6 +173,8 @@ async function validate(def: MasterDef, body: unknown, existing: MasterRecord | 
       errors[`fields.${field.key}`] = 'Choose a form layout from the list.';
     } else if (field.type === 'lookup' && !unchanged && !(await lookupCodeExists(field.lookupType!, value))) {
       errors[`fields.${field.key}`] = `${field.label} must be chosen from its active list.`;
+    } else if (field.type === 'lookup' && field.allowedLayouts && !unchanged && !(await lookupHasLayout(field.lookupType!, value, field.allowedLayouts))) {
+      errors[`fields.${field.key}`] = `This ${field.label.toLowerCase()} does not use this field.`;
     } else if (field.type === 'master' && !unchanged && !(await masterNameExists(field.masterKey!, value))) {
       errors[`fields.${field.key}`] = `${field.label} must be chosen from its active master.`;
     }
@@ -215,7 +234,12 @@ function storageValues(def: MasterDef, input: CleanInput): { columns: string[]; 
 
 const tableOf = (def: MasterDef) => (def.kind === 'lookup' ? 'lookup_values' : def.table);
 
+function assertNotFixed(def: MasterDef, verb: string): void {
+  if (def.fixedRecords) throw new HttpError(409, `${def.label} are a fixed set and cannot be ${verb}. Rename or deactivate them instead.`, 'FIXED_SET');
+}
+
 export async function createRecord(def: MasterDef, body: unknown, req: Request): Promise<MasterRecord> {
+  assertNotFixed(def, 'added');
   const input = await validate(def, body, null);
   const { columns, values } = storageValues(def, input);
   return inTransaction(async (conn) => {
@@ -286,6 +310,7 @@ export async function setStatus(def: MasterDef, id: number, status: unknown, req
 }
 
 export async function deleteRecord(def: MasterDef, id: number, req: Request, reason?: unknown): Promise<void> {
+  assertNotFixed(def, 'deleted');
   const existing = await getRecord(def, id);
   if (!existing) throw notFound(`${def.noun} not found.`);
   const usage = await findUsage(def, existing);

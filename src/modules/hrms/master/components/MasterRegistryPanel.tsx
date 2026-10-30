@@ -38,6 +38,8 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
     .sort((a, b) => (a.tab ?? 0) - (b.tab ?? 0)), [catalog, group]);
   const [activeKey, setActiveKey] = useState(masters[0]?.key ?? '');
   const def = masters.find((m) => m.key === activeKey) ?? masters[0];
+  // Fields edited on this screen (hidden ones, like an employee type's form layout, stay as stored).
+  const shownFields = useMemo(() => (def?.fields ?? []).filter((f) => !f.hidden), [def]);
 
   const [records, setRecords] = useState<MasterRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -84,7 +86,7 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
   // Load option lists the current master's fields depend on.
   useEffect(() => {
     if (!def) return;
-    const needs = def.fields.filter((f) => f.type === 'lookup' || f.type === 'master');
+    const needs = shownFields.filter((f) => f.type === 'lookup' || f.type === 'master');
     if (needs.length === 0) {
       setFieldOptions({});
       return;
@@ -96,7 +98,11 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
       for (const field of needs) {
         if (field.type === 'lookup') {
           const source = catalog.masters.find((m) => m.kind === 'lookup' && m.lookupType === field.lookupType);
-          out[field.key] = (source ? opts[source.key] ?? [] : []).map((r) => ({ label: r.name, value: r.code }));
+          // Some fields accept only employee types whose form uses them (e.g. designation → staff types).
+          const allowed = field.allowedLayouts;
+          out[field.key] = (source ? opts[source.key] ?? [] : [])
+            .filter((r) => !allowed || allowed.includes(r.fields?.formLayout ?? ''))
+            .map((r) => ({ label: r.name, value: r.code }));
         } else {
           out[field.key] = (opts[field.masterKey!] ?? []).map((r) => ({ label: r.name, value: r.name }));
         }
@@ -104,7 +110,7 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
       setFieldOptions(out);
     }).catch(() => { if (!cancelled) setFieldOptions({}); });
     return () => { cancelled = true; };
-  }, [def, catalog]);
+  }, [def, catalog, shownFields]);
 
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -126,7 +132,7 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
   const columns: ColumnDef<MasterRecord>[] = [
     { key: 'name', header: 'Name', sortValue: (r) => r.name, render: (r) => <span className="font-semibold text-slate-900">{r.name}</span> },
     { key: 'code', header: 'Code', width: '14%', sortValue: (r) => r.code, render: (r) => <span className="font-mono text-[11px] text-slate-600">{r.code}</span> },
-    ...def.fields.map<ColumnDef<MasterRecord>>((f) => ({
+    ...shownFields.map<ColumnDef<MasterRecord>>((f) => ({
       key: `f:${f.key}`, header: f.label, width: '18%',
       sortValue: (r) => labelFor(f.key, r.fields[f.key]).replace(/^—$/, ''),
       render: (r) => <span className="text-slate-700">{labelFor(f.key, r.fields[f.key])}</span>,
@@ -139,7 +145,7 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
         <div className="flex justify-end gap-1.5">
           <Button variant="icon" size="sm" leftIcon={Pencil} aria-label={`Edit ${r.name}`} title="Edit" onClick={() => openEditor(r)} />
           <Button variant="icon" size="sm" leftIcon={Power} aria-label={r.status === 'ACTIVE' ? `Deactivate ${r.name}` : `Activate ${r.name}`} title={r.status === 'ACTIVE' ? 'Deactivate' : 'Activate'} onClick={() => { setConfirmError(null); setConfirm({ kind: 'status', record: r }); }} />
-          <Button variant="icon" size="sm" leftIcon={Trash2} aria-label={`Delete ${r.name}`} title="Delete" className="text-error hover:bg-error-subtle" onClick={() => { setConfirmError(null); setConfirm({ kind: 'delete', record: r }); }} />
+          {!def.fixedRecords && <Button variant="icon" size="sm" leftIcon={Trash2} aria-label={`Delete ${r.name}`} title="Delete" className="text-error hover:bg-error-subtle" onClick={() => { setConfirmError(null); setConfirm({ kind: 'delete', record: r }); }} />}
         </div>
       ),
     }]),
@@ -162,7 +168,7 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
     const errs: Record<string, string> = {};
     if (!form.name.trim()) errs.name = 'Name is required.';
     if (!form.code.trim()) errs.code = 'Code is required.';
-    for (const f of def.fields) if (f.required && !form.fields[f.key]) errs[`fields.${f.key}`] = `${f.label} is required.`;
+    for (const f of shownFields) if (f.required && !form.fields[f.key]) errs[`fields.${f.key}`] = `${f.label} is required.`;
     setFormErrors(errs);
     if (Object.keys(errs).length) return;
 
@@ -224,7 +230,7 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
       <PanelCard
         title={def.label}
         count={records.length}
-        actions={!readOnly && (
+        actions={!readOnly && !def.fixedRecords && (
           <Button variant="primary" size="sm" leftIcon={Plus} onClick={() => openEditor(null)}>Add {def.noun.toLowerCase()}</Button>
         )}
       >
@@ -252,7 +258,7 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
           error={loadError}
           keyExtractor={(r) => r.id}
           emptyTitle={records.length ? 'No matching records' : `No ${def.label.toLowerCase()} yet`}
-          emptyDescription={records.length ? 'Try a different search or status.' : readOnly ? 'Nothing has been added yet.' : `Use "Add ${def.noun.toLowerCase()}" to create the first one.`}
+          emptyDescription={records.length ? 'Try a different search or status.' : readOnly || def.fixedRecords ? 'Nothing has been added yet.' : `Use "Add ${def.noun.toLowerCase()}" to create the first one.`}
         />
       </PanelCard>
 
@@ -282,7 +288,7 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
               <Select label="Status" required value={form.status} error={err('status')}
                 onChange={(v: MasterStatus) => setForm({ ...form, status: v })}
                 options={[{ label: 'Active', value: 'ACTIVE' }, { label: 'Inactive', value: 'INACTIVE' }]} />
-              {def.fields.map((f) => {
+              {shownFields.map((f) => {
                 const value = form.fields[f.key] ?? '';
                 const setValue = (v: string) => setForm({ ...form, fields: { ...form.fields, [f.key]: v } });
                 if (f.type === 'text') {
