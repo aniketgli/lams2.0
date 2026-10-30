@@ -4,7 +4,7 @@ import { Button, DataTable, Input, Modal, Select } from '../../../../shared/comp
 import type { ColumnDef } from '../../../../shared/components';
 import { ApiError } from '../../../../shared/services/api';
 import {
-  MasterCatalog, MasterDefinition, MasterInput, MasterRecord, MasterStatus, announceMastersChanged, masterApi,
+  MasterCatalog, MasterDefinition, MasterFieldDef, MasterInput, MasterRecord, MasterStatus, announceMastersChanged, masterApi,
 } from '../masterApi';
 import { ConfirmDialog, NoticeBar, PanelCard, StatusPill, TabStrip, formatDateTime, useNotice } from './masterUi';
 
@@ -86,7 +86,7 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
   // Load option lists the current master's fields depend on.
   useEffect(() => {
     if (!def) return;
-    const needs = shownFields.filter((f) => f.type === 'lookup' || f.type === 'master');
+    const needs = shownFields.filter((f) => f.type === 'lookup' || f.type === 'master' || (f.type === 'multi' && !f.choices));
     if (needs.length === 0) {
       setFieldOptions({});
       return;
@@ -96,7 +96,7 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
       if (cancelled) return;
       const out: Record<string, { label: string; value: string }[]> = {};
       for (const field of needs) {
-        if (field.type === 'lookup') {
+        if (field.type === 'lookup' || field.type === 'multi') {
           const source = catalog.masters.find((m) => m.kind === 'lookup' && m.lookupType === field.lookupType);
           // Some fields accept only employee types whose form uses them (e.g. designation → staff types).
           const allowed = field.allowedLayouts;
@@ -122,9 +122,19 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
 
   if (!def) return null;
 
+  /** Options of a field: its fixed choices, or the list loaded from the masters. */
+  const optionsOf = (f: MasterFieldDef): { label: string; value: string }[] =>
+    f.choices ? f.choices.map((c) => ({ label: c, value: c })) : fieldOptions[f.key] ?? [];
+
   const labelFor = (fieldKey: string, value: string) => {
-    if (!value) return '—';
     const field = def.fields.find((f) => f.key === fieldKey);
+    // A multi field left empty applies to every value.
+    if (field?.type === 'multi') {
+      if (!value) return 'All';
+      const opts = optionsOf(field);
+      return value.split(',').map((v) => opts.find((o) => o.value === v)?.label ?? v).join(', ');
+    }
+    if (!value) return '—';
     if (field?.type === 'layout') return catalog.formLayouts.find((l) => l.code === value)?.name.split(' (')[0] ?? value;
     return fieldOptions[fieldKey]?.find((o) => o.value === value)?.label ?? value;
   };
@@ -295,9 +305,29 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
                   return <Input key={f.key} label={f.label} required={f.required} maxLength={f.maxLength} placeholder={f.placeholder}
                     value={value} error={err(`fields.${f.key}`)} onChange={(e) => setValue(e.target.value)} />;
                 }
+                if (f.type === 'multi') {
+                  const selected = value ? value.split(',') : [];
+                  const opts = [...optionsOf(f)];
+                  for (const v of selected) if (!opts.some((o) => o.value === v)) opts.push({ label: `${v} (inactive)`, value: v });
+                  const toggle = (v: string) => setValue((selected.includes(v) ? selected.filter((x) => x !== v) : [...selected, v]).join(','));
+                  const chip = (active: boolean) => `h-8 px-3 rounded-full border text-xs font-semibold cursor-pointer transition-colors ${
+                    active ? 'bg-primary text-white border-primary' : 'bg-white text-slate-700 border-slate-200 hover:border-primary/50 hover:text-primary'}`;
+                  return (
+                    <div key={f.key} className="sm:col-span-2" role="group" aria-label={f.label}>
+                      <span className="block text-xs font-semibold text-slate-700 mb-1.5">{f.label}</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        <button type="button" className={chip(selected.length === 0)} aria-pressed={selected.length === 0} onClick={() => setValue('')}>All</button>
+                        {opts.map((o) => (
+                          <button key={o.value} type="button" className={chip(selected.includes(o.value))} aria-pressed={selected.includes(o.value)} onClick={() => toggle(o.value)}>{o.label}</button>
+                        ))}
+                      </div>
+                      {err(`fields.${f.key}`) && <p className="mt-1 text-[11px] font-semibold text-error">{err(`fields.${f.key}`)}</p>}
+                    </div>
+                  );
+                }
                 const options = f.type === 'layout'
                   ? catalog.formLayouts.map((l) => ({ label: l.name, value: l.code }))
-                  : [...(fieldOptions[f.key] ?? [])];
+                  : [...optionsOf(f)];
                 // Keep a current value visible even if its option was deactivated.
                 if (value && !options.some((o) => o.value === value)) options.push({ label: `${value} (inactive)`, value });
                 return <Select key={f.key} label={f.label} required={f.required} value={value} error={err(`fields.${f.key}`)}

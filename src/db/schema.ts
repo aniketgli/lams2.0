@@ -136,6 +136,8 @@ export const organization_units = mysqlTable('organization_units', {
   type: varchar('type', { length: 50 }).notNull().default('Department'),
   /** Institute code (lookup 'institute'). */
   institute: varchar('institute', { length: 50 }),
+  /** JSON text: which employee types / cadres the unit is offered for (empty = all). */
+  metadata: longtext('metadata'),
   status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),

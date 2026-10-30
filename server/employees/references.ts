@@ -32,6 +32,19 @@ export async function layoutOfEmployeeType(q: Querier, code: unknown): Promise<F
   }
 }
 
+function jsonObject(value: unknown): Record<string, unknown> {
+  if (value && typeof value === 'object') return value as Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(String(value || '{}'));
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+/** A comma-separated master value ("a,b") as a list. */
+const listOf = (value: unknown): string[] => String(value ?? '').split(',').map((v) => v.trim()).filter(Boolean);
+
 async function activeLookup(q: Querier, type: string, code: string): Promise<boolean> {
   return (await rows(q, "SELECT 1 FROM lookup_values WHERE lookup_type = ? AND code = ? AND UPPER(status) = 'ACTIVE' LIMIT 1", [type, code])).length > 0;
 }
@@ -91,11 +104,11 @@ export async function checkReferences(q: Querier, input: EmployeeInput, layout: 
 
   // A designation may be tied to one employee type; if so it must be this one.
   if (rules.designation && input.designation) {
-    const [row] = await rows(q,
-      `SELECT JSON_UNQUOTE(JSON_EXTRACT(IF(JSON_VALID(metadata), metadata, '{}'), '$.empType')) AS emp_type
-         FROM designations WHERE name = ? AND UPPER(status) = 'ACTIVE' LIMIT 1`, [input.designation]);
+    const [row] = await rows(q, "SELECT metadata FROM designations WHERE name = ? AND UPPER(status) = 'ACTIVE' LIMIT 1", [input.designation]);
+    const meta = jsonObject(row?.metadata);
     if (!row) errors.designation = 'Choose an active designation from Master Settings.';
-    else if (row.emp_type && String(row.emp_type) !== input.employmentType) errors.designation = 'This designation is not for the selected employee type.';
+    else if (meta.empType && String(meta.empType) !== input.employmentType) errors.designation = 'This designation is not for the selected employee type.';
+    else if (rules.category && input.employeeCategory && meta.cadre && String(meta.cadre) !== input.employeeCategory) errors.designation = 'This designation is not for the selected cadre.';
   }
 
   // Course and batch: trainees pick a training course and its batch, M.Sc students a stream and its batch.
@@ -116,11 +129,21 @@ export async function checkReferences(q: Querier, input: EmployeeInput, layout: 
     }
   }
 
-  // A department / cell must belong to the employee's institute (projects are shared).
+  // A department / cell must belong to the employee's institute (projects are shared),
+  // and, when the unit is limited to some employee types or cadres, fit this employee.
   if (rules.department && input.department && !errors.department && !errors.institute) {
-    const [unit] = await rows(q, "SELECT institute FROM organization_units WHERE name = ? AND UPPER(status) = 'ACTIVE' LIMIT 1", [input.department]);
+    const [unit] = await rows(q, "SELECT * FROM organization_units WHERE name = ? AND UPPER(status) = 'ACTIVE' LIMIT 1", [input.department]);
     if (unit && unit.institute && String(unit.institute) !== input.institute) {
       errors.department = 'This department belongs to another organization. Choose one from the selected organization.';
+    } else if (unit) {
+      const meta = jsonObject(unit.metadata);
+      const empTypes = listOf(meta.empTypes);
+      const cadres = listOf(meta.cadres);
+      if (empTypes.length && !empTypes.includes(input.employmentType)) {
+        errors.department = 'This department is not for the selected employee type.';
+      } else if (rules.category && input.employeeCategory && cadres.length && !cadres.includes(input.employeeCategory)) {
+        errors.department = 'This department is not for the selected cadre.';
+      }
     }
   }
 
