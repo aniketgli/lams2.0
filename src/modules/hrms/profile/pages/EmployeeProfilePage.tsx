@@ -12,7 +12,9 @@ import {
 import { PageHeader } from '../../../../shared/components/PageHeader';
 import { TablePagination } from '../../../../shared/components/TablePagination';
 import { UserProjectHistoryModal } from '../components/UserProjectHistoryModal';
-import { MyProfileView } from '../components/MyProfileView';
+import { EmployeeProfileView, MyProfileView } from '../components/MyProfileView';
+import { EmployeeActivityLog } from '../components/EmployeeActivityLog';
+import { auditorApi } from '../employeeApi';
 import { useSession } from '../../../../auth/SessionContext';
 import { MultiSelectFilter, matchesMultiSelect } from '../../../../shared/components/MultiSelectFilter';
 import { AppSelect } from '../../../../shared/components/AppSelect';
@@ -45,6 +47,7 @@ import {
   Plus,
   Search,
   ArrowLeftRight,
+  ArrowLeft,
   ArrowRight,
   ArrowUp,
   ArrowDown,
@@ -237,6 +240,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const isManager = currentUser.role === 'reporting_manager' || currentUser.role === 'reviewing_manager';
   const canAccessAdminSubTabs = isAdmin || isAudit;
   const showMyProfile = !isAdmin && !isAudit && !isManager;
+  const [auditorView, setAuditorView] = useState<'directory' | 'activity'>('directory');
   const { refresh: refreshSession } = useSession();
 
   // Sub-tabs State
@@ -309,11 +313,13 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const [directoryViewMode, setDirectoryViewMode] = useState<'grid' | 'detail'>('grid');
 
   // UI mirrors server authorization; API remains the security boundary.
+  // Who appears in the directory, by active role. The server sends full details
+  // only for these people and refuses any other profile, whatever the screen shows.
   const accessibleProfiles = useMemo(() => {
-    if (isAdmin) return users;
+    if (isAdmin || isAudit) return users;
     if (isManager) {
       return users.filter((u) => {
-        if (u.id === currentUser.id) return true;
+        if (u.id === currentUser.id) return false;
         if (u.reportingManagerId === currentUser.id) return true;
         if (u.reviewingManagerId === currentUser.id) return true;
         return false;
@@ -402,28 +408,19 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const filteredProfiles = categoryFilteredProfiles;
 
   // Export Handlers for Personnel Directory
-  const handleExportCSV = () => {
-    if (!categoryFilteredProfiles || categoryFilteredProfiles.length === 0) return;
-    const headers = ['Employee ID', 'Biometric ID', 'Name', 'Designation', 'Department', 'Category', 'Email', 'Phone', 'Status'];
-    const rows = categoryFilteredProfiles.map((u) => [
-      u.id,
-      u.biometricId || u.emergencyContactPhone || '',
-      `"${(u.name || '').replace(/"/g, '""')}"`,
-      `"${(u.designation || '').replace(/"/g, '""')}"`,
-      `"${(u.department || '').replace(/"/g, '""')}"`,
-      `"${getCategoryBadge(u).label}"`,
-      u.email || '',
-      u.phone || '',
-      u.status || 'active'
-    ]);
-    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `WII_Personnel_Directory_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  // Auditor: the server builds the CSV from the database and logs the download.
+  const [exportingCsv, setExportingCsv] = useState(false);
+  const handleExportCSV = async () => {
+    if (!isAudit || exportingCsv) return;
+    setExportingCsv(true);
+    try {
+      await auditorApi.downloadDirectory();
+      showToast('Employee records downloaded.');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'The download failed.');
+    } finally {
+      setExportingCsv(false);
+    }
   };
 
   const handleExportPDF = () => {
@@ -1983,7 +1980,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
             : (isAdmin || isAudit)
             ? 'Employee Profiles & Directory'
             : isManager
-            ? 'Employee Directory'
+            ? 'My Team'
             : 'Profile'
         }
         subtitle={
@@ -1991,10 +1988,12 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
             ? 'Manage user accounts, system roles, reporting hierarchy & access permissions'
             : activeTab === 'transfers'
             ? 'Manage employee department transfers, posting orders & manager replacements'
-            : (isAdmin || isAudit)
+            : isAudit
+            ? 'View every employee profile, download records and review activity logs'
+            : isAdmin
             ? 'Manage employee profiles, service cadres & official personnel records'
             : isManager
-            ? 'View employee profiles, service cadre information & official contact details'
+            ? 'Profiles of the employees who report to you or whose HoD you are'
             : 'Personal employment record, service tenure, cadre details & official contact information'
         }
         rightAction={
@@ -2055,36 +2054,52 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
         />
       )}
 
-      {!showMyProfile && (activeTab === 'profile' || (!isAdmin && !isAudit)) && (
+      {/* Auditor: switch between the directory and the activity log */}
+      {isAudit && activeTab === 'profile' && (
+        <div className="inline-flex p-1 bg-slate-100/90 border border-slate-200/90 rounded-xl gap-1" role="tablist" aria-label="Auditor view">
+          {([['directory', 'Employee directory'], ['activity', 'Activity logs']] as const).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={auditorView === key}
+              onClick={() => setAuditorView(key)}
+              className={`h-8 px-3.5 rounded-lg text-xs font-bold cursor-pointer transition-colors ${auditorView === key ? 'bg-white text-primary shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+      {isAudit && activeTab === 'profile' && auditorView === 'activity' && <EmployeeActivityLog />}
+
+      {!showMyProfile && !(isAudit && auditorView === 'activity') && (activeTab === 'profile' || (!isAdmin && !isAudit)) && (
         <div className="space-y-5">
           {/* Category Filter & Directory View Mode Switcher Console (Admin, Audit & Managers) */}
           {(isAdmin || isAudit || isManager) && (
             <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3.5">
-              {/* Top Bar: Clean Themed Scope & Export Action Buttons */}
-              <div className="flex items-center justify-between gap-3.5 border-b border-slate-100 pb-3.5">
-                {/* Left: Blank as requested */}
-                <div />
-
-                {/* Right: Export Buttons */}
-                <div className="flex items-center space-x-2 shrink-0">
-                  <button
-                    onClick={handleExportCSV}
-                    className="h-9 px-3.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer shadow-2xs"
-                    title="Export Personnel Directory to CSV"
-                  >
-                    <Download className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Export CSV</span>
-                  </button>
-                  <button
-                    onClick={handleExportPDF}
-                    className="h-9 px-3.5 bg-slate-900 hover:bg-slate-800 text-white border border-slate-900 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer shadow-2xs"
-                    title="Print / Export Personnel Directory to PDF"
-                  >
-                    <FileText className="w-3.5 h-3.5 text-rose-400" />
-                    <span>Export PDF</span>
-                  </button>
-                </div>
+              {/* Auditor: download the directory (server-generated, logged) or print it */}
+              {isAudit && (
+              <div className="flex items-center justify-end gap-2 border-b border-slate-100 pb-3.5">
+                <button
+                  onClick={handleExportCSV}
+                  disabled={exportingCsv}
+                  className="h-9 px-3.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer shadow-2xs disabled:opacity-60"
+                  title="Download all employee records as CSV (the download is logged)"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>{exportingCsv ? 'Preparing…' : 'Export CSV'}</span>
+                </button>
+                <button
+                  onClick={handleExportPDF}
+                  className="h-9 px-3.5 bg-slate-900 hover:bg-slate-800 text-white border border-slate-900 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer shadow-2xs"
+                  title="Print / save the directory as PDF"
+                >
+                  <FileText className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Export PDF</span>
+                </button>
               </div>
+              )}
 
               {/* Second Row: Search Input on Left, Reset and View Mode on Right */}
               <div className="flex flex-col gap-3">
@@ -2258,7 +2273,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
         )}
 
           {/* Directory Rendering Switcher */}
-          {((isAdmin || isManager) && directoryViewMode === 'grid') ? (
+          {((isAdmin || isAudit || isManager) && directoryViewMode === 'grid') ? (
             /* ================================================================ */
             /* VIEW 1: CATEGORY CARDS GRID */
             /* ================================================================ */
@@ -2427,13 +2442,15 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             <span>View Full Profile</span>
                           </button>
 
-                          <button
-                            onClick={() => setHistoryUser(u)}
-                            className="bg-purple-50 hover:bg-purple-100 text-purple-700 font-extrabold p-2 rounded-xl text-xs border border-purple-200 cursor-pointer transition-colors"
-                            title="View Project & Career History"
-                          >
-                            <Briefcase className="w-3.5 h-3.5" />
-                          </button>
+                          {isAdmin && (
+                            <button
+                              onClick={() => setHistoryUser(u)}
+                              className="bg-purple-50 hover:bg-purple-100 text-purple-700 font-extrabold p-2 rounded-xl text-xs border border-purple-200 cursor-pointer transition-colors"
+                              title="Manage project & career history"
+                            >
+                              <Briefcase className="w-3.5 h-3.5" />
+                            </button>
+                          )}
 
                           {isAdmin && (
                             <button
@@ -2454,298 +2471,24 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
               )}
             </div>
           ) : (
-            /* ================================================================ */
-            /* VIEW 2: DETAILED SELECTED PROFILE VIEW (REBUILT & STREAMLINED)   */
-            /* ================================================================ */
-            <div className="bg-white border border-slate-200/90 rounded-2xl overflow-hidden shadow-xs space-y-6">
-              {/* Unified Dark Navy Cover Header */}
-              <div className="bg-gradient-to-r from-slate-900 via-header-glow to-slate-900 p-5 sm:p-6 relative text-white">
-                {/* Profile Details Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center space-y-3 sm:space-y-0 sm:space-x-4">
-                  <div className="relative shrink-0">
-                    <UserAvatar name={selectedUser.name} src={selectedUser?.avatar} className="w-20 h-20 sm:w-22 sm:h-22 rounded-2xl ring-4 ring-white/20 shadow-xl bg-slate-800" />
-                    <span
-                      className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-slate-900 ${
-                        selectedUser.status === 'deactivated' ? 'bg-slate-400' : 'bg-emerald-500'
-                      }`}
-                    />
-                  </div>
-                  <div>
-                    <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight drop-shadow-xs">{selectedUser.name}</h2>
-                    <p className="text-xs sm:text-sm font-bold text-slate-400 mt-0.5">{selectedUser.designation}</p>
-                    <p className="text-[11px] sm:text-xs font-medium text-slate-300">{selectedUser.department}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Profile Body: Clean, Organized Information Cards */}
-              <div className="p-4 sm:p-6 space-y-5">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {/* Card 1: Official & Employment Details */}
-                  <div className="bg-white border border-slate-200/90 rounded-xl p-4 sm:p-5 shadow-2xs space-y-3.5">
-                    <div className="flex items-center space-x-2 text-slate-900 font-black text-xs uppercase tracking-wider border-b border-slate-100 pb-2.5">
-                      <Building className="w-4 h-4 text-blue-600 shrink-0" />
-                      <span>Official &amp; Employment Details</span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-semibold block">Department</span>
-                        <span className="font-bold text-slate-900">{selectedUser.department}</span>
-                      </div>
-
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-semibold block">Designation</span>
-                        <span className="font-bold text-slate-900">{selectedUser.designation}</span>
-                      </div>
-
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-semibold block">Employment Cadre</span>
-                        <span className="font-bold text-slate-900">{getEmploymentTypeLabel(selectedUser.employmentType)}</span>
-                      </div>
-
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-semibold block">Date of Joining</span>
-                        <span className="font-bold text-slate-900">{selectedUser.joiningDate || 'N/A'}</span>
-                        <span className="text-[10px] text-blue-600 block mt-0.5 font-medium">{calculateServiceTenure(selectedUser.joiningDate)}</span>
-                      </div>
-
-                      {selectedUser.dob && (
-                        <div>
-                          <span className="text-[10px] text-slate-400 font-semibold block">Date of Birth (DOB)</span>
-                          <span className="font-bold text-slate-900">{selectedUser.dob}</span>
-                        </div>
-                      )}
-
-                      {layoutOf(selectedUser.employmentType) === 'permanent' ? (
-                        <div>
-                          <span className="text-[10px] text-slate-400 font-semibold block">Superannuation Date</span>
-                          <span className="font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 inline-block text-[11px]">
-                            {calculateRetirementDate(selectedUser.dob)}
-                          </span>
-                        </div>
-                      ) : selectedUser.validUntilDate ? (
-                        <div>
-                          <span className="text-[10px] text-slate-400 font-semibold block">Tenure / Contract Valid Up To</span>
-                          <span className="font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 inline-block text-[11px]">
-                            {selectedUser.validUntilDate}
-                          </span>
-                        </div>
-                      ) : null}
-
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-semibold block">Assigned Work Shift</span>
-                        <span className="font-bold text-slate-900">
-                          {(() => {
-                            const userShift = shifts.find((s) => s.id === selectedUser.shiftId) || shifts.find((s) => s.isDefault) || shifts[0];
-                            return userShift ? `${userShift.name} (${userShift.startTime} - ${userShift.endTime})` : 'General Shift (09:00 - 17:30)';
-                          })()}
-                        </span>
-                      </div>
-
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-semibold block">Probation Status</span>
-                        <span className="font-bold text-slate-900">
-                          {selectedUser.isOnProbation
-                            ? `Under Probation (Until ${selectedUser.probationEndDate || 'N/A'})`
-                            : 'Confirmed Regular Staff'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Card 2: Reporting Hierarchy & Roles */}
-                  <div className="bg-white border border-slate-200/90 rounded-xl p-4 sm:p-5 shadow-2xs space-y-3.5">
-                    <div className="flex items-center space-x-2 text-slate-900 font-black text-xs uppercase tracking-wider border-b border-slate-100 pb-2.5">
-                      <Shield className="w-4 h-4 text-purple-600 shrink-0" />
-                      <span>Reporting Hierarchy &amp; Access Roles</span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-semibold block">Reporting Manager (L1)</span>
-                        <span className="font-bold text-slate-900">
-                          {users.find((u) => u.id === selectedUser.reportingManagerId)?.name || 'Not Assigned'}
-                        </span>
-                        <span className="text-[10px] text-slate-500 block">
-                          {users.find((u) => u.id === selectedUser.reportingManagerId)?.designation || ''}
-                        </span>
-                      </div>
-
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-semibold block">Reviewing Officer / HoD (L2)</span>
-                        <span className="font-bold text-slate-900">
-                          {selectedUser.hodName || users.find((u) => u.id === selectedUser.reviewingManagerId)?.name || 'Not Assigned'}
-                        </span>
-                        <span className="text-[10px] text-slate-500 block">
-                          {users.find((u) => u.id === selectedUser.reviewingManagerId)?.designation || ''}
-                        </span>
-                      </div>
-
-                      {(selectedUser.piName || selectedUser.guideSupervisor) && (
-                        <div className="sm:col-span-2">
-                          <span className="text-[10px] text-slate-400 font-semibold block">Principal Investigator / Supervisor</span>
-                          <span className="font-bold text-slate-900">{selectedUser.piName || selectedUser.guideSupervisor}</span>
-                        </div>
-                      )}
-
-                      <div className="sm:col-span-2 pt-2 border-t border-slate-100">
-                        <span className="text-[10px] text-slate-400 font-semibold block mb-1">Assigned System Roles</span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {(selectedUser.roles && selectedUser.roles.length > 0 ? selectedUser.roles : [selectedUser.role]).map((r) => (
-                            <span
-                              key={r}
-                              className={`px-2.5 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider border ${getRoleBadgeStyle(r)}`}
-                            >
-                              {getRoleLabel(r)}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Card 3: Contact Information */}
-                <div className="bg-white border border-slate-200/90 rounded-xl p-4 sm:p-5 shadow-2xs space-y-3.5">
-                  <div className="flex items-center space-x-2 text-slate-900 font-black text-xs uppercase tracking-wider border-b border-slate-100 pb-2.5">
-                    <Mail className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>Contact Information</span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                    <div>
-                      <span className="text-[10px] text-slate-400 font-semibold block">Official Email</span>
-                      <span className="font-bold text-slate-900 truncate block">{selectedUser.email}</span>
-                    </div>
-
-                    <div>
-                      <span className="text-[10px] text-slate-400 font-semibold block">Contact Phone</span>
-                      <span className="font-bold text-slate-900">{selectedUser.phone || 'Not provided'}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Card 4: Academic Program & Research (Conditionally displayed when relevant) */}
-                {(layoutOf(selectedUser.employmentType) === 'bsc_msc_student' ||
-                  layoutOf(selectedUser.employmentType) === 'phd_student' ||
-                  layoutOf(selectedUser.employmentType) === 'diploma_trainee' ||
-                  layoutOf(selectedUser.employmentType) === 'intern' ||
-                  selectedUser.isPhDEnrolled) && (
-                  <div className="bg-indigo-50/70 border border-indigo-200 rounded-xl p-4 sm:p-5 shadow-2xs space-y-3.5">
-                    <div className="flex items-center space-x-2 text-indigo-950 font-black text-xs uppercase tracking-wider border-b border-indigo-200/80 pb-2.5">
-                      <GraduationCap className="w-4 h-4 text-indigo-600 shrink-0" />
-                      <span>Academic Program &amp; Research Affiliation</span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs text-slate-800">
-                      {selectedUser.courseProgram && (
-                        <div>
-                          <span className="text-[10px] text-indigo-800 font-semibold block">Degree / Course Program</span>
-                          <span className="font-bold text-slate-900">{selectedUser.courseProgram}</span>
-                        </div>
-                      )}
-
-                      {selectedUser.courseBatch && (
-                        <div>
-                          <span className="text-[10px] text-indigo-800 font-semibold block">Batch / Academic Year</span>
-                          <span className="font-bold text-slate-900">{selectedUser.courseBatch}</span>
-                        </div>
-                      )}
-
-                      {(selectedUser.universityName || selectedUser.parentInstitution) && (
-                        <div>
-                          <span className="text-[10px] text-indigo-800 font-semibold block">Affiliated University / Institute</span>
-                          <span className="font-bold text-slate-900">{selectedUser.universityName || selectedUser.parentInstitution}</span>
-                        </div>
-                      )}
-
-                      {selectedUser.enrollmentNo && (
-                        <div>
-                          <span className="text-[10px] text-indigo-800 font-semibold block">Enrollment / Registration No</span>
-                          <span className="font-mono font-bold text-indigo-950">{selectedUser.enrollmentNo}</span>
-                        </div>
-                      )}
-
-                      {(selectedUser.guideSupervisor || selectedUser.phdGuide) && (
-                        <div>
-                          <span className="text-[10px] text-indigo-800 font-semibold block">Academic Supervisor / Guide</span>
-                          <span className="font-bold text-slate-900">{selectedUser.phdGuide || selectedUser.guideSupervisor}</span>
-                        </div>
-                      )}
-
-                      {selectedUser.phdTopic && (
-                        <div className="sm:col-span-2 lg:col-span-3">
-                          <span className="text-[10px] text-indigo-800 font-semibold block">Research Topic / Title</span>
-                          <span className="font-bold text-slate-900">{selectedUser.phdTopic}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Card 5: Service & Posting History Timeline */}
-                <div className="bg-white border border-slate-200/90 rounded-xl p-4 sm:p-5 shadow-2xs space-y-3.5">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                    <div className="flex items-center space-x-2 text-slate-900 font-black text-xs uppercase tracking-wider">
-                      <Briefcase className="w-4 h-4 text-blue-600 shrink-0" />
-                      <span>Service &amp; Posting History</span>
-                    </div>
-                    <span className="text-[11px] font-bold text-slate-700 bg-slate-50 px-2.5 py-0.5 rounded border border-slate-200">
-                      {calculateServiceTenure(selectedUser.joiningDate)}
-                    </span>
-                  </div>
-
-                  {/* Clean Minimal Timeline */}
-                  <div className="relative pl-4 border-l-2 border-slate-200 space-y-3 my-1 text-xs">
-                    {/* Active Posting */}
-                    <div className="relative">
-                      <div className="absolute -left-[23px] top-1.5 w-3 h-3 rounded-full bg-emerald-500 ring-4 ring-emerald-100"></div>
-                      <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/80 space-y-1">
-                        <div className="flex flex-wrap items-center justify-between gap-1">
-                          <div className="flex items-center space-x-2">
-                            <span className="font-extrabold text-slate-900">{selectedUser.designation}</span>
-                            <span className="px-2 py-0.2 rounded text-[9.5px] font-bold uppercase bg-emerald-100 text-emerald-800 border border-emerald-300">
-                              Current Posting
-                            </span>
-                          </div>
-                          <span className="text-[10.5px] text-slate-500 font-mono">
-                            {selectedUser.joiningDate ? `${selectedUser.joiningDate} — Present` : 'Present'}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-600">
-                          {selectedUser.department}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Historical Transfers */}
-                    {transferLogs
-                      .filter(
-                        (t) =>
-                          t.userId === selectedUser.id ||
-                          t.userName.toLowerCase() === selectedUser.name.toLowerCase()
-                      )
-                      .map((t) => (
-                        <div key={t.id} className="relative">
-                          <div className="absolute -left-[23px] top-1.5 w-3 h-3 rounded-full bg-blue-500 ring-4 ring-blue-100"></div>
-                          <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/80 space-y-1">
-                            <div className="flex flex-wrap items-center justify-between gap-1">
-                              <span className="font-bold text-slate-900">Transfer &amp; Posting Order</span>
-                              <span className="text-[10.5px] text-slate-500 font-mono">Effective: {t.effectiveDate}</span>
-                            </div>
-                            <div className="text-[11px] text-slate-700">
-                              <span className="text-slate-500">Department:</span> {t.previousDept} <span className="text-blue-600 font-bold">→</span> {t.newDept}
-                            </div>
-                            {t.notes && (
-                              <p className="text-[10.5px] text-slate-500 italic">Note: {t.notes}</p>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              </div>
+            /* Full profile of one employee (server checks the viewer may see it). */
+            <div className="space-y-4">
+              {(isAdmin || isAudit || isManager) && (
+                <button
+                  type="button"
+                  onClick={() => setDirectoryViewMode('grid')}
+                  className="h-9 px-3.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" /> Back to directory
+                </button>
+              )}
+              <EmployeeProfileView
+                userId={selectedUser.id}
+                canEditPhoto={isAdmin}
+                onPhotoChanged={async () => {
+                  await Promise.all([reloadEmployees(), selectedUser.id === currentUser.id ? refreshSession() : Promise.resolve()]);
+                }}
+              />
             </div>
           )}
         </div>

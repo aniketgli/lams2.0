@@ -146,3 +146,64 @@ export const myProfileApi = {
   savePhoto: (image: string) => api<{ photoUrl: string; message: string }>('/hrms/me/photo', { method: 'PUT', body: { image } }),
   deletePhoto: () => api<{ photoUrl: null; message: string }>('/hrms/me/photo', { method: 'DELETE' }),
 };
+
+/** Another employee's profile (server checks the viewer may see it) and administrator photo changes. */
+export const employeeProfileApi = {
+  get: (userId: string) => api<MyProfile>(`/hrms/employees/${encodeURIComponent(userId)}/profile`),
+  savePhoto: (biometricId: string, image: string) =>
+    api<{ photoUrl: string; message: string }>(`/hrms/employees/${encodeURIComponent(biometricId)}/photo`, { method: 'PUT', body: { image } }),
+  deletePhoto: (biometricId: string) =>
+    api<{ photoUrl: null; message: string }>(`/hrms/employees/${encodeURIComponent(biometricId)}/photo`, { method: 'DELETE' }),
+};
+
+// ---------------------------------------------------------------------------
+// Auditor: downloads and activity log
+// ---------------------------------------------------------------------------
+
+export interface ActivityRow {
+  id: string;
+  at: string;
+  area: string;
+  action: string;
+  recordId: string;
+  recordLabel: string | null;
+  changedFields: string[];
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+  reason: string | null;
+  actor: { biometricId: string | null; name: string | null; role: string | null };
+}
+
+export interface ActivityQuery { area?: string; action?: string; from?: string; to?: string; search?: string; page?: number; pageSize?: number }
+
+const queryString = (q: ActivityQuery) => {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== '' && v !== null) params.set(k, String(v));
+  const s = params.toString();
+  return s ? `?${s}` : '';
+};
+
+/** Fetches a CSV from the server and saves it, keeping the server's file name. */
+async function downloadCsv(path: string, fallbackName: string): Promise<void> {
+  const response = await fetch(`/api${path}`, { credentials: 'same-origin', headers: { Accept: 'text/csv' } });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new ApiError(response.status, body?.message || 'The download failed.', body?.code, body?.details);
+  }
+  const name = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') || '')?.[1] || fallbackName;
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+export const auditorApi = {
+  activity: (q: ActivityQuery) =>
+    api<{ rows: ActivityRow[]; total: number; page: number; pageSize: number }>(`/hrms/employees/activity${queryString(q)}`),
+  downloadDirectory: () => downloadCsv('/hrms/employees/export.csv', 'WII_Employee_Directory.csv'),
+  downloadActivity: (q: ActivityQuery) => downloadCsv(`/hrms/employees/activity.csv${queryString({ ...q, page: undefined, pageSize: undefined })}`, 'WII_Employee_Activity.csv'),
+};

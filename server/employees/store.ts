@@ -165,6 +165,8 @@ export interface Viewer { id: number; role: RoleId | null }
 export function canSeeFullProfile(viewer: Viewer, record: EmployeeRecord): boolean {
   if (viewer.role === 'administrator' || viewer.role === 'audit') return true;
   if (record.id === String(viewer.id)) return true;
+  // Reporting managers / HoDs see their own people, and only while acting in that role.
+  if (viewer.role !== 'reporting_manager' && viewer.role !== 'reviewing_manager') return false;
   const data = parseProfileData(record.profileData);
   return String(data.reportingManagerId ?? '') === String(viewer.id) || String(data.reviewingManagerId ?? '') === String(viewer.id);
 }
