@@ -201,7 +201,12 @@ async function downloadCsv(path: string, fallbackName: string): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
+export interface PrintableTable { generatedAt: string; headers: string[]; rows: unknown[][] }
+
 export const auditorApi = {
+  /** Rows for the PDF; the server logs the download. */
+  directoryForPdf: () => api<PrintableTable>('/hrms/employees/export-pdf'),
+  activityForPdf: (q: ActivityQuery) => api<PrintableTable>(`/hrms/employees/activity/export-pdf${queryString({ ...q, page: undefined, pageSize: undefined })}`),
   activity: (q: ActivityQuery) =>
     api<{ rows: ActivityRow[]; total: number; page: number; pageSize: number }>(`/hrms/employees/activity${queryString(q)}`),
   downloadDirectory: () => downloadCsv('/hrms/employees/export.csv', 'WII_Employee_Directory.csv'),

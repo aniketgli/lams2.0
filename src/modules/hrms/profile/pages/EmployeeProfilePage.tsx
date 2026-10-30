@@ -14,7 +14,10 @@ import { TablePagination } from '../../../../shared/components/TablePagination';
 import { UserProjectHistoryModal } from '../components/UserProjectHistoryModal';
 import { EmployeeProfileView, MyProfileView } from '../components/MyProfileView';
 import { EmployeeActivityLog } from '../components/EmployeeActivityLog';
+import { DirectoryTable } from '../components/DirectoryTable';
 import { auditorApi } from '../employeeApi';
+import { ExportButtons } from '../../../../shared/components/ExportButtons';
+import { printTable, printedAt } from '../../../../shared/services/printTable';
 import { useSession } from '../../../../auth/SessionContext';
 import { MultiSelectFilter, matchesMultiSelect } from '../../../../shared/components/MultiSelectFilter';
 import { AppSelect } from '../../../../shared/components/AppSelect';
@@ -241,6 +244,23 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const canAccessAdminSubTabs = isAdmin || isAudit;
   const showMyProfile = !isAdmin && !isAudit && !isManager;
   const [auditorView, setAuditorView] = useState<'directory' | 'activity'>('directory');
+  /** Auditor: Directory / Activity logs switch, shown at the top-left of whichever panel is open. */
+  const auditorSwitch = (
+    <div className="inline-flex p-1 bg-slate-100/90 border border-slate-200/90 rounded-xl gap-1" role="tablist" aria-label="Auditor view">
+      {([['directory', 'Employee directory'], ['activity', 'Activity logs']] as const).map(([key, label]) => (
+        <button
+          key={key}
+          type="button"
+          role="tab"
+          aria-selected={auditorView === key}
+          onClick={() => setAuditorView(key)}
+          className={`h-7 px-3.5 rounded-lg text-xs font-bold cursor-pointer transition-colors ${auditorView === key ? 'bg-white text-primary shadow-2xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'}`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
   const { refresh: refreshSession } = useSession();
 
   // Sub-tabs State
@@ -310,7 +330,14 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   };
 
   // Directory View Mode: 'grid' (Category Cards Grid) or 'detail' (Single Detailed Profile View)
-  const [directoryViewMode, setDirectoryViewMode] = useState<'grid' | 'detail'>('grid');
+  // table (default) or cards; 'detail' = one employee's full profile.
+  const [directoryViewMode, setDirectoryViewModeRaw] = useState<'table' | 'grid' | 'detail'>('table');
+  // Remember table vs cards so "Back" returns to the same list.
+  const [lastListMode, setLastListMode] = useState<'table' | 'grid'>('table');
+  const setDirectoryViewMode = (mode: 'table' | 'grid' | 'detail') => {
+    if (mode !== 'detail') setLastListMode(mode);
+    setDirectoryViewModeRaw(mode);
+  };
 
   // UI mirrors server authorization; API remains the security boundary.
   // Who appears in the directory, by active role. The server sends full details
@@ -408,23 +435,32 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const filteredProfiles = categoryFilteredProfiles;
 
   // Export Handlers for Personnel Directory
-  // Auditor: the server builds the CSV from the database and logs the download.
-  const [exportingCsv, setExportingCsv] = useState(false);
+  // Auditor: the server builds the files from the database and logs every download.
+  const [exportingDirectory, setExportingDirectory] = useState<'csv' | 'pdf' | null>(null);
   const handleExportCSV = async () => {
-    if (!isAudit || exportingCsv) return;
-    setExportingCsv(true);
+    if (!isAudit || exportingDirectory) return;
+    setExportingDirectory('csv');
     try {
       await auditorApi.downloadDirectory();
       showToast('Employee records downloaded.');
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'The download failed.');
     } finally {
-      setExportingCsv(false);
+      setExportingDirectory(null);
     }
   };
 
-  const handleExportPDF = () => {
-    window.print();
+  const handleExportPDF = async () => {
+    if (!isAudit || exportingDirectory) return;
+    setExportingDirectory('pdf');
+    try {
+      const table = await auditorApi.directoryForPdf();
+      printTable({ title: 'Employee directory', subtitle: [`Generated ${printedAt(table.generatedAt)}`], headers: table.headers, rows: table.rows });
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'The PDF could not be prepared.');
+    } finally {
+      setExportingDirectory(null);
+    }
   };
 
   const getCategoryBadge = (u: UserType) => {
@@ -2054,50 +2090,24 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
         />
       )}
 
-      {/* Auditor: switch between the directory and the activity log */}
-      {isAudit && activeTab === 'profile' && (
-        <div className="inline-flex p-1 bg-slate-100/90 border border-slate-200/90 rounded-xl gap-1" role="tablist" aria-label="Auditor view">
-          {([['directory', 'Employee directory'], ['activity', 'Activity logs']] as const).map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              aria-selected={auditorView === key}
-              onClick={() => setAuditorView(key)}
-              className={`h-8 px-3.5 rounded-lg text-xs font-bold cursor-pointer transition-colors ${auditorView === key ? 'bg-white text-primary shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
-      {isAudit && activeTab === 'profile' && auditorView === 'activity' && <EmployeeActivityLog />}
+      {isAudit && activeTab === 'profile' && auditorView === 'activity' && <EmployeeActivityLog toolbarStart={auditorSwitch} />}
 
       {!showMyProfile && !(isAudit && auditorView === 'activity') && (activeTab === 'profile' || (!isAdmin && !isAudit)) && (
         <div className="space-y-5">
           {/* Category Filter & Directory View Mode Switcher Console (Admin, Audit & Managers) */}
           {(isAdmin || isAudit || isManager) && (
             <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3.5">
-              {/* Auditor: download the directory (server-generated, logged) or print it */}
+              {/* Auditor: view switch on the left, downloads (server-generated, logged) on the right */}
               {isAudit && (
-              <div className="flex items-center justify-end gap-2 border-b border-slate-100 pb-3.5">
-                <button
-                  onClick={handleExportCSV}
-                  disabled={exportingCsv}
-                  className="h-9 px-3.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer shadow-2xs disabled:opacity-60"
-                  title="Download all employee records as CSV (the download is logged)"
-                >
-                  <Download className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>{exportingCsv ? 'Preparing…' : 'Export CSV'}</span>
-                </button>
-                <button
-                  onClick={handleExportPDF}
-                  className="h-9 px-3.5 bg-slate-900 hover:bg-slate-800 text-white border border-slate-900 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer shadow-2xs"
-                  title="Print / save the directory as PDF"
-                >
-                  <FileText className="w-3.5 h-3.5 text-rose-400" />
-                  <span>Export PDF</span>
-                </button>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
+                {auditorSwitch}
+                <ExportButtons
+                  onCsv={() => void handleExportCSV()}
+                  onPdf={() => void handleExportPDF()}
+                  busy={exportingDirectory}
+                  csvTitle="Download all employee records as CSV (the download is logged)"
+                  pdfTitle="Print / save all employee records as PDF (the download is logged)"
+                />
               </div>
               )}
 
@@ -2156,26 +2166,28 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                     {/* View Switcher Icons Container */}
                     <div className="h-9 flex items-center p-1 bg-slate-100/90 border border-slate-200/90 rounded-xl gap-1 shrink-0">
                       <button
+                        onClick={() => setDirectoryViewMode('table')}
+                        className={`h-7 px-2 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
+                          directoryViewMode !== 'grid'
+                            ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
+                            : 'text-slate-400 hover:text-slate-700'
+                        }`}
+                        title="Table view"
+                        aria-label="Table view"
+                      >
+                        <List className="w-4 h-4" />
+                      </button>
+                      <button
                         onClick={() => setDirectoryViewMode('grid')}
                         className={`h-7 px-2 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
                           directoryViewMode === 'grid'
                             ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
                             : 'text-slate-400 hover:text-slate-700'
                         }`}
-                        title="Grid View"
+                        title="Card view"
+                        aria-label="Card view"
                       >
                         <LayoutGrid className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => setDirectoryViewMode('detail')}
-                        className={`h-7 px-2 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
-                          directoryViewMode === 'detail'
-                            ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80 font-bold'
-                            : 'text-slate-400 hover:text-slate-700'
-                        }`}
-                        title="Detailed View"
-                      >
-                        <UserIcon className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
@@ -2273,21 +2285,13 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
         )}
 
           {/* Directory Rendering Switcher */}
-          {((isAdmin || isAudit || isManager) && directoryViewMode === 'grid') ? (
+          {((isAdmin || isAudit || isManager) && directoryViewMode !== 'detail') ? (
             /* ================================================================ */
             /* VIEW 1: CATEGORY CARDS GRID */
             /* ================================================================ */
             <div className="space-y-4">
               <div className="flex items-center justify-between text-xs text-slate-500 font-semibold px-1">
                 <span>Showing <strong>{categoryFilteredProfiles.length}</strong> profile(s) in selected view</span>
-                {selectedCategoryFilter !== 'all' && (
-                  <button
-                    onClick={() => setSelectedCategoryFilter('all')}
-                    className="text-blue-600 hover:text-blue-800 font-bold hover:underline cursor-pointer"
-                  >
-                    Reset Filter (Show All)
-                  </button>
-                )}
               </div>
 
               {categoryFilteredProfiles.length === 0 ? (
@@ -2305,6 +2309,16 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                     Show All Profiles
                   </button>
                 </div>
+              ) : directoryViewMode === 'table' ? (
+                <DirectoryTable
+                  rows={categoryFilteredProfiles}
+                  typeLabel={(code) => (masterOptions.employeeType ?? []).find((r) => r.code === code)?.name || code || '—'}
+                  instituteName={(code) => (masterOptions.institute ?? []).find((r) => r.code === code)?.name || ''}
+                  managerName={(id) => (id && users.find((m) => m.id === id)?.name) || '—'}
+                  onView={(u) => { setSelectedUserId(u.id); setDirectoryViewMode('detail'); }}
+                  onEdit={isAdmin ? (u) => openEditEmployee(u) : undefined}
+                  onHistory={isAdmin ? (u) => setHistoryUser(u) : undefined}
+                />
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {categoryFilteredProfiles.map((u) => {
@@ -2472,19 +2486,11 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
             </div>
           ) : (
             /* Full profile of one employee (server checks the viewer may see it). */
-            <div className="space-y-4">
-              {(isAdmin || isAudit || isManager) && (
-                <button
-                  type="button"
-                  onClick={() => setDirectoryViewMode('grid')}
-                  className="h-9 px-3.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" /> Back to directory
-                </button>
-              )}
+            <div>
               <EmployeeProfileView
                 userId={selectedUser.id}
                 canEditPhoto={isAdmin}
+                onBack={(isAdmin || isAudit || isManager) ? () => setDirectoryViewMode(lastListMode) : undefined}
                 onPhotoChanged={async () => {
                   await Promise.all([reloadEmployees(), selectedUser.id === currentUser.id ? refreshSession() : Promise.resolve()]);
                 }}

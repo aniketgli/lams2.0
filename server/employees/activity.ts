@@ -4,6 +4,7 @@ import { pool } from '../../src/db';
 import { badRequest } from '../lib/http';
 import { isValidIsoDate } from '../lib/validate';
 import { writeMasterAuditSql } from '../masters/audit';
+import { ROLE_LABELS, RoleId } from '../lib/roles';
 import { EmployeeRecord, Viewer, listEmployees } from './store';
 
 /**
@@ -48,7 +49,10 @@ async function lookupNames(type: string): Promise<Map<string, string>> {
 // Directory download
 // ---------------------------------------------------------------------------
 
-export async function employeeDirectoryCsv(req: Request, viewer: Viewer): Promise<{ filename: string; csv: string; count: number }> {
+export type ExportFormat = 'csv' | 'pdf';
+
+/** Directory as a table (headers + rows), logged as a download in `format`. */
+export async function employeeDirectoryTable(req: Request, viewer: Viewer, format: ExportFormat): Promise<{ headers: string[]; rows: unknown[][] }> {
   const records: EmployeeRecord[] = await listEmployees(viewer);
   const [types, institutes] = await Promise.all([lookupNames('employee_type'), lookupNames('institute')]);
   const nameById = new Map(records.map((r) => [r.id, `${r.name} (${r.biometricId})`]));
@@ -68,9 +72,14 @@ export async function employeeDirectoryCsv(req: Request, viewer: Viewer): Promis
   });
 
   await writeMasterAuditSql(pool, req, {
-    masterKey: 'employee_export', recordId: 'directory', recordLabel: 'Employee directory (CSV)', action: 'EXPORT',
-    after: { rows: rows.length },
+    masterKey: 'employee_export', recordId: 'directory', recordLabel: `Employee directory (${format.toUpperCase()})`, action: 'EXPORT',
+    after: { rows: rows.length, format },
   });
+  return { headers, rows };
+}
+
+export async function employeeDirectoryCsv(req: Request, viewer: Viewer): Promise<{ filename: string; csv: string; count: number }> {
+  const { headers, rows } = await employeeDirectoryTable(req, viewer, 'csv');
   const day = new Date().toISOString().slice(0, 10);
   return { filename: `WII_Employee_Directory_${day}.csv`, csv: toCsv(headers, rows), count: rows.length };
 }
@@ -173,6 +182,10 @@ const AREA_LABELS: Record<string, string> = {
   employee_photo: 'Profile photo', employee_export: 'Data download',
 };
 
+const ACTION_LABELS: Record<string, string> = {
+  CREATE: 'Created', UPDATE: 'Changed', STATUS: 'Activated / deactivated', DELETE: 'Deleted', RESET: 'Password reset', EXPORT: 'Downloaded',
+};
+
 /** Readable "field: old → new" summary of one log entry. */
 export function describeChange(row: ActivityRow): string {
   const show = (v: unknown) => (v === null || v === undefined || v === '' ? '—' : typeof v === 'object' ? JSON.stringify(v) : String(v));
@@ -186,19 +199,29 @@ export function describeChange(row: ActivityRow): string {
 
 export const MAX_ACTIVITY_EXPORT = 10_000;
 
-export async function activityCsv(req: Request, f: ActivityFilter): Promise<{ filename: string; csv: string; count: number }> {
+/** Activity log as a table for download, logged as an export in `format`. */
+export async function activityTable(req: Request, f: ActivityFilter, format: ExportFormat): Promise<{ headers: string[]; rows: unknown[][] }> {
   const { sql, params } = whereFor(f);
-  const [rows] = await pool.query<RowDataPacket[]>(`${SELECT} ${sql} ORDER BY created_at DESC, id DESC LIMIT ?`, [...params, MAX_ACTIVITY_EXPORT]);
+  const limit = format === 'pdf' ? MAX_ACTIVITY_PDF : MAX_ACTIVITY_EXPORT;
+  const [rows] = await pool.query<RowDataPacket[]>(`${SELECT} ${sql} ORDER BY created_at DESC, id DESC LIMIT ?`, [...params, limit]);
   const items = rows.map(toActivity);
   const headers = ['When (UTC)', 'Area', 'Action', 'Record', 'Biometric ID / ref', 'Changes', 'Reason', 'Done by', 'Done by (B.I.)', 'Role'];
-  const csvRows = items.map((r) => [
-    r.at, AREA_LABELS[r.area] ?? r.area, r.action, r.recordLabel, r.recordId, describeChange(r), r.reason,
-    r.actor.name, r.actor.biometricId, r.actor.role,
+  const out = items.map((r) => [
+    r.at, AREA_LABELS[r.area] ?? r.area, ACTION_LABELS[r.action] ?? r.action, r.recordLabel, r.recordId, describeChange(r), r.reason,
+    r.actor.name, r.actor.biometricId, r.actor.role ? ROLE_LABELS[r.actor.role as RoleId] ?? r.actor.role : null,
   ]);
   await writeMasterAuditSql(pool, req, {
-    masterKey: 'employee_export', recordId: 'activity', recordLabel: 'Employee activity log (CSV)', action: 'EXPORT',
-    after: { rows: csvRows.length, area: f.area, action: f.action, from: f.from, to: f.to, search: f.search },
+    masterKey: 'employee_export', recordId: 'activity', recordLabel: `Employee activity log (${format.toUpperCase()})`, action: 'EXPORT',
+    after: { rows: out.length, format, area: f.area, action: f.action, from: f.from, to: f.to, search: f.search },
   });
+  return { headers, rows: out };
+}
+
+/** A PDF is printed in the browser, so it is capped lower than a CSV. */
+export const MAX_ACTIVITY_PDF = 2_000;
+
+export async function activityCsv(req: Request, f: ActivityFilter): Promise<{ filename: string; csv: string; count: number }> {
+  const { headers, rows } = await activityTable(req, f, 'csv');
   const day = new Date().toISOString().slice(0, 10);
-  return { filename: `WII_Employee_Activity_${day}.csv`, csv: toCsv(headers, csvRows), count: csvRows.length };
+  return { filename: `WII_Employee_Activity_${day}.csv`, csv: toCsv(headers, rows), count: rows.length };
 }
