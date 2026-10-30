@@ -1,13 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarCheck, Check, CheckCircle2, ClipboardList, Clock, Pencil, Plus, Trash2, X, XCircle } from 'lucide-react';
+import { CalendarCheck, Check, CheckCircle2, ClipboardList, Clock, Eye, Pencil, Plus, RotateCcw, Trash2, X, XCircle } from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
 import { PageHeader } from '../../../../shared/components/PageHeader';
-import { DataTable, Modal } from '../../../../shared/components';
+import { DataTable, Modal, Select } from '../../../../shared/components';
 import type { ColumnDef } from '../../../../shared/components';
 import { Textarea } from '../../../../shared/components/forms/Textarea';
 import { AppDatePicker } from '../../../../shared/components/AppDatePicker';
 import { AppTimePicker } from '../../../../shared/components/AppTimePicker';
-import { AppSelect } from '../../../../shared/components/AppSelect';
 import { MultiSelectFilter, matchesMultiSelect } from '../../../../shared/components/MultiSelectFilter';
 import { FilterToolbar } from '../../../../shared/components/FilterToolbar';
 import { UserAvatar } from '../../../../shared/components/UserAvatar';
@@ -250,19 +249,31 @@ export const ManualAttendanceView: React.FC = () => {
   };
 
   // ---- Table ---------------------------------------------------------------------------------
-  const hasActions = visible.some((r) => r.canDecide || r.canEdit || r.canDelete);
+  const [viewing, setViewing] = useState<ManualRequest | null>(null);
+  const [undoing, setUndoing] = useState<ManualRequest | null>(null);
+  const [undoBusy, setUndoBusy] = useState(false);
+  const [undoError, setUndoError] = useState<string | null>(null);
+  const confirmUndo = async (reason: string) => {
+    if (!undoing) return;
+    setUndoBusy(true); setUndoError(null);
+    try {
+      const result = await manualAttendanceApi.undo(undoing.id, reason);
+      setUndoing(null);
+      showNotice('success', result.message);
+      await load(true);
+    } catch (error) {
+      setUndoError(error instanceof Error ? error.message : 'The decision could not be undone.');
+    } finally {
+      setUndoBusy(false);
+    }
+  };
+
+  const iconBtn = 'w-8 h-8 rounded-lg border flex items-center justify-center cursor-pointer shrink-0';
+  const statusBy = (r: ManualRequest) => (r.status === 'pending' ? `Applied by ${r.appliedByName || r.name}` : `by ${r.actionByName ?? '—'}`);
+  // Who sees which columns: the employee column for everyone who sees other people's requests.
   const columns: ColumnDef<ManualRequest>[] = [
-    {
-      key: 'date', header: 'Date', width: teamView ? '9%' : '11%', sortValue: (r) => r.date,
-      render: (r) => (
-        <div className="leading-tight">
-          <div className="font-semibold text-slate-900 whitespace-nowrap">{formatDate(r.date)}</div>
-          <div className="text-[11px] text-slate-500 whitespace-nowrap">Applied {formatDate(r.appliedAt.slice(0, 10))}</div>
-        </div>
-      ),
-    },
     ...(teamView ? [{
-      key: 'employee', header: 'Employee', width: '17%', sortValue: (r: ManualRequest) => r.name,
+      key: 'employee', header: 'Employee', width: '18%', sortValue: (r: ManualRequest) => r.name,
       render: (r: ManualRequest) => (
         <div className="flex items-center gap-2.5 min-w-0">
           <UserAvatar name={r.name} src={(userById.get(r.userId) as { avatar?: string } | undefined)?.avatar || null} className="w-8 h-8 rounded-full shrink-0" />
@@ -274,62 +285,66 @@ export const ManualAttendanceView: React.FC = () => {
       ),
     } as ColumnDef<ManualRequest>] : []),
     {
-      key: 'requested', header: 'Requested In / Out', width: teamView ? '11%' : '15%', align: 'center', sortValue: (r) => r.inTime,
-      render: (r) => <span className="font-mono font-semibold text-slate-800 whitespace-nowrap">{r.inTime} – {r.outTime}</span>,
-    },
-    {
-      key: 'original', header: 'Biometric In / Out', width: teamView ? '10%' : '13%', align: 'center', sortValue: (r) => r.originalIn ?? '',
-      render: (r) => <span className="font-mono text-slate-600 whitespace-nowrap">{r.originalIn || r.originalOut ? `${r.originalIn ?? '—'} – ${r.originalOut ?? '—'}` : 'No punch'}</span>,
-    },
-    {
-      key: 'reason', header: 'Category & reason', width: teamView ? '21%' : '24%', sortValue: (r) => r.category,
+      key: 'date', header: 'Forgot date & time', width: teamView ? '13%' : '17%', sortValue: (r) => r.date,
       render: (r) => (
-        <div className="whitespace-normal leading-snug min-w-[160px]">
-          <div className="font-semibold text-slate-800">{r.category}</div>
-          <div className="text-[11px] text-slate-500">{r.reason}</div>
+        <div className="leading-tight">
+          <div className="font-semibold text-slate-900 whitespace-nowrap">{formatDate(r.date)}</div>
+          <div className="text-[11px] text-slate-500 font-mono whitespace-nowrap">{r.inTime} – {r.outTime}</div>
         </div>
       ),
     },
-    { key: 'status', header: 'Status', width: '9%', sortValue: (r) => r.status, render: (r) => <StatusPill status={r.status} /> },
     {
-      key: 'decision', header: 'Reporting manager / decision', width: teamView ? '17%' : '20%', sortValue: (r) => r.actionByName ?? r.managerName ?? '',
+      key: 'applied', header: 'Applied date', width: teamView ? '11%' : '15%', sortValue: (r) => r.appliedAt,
       render: (r) => (
-        <div className="whitespace-normal leading-snug min-w-[140px]">
-          {r.status === 'pending' ? (
-            <span className="text-slate-600">{r.managerName ? `Waiting for ${r.managerName}` : 'Waiting for an administrator'}</span>
-          ) : (
-            <>
-              <span className="text-slate-700">{r.status === 'approved' ? 'Approved' : 'Rejected'} by {r.actionByName ?? '—'}</span>
-              <div className="text-[11px] text-slate-400">{formatStamp(r.actionAt)}</div>
-              {r.comment && <div className="text-[11px] text-slate-500">“{r.comment}”</div>}
-            </>
-          )}
+        <div className="leading-tight">
+          <div className="text-slate-800 whitespace-nowrap">{formatDate(r.appliedAt.slice(0, 10))}</div>
+          <div className="text-[11px] text-slate-500 whitespace-nowrap">{new Date(r.appliedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</div>
         </div>
       ),
     },
-    ...(hasActions ? [{
-      key: 'actions', header: 'Actions', width: '120px', align: 'center',
+    { key: 'category', header: 'Category', width: teamView ? '11%' : '14%', sortValue: (r) => r.category, render: (r) => <span className="font-semibold text-slate-800">{r.category}</span> },
+    {
+      key: 'reason', header: 'Reason', width: teamView ? '17%' : '24%', sortValue: (r) => r.reason,
+      render: (r) => <div className="whitespace-normal leading-snug min-w-[140px] text-slate-700 line-clamp-2" title={r.reason}>{r.reason}</div>,
+    },
+    {
+      key: 'status', header: 'Status', width: teamView ? '14%' : '16%', sortValue: (r) => r.status,
+      render: (r) => (
+        <div className="leading-tight space-y-1">
+          <StatusPill status={r.status} />
+          <div className="text-[11px] text-slate-500 truncate" title={statusBy(r)}>{statusBy(r)}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'actions', header: 'Actions', width: teamView ? '16%' : '14%', align: 'center',
       render: (r: ManualRequest) => (
         <div className="flex items-center justify-center gap-1">
-          {r.canDecide && (
-            <>
-              <button type="button" onClick={() => openDecide(r, 'approve')} title="Approve" aria-label={`Approve ${r.name}`}
-                className="w-8 h-8 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 flex items-center justify-center cursor-pointer"><Check className="w-3.5 h-3.5" /></button>
-              <button type="button" onClick={() => openDecide(r, 'reject')} title="Reject" aria-label={`Reject ${r.name}`}
-                className="w-8 h-8 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 flex items-center justify-center cursor-pointer"><X className="w-3.5 h-3.5" /></button>
-            </>
-          )}
+          <button type="button" onClick={() => setViewing(r)} title="View" aria-label={`View request of ${r.name} for ${formatDate(r.date)}`}
+            className={`${iconBtn} border-slate-200 text-slate-600 hover:text-primary hover:bg-slate-50`}><Eye className="w-3.5 h-3.5" /></button>
           {r.canEdit && (
             <button type="button" onClick={() => openEdit(r)} title="Edit" aria-label={`Edit ${r.name}`}
-              className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 hover:text-primary hover:bg-slate-50 flex items-center justify-center cursor-pointer"><Pencil className="w-3.5 h-3.5" /></button>
+              className={`${iconBtn} border-slate-200 text-slate-600 hover:text-primary hover:bg-slate-50`}><Pencil className="w-3.5 h-3.5" /></button>
           )}
           {r.canDelete && (
             <button type="button" onClick={() => { setDeleting(r); setDeleteError(null); }} title="Delete" aria-label={`Delete ${r.name}`}
-              className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 hover:text-error hover:bg-error-subtle flex items-center justify-center cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
+              className={`${iconBtn} border-slate-200 text-slate-600 hover:text-error hover:bg-error-subtle`}><Trash2 className="w-3.5 h-3.5" /></button>
+          )}
+          {r.canDecide && (
+            <>
+              <button type="button" onClick={() => openDecide(r, 'approve')} title="Approve" aria-label={`Approve ${r.name}`}
+                className={`${iconBtn} border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100`}><Check className="w-3.5 h-3.5" /></button>
+              <button type="button" onClick={() => openDecide(r, 'reject')} title="Reject" aria-label={`Reject ${r.name}`}
+                className={`${iconBtn} border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100`}><X className="w-3.5 h-3.5" /></button>
+            </>
+          )}
+          {r.canUndo && (
+            <button type="button" onClick={() => { setUndoing(r); setUndoError(null); }} title="Undo the decision" aria-label={`Undo decision on ${r.name}`}
+              className={`${iconBtn} border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100`}><RotateCcw className="w-3.5 h-3.5" /></button>
           )}
         </div>
       ),
-    } as ColumnDef<ManualRequest>] : []),
+    },
   ];
 
   const sorted = useMemo(() => {
@@ -452,7 +467,7 @@ export const ManualAttendanceView: React.FC = () => {
             data={pageRows}
             loading={loading}
             keyExtractor={(r) => r.id}
-            className={teamView ? 'min-w-[1150px]' : 'min-w-[820px]'}
+            className={teamView ? 'min-w-[1100px]' : 'min-w-[800px]'}
             sortColumn={sort.key}
             sortDirection={sort.dir}
             onSort={(key) => setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }))}
@@ -486,30 +501,28 @@ export const ManualAttendanceView: React.FC = () => {
             {formMessage && <NoticeBar notice={{ kind: 'error', text: formMessage }} onClose={() => setFormMessage(null)} />}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {isAdmin ? (
-                <div className={`sm:col-span-2 ${formErrors.userId ? 'rounded-xl ring-2 ring-rose-400' : ''}`} title={formErrors.userId || undefined}>
-                  <label className="block font-bold text-slate-800 text-xs tracking-tight mb-1">Employee *</label>
-                  <AppSelect value={form.userId} onChange={(v) => setForm((f) => ({ ...f, userId: v, date: '', inTime: '', outTime: '' }))} disabled={Boolean(editing)} searchable placeholder="Select employee"
+                <div className="sm:col-span-2" title={formErrors.userId || undefined}>
+                  <Select label="Employee" required value={form.userId} disabled={Boolean(editing)} searchable placeholder="Select employee" error={Boolean(formErrors.userId)}
+                    onChange={(v: string) => setForm((f) => ({ ...f, userId: v, date: '', inTime: '', outTime: '' }))}
                     options={(data?.employees ?? []).map((e) => ({ label: `${e.name} (${e.biometricId})${e.designation ? ` · ${e.designation}` : ''}`, value: e.id }))} />
                 </div>
               ) : null}
-              <div className={formErrors.date ? 'rounded-xl ring-2 ring-rose-400' : ''} title={formErrors.date || gapsError || undefined}>
-                <label className="block font-bold text-slate-800 text-xs tracking-tight mb-1">Date *</label>
-                <AppSelect value={form.date} onChange={pickDate} searchable={false}
+              <div title={formErrors.date || gapsError || undefined}>
+                <Select label="Date" required value={form.date} onChange={pickDate} searchable={false} error={Boolean(formErrors.date || gapsError)}
                   disabled={gapsLoading || (isAdmin && !form.userId) || dateChoices.length === 0}
                   placeholder={gapsLoading ? 'Loading dates…' : isAdmin && !form.userId ? 'Select employee first' : dateChoices.length === 0 ? 'No date with a missing punch' : 'Select date'}
                   options={dateChoices.map((g) => ({ label: `${formatDate(g.date)} (${dayShort(g.date)}) · ${gapText(g)}`, value: g.date }))} />
               </div>
-              <div className={formErrors.category ? 'rounded-xl ring-2 ring-rose-400' : ''} title={formErrors.category || undefined}>
-                <label className="block font-bold text-slate-800 text-xs tracking-tight mb-1">Category *</label>
-                <AppSelect value={form.category} onChange={(v) => setField('category', v)} searchable={false} placeholder="Select category"
-                  options={(data?.categories ?? []).map((c) => ({ label: c, value: c }))} />
+              <div title={formErrors.category || undefined}>
+                <Select label="Category" required value={form.category} onChange={(v: string) => setField('category', v)} searchable={false} placeholder="Select category"
+                  error={Boolean(formErrors.category)} options={(data?.categories ?? []).map((c) => ({ label: c, value: c }))} />
               </div>
               <div className={formErrors.inTime ? 'rounded-xl ring-2 ring-rose-400' : ''} title={formErrors.inTime || undefined}>
-                <AppTimePicker label="Check-In *" value={form.inTime} placeholder="HH:mm" disabled={!chosen || Boolean(chosen.in)}
+                <AppTimePicker label="Check-In" required value={form.inTime} placeholder="HH:mm" disabled={!chosen || Boolean(chosen.in)}
                   onChange={(v) => setField('inTime', v)} className="w-full" />
               </div>
               <div className={formErrors.outTime ? 'rounded-xl ring-2 ring-rose-400' : ''} title={formErrors.outTime || undefined}>
-                <AppTimePicker label="Check-Out *" value={form.outTime} placeholder="HH:mm" disabled={!chosen || Boolean(chosen.out)}
+                <AppTimePicker label="Check-Out" required value={form.outTime} placeholder="HH:mm" disabled={!chosen || Boolean(chosen.out)}
                   onChange={(v) => setField('outTime', v)} align="right" className="w-full" />
               </div>
             </div>
@@ -548,11 +561,57 @@ export const ManualAttendanceView: React.FC = () => {
         </div>
       </Modal>
 
-      {isAdmin && (
+      <Modal
+        isOpen={Boolean(viewing)}
+        onClose={() => setViewing(null)}
+        size="md"
+        title="Manual attendance request"
+        subtitle={viewing ? `${viewing.name} · ${formatDate(viewing.date)}` : undefined}
+        footer={<div className="flex justify-end"><button type="button" onClick={() => setViewing(null)} className="h-9 px-4 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer">Close</button></div>}
+      >
+        {viewing && (
+          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-xs">
+            {([
+              ['Employee', `${viewing.name} (B.I. ${viewing.biometricId})`],
+              ['Designation / department', [viewing.designation, viewing.department].filter(Boolean).join(' · ') || '—'],
+              ['Forgot date', formatDate(viewing.date)],
+              ['Requested In – Out', `${viewing.inTime} – ${viewing.outTime}`],
+              ['Biometric In – Out', viewing.originalIn || viewing.originalOut ? `${viewing.originalIn ?? 'missing'} – ${viewing.originalOut ?? 'missing'}` : 'No punch'],
+              ['Category', viewing.category],
+              ['Applied', `${formatStamp(viewing.appliedAt)} by ${viewing.appliedByName || viewing.name}`],
+              ['Reporting manager', viewing.managerName ?? '—'],
+            ] as const).map(([k, v]) => (
+              <div key={k}><dt className="font-semibold text-slate-500">{k}</dt><dd className="text-slate-900 font-medium">{v}</dd></div>
+            ))}
+            <div className="sm:col-span-2"><dt className="font-semibold text-slate-500">Reason</dt><dd className="text-slate-900 font-medium whitespace-pre-wrap">{viewing.reason}</dd></div>
+            <div className="sm:col-span-2">
+              <dt className="font-semibold text-slate-500">Status</dt>
+              <dd className="space-y-1 mt-0.5">
+                <StatusPill status={viewing.status} />
+                <div className="text-slate-700">{viewing.status === 'pending' ? 'Waiting for a decision' : `${viewing.status === 'approved' ? 'Approved' : 'Rejected'} by ${viewing.actionByName ?? '—'} · ${formatStamp(viewing.actionAt)}`}</div>
+                {viewing.comment && <div className="text-slate-600">“{viewing.comment}”</div>}
+              </dd>
+            </div>
+          </dl>
+        )}
+      </Modal>
+
+      <ConfirmDialog
+        open={Boolean(undoing)}
+        title="Undo decision"
+        message={undoing ? <>Take back the {undoing.status} decision on the request of <strong>{undoing.name}</strong> for {formatDate(undoing.date)}? It goes back to pending.{role === 'reporting_manager' ? ' You can undo a decision only once.' : ''} This is recorded in the audit log.</> : ''}
+        confirmLabel="Undo decision"
+        busy={undoBusy}
+        error={undoError}
+        onConfirm={(reason) => void confirmUndo(reason)}
+        onCancel={() => setUndoing(null)}
+      />
+
+      {canApply && (
         <ConfirmDialog
           open={Boolean(deleting)}
           title="Delete request"
-          message={deleting ? <>Delete the {STATUS_META[deleting.status].label.toLowerCase()} request of <strong>{deleting.name}</strong> for {formatDate(deleting.date)}?{deleting.status === 'approved' ? ' The day goes back to the biometric punches.' : ''} This is recorded in the audit log.</> : ''}
+          message={deleting ? <>Delete the {STATUS_META[deleting.status].label.toLowerCase()} request of <strong>{deleting.name}</strong> for {formatDate(deleting.date)}?This is recorded in the audit log.</> : ''}
           confirmLabel="Delete"
           danger
           busy={deleteBusy}

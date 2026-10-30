@@ -68,6 +68,8 @@ export interface ManualRequest {
   canDecide: boolean;
   canEdit: boolean;
   canDelete: boolean;
+  /** The decision can be taken back (reporting manager: once; administrator: any time). */
+  canUndo: boolean;
 }
 
 export interface ManualInput {
@@ -136,8 +138,20 @@ function canDecide(viewer: Viewer, row: RowDataPacket): boolean {
   return viewer.role === 'reporting_manager' && managersOf(row).reporting === String(viewer.id);
 }
 
+/** Edit / delete: only before a decision, by the employee (own request) or an administrator. */
+function canModify(viewer: Viewer, row: RowDataPacket): boolean {
+  if (String(row.status) !== 'pending') return false;
+  return viewer.role === 'administrator' || (viewer.role === 'general_staff' && Number(row.user_id) === viewer.id);
+}
+
+function canUndo(viewer: Viewer, row: RowDataPacket): boolean {
+  if (String(row.status) === 'pending') return false;
+  if (viewer.role === 'administrator') return true;
+  return viewer.role === 'reporting_manager' && managersOf(row).reporting === String(viewer.id)
+    && Number(row.action_by) === viewer.id && Number(row.undo_count ?? 0) < 1;
+}
+
 function toRequest(viewer: Viewer, row: RowDataPacket): ManualRequest {
-  const admin = viewer.role === 'administrator';
   return {
     id: String(row.id),
     userId: String(row.user_id),
@@ -162,8 +176,9 @@ function toRequest(viewer: Viewer, row: RowDataPacket): ManualRequest {
     actionAt: isoTime(row.action_at),
     comment: row.manager_comment ? String(row.manager_comment) : null,
     canDecide: canDecide(viewer, row),
-    canEdit: admin && String(row.status) === 'pending',
-    canDelete: admin,
+    canEdit: canModify(viewer, row),
+    canDelete: canModify(viewer, row),
+    canUndo: canUndo(viewer, row),
   };
 }
 
@@ -177,7 +192,8 @@ function auditView(r: ManualRequest): Record<string, unknown> {
 const label = (r: ManualRequest) => `${r.name} (${r.biometricId}) · ${r.date}`;
 
 function missingTable(error: unknown): never | undefined {
-  if ((error as { code?: string })?.code === 'ER_NO_SUCH_TABLE') {
+  const code = (error as { code?: string })?.code;
+  if (code === 'ER_NO_SUCH_TABLE' || code === 'ER_BAD_FIELD_ERROR') {
     throw new HttpError(503, 'Manual attendance is not set up yet. Ask the administrator to run the manual attendance migration.', 'NOT_CONFIGURED');
   }
   return undefined;
@@ -312,14 +328,17 @@ export async function createRequest(req: Request, viewer: Viewer, body: unknown)
 }
 
 export async function updateRequest(req: Request, viewer: Viewer, id: number, body: unknown): Promise<{ request: ManualRequest; changed: string[] }> {
-  if (viewer.role !== 'administrator') throw forbidden('Only an administrator can edit a request.');
+  if (viewer.role !== 'administrator' && viewer.role !== 'general_staff') throw forbidden('Your current role cannot edit requests.');
   const input = parseManualInput(body);
   try {
     return await inTransaction(async (conn) => {
       const row = await fetchOne(viewer, conn, id, true);
       if (!row) throw notFound('Request not found.');
+      if (viewer.role !== 'administrator' && Number(row.user_id) !== viewer.id) throw notFound('Request not found.');
       const before = toRequest(viewer, row);
-      if (before.status !== 'pending') throw new HttpError(409, 'Only a pending request can be edited. Delete it and apply again if an approved one is wrong.', 'NOT_PENDING');
+      if (before.status !== 'pending') throw new HttpError(409, 'Only a request that is not yet approved or rejected can be edited.', 'NOT_PENDING');
+      if (input.userId && viewer.role !== 'administrator' && Number(input.userId) !== viewer.id) throw forbidden('You can only edit your own request.');
+      if (input.userId && viewer.role === 'administrator' && input.userId !== String(row.user_id)) throw badRequest('Please correct the highlighted fields.', { userId: 'The employee of a request cannot be changed.' });
       const target = await loadTarget(conn, Number(row.user_id));
       checkDate(input, target.joining);
       if (await hasOpenRequest(conn, target.id, input.date, id)) throw duplicate(input.date);
@@ -377,13 +396,44 @@ export async function decideRequest(req: Request, viewer: Viewer, id: number, bo
   }
 }
 
+/** Takes an approval / rejection back: the request is pending again, with the decision kept in the audit log. */
+export async function undoDecision(req: Request, viewer: Viewer, id: number, reason: string | null): Promise<ManualRequest> {
+  try {
+    return await inTransaction(async (conn) => {
+      const row = await fetchOne(viewer, conn, id, true);
+      if (!row || !canSee(viewer, row)) throw notFound('Request not found.');
+      const before = toRequest(viewer, row);
+      if (before.status === 'pending') throw new HttpError(409, 'This request has no decision to undo.', 'NOT_DECIDED');
+      if (!canUndo(viewer, row)) {
+        throw forbidden(viewer.role === 'reporting_manager' && Number(row.action_by) === viewer.id
+          ? 'You have already undone a decision on this request once.' : 'You cannot undo this decision.');
+      }
+      await conn.query(
+        'UPDATE manual_attendance_requests SET status = \'pending\', action_by = NULL, action_at = NULL, manager_comment = NULL, undo_count = undo_count + 1 WHERE id = ?',
+        [id],
+      );
+      const after = toRequest(viewer, (await fetchOne(viewer, conn, id))!);
+      await writeMasterAuditSql(conn, req, {
+        masterKey: AUDIT_KEY, recordId: id, recordLabel: label(after), action: 'STATUS',
+        before: auditView(before), after: auditView(after), reason: reason ? `Decision undone: ${reason}` : 'Decision undone',
+      });
+      return after;
+    });
+  } catch (error) {
+    missingTable(error);
+    throw error;
+  }
+}
+
 export async function deleteRequest(req: Request, viewer: Viewer, id: number, reason: string | null): Promise<ManualRequest> {
-  if (viewer.role !== 'administrator') throw forbidden('Only an administrator can delete a request.');
+  if (viewer.role !== 'administrator' && viewer.role !== 'general_staff') throw forbidden('Your current role cannot delete requests.');
   try {
     return await inTransaction(async (conn) => {
       const row = await fetchOne(viewer, conn, id, true);
       if (!row) throw notFound('Request not found.');
+      if (viewer.role !== 'administrator' && Number(row.user_id) !== viewer.id) throw notFound('Request not found.');
       const target = toRequest(viewer, row);
+      if (target.status !== 'pending') throw new HttpError(409, `This request is already ${target.status}. Undo the decision first.`, 'NOT_PENDING');
       await writeMasterAuditSql(conn, req, { masterKey: AUDIT_KEY, recordId: id, recordLabel: label(target), action: 'DELETE', before: auditView(target), reason });
       await conn.query('DELETE FROM manual_attendance_requests WHERE id = ?', [id]);
       return target;

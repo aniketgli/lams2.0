@@ -30,6 +30,7 @@ export interface ManualRequest {
   canDecide: boolean;
   canEdit: boolean;
   canDelete: boolean;
+  canUndo: boolean;
 }
 
 export interface ManualList {
@@ -63,5 +64,6 @@ export const manualAttendanceApi = {
   update: (id: string, input: ManualInput) => api<{ request: ManualRequest; changed: string[]; message: string }>(one(id), { method: 'PUT', body: input }),
   decide: (id: string, action: 'approve' | 'reject', comment: string) =>
     api<{ request: ManualRequest; message: string }>(`${one(id)}/decision`, { method: 'POST', body: { action, comment: comment || undefined } }),
+  undo: (id: string, reason?: string) => api<{ request: ManualRequest; message: string }>(`${one(id)}/undo`, { method: 'POST', body: { reason: reason || undefined } }),
   remove: (id: string, reason?: string) => api<{ message: string }>(one(id), { method: 'DELETE', body: { reason: reason || undefined } }),
 };

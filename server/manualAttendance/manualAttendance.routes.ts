@@ -4,7 +4,7 @@ import { Validator } from '../lib/validate';
 import { requireActiveRole, requireAuth } from '../middleware/auth.middleware';
 import { activityCsv, activityTable, listActivity, parseActivityFilter } from '../employees/activity';
 import {
-  MANUAL_SCOPE, REASON_CATEGORIES, applicableEmployees, createRequest, decideRequest, deleteRequest, listRequests, missingPunchDates, requestId, updateRequest,
+  MANUAL_SCOPE, REASON_CATEGORIES, applicableEmployees, createRequest, decideRequest, deleteRequest, listRequests, missingPunchDates, requestId, undoDecision, updateRequest,
 } from './store';
 
 /**
@@ -12,7 +12,8 @@ import {
  *   list:     every signed-in user, scoped by active role (self / team / all)
  *   apply:    general staff for themselves; administrator for anyone
  *   decide:   the employee's reporting manager, or an administrator
- *   edit/delete: administrator
+ *   edit/delete: the employee (own) or an administrator, before approval
+ *   undo:     reporting manager (own decision, once) or administrator (any time)
  *   logs:     auditor, with CSV / PDF downloads that are logged too
  */
 const router = Router();
@@ -63,6 +64,14 @@ router.put('/manual-attendance/:id', requireAuth, asyncHandler(async (req, res) 
 router.post('/manual-attendance/:id/decision', requireAuth, asyncHandler(async (req, res) => {
   const request = await decideRequest(req, viewerOf(req), requestId(req.params.id), req.body);
   res.json({ request, message: request.status === 'approved' ? 'Request approved.' : 'Request rejected.' });
+}));
+
+router.post('/manual-attendance/:id/undo', requireAuth, asyncHandler(async (req, res) => {
+  const v = new Validator(req.body ?? {});
+  const reason = v.optionalString('reason', { max: 400 });
+  v.assert();
+  const request = await undoDecision(req, viewerOf(req), requestId(req.params.id), reason);
+  res.json({ request, message: 'Decision undone. The request is pending again.' });
 }));
 
 router.delete('/manual-attendance/:id', requireAuth, asyncHandler(async (req, res) => {
