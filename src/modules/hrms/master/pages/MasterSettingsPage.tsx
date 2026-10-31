@@ -12,7 +12,7 @@ import { OrganizationPanel } from '../components/OrganizationPanel';
 import { NotificationRecipientsCard } from '../components/NotificationRecipientsCard';
 import { EmailSettingsCard } from '../components/EmailSettingsCard';
 import { DefaultPasswordCard } from '../components/DefaultPasswordCard';
-import { ReadOnlyNotice, TabStrip } from '../components/masterUi';
+import { TabStrip } from '../components/masterUi';
 import { MasterCatalog, masterApi } from '../masterApi';
 
 type Section = 'shifts' | 'biometric' | 'leave' | 'profile' | 'organization' | 'activity';
@@ -64,8 +64,6 @@ export const MasterSettingsPage: React.FC = () => {
         title="Master Settings"
         subtitle={readOnly ? 'Read-only view of all masters.' : 'Shifts, devices, profile masters and organization details.'}
       />
-
-      {readOnly && <ReadOnlyNotice />}
 
       <TabStrip tabs={isAudit ? [...SECTIONS, ACTIVITY_SECTION] : SECTIONS} value={section} onChange={setSection} />
 
