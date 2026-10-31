@@ -1,3 +1,4 @@
+import { applyImport, reviewImport } from './balanceImport';
 import { Router, type Request, type Response } from 'express';
 import { pool } from '../../src/db';
 import { asyncHandler } from '../lib/http';
@@ -120,6 +121,15 @@ router.get('/leave/balances', requireAuth, asyncHandler(async (req, res) => {
 router.put('/leave/balances', requireAuth, asyncHandler(async (req, res) => {
   const balance = await setBalance(req, viewerOf(req), req.body);
   res.json({ balance, message: 'Leave balance saved.' });
+}));
+
+router.post('/leave/balances/import/review', requireAuth, asyncHandler(async (req, res) => {
+  res.json(await reviewImport(viewerOf(req), req.body));
+}));
+
+router.post('/leave/balances/import', requireAuth, asyncHandler(async (req, res) => {
+  const result = await applyImport(req, viewerOf(req), req.body);
+  res.json({ ...result, message: `${result.summary.ok} balance(s) updated${result.summary.unchanged ? `, ${result.summary.unchanged} unchanged` : ''}.` });
 }));
 
 // Auditor log routes come before /:id so "activity" is never read as an ID.
