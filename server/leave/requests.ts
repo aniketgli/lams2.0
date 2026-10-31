@@ -311,7 +311,7 @@ async function loadEmployee(q: { query: typeof pool.query }, userId: number): Pr
 interface Policy {
   id: number; code: string; name: string; quota: number; pwdQuota: number | null; pwdOnly: boolean; stages: 1 | 2; minNotice: number; halfDay: boolean; certDays: number;
   sandwich: 'included' | 'excluded'; employeeTypes: string[]; gender: string; minServiceMonths: number; maxConsecutive: number; debited: boolean;
-  status: string; combineWith: Combine; maxAccumulation: number; afterExhaustedId: number; accrual: string; debitFromId: number; debitFactor: number; lifetimeMax: number; maxSpells: number; quotas: Record<string, number>;
+  status: string; combineWith: Combine; maxAccumulation: number; afterExhaustedId: number; accrual: string; debitFromId: number; debitFactor: number; lifetimeMax: number; maxSpells: number; minDays: number; maxSpellsMonth: number; maxSpellsLifetime: number; quotas: Record<string, number>;
 }
 
 function toPolicy(r: RowDataPacket): Policy {
@@ -323,7 +323,7 @@ function toPolicy(r: RowDataPacket): Policy {
     minServiceMonths: Number(r.min_service_months), maxConsecutive: Number(r.max_consecutive_days), debited: Boolean(r.is_debited),
     status: String(r.status), combineWith: toCombine(r.combine_with), maxAccumulation: Number(r.max_accumulation), afterExhaustedId: Number(r.after_exhausted_type_id ?? 0), accrual: String(r.accrual ?? 'yearly'),
     debitFromId: Number(r.debit_from_type_id ?? 0), debitFactor: Number(r.debit_factor ?? 1),
-    lifetimeMax: Number(r.lifetime_max ?? 0), maxSpells: Number(r.max_spells_per_year ?? 0), quotas: {},
+    lifetimeMax: Number(r.lifetime_max ?? 0), maxSpells: Number(r.max_spells_per_year ?? 0), minDays: Number(r.min_days_per_application ?? 0), maxSpellsMonth: Number(r.max_spells_per_month ?? 0), maxSpellsLifetime: Number(r.max_spells_lifetime ?? 0), quotas: {},
   };
 }
 
@@ -494,12 +494,21 @@ async function checkLeave(
   const rule = await dayRule(q, emp, policy, input.startDate, input.endDate);
   const { days } = countLeaveDays(input.startDate, input.endDate, input.startSession, input.endSession, rule);
   if (days <= 0) throw badRequest('Please correct the highlighted fields.', { startDate: 'No working day falls in these dates.' });
+  if (policy.minDays && days < policy.minDays) errors.endDate = `${policy.name} needs at least ${policy.minDays} days in one application.`;
   if (policy.maxConsecutive && days > policy.maxConsecutive) errors.endDate = `${policy.name} can be taken for at most ${policy.maxConsecutive} days at a time.`;
   if (policy.certDays && days > policy.certDays && !input.certificate) errors.certificate = `A medical certificate is needed for more than ${policy.certDays} days. Confirm that it will be submitted.`;
   if (policy.lifetimeMax) {
     const [taken] = await rows(q, "SELECT COALESCE(SUM(days_count), 0) AS n FROM leave_requests WHERE user_id = ? AND leave_type_id = ? AND status <> 'rejected' AND id <> ?", [targetId, policy.id, exceptId]);
     const before = Number(taken?.n ?? 0);
     if (before + days > policy.lifetimeMax) errors.endDate = `${policy.name} is limited to ${policy.lifetimeMax} days in the whole service; ${num(Math.max(0, policy.lifetimeMax - before))} days are left.`;
+  }
+  if (policy.maxSpellsMonth && !errors.endDate) {
+    const [monthly] = await rows(q, "SELECT COUNT(*) AS n FROM leave_requests WHERE user_id = ? AND leave_type_id = ? AND DATE_FORMAT(start_date, '%Y-%m') = ? AND status <> 'rejected' AND id <> ?", [targetId, policy.id, input.startDate.slice(0, 7), exceptId]);
+    if (Number(monthly?.n ?? 0) >= policy.maxSpellsMonth) errors.startDate = `${policy.name} can be applied for at most ${policy.maxSpellsMonth} times in a month.`;
+  }
+  if (policy.maxSpellsLifetime && !errors.endDate && !errors.startDate) {
+    const [ever] = await rows(q, "SELECT COUNT(*) AS n FROM leave_requests WHERE user_id = ? AND leave_type_id = ? AND status <> 'rejected' AND id <> ?", [targetId, policy.id, exceptId]);
+    if (Number(ever?.n ?? 0) >= policy.maxSpellsLifetime) errors.startDate = `${policy.name} can be applied for at most ${policy.maxSpellsLifetime} times in the whole service.`;
   }
   if (policy.maxSpells && !errors.endDate) {
     const [spells] = await rows(q, "SELECT COUNT(*) AS n FROM leave_requests WHERE user_id = ? AND leave_type_id = ? AND cycle_year = ? AND status <> 'rejected' AND id <> ?", [targetId, policy.id, cycleYear, exceptId]);

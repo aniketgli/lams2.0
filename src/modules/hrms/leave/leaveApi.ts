@@ -33,6 +33,9 @@ export interface LeaveTypeRecord {
   debitFactor: number;
   lifetimeMax: number;
   maxSpellsPerYear: number;
+  minDaysPerApplication: number;
+  maxSpellsPerMonth: number;
+  maxSpellsLifetime: number;
   quotas: Array<{ employeeType: string; quota: number }>;
   status: 'active' | 'inactive';
   updatedAt: string | null;

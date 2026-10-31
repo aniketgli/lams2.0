@@ -59,6 +59,9 @@ export interface LeaveType {
   debitFactor: number;
   lifetimeMax: number;
   maxSpellsPerYear: number;
+  minDaysPerApplication: number;
+  maxSpellsPerMonth: number;
+  maxSpellsLifetime: number;
   quotas: Array<{ employeeType: string; quota: number }>;
   status: 'active' | 'inactive';
   updatedAt: string | null;
@@ -97,6 +100,9 @@ export function toLeaveType(row: RowDataPacket): LeaveType {
     debitFactor: Number(row.debit_factor ?? 1),
     lifetimeMax: Number(row.lifetime_max ?? 0),
     maxSpellsPerYear: Number(row.max_spells_per_year ?? 0),
+    minDaysPerApplication: Number(row.min_days_per_application ?? 0),
+    maxSpellsPerMonth: Number(row.max_spells_per_month ?? 0),
+    maxSpellsLifetime: Number(row.max_spells_lifetime ?? 0),
     quotas: [],
     status: String(row.status) === 'inactive' ? 'inactive' : 'active',
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : null,
@@ -154,6 +160,11 @@ export async function parseLeaveTypeInput(body: unknown, selfId = 0): Promise<Le
   const lifetimeMax = Number(v.raw('lifetimeMax') ?? 0);
   if (!Number.isFinite(lifetimeMax) || lifetimeMax < 0 || lifetimeMax > 5000 || Math.round(lifetimeMax * 2) !== lifetimeMax * 2) v.errors.lifetimeMax ||= 'Enter days from 0 to 5000, in steps of 0.5.';
   const maxSpellsPerYear = v.int('maxSpellsPerYear', { min: 0, max: 100 });
+  const minDaysPerApplication = Number(v.raw('minDaysPerApplication') ?? 0);
+  if (!Number.isFinite(minDaysPerApplication) || minDaysPerApplication < 0 || minDaysPerApplication > 730 || Math.round(minDaysPerApplication * 2) !== minDaysPerApplication * 2) v.errors.minDaysPerApplication ||= 'Enter days from 0 to 730, in steps of 0.5.';
+  else if (maxConsecutiveDays && maxConsecutiveDays > 0 && minDaysPerApplication > maxConsecutiveDays) v.errors.minDaysPerApplication ||= 'The minimum cannot be more than the maximum.';
+  const maxSpellsPerMonth = v.int('maxSpellsPerMonth', { min: 0, max: 31 });
+  const maxSpellsLifetime = v.int('maxSpellsLifetime', { min: 0, max: 1000 });
   const rawAfter = v.raw('afterExhaustedTypeId');
   const afterText = rawAfter === undefined || rawAfter === null ? '' : String(rawAfter).trim();
   let afterExhaustedTypeId = '';
@@ -212,7 +223,7 @@ export async function parseLeaveTypeInput(body: unknown, selfId = 0): Promise<Le
     code, name, description: description ?? '', defaultQuota: quota, pwdQuota, pwdOnly, accrual: accrual!, maxAccumulation: maxAccumulation!, carryForward,
     maxCarryForward: carryForward ? cf : 0, encashmentAllowed, approvalStages: stages as 1 | 2, minNoticeDays: minNoticeDays!, halfDayAllowed,
     medicalCertDays: medicalCertDays!, sandwichRule: sandwichRule!, combineWith: combineWith!, employeeTypes, gender: gender!, minServiceMonths: minServiceMonths!,
-    maxConsecutiveDays: maxConsecutiveDays!, isDebited, isPaid, afterExhaustedTypeId, debitFromTypeId, debitFactor, lifetimeMax, maxSpellsPerYear: maxSpellsPerYear!, quotas, status: status!,
+    maxConsecutiveDays: maxConsecutiveDays!, isDebited, isPaid, afterExhaustedTypeId, debitFromTypeId, debitFactor, lifetimeMax, maxSpellsPerYear: maxSpellsPerYear!, minDaysPerApplication, maxSpellsPerMonth: maxSpellsPerMonth!, maxSpellsLifetime: maxSpellsLifetime!, quotas, status: status!,
   };
 }
 
@@ -247,11 +258,11 @@ export async function leaveTypeOptions(): Promise<{ employeeTypes: Array<{ code:
 
 const COLS = `code, name, description, default_quota, pwd_quota, accrual, max_accumulation, carry_forward, max_carry_forward, encashment_allowed, approval_stages,
   min_notice_days, half_day_allowed, medical_cert_days, sandwich_rule, combine_with, employee_types, pwd_only, gender, min_service_months, max_consecutive_days,
-  is_debited, is_paid, after_exhausted_type_id, debit_from_type_id, debit_factor, lifetime_max, max_spells_per_year, status`;
+  is_debited, is_paid, after_exhausted_type_id, debit_from_type_id, debit_factor, lifetime_max, max_spells_per_year, min_days_per_application, max_spells_per_month, max_spells_lifetime, status`;
 const values = (t: LeaveTypeInput) => [
   t.code, t.name, t.description || null, t.defaultQuota, t.pwdQuota, t.accrual, t.maxAccumulation, t.carryForward ? 1 : 0, t.maxCarryForward, t.encashmentAllowed ? 1 : 0,
   t.approvalStages, t.minNoticeDays, t.halfDayAllowed ? 1 : 0, t.medicalCertDays, t.sandwichRule, t.combineWith, t.employeeTypes.join(','), t.pwdOnly ? 1 : 0, t.gender, t.minServiceMonths,
-  t.maxConsecutiveDays, t.isDebited ? 1 : 0, t.isPaid ? 1 : 0, t.afterExhaustedTypeId ? Number(t.afterExhaustedTypeId) : null, t.debitFromTypeId ? Number(t.debitFromTypeId) : null, t.debitFactor, t.lifetimeMax, t.maxSpellsPerYear, t.status,
+  t.maxConsecutiveDays, t.isDebited ? 1 : 0, t.isPaid ? 1 : 0, t.afterExhaustedTypeId ? Number(t.afterExhaustedTypeId) : null, t.debitFromTypeId ? Number(t.debitFromTypeId) : null, t.debitFactor, t.lifetimeMax, t.maxSpellsPerYear, t.minDaysPerApplication, t.maxSpellsPerMonth, t.maxSpellsLifetime, t.status,
 ];
 
 function duplicate(error: unknown): never | void {
