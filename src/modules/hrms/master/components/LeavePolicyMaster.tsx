@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { FileText, Pencil, Plus, Trash2 } from 'lucide-react';
-import { Button, DataTable, Input, Modal, Select, Textarea } from '../../../../shared/components';
+import { Button, DataTable, Input, Modal, Select } from '../../../../shared/components';
 import type { ColumnDef } from '../../../../shared/components';
 import { ApiError } from '../../../../shared/services/api';
 import { LeaveTypeInput, LeaveTypeList, LeaveTypeRecord, leaveTypeApi } from '../../leave/leaveApi';
@@ -219,12 +219,11 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
           <form id="leave-type-editor" onSubmit={save} className="space-y-5" noValidate>
             {formMessage && <p role="alert" className="rounded-lg border border-error-border bg-error-subtle px-3 py-2 text-xs text-error">{formMessage}</p>}
 
-            <FormSection step={1} title="Basic details" errorCount={countErrors(['code', 'name', 'description', 'status'])}>
-              <Input label="Name" required maxLength={100} placeholder="e.g. Casual Leave" value={form.name} error={errors.name} onChange={(e) => set('name', e.target.value)} containerClassName="sm:col-span-2" />
+            <FormSection step={1} title="Basic details" errorCount={countErrors(['name', 'code', 'status'])}>
+              <Input label="Name" required maxLength={100} placeholder="e.g. Casual Leave" value={form.name} error={errors.name} onChange={(e) => set('name', e.target.value)} />
               <Input label="Code" required maxLength={20} placeholder="e.g. CL" value={form.code} error={errors.code} onChange={(e) => set('code', e.target.value)} />
               <Select label="Status" required value={form.status} searchable={false} onChange={(v: string) => set('status', v as 'active' | 'inactive')}
                 options={[{ label: 'Active', value: 'active' }, { label: 'Inactive', value: 'inactive' }]} />
-              <Textarea label="Description" rows={2} maxLength={500} value={form.description} onChange={(e) => set('description', e.target.value)} containerClassName="sm:col-span-3" />
             </FormSection>
 
             <FormSection step={2} title="Entitlement" errorCount={countErrors(['defaultQuota', 'accrual', 'maxAccumulation', 'pwdQuota', 'pwdOnly', 'employeeTypes', 'quotas'])}>
