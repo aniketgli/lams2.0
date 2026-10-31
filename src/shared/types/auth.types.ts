@@ -68,6 +68,7 @@ export interface User {
   biometricId?: string;
   bio?: string;
   shiftId?: string; // ID of assigned Shift (falls back to default shift)
+  leaveGroup?: string; // Code of the leave group (Master Settings > Leave Policy); it decides the leave types and the leave year
   leaveCycle?: 'CY' | 'FY'; // Cadre-specific Leave Accounting Cycle ('CY' for Calendar Year, 'FY' for Financial Year)
   leaveCycleBasis?: 'calendar_year' | 'financial_year'; // Descriptive basis for leave cycle
   status?: 'active' | 'deactivated';

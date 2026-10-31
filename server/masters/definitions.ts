@@ -64,7 +64,7 @@ interface BaseDef {
   label: string;
   /** Singular noun for messages ("Designation"). */
   noun: string;
-  group: 'profile' | 'lists' | 'leave';
+  group: 'profile' | 'lists';
   description: string;
   fields: FieldDef[];
   usage: UsageCheck[];
@@ -226,12 +226,6 @@ export const MASTERS: MasterDef[] = [
     ],
   },
   {
-    kind: 'lookup', key: 'leaveGroup', lookupType: 'leave_group', group: 'leave',
-    label: 'Leave Groups', noun: 'Leave group', description: 'Groups of leave types, for example regular, special or unpaid leave.',
-    fields: [],
-    usage: [{ what: 'leave types', sql: 'SELECT COUNT(*) AS n FROM leave_types WHERE leave_group = ?', by: 'code' }],
-  },
-  {
     kind: 'lookup', key: 'orgUnitType', lookupType: 'org_unit_type', group: 'lists',
     label: 'Organization Unit Types', noun: 'Unit type', description: 'Types used in the Organizations master.',
     fields: [],
@@ -261,14 +255,9 @@ export const PROFILE_TABS = [
   'courses', 'traineeBatches', 'mscStreams', 'mscBatches', 'phdEnrollment', 'fundingCategory',
 ] as const;
 
-/** Tabs of the Leave Policy section's "Leave groups" screen. */
-export const LEAVE_TABS = ['leaveGroup'] as const;
-
 export function tabOrder(key: string): number | null {
   const i = (PROFILE_TABS as readonly string[]).indexOf(key);
-  if (i >= 0) return i;
-  const j = (LEAVE_TABS as readonly string[]).indexOf(key);
-  return j < 0 ? null : j;
+  return i < 0 ? null : i;
 }
 
 export function findMaster(key: string): MasterDef | undefined {
@@ -306,9 +295,9 @@ export function auditMasterLabels(): Record<string, string> {
 /** Everything on the Master Settings screen, for the auditor's activity log. */
 export function masterActivityScope(): { keys: string[]; areaLabels: Record<string, string> } {
   const labels = auditMasterLabels();
-  const keys = ['shift', 'biometric_machine', 'organization_settings', 'notification_recipient', 'email_settings', 'default_password', 'leave_type', 'leave_policy', ...MASTERS.map(auditKey)];
+  const keys = ['shift', 'biometric_machine', 'organization_settings', 'notification_recipient', 'email_settings', 'default_password', 'leave_type', 'leave_group', ...MASTERS.map(auditKey)];
   const unique = [...new Set(keys)];
-  const areaLabels: Record<string, string> = { leave_type: 'Leave type', leave_policy: 'Leave policy', master_export: 'Log download' };
+  const areaLabels: Record<string, string> = { leave_type: 'Leave type', leave_group: 'Leave group', master_export: 'Log download' };
   for (const k of unique) areaLabels[k] ||= labels[k] ?? k;
   return { keys: [...unique, 'master_export'], areaLabels };
 }

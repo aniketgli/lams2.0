@@ -5,6 +5,7 @@ import { PageHeader } from '../../../../shared/components/PageHeader';
 import { ActivityLogPanel, ActivitySource } from '../../../../shared/components/ActivityLogPanel';
 import { activityEndpoints } from '../../../../shared/services/activityApi';
 import { LeavePolicyMaster } from '../components/LeavePolicyMaster';
+import { LeaveGroupsPanel } from '../components/LeaveGroupsPanel';
 import { ShiftsPanel } from '../components/ShiftsPanel';
 import { BiometricMachinesPanel } from '../components/BiometricMachinesPanel';
 import { MasterRegistryPanel } from '../components/MasterRegistryPanel';
@@ -15,10 +16,10 @@ import { DefaultPasswordCard } from '../components/DefaultPasswordCard';
 import { TabStrip } from '../components/masterUi';
 import { MasterCatalog, masterApi } from '../masterApi';
 
-type LeaveTab = 'types' | 'groups';
+type LeaveTab = 'groups' | 'types';
 const LEAVE_TABS: { id: LeaveTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { id: 'types', label: 'Leave types', icon: FileText },
-  { id: 'groups', label: 'Leave groups', icon: Layers },
+  { id: 'groups', label: 'Leave Groups', icon: Layers },
+  { id: 'types', label: 'Leave Types', icon: FileText },
 ];
 
 type Section = 'shifts' | 'biometric' | 'leave' | 'profile' | 'organization' | 'activity';
@@ -41,7 +42,7 @@ export const MasterSettingsPage: React.FC = () => {
   const { session } = useSession();
   const readOnly = session?.activeRole !== 'administrator';
   const [section, setSection] = useState<Section>('shifts');
-  const [leaveTab, setLeaveTab] = useState<LeaveTab>('types');
+  const [leaveTab, setLeaveTab] = useState<LeaveTab>('groups');
   const [catalog, setCatalog] = useState<MasterCatalog | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
 
@@ -54,7 +55,7 @@ export const MasterSettingsPage: React.FC = () => {
   }, []);
 
   const isAudit = session?.activeRole === 'audit';
-  const needsCatalog = section === 'profile' || section === 'activity' || (section === 'leave' && leaveTab === 'groups');
+  const needsCatalog = section === 'profile' || section === 'activity';
   const activitySource = useMemo<ActivitySource | null>(() => !catalog ? null : ({
     title: 'Master settings activity log',
     recordLabel: 'Record',
@@ -79,8 +80,8 @@ export const MasterSettingsPage: React.FC = () => {
       {section === 'leave' && (
         <>
           <TabStrip tabs={LEAVE_TABS} value={leaveTab} onChange={setLeaveTab} size="sm" />
+          {leaveTab === 'groups' && <LeaveGroupsPanel readOnly={readOnly} />}
           {leaveTab === 'types' && <LeavePolicyMaster readOnly={readOnly} />}
-          {leaveTab === 'groups' && catalog && <MasterRegistryPanel catalog={catalog} group="leave" readOnly={readOnly} />}
         </>
       )}
       {section === 'organization' && (

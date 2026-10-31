@@ -23,6 +23,7 @@ import { MultiSelectFilter, matchesMultiSelect } from '../../../../shared/compon
 import { AppSelect } from '../../../../shared/components/AppSelect';
 import { AppDatePicker } from '../../../../shared/components/AppDatePicker';
 import { api } from '../../../../shared/services/api';
+import { LeaveGroupRecord, leaveGroupApi } from '../../leave/leaveApi';
 import { getUserLeaveCycleType, isCalendarYearCadre } from '../../leave/utils/leaveCycleUtils';
 import {
   User as UserIcon,
@@ -673,8 +674,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     biometricId: '',
     permanentEmploymentType: '' as 'Direct' | 'Deputation' | '',
     shiftId: '',
-    leaveCycle: '' as 'CY' | 'FY' | '',
-    leaveCycleBasis: '' as 'calendar_year' | 'financial_year' | '',
+    leaveGroup: '',
     department: '',
     designation: '',
     role: '' as UserRole,
@@ -703,6 +703,13 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
   // Field errors from the server's last answer, shown under each field.
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  // Leave groups come from Master Settings; the employee's group decides the leave types and the leave year.
+  const [leaveGroups, setLeaveGroups] = useState<LeaveGroupRecord[]>([]);
+  useEffect(() => {
+    let active = true;
+    leaveGroupApi.list().then((r) => { if (active) setLeaveGroups(r.groups); }).catch(() => undefined);
+    return () => { active = false; };
+  }, []);
   // Allowed email domains come from the server's sign-in rules.
   const [emailDomains, setEmailDomains] = useState<string[]>(['wii.gov.in', 'edu.wii.gov.in']);
   useEffect(() => {
@@ -1306,8 +1313,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       biometricId: u.biometricId || '',
       permanentEmploymentType: saved.permanentEmploymentType || '',
       shiftId: u.shiftId || '',
-      leaveCycle: u.leaveCycle || '',
-      leaveCycleBasis: u.leaveCycleBasis || '',
+      leaveGroup: u.leaveGroup || '',
       department: u.department || '',
       designation: u.designation || '',
       role: u.role,
@@ -1355,7 +1361,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     if (!newUserForm.institute) missingFields.push('Organization');
     if (!newUserForm.employmentType) missingFields.push('Employee Type');
     if (!newUserForm.shiftId?.trim()) missingFields.push('Shift');
-    if (!newUserForm.leaveCycle) missingFields.push('Leave Year Type');
+    if (!newUserForm.leaveGroup) missingFields.push('Leave Group');
     if (!newUserForm.joiningDate?.trim()) missingFields.push('Date of Joining');
 
     if (layoutOf(newUserForm.employmentType) === 'permanent') {
@@ -1420,8 +1426,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       avatar: '',
       role: newUserForm.role || 'general_staff',
       employmentType: newUserForm.employmentType as EmploymentType,
-      leaveCycle: newUserForm.leaveCycle as 'CY' | 'FY',
-      leaveCycleBasis: (newUserForm.leaveCycle === 'FY' ? 'financial_year' : 'calendar_year') as 'financial_year' | 'calendar_year',
+      leaveGroup: newUserForm.leaveGroup,
       status: 'active' as const
     };
     setSavingProfile(true);
@@ -1456,8 +1461,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       emergencyContactPhone: '',
       biometricId: '',
       shiftId: '',
-      leaveCycle: '' as 'CY' | 'FY' | '',
-      leaveCycleBasis: '' as 'calendar_year' | 'financial_year' | '',
+      leaveGroup: '',
       department: '',
       designation: '',
       role: '' as UserRole,
@@ -3408,26 +3412,18 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                           />
                         </div>
 
-                        {/* Leave year type */}
+                        {/* Leave group */}
                         <div>
                           <label className="block text-slate-700 font-bold mb-1 text-xs">
-                            Leave Year Type <span className="text-blue-600 font-bold ml-0.5">*</span>
+                            Leave Group <span className="text-blue-600 font-bold ml-0.5">*</span>
                           </label>
                           <AppSelect
-                            value={newUserForm.leaveCycle}
-                            placeholder="Select Leave Year Type"
-                            onChange={(val) => {
-                              const v = val as 'CY' | 'FY' | '';
-                              setNewUserForm({
-                                ...newUserForm,
-                                leaveCycle: v as any,
-                                leaveCycleBasis: v === 'CY' ? 'calendar_year' : v === 'FY' ? 'financial_year' : ('' as any)
-                              });
-                            }}
+                            value={newUserForm.leaveGroup}
+                            placeholder="Select Leave Group"
+                            onChange={(val) => setNewUserForm({ ...newUserForm, leaveGroup: String(val ?? '') })}
                             options={[
-                              { label: 'Select Leave Year Type', value: '' },
-                              { label: 'Calendar Year (CY: 01 Jan – 31 Dec)', value: 'CY' },
-                              { label: 'Financial Year (FY: 01 Apr – 31 Mar)', value: 'FY' }
+                              { label: 'Select Leave Group', value: '' },
+                              ...leaveGroups.filter((g) => g.status === 'active').map((g) => ({ label: `${g.name} (${g.leaveYear})`, value: g.code })),
                             ]}
                             className="w-full"
                           />
@@ -3616,26 +3612,18 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                           />
                         </div>
 
-                        {/* Leave year type */}
+                        {/* Leave group */}
                         <div>
                           <label className="block text-slate-700 font-bold mb-1 text-xs">
-                            Leave Year Type <span className="text-blue-600 font-bold ml-0.5">*</span>
+                            Leave Group <span className="text-blue-600 font-bold ml-0.5">*</span>
                           </label>
                           <AppSelect
-                            value={newUserForm.leaveCycle}
-                            placeholder="Select Leave Year Type"
-                            onChange={(val) => {
-                              const v = val as 'CY' | 'FY' | '';
-                              setNewUserForm({
-                                ...newUserForm,
-                                leaveCycle: v as any,
-                                leaveCycleBasis: v === 'CY' ? 'calendar_year' : v === 'FY' ? 'financial_year' : ('' as any)
-                              });
-                            }}
+                            value={newUserForm.leaveGroup}
+                            placeholder="Select Leave Group"
+                            onChange={(val) => setNewUserForm({ ...newUserForm, leaveGroup: String(val ?? '') })}
                             options={[
-                              { label: 'Select Leave Year Type', value: '' },
-                              { label: 'Calendar Year (CY: 01 Jan – 31 Dec)', value: 'CY' },
-                              { label: 'Financial Year (FY: 01 Apr – 31 Mar)', value: 'FY' }
+                              { label: 'Select Leave Group', value: '' },
+                              ...leaveGroups.filter((g) => g.status === 'active').map((g) => ({ label: `${g.name} (${g.leaveYear})`, value: g.code })),
                             ]}
                             className="w-full"
                           />
@@ -3749,26 +3737,18 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                           />
                         </div>
 
-                        {/* Leave year type */}
+                        {/* Leave group */}
                         <div>
                           <label className="block text-slate-700 font-bold mb-1 text-xs">
-                            Leave Year Type <span className="text-blue-600 font-bold ml-0.5">*</span>
+                            Leave Group <span className="text-blue-600 font-bold ml-0.5">*</span>
                           </label>
                           <AppSelect
-                            value={newUserForm.leaveCycle}
-                            placeholder="Select Leave Year Type"
-                            onChange={(val) => {
-                              const v = val as 'CY' | 'FY' | '';
-                              setNewUserForm({
-                                ...newUserForm,
-                                leaveCycle: v as any,
-                                leaveCycleBasis: v === 'CY' ? 'calendar_year' : v === 'FY' ? 'financial_year' : ('' as any)
-                              });
-                            }}
+                            value={newUserForm.leaveGroup}
+                            placeholder="Select Leave Group"
+                            onChange={(val) => setNewUserForm({ ...newUserForm, leaveGroup: String(val ?? '') })}
                             options={[
-                              { label: 'Select Leave Year Type', value: '' },
-                              { label: 'Calendar Year (CY: 01 Jan – 31 Dec)', value: 'CY' },
-                              { label: 'Financial Year (FY: 01 Apr – 31 Mar)', value: 'FY' }
+                              { label: 'Select Leave Group', value: '' },
+                              ...leaveGroups.filter((g) => g.status === 'active').map((g) => ({ label: `${g.name} (${g.leaveYear})`, value: g.code })),
                             ]}
                             className="w-full"
                           />
@@ -3894,26 +3874,18 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                           />
                         </div>
 
-                        {/* Leave year type */}
+                        {/* Leave group */}
                         <div>
                           <label className="block text-slate-700 font-bold mb-1 text-xs">
-                            Leave Year Type <span className="text-blue-600 font-bold ml-0.5">*</span>
+                            Leave Group <span className="text-blue-600 font-bold ml-0.5">*</span>
                           </label>
                           <AppSelect
-                            value={newUserForm.leaveCycle}
-                            placeholder="Select Leave Year Type"
-                            onChange={(val) => {
-                              const v = val as 'CY' | 'FY' | '';
-                              setNewUserForm({
-                                ...newUserForm,
-                                leaveCycle: v as any,
-                                leaveCycleBasis: v === 'CY' ? 'calendar_year' : v === 'FY' ? 'financial_year' : ('' as any)
-                              });
-                            }}
+                            value={newUserForm.leaveGroup}
+                            placeholder="Select Leave Group"
+                            onChange={(val) => setNewUserForm({ ...newUserForm, leaveGroup: String(val ?? '') })}
                             options={[
-                              { label: 'Select Leave Year Type', value: '' },
-                              { label: 'Calendar Year (CY: 01 Jan – 31 Dec)', value: 'CY' },
-                              { label: 'Financial Year (FY: 01 Apr – 31 Mar)', value: 'FY' }
+                              { label: 'Select Leave Group', value: '' },
+                              ...leaveGroups.filter((g) => g.status === 'active').map((g) => ({ label: `${g.name} (${g.leaveYear})`, value: g.code })),
                             ]}
                             className="w-full"
                           />
@@ -4023,26 +3995,18 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                           />
                         </div>
 
-                        {/* Leave year type */}
+                        {/* Leave group */}
                         <div>
                           <label className="block text-slate-700 font-bold mb-1 text-xs">
-                            Leave Year Type <span className="text-blue-600 font-bold ml-0.5">*</span>
+                            Leave Group <span className="text-blue-600 font-bold ml-0.5">*</span>
                           </label>
                           <AppSelect
-                            value={newUserForm.leaveCycle}
-                            placeholder="Select Leave Year Type"
-                            onChange={(val) => {
-                              const v = val as 'CY' | 'FY' | '';
-                              setNewUserForm({
-                                ...newUserForm,
-                                leaveCycle: v as any,
-                                leaveCycleBasis: v === 'CY' ? 'calendar_year' : v === 'FY' ? 'financial_year' : ('' as any)
-                              });
-                            }}
+                            value={newUserForm.leaveGroup}
+                            placeholder="Select Leave Group"
+                            onChange={(val) => setNewUserForm({ ...newUserForm, leaveGroup: String(val ?? '') })}
                             options={[
-                              { label: 'Select Leave Year Type', value: '' },
-                              { label: 'Calendar Year (CY: 01 Jan – 31 Dec)', value: 'CY' },
-                              { label: 'Financial Year (FY: 01 Apr – 31 Mar)', value: 'FY' }
+                              { label: 'Select Leave Group', value: '' },
+                              ...leaveGroups.filter((g) => g.status === 'active').map((g) => ({ label: `${g.name} (${g.leaveYear})`, value: g.code })),
                             ]}
                             className="w-full"
                           />
@@ -4138,26 +4102,18 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                           />
                         </div>
 
-                        {/* Leave year type */}
+                        {/* Leave group */}
                         <div>
                           <label className="block text-slate-700 font-bold mb-1 text-xs">
-                            Leave Year Type <span className="text-blue-600 font-bold ml-0.5">*</span>
+                            Leave Group <span className="text-blue-600 font-bold ml-0.5">*</span>
                           </label>
                           <AppSelect
-                            value={newUserForm.leaveCycle}
-                            placeholder="Select Leave Year Type"
-                            onChange={(val) => {
-                              const v = val as 'CY' | 'FY' | '';
-                              setNewUserForm({
-                                ...newUserForm,
-                                leaveCycle: v as any,
-                                leaveCycleBasis: v === 'CY' ? 'calendar_year' : v === 'FY' ? 'financial_year' : ('' as any)
-                              });
-                            }}
+                            value={newUserForm.leaveGroup}
+                            placeholder="Select Leave Group"
+                            onChange={(val) => setNewUserForm({ ...newUserForm, leaveGroup: String(val ?? '') })}
                             options={[
-                              { label: 'Select Leave Year Type', value: '' },
-                              { label: 'Calendar Year (CY: 01 Jan – 31 Dec)', value: 'CY' },
-                              { label: 'Financial Year (FY: 01 Apr – 31 Mar)', value: 'FY' }
+                              { label: 'Select Leave Group', value: '' },
+                              ...leaveGroups.filter((g) => g.status === 'active').map((g) => ({ label: `${g.name} (${g.leaveYear})`, value: g.code })),
                             ]}
                             className="w-full"
                           />
@@ -4269,26 +4225,18 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                           />
                         </div>
 
-                        {/* Leave year type */}
+                        {/* Leave group */}
                         <div>
                           <label className="block text-slate-700 font-bold mb-1 text-xs">
-                            Leave Year Type <span className="text-blue-600 font-bold ml-0.5">*</span>
+                            Leave Group <span className="text-blue-600 font-bold ml-0.5">*</span>
                           </label>
                           <AppSelect
-                            value={newUserForm.leaveCycle}
-                            placeholder="Select Leave Year Type"
-                            onChange={(val) => {
-                              const v = val as 'CY' | 'FY' | '';
-                              setNewUserForm({
-                                ...newUserForm,
-                                leaveCycle: v as any,
-                                leaveCycleBasis: v === 'CY' ? 'calendar_year' : v === 'FY' ? 'financial_year' : ('' as any)
-                              });
-                            }}
+                            value={newUserForm.leaveGroup}
+                            placeholder="Select Leave Group"
+                            onChange={(val) => setNewUserForm({ ...newUserForm, leaveGroup: String(val ?? '') })}
                             options={[
-                              { label: 'Select Leave Year Type', value: '' },
-                              { label: 'Calendar Year (CY: 01 Jan – 31 Dec)', value: 'CY' },
-                              { label: 'Financial Year (FY: 01 Apr – 31 Mar)', value: 'FY' }
+                              { label: 'Select Leave Group', value: '' },
+                              ...leaveGroups.filter((g) => g.status === 'active').map((g) => ({ label: `${g.name} (${g.leaveYear})`, value: g.code })),
                             ]}
                             className="w-full"
                           />

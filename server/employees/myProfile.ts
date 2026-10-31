@@ -114,7 +114,7 @@ export function buildSections(
   record: EmployeeRecord,
   data: Record<string, unknown>,
   layout: FormLayout | null,
-  resolved: { typeLabel: string | null; shift: string | null; reportingManager: string | null; hod: string | null; institute?: string | null },
+  resolved: { typeLabel: string | null; shift: string | null; reportingManager: string | null; hod: string | null; institute?: string | null; leaveGroup?: string | null },
 ): ProfileSection[] {
   const f = (key: string, label: string, value: unknown, kind: FieldKind = 'text'): ProfileField =>
     ({ key, label, value: kind === 'date' ? dateOnly(value) : text(value), kind });
@@ -216,6 +216,7 @@ export function buildSections(
 
   const attendance: ProfileField[] = [
     f('shift', 'Work shift', resolved.shift),
+    f('leaveGroup', 'Leave group', resolved.leaveGroup ?? null),
     f('leaveCycle', 'Leave year', LEAVE_YEAR[String(data.leaveCycle ?? '')] ?? null),
   ];
   // Shown in place of the old free-text office location.
@@ -290,6 +291,17 @@ export function getMyProfile(viewer: Viewer): Promise<MyProfile> {
  * (themselves, administrators, auditors, and their reporting manager / HoD
  * while acting in that role). getEmployee() refuses everyone else with 403.
  */
+async function leaveGroupName(code: unknown): Promise<string | null> {
+  if (typeof code !== 'string' || !code) return null;
+  try {
+    const [found] = await rows('SELECT name FROM leave_groups WHERE code = ? LIMIT 1', [code]);
+    return found ? String(found.name) : code;
+  } catch (error) {
+    if ((error as { code?: string })?.code === 'ER_NO_SUCH_TABLE') return code;
+    throw error;
+  }
+}
+
 export async function getProfileFor(viewer: Viewer, id: number): Promise<MyProfile> {
   const record = await getEmployee(viewer, id);
   let data: Record<string, unknown> = {};
@@ -301,7 +313,7 @@ export async function getProfileFor(viewer: Viewer, id: number): Promise<MyProfi
   }
 
   const type = await employeeType(record.employmentType);
-  const [shift, reportingManager, hod, photos, historyRows, institute] = await Promise.all([
+  const [shift, reportingManager, hod, photos, historyRows, institute, leaveGroup] = await Promise.all([
     shiftLabel(record.shiftId),
     personName(data.reportingManagerId),
     personName(data.reviewingManagerId),
@@ -310,6 +322,7 @@ export async function getProfileFor(viewer: Viewer, id: number): Promise<MyProfi
             FROM user_histories WHERE biometric_id = ? ORDER BY is_ongoing DESC, start_date DESC LIMIT 50`, [record.biometricId])
       .catch((error) => { if ((error as { code?: string })?.code === 'ER_NO_SUCH_TABLE') return [] as RowDataPacket[]; throw error; }),
     instituteName(record.institute),
+    leaveGroupName(data.leaveGroup),
   ]);
 
   const student = type.layout === 'diploma_trainee' || type.layout === 'bsc_msc_student';
@@ -324,7 +337,7 @@ export async function getProfileFor(viewer: Viewer, id: number): Promise<MyProfi
     joiningDate: record.joiningDate,
     photoUrl: photos.get(record.biometricId) ?? null,
     roles: [...new Set(record.roles.map((r) => ROLE_LABELS[r]))],
-    sections: buildSections(record, data, type.layout, { typeLabel: type.label, shift, reportingManager, hod, institute }),
+    sections: buildSections(record, data, type.layout, { typeLabel: type.label, shift, reportingManager, hod, institute, leaveGroup }),
     career: buildCareer(record, data, type, historyRows),
   };
 }

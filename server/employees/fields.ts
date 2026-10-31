@@ -64,7 +64,8 @@ export interface EmployeeInput {
   phone: string;
   employmentType: string;
   shiftId: string;
-  leaveCycle: 'CY' | 'FY';
+  /** Code of the employee's leave group (Leave Groups master); it decides the leave types and the leave year. */
+  leaveGroup: string;
   joiningDate: string;
   /** Institute code (lookup 'institute'), e.g. WII or SACON. */
   institute: string;
@@ -151,7 +152,7 @@ export function parseEmployeeInput(body: unknown, layout: FormLayout | null, tod
   const shiftId = shiftRaw === undefined || shiftRaw === null || shiftRaw === '' ? '' : String(shiftRaw).trim();
   if (!shiftId) v.errors.shiftId ||= 'This field is required.';
   else if (!ID_PATTERN.test(shiftId)) v.errors.shiftId ||= 'Choose a shift from the list.';
-  const leaveCycle = v.oneOf('leaveCycle', ['CY', 'FY'] as const);
+  const leaveGroup = v.string('leaveGroup', { max: 20, pattern: /^[A-Za-z0-9_-]+$/, patternMessage: 'Choose a leave group from the list.' });
   const joiningDate = v.date('joiningDate');
   const institute = v.string('institute', { max: 50 });
 
@@ -194,7 +195,7 @@ export function parseEmployeeInput(body: unknown, layout: FormLayout | null, tod
 
   return {
     biometricId, salutation, name, email: email!, gender, dob: dob!, phone: phone!, employmentType, shiftId,
-    leaveCycle: leaveCycle!, joiningDate: joiningDate!, institute, department, designation, employeeCategory,
+    leaveGroup, joiningDate: joiningDate!, institute, department, designation, employeeCategory,
     permanentEmploymentType, reportingManagerId, reviewingManagerId, hodName, validUntilDate, isOnProbation, isPwd,
     probationEndDate, isPhDEnrolled, piName, courseProgram, courseBatch, enrolledThrough, guideSupervisor,
   };
@@ -208,7 +209,7 @@ export function accountValidUpto(input: EmployeeInput, layout: FormLayout): stri
 
 /** Keys of profile_data that come from the form. Anything else already stored there is kept. */
 export const PROFILE_DATA_KEYS = [
-  'gender', 'dob', 'leaveCycle', 'leaveCycleBasis', 'employeeCategory', 'permanentEmploymentType',
+  'gender', 'dob', 'leaveGroup', 'leaveCycle', 'leaveCycleBasis', 'employeeCategory', 'permanentEmploymentType',
   'reportingManagerId', 'reviewingManagerId', 'hodName', 'validUntilDate', 'isOnProbation', 'isPwd', 'probationEndDate',
   'isPhDEnrolled', 'piName', 'courseProgram', 'courseBatch', 'enrolledThrough', 'guideSupervisor', 'retirementDate',
 ] as const;

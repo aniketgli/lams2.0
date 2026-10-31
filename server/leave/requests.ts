@@ -8,6 +8,7 @@ import { changedFields, writeMasterAuditSql } from '../masters/audit';
 import type { RoleId } from '../lib/roles';
 import type { ActivityScope } from '../employees/activity';
 import { WEEK_DAYS } from '../attendance/compute';
+import { groupLeaveTypeIds, groupLeaveTypeMap } from './groups';
 import { SESSIONS_END, SESSIONS_START, countLeaveDays, cycleYearOf } from './days';
 
 /**
@@ -276,6 +277,8 @@ interface Employee {
   basis: 'CY' | 'FY';
   shiftId: string | null;
   isPwd: boolean;
+  /** Leave types of the employee's group; null when the employee has no group (nothing restricted). */
+  groupTypeIds: Set<number> | null;
   reportingManagerId: string | null;
   reviewingManagerId: string | null;
 }
@@ -296,6 +299,7 @@ async function loadEmployee(q: { query: typeof pool.query }, userId: number): Pr
     basis: data.leaveCycle === 'FY' ? 'FY' : 'CY',
     shiftId: row.shift_id ? String(row.shift_id) : null,
     isPwd: data.isPwd === true || data.isPwd === 'true',
+    groupTypeIds: await groupLeaveTypeIds(q, data.leaveGroup),
     reportingManagerId: id(data.reportingManagerId),
     reviewingManagerId: id(data.reviewingManagerId),
   };
@@ -355,7 +359,8 @@ const monthsBetween = (from: string, to: string): number =>
   (Number(to.slice(0, 4)) - Number(from.slice(0, 4))) * 12 + Number(to.slice(5, 7)) - Number(from.slice(5, 7)) - (Number(to.slice(8, 10)) < Number(from.slice(8, 10)) ? 1 : 0);
 
 /** Why this employee may not take this leave type, or null when eligible. */
-export function eligibilityProblem(policy: Policy, emp: Pick<Employee, 'employmentType' | 'gender' | 'joining'> & { isPwd?: boolean }, onDate: string): string | null {
+export function eligibilityProblem(policy: Policy, emp: Pick<Employee, 'employmentType' | 'gender' | 'joining'> & { isPwd?: boolean; groupTypeIds?: Set<number> | null }, onDate: string): string | null {
+  if (emp.groupTypeIds && !emp.groupTypeIds.has(policy.id)) return `${policy.name} is not part of this employee’s leave group.`;
   if (policy.pwdOnly && !emp.isPwd) return `${policy.name} is for persons with disability only.`;
   if (policy.employeeTypes.length && !policy.employeeTypes.includes(emp.employmentType)) return `${policy.name} is not available for this employee type.`;
   if (policy.gender === 'female_only' && emp.gender.toLowerCase() !== 'female') return `${policy.name} is for female employees only.`;
@@ -742,13 +747,15 @@ export async function listBalances(viewer: Viewer, yearRaw: unknown): Promise<{ 
          FROM leave_requests r JOIN leave_types t ON t.id = r.leave_type_id
         WHERE t.debit_from_type_id IS NOT NULL AND r.cycle_year = ? GROUP BY r.user_id, t.debit_from_type_id`, [year]);
     const linkedOf = new Map(linkedRows.map((l) => [`${l.user_id}:${l.base_id}`, l]));
+    const groupMap = await groupLeaveTypeMap(pool);
     const today = todayInIndia();
     const grantOf = new Map(grants.map((g) => [`${g.user_id}:${g.leave_type_id}`, g]));
     const sumOf = new Map(sums.map((s) => [`${s.user_id}:${s.leave_type_id}`, s]));
     const out: BalanceRow[] = visible.map((r) => {
       const data = profileData(r.profile_data);
       const basis: 'CY' | 'FY' = data.leaveCycle === 'FY' ? 'FY' : 'CY';
-      const emp = { employmentType: String(r.employment_type ?? ''), gender: String(data.gender ?? ''), joining: r.joining_date ? isoDate(r.joining_date) : null, isPwd: data.isPwd === true || data.isPwd === 'true' };
+      const groupCode = typeof data.leaveGroup === 'string' ? data.leaveGroup : '';
+      const emp = { employmentType: String(r.employment_type ?? ''), gender: String(data.gender ?? ''), joining: r.joining_date ? isoDate(r.joining_date) : null, isPwd: data.isPwd === true || data.isPwd === 'true', groupTypeIds: groupCode ? groupMap.get(groupCode) ?? null : null };
       const balances: BalanceRow['balances'] = {};
       for (const p of policies) {
         const eligible = eligibilityProblem(p, emp, `${year}-12-31`) === null;
