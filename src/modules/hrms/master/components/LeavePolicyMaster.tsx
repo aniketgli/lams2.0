@@ -26,6 +26,18 @@ const blank = (): LeaveTypeInput => ({
 
 const flag = (b: boolean) => (b ? 'yes' : 'no');
 
+/** One numbered block of the leave type form; shows how many of its fields the server rejected. */
+const FormSection: React.FC<{ step: number; title: string; errorCount: number; children: React.ReactNode }> = ({ step, title, errorCount, children }) => (
+  <section className="rounded-xl border border-slate-200">
+    <header className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-200 bg-slate-50 rounded-t-xl">
+      <span className="w-5 h-5 rounded-full bg-primary text-white text-[11px] font-bold flex items-center justify-center">{step}</span>
+      <h3 className="text-sm font-bold text-slate-800">{title}</h3>
+      {errorCount > 0 && <span className="ml-auto text-[11px] font-semibold text-error">{errorCount} to fix</span>}
+    </header>
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4">{children}</div>
+  </section>
+);
+
 export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => {
   const [data, setData] = useState<LeaveTypeList>({ types: [], employeeTypes: [] });
   const [loading, setLoading] = useState(true);
@@ -105,6 +117,7 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
     setForm((f) => (f ? { ...f, [key]: value } : f));
     setErrors((er) => (er[key as string] ? { ...er, [key as string]: '' } : er));
   };
+  const countErrors = (keys: string[]) => keys.filter((k) => errors[k]).length;
   const num = (key: keyof LeaveTypeInput) => (e: React.ChangeEvent<HTMLInputElement>) => set(key, (e.target.value === '' ? 0 : Number(e.target.value)) as never);
 
   const columns: ColumnDef<LeaveTypeRecord>[] = [
@@ -203,85 +216,97 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
         }
       >
         {form && (
-          <form id="leave-type-editor" onSubmit={save} className="space-y-4" noValidate>
+          <form id="leave-type-editor" onSubmit={save} className="space-y-5" noValidate>
             {formMessage && <p role="alert" className="rounded-lg border border-error-border bg-error-subtle px-3 py-2 text-xs text-error">{formMessage}</p>}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Input label="Code" required maxLength={20} value={form.code} error={errors.code} onChange={(e) => set('code', e.target.value)} />
-              <Input label="Name" required maxLength={100} value={form.name} error={errors.name} onChange={(e) => set('name', e.target.value)} containerClassName="sm:col-span-2" />
+
+            <FormSection step={1} title="Basic details" errorCount={countErrors(['code', 'name', 'description', 'status'])}>
+              <Input label="Name" required maxLength={100} placeholder="e.g. Casual Leave" value={form.name} error={errors.name} onChange={(e) => set('name', e.target.value)} containerClassName="sm:col-span-2" />
+              <Input label="Code" required maxLength={20} placeholder="e.g. CL" value={form.code} error={errors.code} onChange={(e) => set('code', e.target.value)} />
+              <Select label="Status" required value={form.status} searchable={false} onChange={(v: string) => set('status', v as 'active' | 'inactive')}
+                options={[{ label: 'Active', value: 'active' }, { label: 'Inactive', value: 'inactive' }]} />
+              <Textarea label="Description" rows={2} maxLength={500} value={form.description} onChange={(e) => set('description', e.target.value)} containerClassName="sm:col-span-3" />
+            </FormSection>
+
+            <FormSection step={2} title="Entitlement" errorCount={countErrors(['defaultQuota', 'accrual', 'maxAccumulation', 'pwdQuota', 'pwdOnly', 'employeeTypes', 'quotas'])}>
               <Input label="Yearly quota (days)" type="number" min={0} max={400} step="0.5" required value={String(form.defaultQuota)} error={errors.defaultQuota} onChange={num('defaultQuota')} />
               <Select label="Accrual" required value={form.accrual} searchable={false} error={Boolean(errors.accrual)} onChange={(v: string) => set('accrual', v as LeaveTypeInput['accrual'])} options={ACCRUALS} />
               <Input label="Maximum balance (0 = no limit)" type="number" min={0} value={String(form.maxAccumulation)} error={errors.maxAccumulation} onChange={num('maxAccumulation')} />
-              <Select label="Approval stages" required value={String(form.approvalStages)} searchable={false} error={Boolean(errors.approvalStages)}
-                onChange={(v: string) => set('approvalStages', Number(v) as 1 | 2)}
-                options={[{ label: '1 · Reporting Manager approves', value: '1' }, { label: '2 · Reporting Manager forwards, HoD approves', value: '2' }]} />
+              <Input label="Quota for persons with disability (days)" type="number" min={0} max={400} step="0.5" placeholder="Same as yearly quota" value={form.pwdQuota === null ? '' : String(form.pwdQuota)} error={errors.pwdQuota}
+                onChange={(e) => set('pwdQuota', e.target.value === '' ? null : Number(e.target.value))} />
+              <Select label="Who can take it" value={form.pwdOnly ? 'pwd' : 'all'} searchable={false} onChange={(v: string) => set('pwdOnly', v === 'pwd')}
+                options={[{ label: 'Everyone allowed below', value: 'all' }, { label: 'Persons with disability only', value: 'pwd' }]} />
+              <fieldset className="sm:col-span-3">
+                <legend className="text-xs font-semibold text-slate-700 mb-1.5">Employee types (none selected = everyone)</legend>
+                <div className="flex flex-wrap gap-1.5">
+                  {data.employeeTypes.map((t) => {
+                    const on = form.employeeTypes.includes(t.code);
+                    return (
+                      <button key={t.code} type="button" aria-pressed={on}
+                        onClick={() => set('employeeTypes', on ? form.employeeTypes.filter((x) => x !== t.code) : [...form.employeeTypes, t.code])}
+                        className={`h-8 px-3 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${on ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}>
+                        {t.name}
+                      </button>
+                    );
+                  })}
+                </div>
+                {errors.employeeTypes && <p className="text-xs text-error mt-1">{errors.employeeTypes}</p>}
+              </fieldset>
+              <fieldset className="sm:col-span-3">
+                <legend className="text-xs font-semibold text-slate-700 mb-1.5">Quota by employee type (blank = yearly quota)</legend>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {data.employeeTypes.filter((t) => !form.employeeTypes.length || form.employeeTypes.includes(t.code)).map((t) => {
+                    const found = form.quotas.find((q) => q.employeeType === t.code);
+                    return (
+                      <Input key={t.code} label={`${t.name} (days)`} type="number" min={0} max={400} step="0.5" value={found ? String(found.quota) : ''}
+                        onChange={(e) => {
+                          const rest = form.quotas.filter((q) => q.employeeType !== t.code);
+                          set('quotas', e.target.value === '' ? rest : [...rest, { employeeType: t.code, quota: Number(e.target.value) }]);
+                        }} />
+                    );
+                  })}
+                </div>
+                {errors.quotas && <p className="text-xs text-error mt-1">{errors.quotas}</p>}
+              </fieldset>
+            </FormSection>
+
+            <FormSection step={3} title="Carry forward and encashment" errorCount={countErrors(['carryForward', 'maxCarryForward', 'encashmentAllowed'])}>
+              <Select label="Carry forward" value={flag(form.carryForward)} searchable={false} onChange={(v: string) => set('carryForward', v === 'yes')} options={yesNo} />
+              {form.carryForward && (
+                <Input label="Carry forward up to (days)" type="number" min={0} step="0.5" value={String(form.maxCarryForward)} error={errors.maxCarryForward} onChange={num('maxCarryForward')} />
+              )}
+              <Select label="Encashment allowed" value={flag(form.encashmentAllowed)} searchable={false} onChange={(v: string) => set('encashmentAllowed', v === 'yes')} options={yesNo} />
+            </FormSection>
+
+            <FormSection step={4} title="Rules for taking leave" errorCount={countErrors(['halfDayAllowed', 'minNoticeDays', 'maxConsecutiveDays', 'maxSpellsPerYear', 'lifetimeMax', 'medicalCertDays', 'minServiceMonths', 'gender', 'sandwichRule'])}>
+              <Select label="Half day allowed" value={flag(form.halfDayAllowed)} searchable={false} onChange={(v: string) => set('halfDayAllowed', v === 'yes')} options={yesNo} />
               <Input label="Notice needed (days)" type="number" min={0} max={365} value={String(form.minNoticeDays)} error={errors.minNoticeDays} onChange={num('minNoticeDays')} />
               <Input label="Longest at a time (days, 0 = no limit)" type="number" min={0} value={String(form.maxConsecutiveDays)} error={errors.maxConsecutiveDays} onChange={num('maxConsecutiveDays')} />
+              <Input label="Times a year (0 = no limit)" type="number" min={0} value={String(form.maxSpellsPerYear)} error={errors.maxSpellsPerYear} onChange={num('maxSpellsPerYear')} />
+              <Input label="Limit in whole service (days, 0 = no limit)" type="number" min={0} step="0.5" value={String(form.lifetimeMax)} error={errors.lifetimeMax} onChange={num('lifetimeMax')} />
               <Input label="Certificate needed above (days, 0 = never)" type="number" min={0} value={String(form.medicalCertDays)} error={errors.medicalCertDays} onChange={num('medicalCertDays')} />
               <Input label="Minimum service (months)" type="number" min={0} value={String(form.minServiceMonths)} error={errors.minServiceMonths} onChange={num('minServiceMonths')} />
               <Select label="Gender" required value={form.gender} searchable={false} error={Boolean(errors.gender)} onChange={(v: string) => set('gender', v as LeaveTypeInput['gender'])}
                 options={[{ label: 'All', value: 'all' }, { label: 'Female only', value: 'female_only' }, { label: 'Male only', value: 'male_only' }]} />
               <Select label="Holidays in between" required value={form.sandwichRule} searchable={false} error={Boolean(errors.sandwichRule)} onChange={(v: string) => set('sandwichRule', v as LeaveTypeInput['sandwichRule'])}
                 options={[{ label: 'Not counted', value: 'excluded' }, { label: 'Counted as leave', value: 'included' }]} />
-              <Select label="Half day allowed" value={flag(form.halfDayAllowed)} searchable={false} onChange={(v: string) => set('halfDayAllowed', v === 'yes')} options={yesNo} />
-              <Select label="Carry forward" value={flag(form.carryForward)} searchable={false} onChange={(v: string) => set('carryForward', v === 'yes')} options={yesNo} />
-              {form.carryForward && (
-                <Input label="Carry forward up to (days)" type="number" min={0} step="0.5" value={String(form.maxCarryForward)} error={errors.maxCarryForward} onChange={num('maxCarryForward')} />
-              )}
-              <Select label="Encashment allowed" value={flag(form.encashmentAllowed)} searchable={false} onChange={(v: string) => set('encashmentAllowed', v === 'yes')} options={yesNo} />
-              <Select label="Debited from balance" value={flag(form.isDebited)} searchable={false} onChange={(v: string) => set('isDebited', v === 'yes')} options={yesNo} />
-              <Input label="Quota for persons with disability (days)" type="number" min={0} max={400} step="0.5" value={form.pwdQuota === null ? '' : String(form.pwdQuota)} error={errors.pwdQuota}
-                onChange={(e) => set('pwdQuota', e.target.value === '' ? null : Number(e.target.value))} />
-              <Select label="Who can take it" value={form.pwdOnly ? 'pwd' : 'all'} searchable={false} onChange={(v: string) => set('pwdOnly', v === 'pwd')}
-                options={[{ label: 'Everyone allowed above', value: 'all' }, { label: 'Persons with disability only', value: 'pwd' }]} />
+            </FormSection>
+
+            <FormSection step={5} title="Approval and balance" errorCount={countErrors(['approvalStages', 'isPaid', 'isDebited', 'debitFromTypeId', 'debitFactor', 'afterExhaustedTypeId'])}>
+              <Select label="Approval stages" required value={String(form.approvalStages)} searchable={false} error={Boolean(errors.approvalStages)}
+                onChange={(v: string) => set('approvalStages', Number(v) as 1 | 2)}
+                options={[{ label: '1 · Reporting Manager approves', value: '1' }, { label: '2 · Reporting Manager forwards, HoD approves', value: '2' }]} />
               <Select label="Paid" value={flag(form.isPaid)} searchable={false} onChange={(v: string) => set('isPaid', v === 'yes')} options={yesNo} />
-              <Select label="Can be taken only after" value={form.afterExhaustedTypeId} searchable={false} placeholder="Any time" error={Boolean(errors.afterExhaustedTypeId)}
-                onChange={(v: string) => set('afterExhaustedTypeId', v)}
-                options={[{ label: 'Any time', value: '' }, ...data.types.filter((t) => t.isDebited && t.id !== editing?.id).map((t) => ({ label: `${t.name} is used up`, value: t.id }))]} />
+              <Select label="Debited from balance" value={flag(form.isDebited)} searchable={false} onChange={(v: string) => set('isDebited', v === 'yes')} options={yesNo} />
               <Select label="Uses the balance of" value={form.debitFromTypeId} searchable={false} placeholder="Its own balance" error={Boolean(errors.debitFromTypeId)}
                 onChange={(v: string) => { set('debitFromTypeId', v); if (v) set('isDebited', false); }}
                 options={[{ label: 'Its own balance', value: '' }, ...data.types.filter((t) => t.isDebited && t.id !== editing?.id).map((t) => ({ label: t.name, value: t.id }))]} />
               {form.debitFromTypeId && (
                 <Input label="Days used for each day taken" type="number" min={0.5} max={10} step="0.5" value={String(form.debitFactor)} error={errors.debitFactor} onChange={num('debitFactor')} />
               )}
-              <Input label="Limit in whole service (days, 0 = no limit)" type="number" min={0} step="0.5" value={String(form.lifetimeMax)} error={errors.lifetimeMax} onChange={num('lifetimeMax')} />
-              <Input label="Times a year (0 = no limit)" type="number" min={0} value={String(form.maxSpellsPerYear)} error={errors.maxSpellsPerYear} onChange={num('maxSpellsPerYear')} />
-              <Select label="Status" required value={form.status} searchable={false} onChange={(v: string) => set('status', v as 'active' | 'inactive')}
-                options={[{ label: 'Active', value: 'active' }, { label: 'Inactive', value: 'inactive' }]} />
-            </div>
-
-            <fieldset>
-              <legend className="text-xs font-semibold text-slate-700 mb-1.5">Employee types (none selected = everyone)</legend>
-              <div className="flex flex-wrap gap-1.5">
-                {data.employeeTypes.map((t) => {
-                  const on = form.employeeTypes.includes(t.code);
-                  return (
-                    <button key={t.code} type="button" aria-pressed={on}
-                      onClick={() => set('employeeTypes', on ? form.employeeTypes.filter((x) => x !== t.code) : [...form.employeeTypes, t.code])}
-                      className={`h-8 px-3 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${on ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}>
-                      {t.name}
-                    </button>
-                  );
-                })}
-              </div>
-              {errors.employeeTypes && <p className="text-xs text-error mt-1">{errors.employeeTypes}</p>}
-            </fieldset>
-            <fieldset>
-              <legend className="text-xs font-semibold text-slate-700 mb-1.5">Quota by employee type (blank = yearly quota above)</legend>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {data.employeeTypes.filter((t) => !form.employeeTypes.length || form.employeeTypes.includes(t.code)).map((t) => {
-                  const found = form.quotas.find((q) => q.employeeType === t.code);
-                  return (
-                    <Input key={t.code} label={`${t.name} (days)`} type="number" min={0} max={400} step="0.5" value={found ? String(found.quota) : ''}
-                      onChange={(e) => {
-                        const rest = form.quotas.filter((q) => q.employeeType !== t.code);
-                        set('quotas', e.target.value === '' ? rest : [...rest, { employeeType: t.code, quota: Number(e.target.value) }]);
-                      }} />
-                  );
-                })}
-              </div>
-              {errors.quotas && <p className="text-xs text-error mt-1">{errors.quotas}</p>}
-            </fieldset>
-            <Textarea label="Description" rows={2} maxLength={500} value={form.description} onChange={(e) => set('description', e.target.value)} />
+              <Select label="Can be taken only after" value={form.afterExhaustedTypeId} searchable={false} placeholder="Any time" error={Boolean(errors.afterExhaustedTypeId)}
+                onChange={(v: string) => set('afterExhaustedTypeId', v)}
+                options={[{ label: 'Any time', value: '' }, ...data.types.filter((t) => t.isDebited && t.id !== editing?.id).map((t) => ({ label: `${t.name} is used up`, value: t.id }))]} />
+            </FormSection>
           </form>
         )}
       </Modal>
