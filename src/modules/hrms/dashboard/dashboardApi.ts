@@ -19,7 +19,7 @@ export interface DashboardData {
   manual: Queue;
   od: Queue;
   leave: Queue;
-  me: { punchIn: string | null; punchOut: string | null; balances: BalanceLine[] } | null;
+  me: { punchIn: string | null; punchOut: string | null; designation: string; balances: BalanceLine[] } | null;
 }
 
 export const dashboardApi = {

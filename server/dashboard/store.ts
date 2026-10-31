@@ -36,6 +36,8 @@ export interface QueueItem {
 
 export interface Queue { total: number; items: QueueItem[] }
 
+/** How many leave types the staff dashboard shows. */
+const DASHBOARD_LEAVES = 5;
 export interface BalanceLine { code: string; name: string; total: number; carryForward: number; used: number; pending: number; available: number }
 
 export interface Dashboard {
@@ -44,7 +46,7 @@ export interface Dashboard {
   od: Queue;
   leave: Queue;
   /** Only for general staff. */
-  me: { punchIn: string | null; punchOut: string | null; balances: BalanceLine[] } | null;
+  me: { punchIn: string | null; punchOut: string | null; designation: string; balances: BalanceLine[] } | null;
 }
 
 const SHOWN = 3;
@@ -102,7 +104,9 @@ export async function buildDashboard(viewer: DashboardViewer): Promise<Dashboard
       const b = row?.balances[type.id];
       if (b && type.isDebited && b.eligible) lines.push({ code: type.code, name: type.name, total: b.total, carryForward: b.carryForward, used: b.used, pending: b.pending, available: b.available });
     }
-    dash.me = { punchIn: day?.clockIn ?? null, punchOut: day?.clockOut ?? null, balances: lines };
+    // The dashboard shows five leave types: those with days granted first (the list is already in name order).
+    lines.sort((a, b) => Number(b.total + b.carryForward > 0) - Number(a.total + a.carryForward > 0));
+    dash.me = { punchIn: day?.clockIn ?? null, punchOut: day?.clockOut ?? null, designation: row?.designation ?? '', balances: lines.slice(0, DASHBOARD_LEAVES) };
   }
   return dash;
 }

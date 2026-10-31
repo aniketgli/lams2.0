@@ -30,7 +30,7 @@ export const DashboardPage: React.FC<DashboardProps> = ({ onNavigate }) => {
 
   return (
     <div className="space-y-6 pb-6">
-      <PageHeader icon={LayoutDashboard} title={role === 'general_staff' && session?.user.name ? `Welcome, ${session.user.name}` : 'Dashboard'}
+      <PageHeader icon={LayoutDashboard} title="Dashboard"
         subtitle="Pending requests and action center for your role" />
       {error && <div className="rounded-xl border border-error-border bg-error-subtle px-4 py-6 text-center text-xs text-error">{error}</div>}
       {!data && !error && <div className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-center text-xs text-slate-500">Loading…</div>}

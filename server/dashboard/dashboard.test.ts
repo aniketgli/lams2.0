@@ -34,7 +34,7 @@ describe('dashboard by role', () => {
     expect(d.od.total).toBe(1);
     expect(d.leave.items.map((i) => i.id)).toEqual(['7', '8']);
     expect(d.leave.items[1].note).toBe('Forwarded by Mgr: "ok"');
-    expect(d.me).toEqual({ punchIn: '09:41', punchOut: null, balances: [{ code: 'CL', name: 'Casual Leave', total: 8, carryForward: 0, used: 2, pending: 1, available: 5 }] });
+    expect(d.me).toEqual({ punchIn: '09:41', punchOut: null, designation: '', balances: [{ code: 'CL', name: 'Casual Leave', total: 8, carryForward: 0, used: 2, pending: 1, available: 5 }] });
   });
   test('another staff member sees none of it', async () => {
     const d = await buildDashboard({ id: 9, role: 'general_staff' });
