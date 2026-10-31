@@ -17,7 +17,6 @@ export const ACCRUALS = ['yearly', 'half_yearly', 'quarterly', 'monthly', 'upfro
 export const SANDWICH = ['excluded', 'included'] as const;
 export const GENDERS = ['all', 'female_only', 'male_only'] as const;
 export const STAGES = [1, 2] as const;
-export const NATURES = ['paid', 'unpaid', 'special'] as const;
 
 const AUDIT_KEY = 'leave_type';
 
@@ -53,10 +52,6 @@ export interface LeaveType {
   maxConsecutiveDays: number;
   isDebited: boolean;
   isPaid: boolean;
-  /** Paid, unpaid (leave without pay) or special (granted for a particular reason). */
-  nature: (typeof NATURES)[number];
-  /** Code of the leave group (Leave Groups master), or '' for none. */
-  leaveGroup: string;
   afterExhaustedTypeId: string;
   debitFromTypeId: string;
   debitFactor: number;
@@ -94,8 +89,6 @@ export function toLeaveType(row: RowDataPacket): LeaveType {
     maxConsecutiveDays: Number(row.max_consecutive_days),
     isDebited: Boolean(row.is_debited),
     isPaid: row.is_paid === undefined ? true : Boolean(row.is_paid),
-    nature: ((NATURES as readonly string[]).includes(String(row.nature)) ? String(row.nature) : (row.is_paid === undefined || row.is_paid ? 'paid' : 'unpaid')) as LeaveType['nature'],
-    leaveGroup: row.leave_group ? String(row.leave_group) : '',
     afterExhaustedTypeId: row.after_exhausted_type_id ? String(row.after_exhausted_type_id) : '',
     debitFromTypeId: row.debit_from_type_id ? String(row.debit_from_type_id) : '',
     debitFactor: Number(row.debit_factor ?? 1),
@@ -153,16 +146,7 @@ export async function parseLeaveTypeInput(body: unknown, selfId = 0): Promise<Le
   const minServiceMonths = v.int('minServiceMonths', { min: 0, max: 600 });
   const maxConsecutiveDays = v.int('maxConsecutiveDays', { min: 0, max: 730 });
   const isDebited = v.bool('isDebited', true);
-  const nature = v.oneOf('nature', NATURES);
-  const isPaid = nature !== 'unpaid';
-  const rawGroup = v.raw('leaveGroup');
-  const groupText = rawGroup === undefined || rawGroup === null ? '' : String(rawGroup).trim();
-  let leaveGroup = '';
-  if (groupText) {
-    const [found] = await pool.query<RowDataPacket[]>("SELECT 1 FROM lookup_values WHERE lookup_type = 'leave_group' AND code = ? AND UPPER(status) = 'ACTIVE' LIMIT 1", [groupText]);
-    if (!found[0]) v.errors.leaveGroup ||= 'Choose a leave group from the list.';
-    else leaveGroup = groupText;
-  }
+  const isPaid = v.bool('isPaid', true);
   const lifetimeMax = Number(v.raw('lifetimeMax') ?? 0);
   if (!Number.isFinite(lifetimeMax) || lifetimeMax < 0 || lifetimeMax > 5000 || Math.round(lifetimeMax * 2) !== lifetimeMax * 2) v.errors.lifetimeMax ||= 'Enter days from 0 to 5000, in steps of 0.5.';
   const maxSpellsPerYear = v.int('maxSpellsPerYear', { min: 0, max: 100 });
@@ -224,7 +208,7 @@ export async function parseLeaveTypeInput(body: unknown, selfId = 0): Promise<Le
     code, name, description: description ?? '', defaultQuota: quota, pwdQuota, pwdOnly, accrual: accrual!, maxAccumulation: maxAccumulation!, carryForward,
     maxCarryForward: carryForward ? cf : 0, encashmentAllowed, approvalStages: stages as 1 | 2, minNoticeDays: minNoticeDays!, halfDayAllowed,
     medicalCertDays: medicalCertDays!, sandwichRule: sandwichRule!, employeeTypes, gender: gender!, minServiceMonths: minServiceMonths!,
-    maxConsecutiveDays: maxConsecutiveDays!, isDebited, isPaid, nature: nature!, leaveGroup, afterExhaustedTypeId, debitFromTypeId, debitFactor, lifetimeMax, maxSpellsPerYear: maxSpellsPerYear!, quotas, status: status!,
+    maxConsecutiveDays: maxConsecutiveDays!, isDebited, isPaid, afterExhaustedTypeId, debitFromTypeId, debitFactor, lifetimeMax, maxSpellsPerYear: maxSpellsPerYear!, quotas, status: status!,
   };
 }
 
@@ -252,19 +236,18 @@ async function saveQuotas(conn: Q, id: number, quotas: LeaveTypeInput['quotas'])
   for (const q of quotas) await conn.query('INSERT INTO leave_type_quotas (leave_type_id, employee_type, quota) VALUES (?, ?, ?)', [id, q.employeeType, q.quota]);
 }
 
-export async function leaveTypeOptions(): Promise<{ employeeTypes: Array<{ code: string; name: string }>; leaveGroups: Array<{ code: string; name: string }> }> {
-  const [rows] = await pool.query<RowDataPacket[]>("SELECT lookup_type, code, name FROM lookup_values WHERE lookup_type IN ('employee_type', 'leave_group') AND UPPER(status) = 'ACTIVE' ORDER BY name");
-  const pick = (type: string) => rows.filter((r) => r.lookup_type === type).map((r) => ({ code: String(r.code), name: String(r.name) }));
-  return { employeeTypes: pick('employee_type'), leaveGroups: pick('leave_group') };
+export async function leaveTypeOptions(): Promise<{ employeeTypes: Array<{ code: string; name: string }> }> {
+  const [rows] = await pool.query<RowDataPacket[]>("SELECT code, name FROM lookup_values WHERE lookup_type = 'employee_type' AND status = 'active' ORDER BY name");
+  return { employeeTypes: rows.map((r) => ({ code: String(r.code), name: String(r.name) })) };
 }
 
 const COLS = `code, name, description, default_quota, pwd_quota, accrual, max_accumulation, carry_forward, max_carry_forward, encashment_allowed, approval_stages,
   min_notice_days, half_day_allowed, medical_cert_days, sandwich_rule, employee_types, pwd_only, gender, min_service_months, max_consecutive_days,
-  is_debited, is_paid, nature, leave_group, after_exhausted_type_id, debit_from_type_id, debit_factor, lifetime_max, max_spells_per_year, status`;
+  is_debited, is_paid, after_exhausted_type_id, debit_from_type_id, debit_factor, lifetime_max, max_spells_per_year, status`;
 const values = (t: LeaveTypeInput) => [
   t.code, t.name, t.description || null, t.defaultQuota, t.pwdQuota, t.accrual, t.maxAccumulation, t.carryForward ? 1 : 0, t.maxCarryForward, t.encashmentAllowed ? 1 : 0,
   t.approvalStages, t.minNoticeDays, t.halfDayAllowed ? 1 : 0, t.medicalCertDays, t.sandwichRule, t.employeeTypes.join(','), t.pwdOnly ? 1 : 0, t.gender, t.minServiceMonths,
-  t.maxConsecutiveDays, t.isDebited ? 1 : 0, t.isPaid ? 1 : 0, t.nature, t.leaveGroup || null, t.afterExhaustedTypeId ? Number(t.afterExhaustedTypeId) : null, t.debitFromTypeId ? Number(t.debitFromTypeId) : null, t.debitFactor, t.lifetimeMax, t.maxSpellsPerYear, t.status,
+  t.maxConsecutiveDays, t.isDebited ? 1 : 0, t.isPaid ? 1 : 0, t.afterExhaustedTypeId ? Number(t.afterExhaustedTypeId) : null, t.debitFromTypeId ? Number(t.debitFromTypeId) : null, t.debitFactor, t.lifetimeMax, t.maxSpellsPerYear, t.status,
 ];
 
 function duplicate(error: unknown): never | void {

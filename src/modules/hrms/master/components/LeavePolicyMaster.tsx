@@ -21,13 +21,13 @@ const yesNo = [{ label: 'Yes', value: 'yes' }, { label: 'No', value: 'no' }];
 const blank = (): LeaveTypeInput => ({
   code: '', name: '', description: '', defaultQuota: 0, pwdQuota: null, pwdOnly: false, accrual: 'yearly', maxAccumulation: 0, carryForward: false, maxCarryForward: 0,
   encashmentAllowed: false, approvalStages: 1, minNoticeDays: 0, halfDayAllowed: false, medicalCertDays: 0, sandwichRule: 'excluded',
-  employeeTypes: [], gender: 'all', minServiceMonths: 0, maxConsecutiveDays: 0, isDebited: true, isPaid: true, nature: 'paid', leaveGroup: '', afterExhaustedTypeId: '', debitFromTypeId: '', debitFactor: 1, lifetimeMax: 0, maxSpellsPerYear: 0, quotas: [], status: 'active',
+  employeeTypes: [], gender: 'all', minServiceMonths: 0, maxConsecutiveDays: 0, isDebited: true, isPaid: true, afterExhaustedTypeId: '', debitFromTypeId: '', debitFactor: 1, lifetimeMax: 0, maxSpellsPerYear: 0, quotas: [], status: 'active',
 });
 
 const flag = (b: boolean) => (b ? 'yes' : 'no');
 
 export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => {
-  const [data, setData] = useState<LeaveTypeList>({ types: [], employeeTypes: [], leaveGroups: [] });
+  const [data, setData] = useState<LeaveTypeList>({ types: [], employeeTypes: [] });
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | undefined>();
   const [notice, showNotice, clearNotice] = useNotice();
@@ -56,7 +56,6 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
   useEffect(() => { void load(); }, [load]);
 
   const nameOf = (id: string) => data.types.find((t) => t.id === id)?.name ?? id;
-  const groupName = (code: string) => data.leaveGroups.find((g) => g.code === code)?.name ?? code;
   const typeName = (code: string) => data.employeeTypes.find((t) => t.code === code)?.name ?? code;
 
   const open = (record: LeaveTypeRecord | null) => {
@@ -115,7 +114,6 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
         <div className="min-w-0 leading-tight">
           <div className="font-semibold text-slate-900">{t.name}</div>
           <div className="font-mono text-[11px] text-slate-500">{t.code}</div>
-          {(t.leaveGroup || t.nature !== 'paid') && <div className="text-[11px] text-slate-600">{[t.leaveGroup ? groupName(t.leaveGroup) : null, t.nature === 'unpaid' ? 'Unpaid' : t.nature === 'special' ? 'Special' : null].filter(Boolean).join(' · ')}</div>}
         </div>
       ),
     },
@@ -155,6 +153,7 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
             t.carryForward ? `Carry forward ${t.maxCarryForward}` : null,
             t.encashmentAllowed ? 'Encashable' : null,
             t.sandwichRule === 'included' ? 'Holidays counted' : 'Holidays not counted',
+            t.isPaid ? null : 'Unpaid',
             t.pwdOnly ? 'Persons with disability only' : null,
             t.afterExhaustedTypeId ? `Only after ${nameOf(t.afterExhaustedTypeId)} is used up` : null,
             t.debitFromTypeId ? `${t.debitFactor} day(s) of ${nameOf(t.debitFromTypeId)} per day` : null,
@@ -207,12 +206,6 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
           <form id="leave-type-editor" onSubmit={save} className="space-y-4" noValidate>
             {formMessage && <p role="alert" className="rounded-lg border border-error-border bg-error-subtle px-3 py-2 text-xs text-error">{formMessage}</p>}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Select label="Leave group" value={form.leaveGroup} searchable={false} placeholder="No group" error={Boolean(errors.leaveGroup)} onChange={(v: string) => set('leaveGroup', v)}
-                options={[{ label: 'No group', value: '' }, ...data.leaveGroups.map((g) => ({ label: g.name, value: g.code }))]} />
-              <Select label="Kind of leave" required value={form.nature} searchable={false} error={Boolean(errors.nature)}
-                onChange={(v: string) => { set('nature', v as LeaveTypeInput['nature']); set('isPaid', v !== 'unpaid'); }}
-                options={[{ label: 'Paid', value: 'paid' }, { label: 'Unpaid (leave without pay)', value: 'unpaid' }, { label: 'Special (granted for a particular reason)', value: 'special' }]} />
-              <span className="hidden sm:block" />
               <Input label="Code" required maxLength={20} value={form.code} error={errors.code} onChange={(e) => set('code', e.target.value)} />
               <Input label="Name" required maxLength={100} value={form.name} error={errors.name} onChange={(e) => set('name', e.target.value)} containerClassName="sm:col-span-2" />
               <Input label="Yearly quota (days)" type="number" min={0} max={400} step="0.5" required value={String(form.defaultQuota)} error={errors.defaultQuota} onChange={num('defaultQuota')} />
@@ -240,6 +233,7 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
                 onChange={(e) => set('pwdQuota', e.target.value === '' ? null : Number(e.target.value))} />
               <Select label="Who can take it" value={form.pwdOnly ? 'pwd' : 'all'} searchable={false} onChange={(v: string) => set('pwdOnly', v === 'pwd')}
                 options={[{ label: 'Everyone allowed above', value: 'all' }, { label: 'Persons with disability only', value: 'pwd' }]} />
+              <Select label="Paid" value={flag(form.isPaid)} searchable={false} onChange={(v: string) => set('isPaid', v === 'yes')} options={yesNo} />
               <Select label="Can be taken only after" value={form.afterExhaustedTypeId} searchable={false} placeholder="Any time" error={Boolean(errors.afterExhaustedTypeId)}
                 onChange={(v: string) => set('afterExhaustedTypeId', v)}
                 options={[{ label: 'Any time', value: '' }, ...data.types.filter((t) => t.isDebited && t.id !== editing?.id).map((t) => ({ label: `${t.name} is used up`, value: t.id }))]} />

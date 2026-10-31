@@ -27,8 +27,6 @@ export interface LeaveTypeRecord {
   maxConsecutiveDays: number;
   isDebited: boolean;
   isPaid: boolean;
-  nature: 'paid' | 'unpaid' | 'special';
-  leaveGroup: string;
   afterExhaustedTypeId: string;
   debitFromTypeId: string;
   debitFactor: number;
@@ -44,7 +42,6 @@ export type LeaveTypeInput = Omit<LeaveTypeRecord, 'id' | 'updatedAt'> & { reaso
 export interface LeaveTypeList {
   types: LeaveTypeRecord[];
   employeeTypes: Array<{ code: string; name: string }>;
-  leaveGroups: Array<{ code: string; name: string }>;
 }
 
 export const leaveTypeApi = {

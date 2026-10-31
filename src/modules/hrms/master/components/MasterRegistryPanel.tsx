@@ -19,7 +19,7 @@ type StatusFilter = 'ALL' | MasterStatus;
 interface Props {
   catalog: MasterCatalog;
   /** Limit to one group; omit to show every master. */
-  group?: 'profile' | 'lists' | 'leave';
+  group?: 'profile' | 'lists';
   readOnly: boolean;
 }
 
@@ -34,8 +34,7 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
   // Tabs: only masters the server gives a tab position, in that order. Field dropdowns
   // below still look up every master in the catalog (e.g. organization unit types).
   const masters = useMemo(() => catalog.masters
-    // Leave groups belong to the Leave Policy section, not to Profile Masters.
-    .filter((m) => (group ? m.group === group : m.group !== 'leave') && m.tab !== null && m.tab !== undefined)
+    .filter((m) => (!group || m.group === group) && m.tab !== null && m.tab !== undefined)
     .sort((a, b) => (a.tab ?? 0) - (b.tab ?? 0)), [catalog, group]);
   const [activeKey, setActiveKey] = useState(masters[0]?.key ?? '');
   const def = masters.find((m) => m.key === activeKey) ?? masters[0];
