@@ -25,7 +25,7 @@ export interface MasterDefinition {
   key: string;
   label: string;
   noun: string;
-  group: 'profile' | 'lists';
+  group: 'profile' | 'lists' | 'leave';
   description: string;
   kind: 'table' | 'lookup';
   /** For kind 'lookup': the list type other masters' fields refer to. */
