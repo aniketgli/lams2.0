@@ -1625,10 +1625,10 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     });
   }, [activeEmployees, transferEmpSearchQuery]);
 
-  /** Reporting manager / HoD choices on the employee form: active employees of the same organization, never the employee themself. */
+  /** Reporting manager / HoD choices on the employee form: active employees of the same organization. The employee may be their own (a Director is their own reporting manager and HoD). */
   const formManagers = useMemo(() => users.filter((u) =>
-    u.status !== 'deactivated' && u.id !== editingEmployeeId && (!newUserForm.institute || !u.institute || u.institute === newUserForm.institute)),
-  [users, editingEmployeeId, newUserForm.institute]);
+    u.status !== 'deactivated' && (!newUserForm.institute || !u.institute || u.institute === newUserForm.institute)),
+  [users, newUserForm.institute]);
 
   // Memoized active managers & HoDs (strictly active only)
   const activeManagersAndHods = useMemo(() => {

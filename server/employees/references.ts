@@ -78,8 +78,8 @@ export interface ResolvedReferences {
 }
 
 /**
- * Checks every reference in the form. `selfId` is the account being edited
- * (null when creating) so nobody can be their own manager.
+ * Checks every reference in the form. `selfId` is the account being edited (null when creating).
+ * An employee may be their own reporting manager and HoD, as a Director is.
  * Throws a 400 with field-level details when anything is wrong.
  */
 export async function checkReferences(q: Querier, input: EmployeeInput, layout: FormLayout, selfId: number | null): Promise<ResolvedReferences> {
@@ -157,12 +157,10 @@ export async function checkReferences(q: Querier, input: EmployeeInput, layout: 
 
   let reportingManagerName: string | null = null;
   if (input.reportingManagerId) {
-    if (selfId !== null && Number(input.reportingManagerId) === selfId) errors.reportingManagerId = 'An employee cannot report to themselves.';
-    else {
-      const manager = await activeAccount(input.reportingManagerId);
-      if (!manager) errors.reportingManagerId = 'Choose an active employee of the same organization as the reporting manager.';
-      else reportingManagerName = String(manager.name);
-    }
+    // An employee may be their own reporting manager (a Director is).
+    const manager = await activeAccount(input.reportingManagerId);
+    if (!manager) errors.reportingManagerId = 'Choose an active employee of the same organization as the reporting manager.';
+    else reportingManagerName = String(manager.name);
   }
 
   let reviewingManagerId = input.reviewingManagerId;
@@ -175,12 +173,10 @@ export async function checkReferences(q: Querier, input: EmployeeInput, layout: 
       else errors.reviewingManagerId = matches.length ? 'More than one employee has this name; choose the HoD again.' : 'Choose an active employee as the HoD.';
     }
     if (reviewingManagerId && !errors.reviewingManagerId) {
-      if (selfId !== null && Number(reviewingManagerId) === selfId) errors.reviewingManagerId = 'An employee cannot be their own HoD.';
-      else {
-        const hod = await activeAccount(reviewingManagerId);
-        if (!hod) errors.reviewingManagerId = 'Choose an active employee of the same organization as the HoD.';
-        else hodName = String(hod.name);
-      }
+      // An employee may be their own HoD (a Director is).
+      const hod = await activeAccount(reviewingManagerId);
+      if (!hod) errors.reviewingManagerId = 'Choose an active employee of the same organization as the HoD.';
+      else hodName = String(hod.name);
     }
   }
 
