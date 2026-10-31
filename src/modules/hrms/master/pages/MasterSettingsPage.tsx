@@ -5,6 +5,7 @@ import { PageHeader } from '../../../../shared/components/PageHeader';
 import { ActivityLogPanel, ActivitySource } from '../../../../shared/components/ActivityLogPanel';
 import { activityEndpoints } from '../../../../shared/services/activityApi';
 import { LeavePolicyMaster } from '../components/LeavePolicyMaster';
+import { LeavePolicyPanel } from '../components/LeavePolicyPanel';
 import { ShiftsPanel } from '../components/ShiftsPanel';
 import { BiometricMachinesPanel } from '../components/BiometricMachinesPanel';
 import { MasterRegistryPanel } from '../components/MasterRegistryPanel';
@@ -15,8 +16,9 @@ import { DefaultPasswordCard } from '../components/DefaultPasswordCard';
 import { TabStrip } from '../components/masterUi';
 import { MasterCatalog, masterApi } from '../masterApi';
 
-type LeaveTab = 'types' | 'groups';
+type LeaveTab = 'policies' | 'types' | 'groups';
 const LEAVE_TABS: { id: LeaveTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { id: 'policies', label: 'Leave policies', icon: FileText },
   { id: 'types', label: 'Leave types', icon: FileText },
   { id: 'groups', label: 'Leave groups', icon: Layers },
 ];
@@ -41,7 +43,7 @@ export const MasterSettingsPage: React.FC = () => {
   const { session } = useSession();
   const readOnly = session?.activeRole !== 'administrator';
   const [section, setSection] = useState<Section>('shifts');
-  const [leaveTab, setLeaveTab] = useState<LeaveTab>('types');
+  const [leaveTab, setLeaveTab] = useState<LeaveTab>('policies');
   const [catalog, setCatalog] = useState<MasterCatalog | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
 
@@ -79,6 +81,7 @@ export const MasterSettingsPage: React.FC = () => {
       {section === 'leave' && (
         <>
           <TabStrip tabs={LEAVE_TABS} value={leaveTab} onChange={setLeaveTab} size="sm" />
+          {leaveTab === 'policies' && <LeavePolicyPanel readOnly={readOnly} />}
           {leaveTab === 'types' && <LeavePolicyMaster readOnly={readOnly} />}
           {leaveTab === 'groups' && catalog && <MasterRegistryPanel catalog={catalog} group="leave" readOnly={readOnly} />}
         </>
