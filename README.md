@@ -27,6 +27,7 @@ mysql lams_db < migrations/20261030_attendance_logs.sql   # biometric punches (A
 mysql lams_db < migrations/20261030_manual_attendance.sql
 mysql lams_db < migrations/20261030_manual_attendance_undo.sql
 mysql lams_db < migrations/20261030_outdoor_duty.sql
+mysql lams_db < migrations/20261031_leave_types.sql
 npm run dev                   # http://localhost:3000
 npm run lint                  # type-check
 ```
