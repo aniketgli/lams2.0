@@ -182,11 +182,11 @@ export interface HistoryYear {
 export interface LeaveHistory { employee: { id: string; name: string; biometricId: string }; years: HistoryYear[] }
 export type ImportStrategy = 'set' | 'add' | 'deduct';
 export interface ImportRow {
-  line: number; biometricId: string; employee: string; cycleType: string; cycle: string; leaveCode: string; leaveType: string; value: string;
+  line: number; biometricId: string; employee: string; cycle: string; leaveCode: string; leaveType: string; value: string;
   before: number | null; after: number | null; status: 'ok' | 'unchanged' | 'error'; error: string | null;
 }
 export interface ImportReview {
-  year: number; strategy: ImportStrategy;
+  strategy: ImportStrategy;
   summary: { rows: number; ok: number; unchanged: number; errors: number };
   rows: ImportRow[];
 }
@@ -208,12 +208,12 @@ export const leaveApi = {
     return api<LeavePreview>(`${base}/preview?${q.toString()}`);
   },
   balances: (year: number) => api<BalanceList>(`${base}/balances?year=${year}`),
-  importTemplate: (year: number, cycle: 'all' | 'CY' | 'FY') =>
+  importTemplate: (year: number, cycle: 'CY' | 'FY') =>
     api<{ year: number; headers: string[]; rows: Array<Array<string | number>> }>(`${base}/balances/import/template?year=${year}&cycle=${cycle}`),
   history: (userId: string) => api<LeaveHistory>(`${base}/balances/history?userId=${encodeURIComponent(userId)}`),
-  reviewImport: (input: { year: number; strategy: ImportStrategy; csv: string }) =>
+  reviewImport: (input: { strategy: ImportStrategy; csv: string }) =>
     api<ImportReview>(`${base}/balances/import/review`, { method: 'POST', body: input }),
-  applyImport: (input: { year: number; strategy: ImportStrategy; csv: string }) =>
+  applyImport: (input: { strategy: ImportStrategy; csv: string }) =>
     api<ImportReview & { message: string }>(`${base}/balances/import`, { method: 'POST', body: input }),
   setBalance: (input: { userId: string; leaveTypeId: string; year: number; total: number; carryForward: number; reason?: string }) =>
     api<{ balance: LeaveBalance; message: string }>(`${base}/balances`, { method: 'PUT', body: { ...input, reason: input.reason || undefined } }),
