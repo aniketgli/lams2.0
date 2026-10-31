@@ -34,6 +34,8 @@ export interface LeaveType {
   name: string;
   description: string;
   defaultQuota: number;
+  pwdQuota: number | null;
+  pwdOnly: boolean;
   accrual: (typeof ACCRUALS)[number];
   maxAccumulation: number;
   carryForward: boolean;
@@ -69,6 +71,8 @@ export function toLeaveType(row: RowDataPacket): LeaveType {
     name: String(row.name),
     description: row.description ? String(row.description) : '',
     defaultQuota: Number(row.default_quota),
+    pwdQuota: row.pwd_quota === null || row.pwd_quota === undefined ? null : Number(row.pwd_quota),
+    pwdOnly: Boolean(row.pwd_only),
     accrual: String(row.accrual) as LeaveType['accrual'],
     maxAccumulation: Number(row.max_accumulation),
     carryForward: Boolean(row.carry_forward),
@@ -119,6 +123,13 @@ export async function parseLeaveTypeInput(body: unknown, selfId = 0): Promise<Le
   const description = v.optionalString('description', { max: 500 });
   const quota = Number(v.raw('defaultQuota'));
   if (!Number.isFinite(quota) || quota < 0 || quota > 400 || Math.round(quota * 2) !== quota * 2) v.errors.defaultQuota ||= 'Enter days from 0 to 400, in steps of 0.5.';
+  const rawPwd = v.raw('pwdQuota');
+  let pwdQuota: number | null = null;
+  if (rawPwd !== undefined && rawPwd !== null && String(rawPwd).trim() !== '') {
+    pwdQuota = Number(rawPwd);
+    if (!Number.isFinite(pwdQuota) || pwdQuota < 0 || pwdQuota > 400 || Math.round(pwdQuota * 2) !== pwdQuota * 2) v.errors.pwdQuota ||= 'Enter days from 0 to 400, in steps of 0.5.';
+  }
+  const pwdOnly = v.bool('pwdOnly');
   const accrual = v.oneOf('accrual', ACCRUALS);
   const maxAccumulation = v.int('maxAccumulation', { min: 0, max: 1000 });
   const carryForward = v.bool('carryForward');
@@ -190,10 +201,11 @@ export async function parseLeaveTypeInput(body: unknown, selfId = 0): Promise<Le
     if (isDebited) v.errors.isDebited ||= 'A leave type that uses another leave type’s balance has no balance of its own.';
   }
   if (carryForward && cf <= 0) v.errors.maxCarryForward ||= 'Enter how many days can be carried forward.';
+  if (maxAccumulation && pwdQuota !== null && pwdQuota > maxAccumulation) v.errors.pwdQuota ||= 'Cannot be more than the maximum balance.';
   if (maxAccumulation && quota > maxAccumulation) v.errors.maxAccumulation ||= 'Cannot be less than the yearly quota.';
   v.assert();
   return {
-    code, name, description: description ?? '', defaultQuota: quota, accrual: accrual!, maxAccumulation: maxAccumulation!, carryForward,
+    code, name, description: description ?? '', defaultQuota: quota, pwdQuota, pwdOnly, accrual: accrual!, maxAccumulation: maxAccumulation!, carryForward,
     maxCarryForward: carryForward ? cf : 0, encashmentAllowed, approvalStages: stages as 1 | 2, minNoticeDays: minNoticeDays!, halfDayAllowed,
     medicalCertDays: medicalCertDays!, sandwichRule: sandwichRule!, employeeTypes, gender: gender!, minServiceMonths: minServiceMonths!,
     maxConsecutiveDays: maxConsecutiveDays!, isDebited, isPaid, afterExhaustedTypeId, debitFromTypeId, debitFactor, lifetimeMax, maxSpellsPerYear: maxSpellsPerYear!, quotas, status: status!,
@@ -229,12 +241,12 @@ export async function leaveTypeOptions(): Promise<{ employeeTypes: Array<{ code:
   return { employeeTypes: rows.map((r) => ({ code: String(r.code), name: String(r.name) })) };
 }
 
-const COLS = `code, name, description, default_quota, accrual, max_accumulation, carry_forward, max_carry_forward, encashment_allowed, approval_stages,
-  min_notice_days, half_day_allowed, medical_cert_days, sandwich_rule, employee_types, gender, min_service_months, max_consecutive_days,
+const COLS = `code, name, description, default_quota, pwd_quota, accrual, max_accumulation, carry_forward, max_carry_forward, encashment_allowed, approval_stages,
+  min_notice_days, half_day_allowed, medical_cert_days, sandwich_rule, employee_types, pwd_only, gender, min_service_months, max_consecutive_days,
   is_debited, is_paid, after_exhausted_type_id, debit_from_type_id, debit_factor, lifetime_max, max_spells_per_year, status`;
 const values = (t: LeaveTypeInput) => [
-  t.code, t.name, t.description || null, t.defaultQuota, t.accrual, t.maxAccumulation, t.carryForward ? 1 : 0, t.maxCarryForward, t.encashmentAllowed ? 1 : 0,
-  t.approvalStages, t.minNoticeDays, t.halfDayAllowed ? 1 : 0, t.medicalCertDays, t.sandwichRule, t.employeeTypes.join(','), t.gender, t.minServiceMonths,
+  t.code, t.name, t.description || null, t.defaultQuota, t.pwdQuota, t.accrual, t.maxAccumulation, t.carryForward ? 1 : 0, t.maxCarryForward, t.encashmentAllowed ? 1 : 0,
+  t.approvalStages, t.minNoticeDays, t.halfDayAllowed ? 1 : 0, t.medicalCertDays, t.sandwichRule, t.employeeTypes.join(','), t.pwdOnly ? 1 : 0, t.gender, t.minServiceMonths,
   t.maxConsecutiveDays, t.isDebited ? 1 : 0, t.isPaid ? 1 : 0, t.afterExhaustedTypeId ? Number(t.afterExhaustedTypeId) : null, t.debitFromTypeId ? Number(t.debitFromTypeId) : null, t.debitFactor, t.lifetimeMax, t.maxSpellsPerYear, t.status,
 ];
 

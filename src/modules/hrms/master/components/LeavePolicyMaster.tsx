@@ -19,7 +19,7 @@ const ACCRUALS = [
 const yesNo = [{ label: 'Yes', value: 'yes' }, { label: 'No', value: 'no' }];
 
 const blank = (): LeaveTypeInput => ({
-  code: '', name: '', description: '', defaultQuota: 0, accrual: 'yearly', maxAccumulation: 0, carryForward: false, maxCarryForward: 0,
+  code: '', name: '', description: '', defaultQuota: 0, pwdQuota: null, pwdOnly: false, accrual: 'yearly', maxAccumulation: 0, carryForward: false, maxCarryForward: 0,
   encashmentAllowed: false, approvalStages: 1, minNoticeDays: 0, halfDayAllowed: false, medicalCertDays: 0, sandwichRule: 'excluded',
   employeeTypes: [], gender: 'all', minServiceMonths: 0, maxConsecutiveDays: 0, isDebited: true, isPaid: true, afterExhaustedTypeId: '', debitFromTypeId: '', debitFactor: 1, lifetimeMax: 0, maxSpellsPerYear: 0, quotas: [], status: 'active',
 });
@@ -122,6 +122,7 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
       render: (t) => (
         <div className="whitespace-normal leading-snug">
           <div className="font-semibold">{t.isDebited ? `${t.defaultQuota} days` : 'No limit'}</div>
+          {t.isDebited && t.pwdQuota !== null && <div className="text-[11px] text-slate-600">PwD: {t.pwdQuota}</div>}
           {t.isDebited && t.quotas.map((q) => <div key={q.employeeType} className="text-[11px] text-slate-600">{typeName(q.employeeType)}: {q.quota}</div>)}
         </div>
       ),
@@ -153,6 +154,7 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
             t.encashmentAllowed ? 'Encashable' : null,
             t.sandwichRule === 'included' ? 'Holidays counted' : 'Holidays not counted',
             t.isPaid ? null : 'Unpaid',
+            t.pwdOnly ? 'Persons with disability only' : null,
             t.afterExhaustedTypeId ? `Only after ${nameOf(t.afterExhaustedTypeId)} is used up` : null,
             t.debitFromTypeId ? `${t.debitFactor} day(s) of ${nameOf(t.debitFromTypeId)} per day` : null,
             t.accrual === 'half_yearly' ? 'Credited every half-year' : null,
@@ -227,6 +229,10 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
               )}
               <Select label="Encashment allowed" value={flag(form.encashmentAllowed)} searchable={false} onChange={(v: string) => set('encashmentAllowed', v === 'yes')} options={yesNo} />
               <Select label="Debited from balance" value={flag(form.isDebited)} searchable={false} onChange={(v: string) => set('isDebited', v === 'yes')} options={yesNo} />
+              <Input label="Quota for persons with disability (days)" type="number" min={0} max={400} step="0.5" value={form.pwdQuota === null ? '' : String(form.pwdQuota)} error={errors.pwdQuota}
+                onChange={(e) => set('pwdQuota', e.target.value === '' ? null : Number(e.target.value))} />
+              <Select label="Who can take it" value={form.pwdOnly ? 'pwd' : 'all'} searchable={false} onChange={(v: string) => set('pwdOnly', v === 'pwd')}
+                options={[{ label: 'Everyone allowed above', value: 'all' }, { label: 'Persons with disability only', value: 'pwd' }]} />
               <Select label="Paid" value={flag(form.isPaid)} searchable={false} onChange={(v: string) => set('isPaid', v === 'yes')} options={yesNo} />
               <Select label="Can be taken only after" value={form.afterExhaustedTypeId} searchable={false} placeholder="Any time" error={Boolean(errors.afterExhaustedTypeId)}
                 onChange={(v: string) => set('afterExhaustedTypeId', v)}

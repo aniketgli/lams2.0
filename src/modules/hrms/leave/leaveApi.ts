@@ -9,6 +9,8 @@ export interface LeaveTypeRecord {
   name: string;
   description: string;
   defaultQuota: number;
+  pwdQuota: number | null;
+  pwdOnly: boolean;
   accrual: LeaveAccrual;
   maxAccumulation: number;
   carryForward: boolean;

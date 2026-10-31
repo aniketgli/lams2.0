@@ -125,6 +125,7 @@ export function buildSections(
     fields: [
       f('biometricId', 'Biometric ID', record.biometricId),
       f('gender', 'Gender', data.gender),
+      f('isPwd', 'Person with disability (PwD)', yesNo(data.isPwd)),
       f('dob', 'Date of birth', data.dob, 'date'),
       f('email', 'Official email', record.email, 'email'),
       f('phone', 'Mobile number', record.phone, 'phone'),
