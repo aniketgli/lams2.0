@@ -1,10 +1,11 @@
-import { Router } from 'express';
+import { Router, type Response } from 'express';
+import { activityCsv, activityTable, listActivity, parseActivityFilter, type ActivityScope } from '../employees/activity';
 import type { RowDataPacket } from 'mysql2';
 import { pool } from '../../src/db';
 import { asyncHandler, badRequest, notFound } from '../lib/http';
 import { isValidIsoDate } from '../lib/validate';
 import { requireActiveRole, requireAuth, requireModule } from '../middleware/auth.middleware';
-import { FORM_LAYOUTS, MASTERS, MasterDef, auditMasterLabels, findMaster, tabOrder } from './definitions';
+import { FORM_LAYOUTS, MASTERS, MasterDef, auditMasterLabels, findMaster, masterActivityScope, tabOrder } from './definitions';
 import { activeOptions, createRecord, deleteRecord, listRecords, setStatus, updateRecord } from './store';
 
 /**
@@ -24,6 +25,32 @@ router.use(requireAuth, requireModule('hrms'));
 
 const canView = requireActiveRole('hrms', 'administrator', 'audit');
 const canEdit = requireActiveRole('hrms', 'administrator');
+
+const MASTER_SCOPE: ActivityScope = {
+  ...masterActivityScope(),
+  exportKey: 'master_export',
+  title: 'Master settings activity log',
+  filePrefix: 'WII_Master_Settings_Activity',
+};
+const isAuditor = requireActiveRole('hrms', 'audit');
+
+function sendCsv(res: Response, file: { filename: string; csv: string }) {
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+  res.send(file.csv);
+}
+
+// Auditor log routes come before /:key so "activity" is never read as a master key.
+router.get('/activity', isAuditor, asyncHandler(async (req, res) => {
+  res.json(await listActivity(parseActivityFilter(req.query as Record<string, unknown>, MASTER_SCOPE), MASTER_SCOPE));
+}));
+router.get('/activity.csv', isAuditor, asyncHandler(async (req, res) => {
+  sendCsv(res, await activityCsv(req, parseActivityFilter(req.query as Record<string, unknown>, MASTER_SCOPE), MASTER_SCOPE));
+}));
+router.get('/activity/export-pdf', isAuditor, asyncHandler(async (req, res) => {
+  const table = await activityTable(req, parseActivityFilter(req.query as Record<string, unknown>, MASTER_SCOPE), 'pdf', MASTER_SCOPE);
+  res.json({ generatedAt: new Date().toISOString(), ...table });
+}));
 
 function masterFrom(key: string): MasterDef {
   const def = findMaster(key);
@@ -45,6 +72,7 @@ router.get('/catalog', canView, (_req, res) => {
     })),
     formLayouts: FORM_LAYOUTS,
     auditMasters: auditMasterLabels(),
+    activityAreas: MASTER_SCOPE.keys.map((value) => ({ value, label: MASTER_SCOPE.areaLabels[value] ?? value })),
   });
 });
 
