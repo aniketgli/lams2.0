@@ -34,10 +34,10 @@ export const LeaveHistoryModal: React.FC<{ userId: string | null; name: string; 
   const columns: ColumnDef<Row>[] = [
     { key: 'cycle', header: 'Leave year', width: '22%', sortValue: (r) => r.cycle, render: (r) => <span className="font-semibold text-slate-900">{r.cycle} <span className="text-[10px] font-bold text-slate-500">{r.cycleType}</span></span> },
     { key: 'type', header: 'Leave type', sortValue: (r) => r.name, render: (r) => <div className="leading-tight"><div className="font-semibold">{r.name}</div><div className="font-mono text-[11px] text-slate-500">{r.code}</div></div> },
-    { key: 'total', header: 'Granted', align: 'center', render: (r) => (r.isDebited ? days(r.total) : 'No limit') },
-    { key: 'used', header: 'Taken', align: 'center', render: (r) => days(r.used) },
+    { key: 'total', header: 'Given', align: 'center', render: (r) => (r.isDebited ? days(r.total) : 'No limit') },
+    { key: 'used', header: 'Used', align: 'center', render: (r) => days(r.used) },
     { key: 'pending', header: 'Pending', align: 'center', render: (r) => days(r.pending) },
-    { key: 'available', header: 'Available', align: 'center', render: (r) => (r.isDebited ? <b className={r.available <= 0 ? 'text-rose-600' : ''}>{days(r.available)}</b> : '—') },
+    { key: 'available', header: 'Balance', align: 'center', render: (r) => (r.isDebited ? <b className={r.available <= 0 ? 'text-rose-600' : ''}>{days(r.available)}</b> : '—') },
   ];
 
   return (

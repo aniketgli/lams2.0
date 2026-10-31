@@ -165,6 +165,7 @@ export interface BalanceRow {
   employmentType: string;
   basis: 'CY' | 'FY';
   cycle: string;
+  asOn: string;
   balances: Record<string, (LeaveBalance & { eligible: boolean }) | null>;
 }
 
@@ -178,7 +179,7 @@ export interface BalanceList {
 }
 
 export interface HistoryYear {
-  year: number; cycleType: 'CY' | 'FY'; cycle: string;
+  year: number; cycleType: 'CY' | 'FY'; cycle: string; asOn: string;
   types: Array<{ code: string; name: string; isDebited: boolean; total: number; carryForward: number; used: number; pending: number; available: number }>;
 }
 export interface LeaveHistory { employee: { id: string; name: string; biometricId: string }; years: HistoryYear[] }

@@ -1,11 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { History, Pencil } from 'lucide-react';
+import { History } from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
-import { DataTable, Input, Modal, Select } from '../../../../shared/components';
+import { DataTable, Select } from '../../../../shared/components';
 import type { ColumnDef } from '../../../../shared/components';
 import { MultiSelectFilter, matchesMultiSelect } from '../../../../shared/components/MultiSelectFilter';
 import { FilterToolbar } from '../../../../shared/components/FilterToolbar';
-import { Textarea } from '../../../../shared/components/forms/Textarea';
 import { ApiError } from '../../../../shared/services/api';
 import { downloadCsvText, downloadTablePdf, printedAt, toCsvText } from '../../../../shared/services/printTable';
 import { NoticeBar, useNotice } from '../../master/components/masterUi';
@@ -15,7 +14,7 @@ import { LeaveHistoryModal } from './LeaveHistoryModal';
 
 /**
  * Leave balances for one leave year. Used and pending days come from the requests; the
- * administrator sets the days granted (and carried forward). The server decides who sees whom.
+ * balances are display-only (change them through Import). A past year shows the closing balance on its last day, the current year the latest balance.
  */
 
 const PAGE_SIZES = [25, 50, 100];
@@ -70,35 +69,6 @@ export const LeaveBalancesView: React.FC<{ importSignal?: number }> = ({ importS
   const totalPages = Math.max(1, Math.ceil(visible.length / pageSize));
   const pageRows = visible.slice((page - 1) * pageSize, page * pageSize);
 
-  // ---- Administrator sets a grant -----------------------------------------------------------------
-  const [editing, setEditing] = useState<{ row: BalanceRow; typeId: string } | null>(null);
-  const [total, setTotal] = useState('');
-  const [carry, setCarry] = useState('');
-  const [reason, setReason] = useState('');
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [message, setMessage] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const openEdit = (row: BalanceRow, typeId: string) => {
-    const b = row.balances[typeId];
-    setEditing({ row, typeId });
-    setTotal(String(b?.total ?? 0)); setCarry(String(b?.carryForward ?? 0)); setReason(''); setErrors({}); setMessage(null);
-  };
-  const save = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editing || saving) return;
-    setSaving(true); setMessage(null);
-    try {
-      const result = await leaveApi.setBalance({ userId: editing.row.userId, leaveTypeId: editing.typeId, year, total: Number(total), carryForward: Number(carry || 0), reason });
-      setEditing(null);
-      showNotice('success', result.message);
-      await load(true);
-    } catch (error) {
-      if (error instanceof ApiError) { setErrors(error.details ?? {}); setMessage(error.message); } else setMessage('The balance could not be saved.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const columns: ColumnDef<BalanceRow>[] = [
     {
       key: 'employee', header: 'Employee', width: '18%', sortValue: (r) => r.name,
@@ -106,27 +76,33 @@ export const LeaveBalancesView: React.FC<{ importSignal?: number }> = ({ importS
         <div className="leading-tight min-w-0">
           <div className="font-semibold text-slate-900 truncate">{r.name}</div>
           <div className="text-[11px] text-slate-500 truncate">B.I. {r.biometricId}{r.department ? ` · ${r.department}` : ''} · {r.cycle}</div>
+          <div className="text-[11px] text-slate-400 truncate">Balance as on {r.asOn}</div>
         </div>
       ),
     },
-    ...types.map((t) => ({
-      key: `t${t.id}`, header: t.code, align: 'center' as const, sortValue: (r: BalanceRow) => r.balances[t.id]?.available ?? -1,
-      render: (r: BalanceRow) => {
-        const b = r.balances[t.id];
-        if (!b) return <span className="text-slate-300">—</span>;
-        const cell = (
-          <div className="leading-tight" title={`${t.name}: total ${days(b.total + b.carryForward)}, used ${days(b.used)}, pending ${days(b.pending)}`}>
-            <div className={`font-bold ${b.available <= 0 && t.isDebited ? 'text-rose-600' : 'text-slate-900'}`}>{days(b.available)}</div>
-            <div className="text-[10px] text-slate-500 whitespace-nowrap">of {days(b.total + b.carryForward)}{b.pending ? ` · ${days(b.pending)} pending` : ''}</div>
-          </div>
-        );
-        return isAdmin ? (
-          <button type="button" onClick={() => openEdit(r, t.id)} aria-label={`Set ${t.name} balance of ${r.name}`} className="group inline-flex items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-slate-50 cursor-pointer">
-            {cell}<Pencil className="w-3 h-3 text-slate-300 group-hover:text-primary" />
-          </button>
-        ) : cell;
-      },
-    })),
+    ...types.flatMap((t) => {
+      const head = (label: string) => (
+        <div className="leading-tight"><div>{t.code}</div><div className="text-[10px] font-medium text-slate-400">{label}</div></div>
+      );
+      const sub = { align: 'center' as const };
+      return [
+        { key: `g${t.id}`, header: head('Given'), ...sub, sortValue: (r: BalanceRow) => (r.balances[t.id]?.total ?? 0) + (r.balances[t.id]?.carryForward ?? 0),
+          render: (r: BalanceRow) => { const b = r.balances[t.id]; return b && t.isDebited ? <span className="text-slate-700">{days(b.total + b.carryForward)}</span> : <span className="text-slate-300">—</span>; } },
+        { key: `u${t.id}`, header: head('Used'), ...sub, sortValue: (r: BalanceRow) => r.balances[t.id]?.used ?? 0,
+          render: (r: BalanceRow) => { const b = r.balances[t.id]; return b ? <span className="text-slate-700">{days(b.used)}</span> : <span className="text-slate-300">—</span>; } },
+        { key: `b${t.id}`, header: head('Balance'), ...sub, sortValue: (r: BalanceRow) => r.balances[t.id]?.available ?? -1,
+          render: (r: BalanceRow) => {
+            const b = r.balances[t.id];
+            if (!b || !t.isDebited) return <span className="text-slate-300">—</span>;
+            return (
+              <div className="leading-tight" title={`${t.name}: given ${days(b.total + b.carryForward)}, used ${days(b.used)}, pending ${days(b.pending)}`}>
+                <div className={`font-bold ${b.available <= 0 ? 'text-rose-600' : 'text-slate-900'}`}>{days(b.available)}</div>
+                {b.pending ? <div className="text-[10px] text-slate-500 whitespace-nowrap">{days(b.pending)} pending</div> : null}
+              </div>
+            );
+          } },
+      ];
+    }),
     {
       key: 'history', header: 'History', width: '70px', align: 'center' as const,
       render: (r: BalanceRow) => (
@@ -136,14 +112,13 @@ export const LeaveBalancesView: React.FC<{ importSignal?: number }> = ({ importS
     },
   ];
 
-  const exportHeaders = ['Biometric ID', 'Employee', 'Department', 'Leave year', ...types.flatMap((t) => [`${t.code} total`, `${t.code} used`, `${t.code} pending`, `${t.code} available`])];
-  const exportRows = () => visible.map((r) => [r.biometricId, r.name, r.department, r.cycle, ...types.flatMap((t) => {
+  const exportHeaders = ['Biometric ID', 'Employee', 'Department', 'Leave year', 'Balance as on', ...types.flatMap((t) => [`${t.code} given`, `${t.code} used`, `${t.code} pending`, `${t.code} balance`])];
+  const exportRows = () => visible.map((r) => [r.biometricId, r.name, r.department, r.cycle, r.asOn, ...types.flatMap((t) => {
     const b = r.balances[t.id];
     return b ? [b.total + b.carryForward, b.used, b.pending, b.available] : ['', '', '', ''];
   })]);
   const fileName = `WII_Leave_Balances_${year}`;
 
-  const editType = editing ? types.find((t) => t.id === editing.typeId) : null;
   const mine = rows[0];
 
   return (
@@ -210,29 +185,6 @@ export const LeaveBalancesView: React.FC<{ importSignal?: number }> = ({ importS
           pagination={{ currentPage: page, totalPages, totalItems: visible.length, pageSize, onPageChange: setPage, onPageSizeChange: setPageSize, pageSizeOptions: PAGE_SIZES }}
         />
       )}
-
-      <Modal
-        isOpen={Boolean(editing)}
-        onClose={() => !saving && setEditing(null)}
-        size="sm"
-        title="Set leave balance"
-        subtitle={editing && editType ? `${editing.row.name} · ${editType.name} · ${editing.row.cycle}` : undefined}
-        footer={(
-          <div className="flex justify-end gap-2">
-            <button type="button" onClick={() => setEditing(null)} disabled={saving} className="h-9 px-4 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer">Cancel</button>
-            <button type="submit" form="balance-form" disabled={saving} className="h-9 px-4 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary/90 cursor-pointer disabled:opacity-60">{saving ? 'Saving…' : 'Save'}</button>
-          </div>
-        )}
-      >
-        <form id="balance-form" onSubmit={save} noValidate className="space-y-4">
-          {message && <NoticeBar notice={{ kind: 'error', text: message }} onClose={() => setMessage(null)} />}
-          <div className="grid grid-cols-2 gap-4">
-            <Input label="Days granted" type="number" min={0} step="0.5" required value={total} error={errors.total} onChange={(e) => { setTotal(e.target.value); setErrors((x) => ({ ...x, total: '' })); }} />
-            <Input label="Carried forward" type="number" min={0} step="0.5" value={carry} error={errors.carryForward} onChange={(e) => { setCarry(e.target.value); setErrors((x) => ({ ...x, carryForward: '' })); }} />
-          </div>
-          <Textarea label="Reason" rows={2} maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} />
-        </form>
-      </Modal>
     </div>
   );
 };
