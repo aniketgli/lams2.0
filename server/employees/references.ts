@@ -43,7 +43,6 @@ function jsonObject(value: unknown): Record<string, unknown> {
 }
 
 /** A comma-separated master value ("a,b") as a list. */
-const listOf = (value: unknown): string[] => String(value ?? '').split(',').map((v) => v.trim()).filter(Boolean);
 
 async function activeLookup(q: Querier, type: string, code: string): Promise<boolean> {
   return (await rows(q, "SELECT 1 FROM lookup_values WHERE lookup_type = ? AND code = ? AND UPPER(status) = 'ACTIVE' LIMIT 1", [type, code])).length > 0;
@@ -129,21 +128,11 @@ export async function checkReferences(q: Querier, input: EmployeeInput, layout: 
     }
   }
 
-  // A department / cell must belong to the employee's institute (projects are shared),
-  // and, when the unit is limited to some employee types or cadres, fit this employee.
+  // A department / cell must belong to the employee's institute (projects are shared).
   if (rules.department && input.department && !errors.department && !errors.institute) {
     const [unit] = await rows(q, "SELECT * FROM organization_units WHERE name = ? AND UPPER(status) = 'ACTIVE' LIMIT 1", [input.department]);
     if (unit && unit.institute && String(unit.institute) !== input.institute) {
       errors.department = 'This department belongs to another organization. Choose one from the selected organization.';
-    } else if (unit) {
-      const meta = jsonObject(unit.metadata);
-      const empTypes = listOf(meta.empTypes);
-      const cadres = listOf(meta.cadres);
-      if (empTypes.length && !empTypes.includes(input.employmentType)) {
-        errors.department = 'This department is not for the selected employee type.';
-      } else if (rules.category && input.employeeCategory && cadres.length && !cadres.includes(input.employeeCategory)) {
-        errors.department = 'This department is not for the selected cadre.';
-      }
     }
   }
 
