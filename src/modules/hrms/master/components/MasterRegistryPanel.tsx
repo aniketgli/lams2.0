@@ -161,7 +161,7 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
         <div className="flex justify-end gap-1.5">
           <Button variant="icon" size="sm" leftIcon={Pencil} aria-label={`Edit ${r.name}`} title="Edit" onClick={() => openEditor(r)} />
           <Button variant="icon" size="sm" leftIcon={Power} aria-label={r.status === 'ACTIVE' ? `Deactivate ${r.name}` : `Activate ${r.name}`} title={r.status === 'ACTIVE' ? 'Deactivate' : 'Activate'} onClick={() => { setConfirmError(null); setConfirm({ kind: 'status', record: r }); }} />
-          {!def.fixedRecords && <Button variant="icon" size="sm" leftIcon={Trash2} aria-label={`Delete ${r.name}`} title="Delete" className="text-error hover:bg-error-subtle" onClick={() => { setConfirmError(null); setConfirm({ kind: 'delete', record: r }); }} />}
+          <Button variant="icon" size="sm" leftIcon={Trash2} aria-label={`Delete ${r.name}`} title="Delete" className="text-error hover:bg-error-subtle" onClick={() => { setConfirmError(null); setConfirm({ kind: 'delete', record: r }); }} />
         </div>
       ),
     }]),
@@ -246,7 +246,7 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
       <PanelCard
         title={def.label}
         count={records.length}
-        actions={!readOnly && !def.fixedRecords && (
+        actions={!readOnly && !def.noCreate && (
           <Button variant="primary" size="sm" leftIcon={Plus} onClick={() => openEditor(null)}>Add {def.noun.toLowerCase()}</Button>
         )}
       >
@@ -274,7 +274,7 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
           error={loadError}
           keyExtractor={(r) => r.id}
           emptyTitle={records.length ? 'No matching records' : `No ${def.label.toLowerCase()} yet`}
-          emptyDescription={records.length ? 'Try a different search or status.' : readOnly || def.fixedRecords ? 'Nothing has been added yet.' : `Use "Add ${def.noun.toLowerCase()}" to create the first one.`}
+          emptyDescription={records.length ? 'Try a different search or status.' : readOnly || def.noCreate ? 'Nothing has been added yet.' : `Use "Add ${def.noun.toLowerCase()}" to create the first one.`}
         />
       </PanelCard>
 
@@ -298,8 +298,8 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
               <Input label="Name" required maxLength={255} value={form.name} error={err('name')}
                 onChange={(e) => setForm({ ...form, name: e.target.value })} containerClassName="sm:col-span-2" />
               <Input label="Code" required maxLength={def.kind === 'lookup' ? 50 : 100} value={form.code} error={err('code')}
-                disabled={def.kind === 'lookup' && Boolean(editing)}
-                title={def.kind === 'lookup' ? (editing ? 'The code is stored on records and cannot be changed.' : 'Stored on records; it cannot be changed later.') : undefined}
+                disabled={def.kind === 'lookup' && Boolean(editing) && !def.codeEditable}
+                title={def.kind === 'lookup' && !def.codeEditable ? (editing ? 'The code is stored on records and cannot be changed.' : 'Stored on records; it cannot be changed later.') : undefined}
                 onChange={(e) => setForm({ ...form, code: def.kind === 'lookup' ? e.target.value : e.target.value.toUpperCase() })} />
               {(() => {
               const statusItem = (

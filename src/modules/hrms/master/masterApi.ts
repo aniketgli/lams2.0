@@ -34,7 +34,9 @@ export interface MasterDefinition {
   /** Position among the Profile Masters tabs; null = no tab (data still used by other dropdowns). */
   tab?: number | null;
   /** Fixed set: records can be renamed or (de)activated, not added or deleted. */
-  fixedRecords?: boolean;
+  noCreate?: boolean;
+  /** The code of an existing record can be changed. */
+  codeEditable?: boolean;
   /** Show this field where Status normally is, and Status where the field is. */
   swapStatusWith?: string | null;
 }

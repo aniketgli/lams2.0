@@ -136,7 +136,7 @@ async function validate(def: MasterDef, body: unknown, existing: MasterRecord | 
   // Lookup codes are what records store, so they are fixed once created.
   let code = typeof input.code === 'string' ? input.code.trim() : '';
   if (def.kind === 'table') code = code.toUpperCase();
-  if (def.kind === 'lookup' && existing) code = existing.code;
+  if (def.kind === 'lookup' && existing && !def.codeEditable) code = existing.code;
   const codeMax = def.kind === 'table' ? def.codeMaxLength : 50;
   if (!code) errors.code = 'Code is required.';
   else if (code.length > codeMax) errors.code = `Code must be at most ${codeMax} characters.`;
@@ -261,12 +261,29 @@ async function missingColumnHint<T>(work: Promise<T>): Promise<T> {
   }
 }
 
-function assertNotFixed(def: MasterDef, verb: string): void {
-  if (def.fixedRecords) throw new HttpError(409, `${def.label} are a fixed set and cannot be ${verb}. Rename or deactivate them instead.`, 'FIXED_SET');
+function assertCanCreate(def: MasterDef): void {
+  if (def.noCreate) throw new HttpError(409, `${def.label} cannot be added here. Edit, deactivate or delete the existing ones.`, 'FIXED_SET');
+}
+
+/** An employee type's code is stored on profiles, designations and leave rules; move them all to the new code. */
+async function moveEmployeeTypeCode(conn: { query: typeof pool.query }, from: string, to: string): Promise<void> {
+  const quiet = async (run: () => Promise<unknown>) => {
+    try { await run(); } catch (error) { if ((error as { code?: string })?.code !== 'ER_NO_SUCH_TABLE') throw error; }
+  };
+  await conn.query('UPDATE employee_profiles SET employment_type = ? WHERE employment_type = ?', [to, from]);
+  await conn.query("UPDATE designations SET metadata = JSON_SET(metadata, '$.empType', ?) WHERE JSON_VALID(metadata) AND JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.empType')) = ?", [to, from]);
+  await quiet(async () => {
+    const [rows] = await conn.query<RowDataPacket[]>('SELECT id, employee_types FROM leave_types WHERE FIND_IN_SET(?, employee_types)', [from]);
+    for (const row of rows) {
+      const next = String(row.employee_types).split(',').map((c) => (c.trim() === from ? to : c.trim())).filter(Boolean).join(',');
+      await conn.query('UPDATE leave_types SET employee_types = ? WHERE id = ?', [next, row.id]);
+    }
+  });
+  await quiet(() => conn.query('UPDATE leave_type_quotas SET employee_type = ? WHERE employee_type = ?', [to, from]));
 }
 
 export async function createRecord(def: MasterDef, body: unknown, req: Request): Promise<MasterRecord> {
-  assertNotFixed(def, 'added');
+  assertCanCreate(def);
   const input = await validate(def, body, null);
   const { columns, values } = storageValues(def, input);
   return missingColumnHint(inTransaction(async (conn) => {
@@ -306,6 +323,7 @@ export async function updateRecord(def: MasterDef, id: number, body: unknown, re
 
   const { columns, values } = storageValues(def, input);
   return missingColumnHint(inTransaction(async (conn) => {
+    if (def.kind === 'lookup' && def.codeEditable && input.code !== existing.code) await moveEmployeeTypeCode(conn, existing.code, input.code);
     const sets = columns.filter((c) => c !== 'lookup_type').map((c) => `${c} = ?`);
     const vals = def.kind === 'lookup' ? values.slice(1) : values;
     await conn.query(`UPDATE ${tableOf(def)} SET ${sets.join(', ')} WHERE id = ?`, [...vals, id]);
@@ -337,7 +355,6 @@ export async function setStatus(def: MasterDef, id: number, status: unknown, req
 }
 
 export async function deleteRecord(def: MasterDef, id: number, req: Request, reason?: unknown): Promise<void> {
-  assertNotFixed(def, 'deleted');
   const existing = await getRecord(def, id);
   if (!existing) throw notFound(`${def.noun} not found.`);
   const usage = await findUsage(def, existing);
