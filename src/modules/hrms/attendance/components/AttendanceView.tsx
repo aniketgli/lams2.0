@@ -393,10 +393,10 @@ export const AttendanceView: React.FC = () => {
           onSort={(key) => setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }))}
           emptyTitle={rows.length ? 'No attendance matches these filters' : 'No attendance for these dates'}
           emptyDescription={rows.length ? 'Change the filters or search.' : 'Choose other dates, or check that the machines are sending punches.'}
-          pagination={sorted.length > PAGE_SIZES[0] ? {
+          pagination={{
             currentPage: page, totalPages, totalItems: sorted.length, pageSize,
             onPageChange: setPage, onPageSizeChange: setPageSize, pageSizeOptions: PAGE_SIZES,
-          } : undefined}
+          }}
         />
       ) : (
         <section className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">

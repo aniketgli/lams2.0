@@ -212,7 +212,13 @@ export function DataTable<T>({
   containerClassName = '',
   serial = true,
 }: DataTableProps<T>) {
-  const serialStart = pagination ? (pagination.currentPage - 1) * pagination.pageSize : 0;
+  // Without a `pagination` prop the table pages its own rows (25 a page), so every
+  // table ends with the same "rows per page / page numbers / Showing x to y" footer.
+  const [autoPage, setAutoPage] = React.useState(1);
+  const [autoSize, setAutoSize] = React.useState(25);
+  const auto = pagination === undefined;
+  React.useEffect(() => { setAutoPage(1); }, [data.length, autoSize]);
+  const serialStart = pagination ? (pagination.currentPage - 1) * pagination.pageSize : auto ? (Math.min(autoPage, Math.max(1, Math.ceil(data.length / autoSize))) - 1) * autoSize : 0;
   const columnCount = columns.length + (serial ? 1 : 0);
   // Built-in sorting when the parent does not control it.
   const controlled = Boolean(onSort);
@@ -229,13 +235,20 @@ export function DataTable<T>({
       : { key: col.key, dir: 'asc' }));
   };
 
-  const rows = React.useMemo(() => {
+  const sortedRows = React.useMemo(() => {
     if (controlled || !internalSort) return data;
     const col = columns.find((c) => c.key === internalSort.key);
     if (!col) return data;
     const value = col.sortValue ?? ((item: T) => (item as any)?.[col.key]);
     return [...data].sort((a, b) => compareValues(value(a), value(b), internalSort.dir));
   }, [controlled, internalSort, data, columns]);
+  const autoPages = Math.max(1, Math.ceil(sortedRows.length / autoSize));
+  const safePage = Math.min(autoPage, autoPages);
+  const rows = auto ? sortedRows.slice((safePage - 1) * autoSize, safePage * autoSize) : sortedRows;
+  const footer: TablePaginationProps | undefined = pagination ?? (auto && !loading && !error ? {
+    currentPage: safePage, totalPages: autoPages, totalItems: sortedRows.length, pageSize: autoSize,
+    onPageChange: setAutoPage, onPageSizeChange: setAutoSize,
+  } : undefined);
 
   return (
     <div className={`space-y-3 ${containerClassName}`}>
@@ -326,7 +339,7 @@ export function DataTable<T>({
         </TableBody>
       </Table>
 
-      {pagination && <TablePagination {...pagination} />}
+      {footer && <TablePagination {...footer} />}
     </div>
   );
 }
