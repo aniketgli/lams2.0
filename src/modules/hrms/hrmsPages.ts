@@ -25,7 +25,7 @@ export const HRMS_PAGES: HrmsPage[] = [
   { id: 'manual_attendance', slug: 'manual-attendance', roles: ALL },
   { id: 'od', slug: 'outdoor-duty', roles: ALL },
   { id: 'leave', slug: 'leave', roles: ALL },
-  { id: 'leave_balance', slug: 'leave-balance', roles: ['administrator'] },
+  { id: 'leave_balance', slug: 'leave-balance', roles: ALL },
   { id: 'holiday_calendar', slug: 'holidays', roles: ALL },
   { id: 'profile', slug: 'profiles', roles: ALL },
   { id: 'user_controls', slug: 'user-controls', roles: ['administrator', 'audit'] },
