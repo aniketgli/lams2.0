@@ -249,6 +249,19 @@ export async function biometricDay(biometricId: string, shiftId: string | null, 
   }
 }
 
+/** Dates in a range on which the employee has at least one punch on a registered machine. */
+export async function punchDates(biometricId: string, from: string, to: string): Promise<Set<string>> {
+  const machines = await attendanceMachines();
+  const code = normalizeEmployeeCode(biometricId);
+  try {
+    const punches = await loadPunches(from, to, machines, [code]);
+    return new Set(punches.get(code)?.keys() ?? []);
+  } catch (error) {
+    if (error instanceof HttpError) return new Set(); // attendance not set up: no punch is known
+    throw error;
+  }
+}
+
 /**
  * Working days from `to` backwards (latest first) on which the In and / or Out punch is
  * missing. Weekly offs, gazetted holidays and days before joining are left out.

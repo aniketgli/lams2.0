@@ -20,7 +20,7 @@ const yesNo = [{ label: 'Yes', value: 'yes' }, { label: 'No', value: 'no' }];
 
 const blank = (): LeaveTypeInput => ({
   code: '', name: '', description: '', defaultQuota: 0, pwdQuota: null, pwdOnly: false, accrual: 'yearly', maxAccumulation: 0, carryForward: false, maxCarryForward: 0,
-  encashmentAllowed: false, approvalStages: 1, minNoticeDays: 0, halfDayAllowed: false, medicalCertDays: 0, sandwichRule: 'excluded',
+  encashmentAllowed: false, approvalStages: 1, minNoticeDays: 0, halfDayAllowed: false, medicalCertDays: 0, sandwichRule: 'excluded', combineWith: 'none',
   employeeTypes: [], gender: 'all', minServiceMonths: 0, maxConsecutiveDays: 0, isDebited: true, isPaid: true, afterExhaustedTypeId: '', debitFromTypeId: '', debitFactor: 1, lifetimeMax: 0, maxSpellsPerYear: 0, quotas: [], status: 'active',
 });
 
@@ -170,6 +170,7 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
             t.pwdOnly ? 'Persons with disability only' : null,
             t.afterExhaustedTypeId ? `Only after ${nameOf(t.afterExhaustedTypeId)} is used up` : null,
             t.debitFromTypeId ? `${t.debitFactor} day(s) of ${nameOf(t.debitFromTypeId)} per day` : null,
+            t.combineWith === 'none' ? 'Not joined with other leaves' : t.combineWith === 'both' ? null : `Joined with ${t.combineWith === 'single' ? '1-stage' : '2-stage'} leaves only`,
             t.accrual === 'half_yearly' ? 'Credited every half-year' : null,
             t.lifetimeMax ? `Max ${t.lifetimeMax} days in service` : null,
             t.maxSpellsPerYear ? `${t.maxSpellsPerYear} times a year` : null,
@@ -226,7 +227,7 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
                 options={[{ label: 'Active', value: 'active' }, { label: 'Inactive', value: 'inactive' }]} />
             </FormSection>
 
-            <FormSection step={2} title="Rules for taking leave" errorCount={countErrors(['halfDayAllowed', 'minNoticeDays', 'maxConsecutiveDays', 'maxSpellsPerYear', 'lifetimeMax', 'medicalCertDays', 'minServiceMonths', 'gender', 'sandwichRule'])}>
+            <FormSection step={2} title="Rules for taking leave" errorCount={countErrors(['halfDayAllowed', 'minNoticeDays', 'maxConsecutiveDays', 'maxSpellsPerYear', 'lifetimeMax', 'medicalCertDays', 'minServiceMonths', 'gender', 'sandwichRule', 'approvalStages', 'combineWith'])}>
               <Select label="Half day allowed" value={flag(form.halfDayAllowed)} searchable={false} onChange={(v: string) => set('halfDayAllowed', v === 'yes')} options={yesNo} />
               <Input label="Notice needed (days)" type="number" min={0} max={365} value={String(form.minNoticeDays)} error={errors.minNoticeDays} onChange={num('minNoticeDays')} />
               <Input label="Longest at a time (days, 0 = no limit)" type="number" min={0} value={String(form.maxConsecutiveDays)} error={errors.maxConsecutiveDays} onChange={num('maxConsecutiveDays')} />
@@ -238,12 +239,14 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
                 options={[{ label: 'All', value: 'all' }, { label: 'Female only', value: 'female_only' }, { label: 'Male only', value: 'male_only' }]} />
               <Select label="Holidays in between" required value={form.sandwichRule} searchable={false} error={Boolean(errors.sandwichRule)} onChange={(v: string) => set('sandwichRule', v as LeaveTypeInput['sandwichRule'])}
                 options={[{ label: 'Not counted', value: 'excluded' }, { label: 'Counted as leave', value: 'included' }]} />
-            </FormSection>
-
-            <FormSection step={3} title="Approval and balance" errorCount={countErrors(['approvalStages', 'isPaid', 'isDebited', 'debitFromTypeId', 'debitFactor', 'afterExhaustedTypeId'])}>
               <Select label="Approval stages" required value={String(form.approvalStages)} searchable={false} error={Boolean(errors.approvalStages)}
                 onChange={(v: string) => set('approvalStages', Number(v) as 1 | 2)}
                 options={[{ label: '1 · Reporting Manager approves', value: '1' }, { label: '2 · Reporting Manager forwards, HoD approves', value: '2' }]} />
+              <Select label="Can be combined with" required value={form.combineWith} searchable={false} error={Boolean(errors.combineWith)} onChange={(v: string) => set('combineWith', v as LeaveTypeInput['combineWith'])}
+                options={[{ label: 'Nothing', value: 'none' }, { label: '1-stage leaves', value: 'single' }, { label: '2-stage leaves', value: 'double' }, { label: 'Both 1-stage and 2-stage leaves', value: 'both' }]} />
+            </FormSection>
+
+            <FormSection step={3} title="Balance" errorCount={countErrors(['isPaid', 'isDebited', 'debitFromTypeId', 'debitFactor', 'afterExhaustedTypeId'])}>
               <Select label="Paid" value={flag(form.isPaid)} searchable={false} onChange={(v: string) => set('isPaid', v === 'yes')} options={yesNo} />
               <Select label="Debited from balance" value={flag(form.isDebited)} searchable={false} onChange={(v: string) => set('isDebited', v === 'yes')} options={yesNo} />
               <Select label="Uses the balance of" value={form.debitFromTypeId} searchable={false} placeholder="Its own balance" error={Boolean(errors.debitFromTypeId)}
