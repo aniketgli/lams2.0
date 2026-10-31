@@ -25,6 +25,7 @@ export const ShiftsPanel: React.FC<{ readOnly: boolean }> = ({ readOnly }) => {
   const [shifts, setShifts] = useState<ShiftRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'active' | 'inactive'>('ALL');
   const [loadError, setLoadError] = useState<string | undefined>();
   const [notice, showNotice, clearNotice] = useNotice();
 
@@ -139,10 +140,11 @@ export const ShiftsPanel: React.FC<{ readOnly: boolean }> = ({ readOnly }) => {
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return shifts;
-    return shifts.filter((s) => [s.code, s.name, s.startTime, s.endTime, s.description, s.applicableDays.join(' '), s.status, s.isDefault ? 'default' : '']
+    const byStatus = statusFilter === 'ALL' ? shifts : shifts.filter((s) => s.status === statusFilter);
+    if (!q) return byStatus;
+    return byStatus.filter((s) => [s.code, s.name, s.startTime, s.endTime, s.description, s.applicableDays.join(' '), s.status, s.isDefault ? 'default' : '']
       .some((v) => v.toLowerCase().includes(q)));
-  }, [shifts, search]);
+  }, [shifts, search, statusFilter]);
 
   return (
     <div className="space-y-4">
@@ -152,13 +154,17 @@ export const ShiftsPanel: React.FC<{ readOnly: boolean }> = ({ readOnly }) => {
         count={shifts.length}
         actions={!readOnly && <Button variant="primary" size="sm" leftIcon={Plus} onClick={() => open(null)}>Add shift</Button>}
       >
-        <div className="mb-4">
+        <div className="flex flex-col sm:flex-row gap-2 mb-4">
           <Input aria-label="Search" placeholder="Search by code, name, timing or working day" leftIcon={Search} value={search}
-            onChange={(e) => setSearch(e.target.value)} />
+            onChange={(e) => setSearch(e.target.value)} containerClassName="flex-1" />
+          <div className="sm:w-52">
+            <Select value={statusFilter} onChange={(v: 'ALL' | 'active' | 'inactive') => setStatusFilter(v)}
+              options={[{ label: 'All statuses', value: 'ALL' }, { label: 'Active', value: 'active' }, { label: 'Inactive', value: 'inactive' }]} />
+          </div>
         </div>
         <DataTable columns={columns} data={visible} loading={loading} error={loadError} keyExtractor={(s) => s.id}
           emptyTitle={shifts.length ? 'No matching shifts' : 'No shifts yet'}
-          emptyDescription={shifts.length ? 'Try a different search.' : readOnly ? 'Nothing has been added yet.' : 'Add the institute’s first shift.'} />
+          emptyDescription={shifts.length ? 'Try a different search or status.' : readOnly ? 'Nothing has been added yet.' : 'Add the institute’s first shift.'} />
       </PanelCard>
 
       <Modal
