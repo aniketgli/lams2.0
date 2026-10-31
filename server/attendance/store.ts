@@ -188,6 +188,31 @@ async function approvedManual(from: string, to: string): Promise<Map<string, Map
   return out;
 }
 
+/** Approved outdoor duty: user id → date → location, for every date in the range. A missing table means none. */
+async function approvedOutdoorDuty(from: string, to: string, onlyUserId: string | null = null): Promise<Map<string, Map<string, string>>> {
+  const out = new Map<string, Map<string, string>>();
+  try {
+    const found = await rows(
+      `SELECT user_id, DATE_FORMAT(start_date, '%Y-%m-%d') AS s, DATE_FORMAT(end_date, '%Y-%m-%d') AS e, location FROM outdoor_duty_requests
+        WHERE status = 'approved' AND start_date <= ? AND end_date >= ?${onlyUserId ? ' AND user_id = ?' : ''}`,
+      [to, from, ...(onlyUserId ? [onlyUserId] : [])],
+    );
+    for (const r of found) {
+      const byDate = out.get(String(r.user_id)) ?? new Map<string, string>();
+      for (const date of datesBetween(String(r.s) < from ? from : String(r.s), String(r.e) > to ? to : String(r.e))) byDate.set(date, String(r.location));
+      out.set(String(r.user_id), byDate);
+    }
+  } catch (error) {
+    if ((error as { code?: string })?.code !== 'ER_NO_SUCH_TABLE') throw error;
+  }
+  return out;
+}
+
+/** Dates in the range on which the employee is on approved outdoor duty. */
+export async function outdoorDutyDates(userId: string, from: string, to: string): Promise<Set<string>> {
+  return new Set((await approvedOutdoorDuty(from, to, userId)).get(userId)?.keys() ?? []);
+}
+
 /** What the biometric machines recorded for one day: the In and Out punch, each null when missing. */
 export interface PunchDay { date: string; in: string | null; out: string | null }
 
@@ -247,8 +272,8 @@ export async function listAttendance(viewer: AttendanceViewer, query: { from?: u
   const onlyUserId = query.userId ? String(query.userId) : null;
   if (onlyUserId && !/^\d{1,20}$/.test(onlyUserId)) throw badRequest('Invalid employee.');
 
-  const [employees, machines, shifts, holidays, manual] = await Promise.all([
-    employeesInScope(viewer, onlyUserId), attendanceMachines(), shiftRules(), gazettedHolidays(from, to), approvedManual(from, to),
+  const [employees, machines, shifts, holidays, manual, od] = await Promise.all([
+    employeesInScope(viewer, onlyUserId), attendanceMachines(), shiftRules(), gazettedHolidays(from, to), approvedManual(from, to), approvedOutdoorDuty(from, to),
   ]);
   const everyone = viewer.role === 'administrator' || viewer.role === 'audit';
   const punches = await loadPunches(from, to, machines, everyone && !onlyUserId ? null : employees.map((e) => e.biometricId));
@@ -266,7 +291,15 @@ export async function listAttendance(viewer: AttendanceViewer, query: { from?: u
       const approved = manual.get(emp.userId)?.get(date);
       const dayPunches = [...(mine?.get(date) ?? []), ...(approved ? [{ time: `${approved.inTime}:00`, device: 'Manual' }, { time: `${approved.outTime}:00`, device: 'Manual' }] : [])];
       const day = buildDay({ date, punches: dayPunches, shift, holiday: holidays.get(date) ?? null, today, nowTime });
-      if (day) records.push({ ...day, userId: emp.userId, biometricId: emp.biometricId });
+      if (day) {
+        // Approved outdoor duty marks a working day as OD, whatever the punches say; off days stay as they are.
+        const odPlace = od.get(emp.userId)?.get(date);
+        const onDuty = odPlace !== undefined && ['PP', 'PA', 'AP', 'AA'].includes(day.status);
+        records.push({
+          ...(onDuty ? { ...day, status: 'OD' as const, workMode: 'field_od' as const, lateByMins: 0, earlyByMins: 0, remark: `Outdoor duty · ${odPlace}` } : day),
+          userId: emp.userId, biometricId: emp.biometricId,
+        });
+      }
     }
   }
   const usedShifts = new Map<string, ShiftRule>();

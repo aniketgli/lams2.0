@@ -7,7 +7,7 @@ import { PATTERNS, Validator, isValidIsoDate, todayInIndia } from '../lib/valida
 import { changedFields, writeMasterAuditSql } from '../masters/audit';
 import type { RoleId } from '../lib/roles';
 import type { ActivityScope } from '../employees/activity';
-import { biometricDay, punchGaps, type PunchDay } from '../attendance/store';
+import { biometricDay, outdoorDutyDates, punchGaps, type PunchDay } from '../attendance/store';
 
 /**
  * Manual attendance: a request to correct a missed or wrong punch (table
@@ -491,5 +491,6 @@ export async function missingPunchDates(viewer: Viewer, userIdRaw: unknown): Pro
     throw error;
   }
   const taken = new Set(open.map((r) => String(r.d)));
-  return gaps.filter((g) => !taken.has(g.date));
+  const onDuty = await outdoorDutyDates(String(target.id), from.toISOString().slice(0, 10), to.toISOString().slice(0, 10));
+  return gaps.filter((g) => !taken.has(g.date) && !onDuty.has(g.date));
 }
