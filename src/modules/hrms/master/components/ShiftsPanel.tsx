@@ -164,11 +164,11 @@ export const ShiftsPanel: React.FC<{ readOnly: boolean }> = ({ readOnly }) => {
           <form id="shift-editor" onSubmit={save} className="space-y-4" noValidate>
             {formMessage && <p role="alert" className="rounded-lg border border-error-border bg-error-subtle px-3 py-2 text-xs text-error">{formMessage}</p>}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Input label="Code" required maxLength={50} value={form.code} error={errors.code} onChange={(e) => set('code', e.target.value)} helperText="e.g. GEN" />
+              <Input label="Code" required maxLength={50} value={form.code} error={errors.code} onChange={(e) => set('code', e.target.value)} placeholder="e.g. GEN" />
               <Input label="Name" required maxLength={255} value={form.name} error={errors.name} onChange={(e) => set('name', e.target.value)} containerClassName="sm:col-span-2" />
               <Input label="Start time" type="time" required value={form.startTime} error={errors.startTime} onChange={(e) => set('startTime', e.target.value)} />
               <Input label="End time" type="time" required value={form.endTime} error={errors.endTime} onChange={(e) => set('endTime', e.target.value)} />
-              <Input label="Half-day cut-off" type="time" value={form.halfDayCutoffTime ?? ''} error={errors.halfDayCutoffTime} onChange={(e) => set('halfDayCutoffTime', e.target.value)} helperText="Optional" />
+              <Input label="Half-day cut-off" type="time" value={form.halfDayCutoffTime ?? ''} error={errors.halfDayCutoffTime} onChange={(e) => set('halfDayCutoffTime', e.target.value)} />
               <Input label="Grace period (minutes)" type="number" min={0} max={240} required value={String(form.gracePeriodMins)} error={errors.gracePeriodMins} onChange={(e) => set('gracePeriodMins', Number(e.target.value))} />
               <Input label="Full day (hours)" type="number" step="0.5" min={0.5} max={24} required value={String(form.fullDayHours)} error={errors.fullDayHours} onChange={(e) => set('fullDayHours', Number(e.target.value))} />
               <Input label="Half day (hours)" type="number" step="0.5" min={0.5} max={24} required value={String(form.halfDayHours)} error={errors.halfDayHours} onChange={(e) => set('halfDayHours', Number(e.target.value))} />
@@ -201,7 +201,6 @@ export const ShiftsPanel: React.FC<{ readOnly: boolean }> = ({ readOnly }) => {
               </label>
             </div>
             <Textarea label="Description" rows={2} maxLength={2000} value={form.description} onChange={(e) => set('description', e.target.value)} />
-            {editing?.isDefault && <p className="text-[11px] text-slate-500">This is the default shift. To change the default, mark another shift as default.</p>}
           </form>
         )}
       </Modal>
