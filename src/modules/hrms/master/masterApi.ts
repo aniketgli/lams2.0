@@ -35,6 +35,8 @@ export interface MasterDefinition {
   tab?: number | null;
   /** Fixed set: records can be renamed or (de)activated, not added or deleted. */
   fixedRecords?: boolean;
+  /** Show this field where Status normally is, and Status where the field is. */
+  swapStatusWith?: string | null;
 }
 
 export interface MasterCatalog {

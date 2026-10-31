@@ -70,6 +70,8 @@ interface BaseDef {
   usage: UsageCheck[];
   /** The set of records is fixed: they can be renamed or (de)activated, never added or deleted. */
   fixedRecords?: boolean;
+  /** Form and table show this field where Status normally is, and Status where the field is (field key). */
+  swapStatusWith?: string;
 }
 
 export interface TableMasterDef extends BaseDef {
@@ -104,12 +106,10 @@ export const MASTERS: MasterDef[] = [
     label: 'Institute Units', noun: 'Institute unit',
     description: 'Departments, divisions, cells and units, each under its institute.',
     columnFields: { institute: 'institute', type: 'type' },
+    swapStatusWith: 'type',
     fields: [
       { key: 'institute', label: 'Institute', type: 'lookup', lookupType: 'institute', required: true },
       { key: 'type', label: 'Type', type: 'lookup', lookupType: 'org_unit_type', required: true },
-      // Empty = offered for every employee type / cadre on the employee form.
-      { key: 'empTypes', label: 'Employee types', type: 'multi', lookupType: 'employee_type', allowedLayouts: ['permanent', 'contractual', 'intern'] },
-      { key: 'cadres', label: 'Cadres', type: 'multi', choices: CADRES },
     ],
     usage: [
       { what: 'employee profiles', sql: PROFILE_COLUMN('department'), by: 'name' },

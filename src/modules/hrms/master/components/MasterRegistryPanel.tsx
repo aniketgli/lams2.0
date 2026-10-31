@@ -139,15 +139,21 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
     return fieldOptions[fieldKey]?.find((o) => o.value === value)?.label ?? value;
   };
 
+  const fieldColumns = shownFields.map<ColumnDef<MasterRecord>>((f) => ({
+    key: `f:${f.key}`, header: f.label, width: '18%',
+    sortValue: (r) => labelFor(f.key, r.fields[f.key]).replace(/^—$/, ''),
+    render: (r) => <span className="text-slate-700">{labelFor(f.key, r.fields[f.key])}</span>,
+  }));
+  const statusColumn: ColumnDef<MasterRecord> = { key: 'status', header: 'Status', width: '11%', sortValue: (r) => r.status, render: (r) => <StatusPill active={r.status === 'ACTIVE'} /> };
+  // Some masters show one field where Status normally is, and Status where that field is.
+  const swapIndex = def?.swapStatusWith ? shownFields.findIndex((f) => f.key === def.swapStatusWith) : -1;
+  const middleColumns = swapIndex < 0 ? [...fieldColumns, statusColumn]
+    : [...fieldColumns.slice(0, swapIndex), statusColumn, ...fieldColumns.slice(swapIndex + 1), fieldColumns[swapIndex]];
+
   const columns: ColumnDef<MasterRecord>[] = [
     { key: 'name', header: 'Name', sortValue: (r) => r.name, render: (r) => <span className="font-semibold text-slate-900">{r.name}</span> },
     { key: 'code', header: 'Code', width: '14%', sortValue: (r) => r.code, render: (r) => <span className="font-mono text-[11px] text-slate-600">{r.code}</span> },
-    ...shownFields.map<ColumnDef<MasterRecord>>((f) => ({
-      key: `f:${f.key}`, header: f.label, width: '18%',
-      sortValue: (r) => labelFor(f.key, r.fields[f.key]).replace(/^—$/, ''),
-      render: (r) => <span className="text-slate-700">{labelFor(f.key, r.fields[f.key])}</span>,
-    })),
-    { key: 'status', header: 'Status', width: '11%', sortValue: (r) => r.status, render: (r) => <StatusPill active={r.status === 'ACTIVE'} /> },
+    ...middleColumns,
     { key: 'updatedAt', header: 'Last updated', width: '15%', sortValue: (r) => r.updatedAt, render: (r) => <span className="text-slate-500 whitespace-nowrap">{formatDateTime(r.updatedAt)}</span> },
     ...(readOnly ? [] : [{
       key: 'actions', header: 'Actions', width: '120px', align: 'right' as const,
@@ -295,10 +301,13 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
                 disabled={def.kind === 'lookup' && Boolean(editing)}
                 title={def.kind === 'lookup' ? (editing ? 'The code is stored on records and cannot be changed.' : 'Stored on records; it cannot be changed later.') : undefined}
                 onChange={(e) => setForm({ ...form, code: def.kind === 'lookup' ? e.target.value : e.target.value.toUpperCase() })} />
-              <Select label="Status" required value={form.status} error={err('status')}
-                onChange={(v: MasterStatus) => setForm({ ...form, status: v })}
-                options={[{ label: 'Active', value: 'ACTIVE' }, { label: 'Inactive', value: 'INACTIVE' }]} />
-              {shownFields.map((f) => {
+              {(() => {
+              const statusItem = (
+                <Select key="status" label="Status" required value={form.status} error={err('status')}
+                  onChange={(v: MasterStatus) => setForm({ ...form, status: v })}
+                  options={[{ label: 'Active', value: 'ACTIVE' }, { label: 'Inactive', value: 'INACTIVE' }]} />
+              );
+              const items = [statusItem, ...shownFields.map((f) => {
                 const value = form.fields[f.key] ?? '';
                 const setValue = (v: string) => setForm({ ...form, fields: { ...form.fields, [f.key]: v } });
                 if (f.type === 'text') {
@@ -333,7 +342,11 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
                 return <Select key={f.key} label={f.label} required={f.required} value={value} error={err(`fields.${f.key}`)}
                   placeholder={`Select ${f.label.toLowerCase()}`} onChange={(v: string) => setValue(v)} options={options} searchable={options.length > 8}
                   containerClassName={f.type === 'layout' ? 'sm:col-span-2' : undefined} />;
-              })}
+              })];
+              // Some masters show one field where Status normally is, and Status where that field is.
+              if (swapIndex >= 0) [items[0], items[swapIndex + 1]] = [items[swapIndex + 1], items[0]];
+              return items;
+              })()}
             </div>
           </form>
         )}

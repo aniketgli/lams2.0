@@ -240,16 +240,9 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const designationOptionsFor = (employeeType: string, cadre = ''): Opt[] =>
     toOpts((masterOptions.designations ?? []).filter((r) =>
       (!r.fields.empType || r.fields.empType === employeeType) && (!cadre || !r.fields.cadre || r.fields.cadre === cadre)).map((r) => r.name));
-  /** Comma-separated master value as a list ("" = applies to all). */
-  const listOf = (v?: string) => (v || '').split(',').map((x) => x.trim()).filter(Boolean);
-  /** Units of the organization offered for this employee type and cadre (a unit with no limits is offered to all). */
-  const departmentsFor = (institute: string, employeeType: string, cadre = ''): string[] =>
-    institute ? (masterOptions.organizations ?? []).filter((r) => {
-      if ((r.fields.institute || '') !== institute) return false;
-      const types = listOf(r.fields.empTypes);
-      const cadres = listOf(r.fields.cadres);
-      return (!types.length || types.includes(employeeType)) && (!cadre || !cadres.length || cadres.includes(cadre));
-    }).map((r) => r.name) : [];
+  /** Units of the organization (shown to every employee type). */
+  const departmentsFor = (institute: string): string[] =>
+    institute ? (masterOptions.organizations ?? []).filter((r) => (r.fields.institute || '') === institute).map((r) => r.name) : [];
   /** Trainees pick a training course, M.Sc students a stream. */
   const courseOptionsFor = (layout: string): Opt[] =>
     toOpts(optionNames(layout === 'bsc_msc_student' ? 'mscStreams' : 'courses'));
@@ -270,7 +263,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     ...f,
     employeeCategory: cadre,
     designation: designationOptionsFor(f.employmentType, cadre).some((o) => o.value === f.designation) ? f.designation : '',
-    department: departmentsFor(f.institute, f.employmentType, cadre).includes(f.department) ? f.department : '',
+    department: departmentsFor(f.institute).includes(f.department) ? f.department : '',
   }));
 
   // Role Checks
@@ -3275,7 +3268,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                           onChange={(val) => {
                             // Departments belong to an organization: clear one that is not in the new one.
                             // Departments and managers belong to an organization: clear the ones that are not in the new one.
-                            const keepDept = !val || departmentsFor(val, newUserForm.employmentType, newUserForm.employeeCategory).includes(newUserForm.department) || optionNames('projects').includes(newUserForm.department);
+                            const keepDept = !val || departmentsFor(val).includes(newUserForm.department) || optionNames('projects').includes(newUserForm.department);
                             const inInstitute = (id: string) => !id || !val || (users.find((u) => u.id === id)?.institute ?? val) === val;
                             setNewUserForm((f) => ({
                               ...f, institute: val, department: keepDept ? f.department : '',
@@ -3390,7 +3383,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, department: val })}
                             options={[
                               { label: newUserForm.institute ? 'Select Department / Section / Cell' : 'Select the organization first', value: '' },
-                              ...withCurrent(toOpts(departmentsFor(newUserForm.institute, newUserForm.employmentType, newUserForm.employeeCategory)), newUserForm.department)
+                              ...withCurrent(toOpts(departmentsFor(newUserForm.institute)), newUserForm.department)
                             ]}
                             className="w-full"
                             searchable={true}
@@ -3598,7 +3591,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, department: val })}
                             options={[
                               { label: newUserForm.institute ? 'Select Department / Section / Cell' : 'Select the organization first', value: '' },
-                              ...withCurrent(toOpts(departmentsFor(newUserForm.institute, newUserForm.employmentType, newUserForm.employeeCategory)), newUserForm.department)
+                              ...withCurrent(toOpts(departmentsFor(newUserForm.institute)), newUserForm.department)
                             ]}
                             className="w-full"
                             searchable={true}
@@ -4250,7 +4243,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, department: val })}
                             options={[
                               { label: 'Select Project / Department / Section / Cell', value: '' },
-                              ...departmentsFor(newUserForm.institute, newUserForm.employmentType).map((dept) => ({ label: `[Dept/Cell] ${dept}`, value: dept })),
+                              ...departmentsFor(newUserForm.institute).map((dept) => ({ label: `[Dept/Cell] ${dept}`, value: dept })),
                               ...projectOptions.map((o) => ({ label: `[Project] ${o.label}`, value: o.value }))
                             ]}
                             className="w-full"
