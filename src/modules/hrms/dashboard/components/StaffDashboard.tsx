@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calendar, CalendarDays, Clock, FileText, Grid2x2, Layers, MapPin, Table2 } from 'lucide-react';
+import { Calendar, CalendarDays, Clock, FileText, LayoutGrid, Layers, List, MapPin } from 'lucide-react';
 import { useSession } from '../../../../auth/SessionContext';
 import { UserAvatar } from '../../../../shared/components/UserAvatar';
 import type { BalanceLine, DashboardData } from '../dashboardApi';
@@ -69,12 +69,6 @@ export const StaffDashboard: React.FC<{ data: DashboardData; onNavigate: (tab: s
   const [view, setView] = useState<'table' | 'cards'>('table');
   const balances = me?.balances ?? [];
   const user = session?.user;
-  const toggle = (key: 'table' | 'cards', Icon: React.ComponentType<{ className?: string }>, label: string) => (
-    <button type="button" onClick={() => setView(key)} aria-label={label} aria-pressed={view === key} title={label}
-      className={`w-8 h-7 flex items-center justify-center rounded-md cursor-pointer ${view === key ? 'bg-slate-100 text-slate-900' : 'text-slate-400 hover:text-slate-700'}`}>
-      <Icon className="w-4 h-4" />
-    </button>
-  );
   return (
     <div className="space-y-5">
       <section className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -107,8 +101,15 @@ export const StaffDashboard: React.FC<{ data: DashboardData; onNavigate: (tab: s
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2"><Layers className="w-4 h-4 text-primary" />Leave Balance</h3>
-          <div className="hidden sm:flex items-center rounded-lg border border-slate-200 bg-white p-0.5">
-            {toggle('table', Table2, 'Table view')}{toggle('cards', Grid2x2, 'Card view')}
+          <div className="hidden sm:flex h-9 items-center p-1 bg-slate-100/90 border border-slate-200/90 rounded-xl gap-1 shrink-0" role="tablist" aria-label="View">
+            {([['table', 'Table view', List], ['cards', 'Card view', LayoutGrid]] as const).map(([value, label, Icon]) => (
+              <button key={value} type="button" role="tab" aria-selected={view === value} aria-label={label} title={label} onClick={() => setView(value)}
+                className={`h-7 px-2 flex items-center justify-center rounded-lg cursor-pointer transition-colors ${
+                  view === value ? 'bg-white text-slate-900 shadow-2xs border border-slate-200/80' : 'text-slate-400 hover:text-slate-700'
+                }`}>
+                <Icon className="w-4 h-4" />
+              </button>
+            ))}
           </div>
         </div>
         {balances.length === 0 ? (
