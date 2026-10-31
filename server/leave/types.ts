@@ -51,6 +51,8 @@ export interface LeaveType {
   isDebited: boolean;
   isPaid: boolean;
   afterExhaustedTypeId: string;
+  debitFromTypeId: string;
+  debitFactor: number;
   lifetimeMax: number;
   maxSpellsPerYear: number;
   quotas: Array<{ employeeType: string; quota: number }>;
@@ -84,6 +86,8 @@ export function toLeaveType(row: RowDataPacket): LeaveType {
     isDebited: Boolean(row.is_debited),
     isPaid: row.is_paid === undefined ? true : Boolean(row.is_paid),
     afterExhaustedTypeId: row.after_exhausted_type_id ? String(row.after_exhausted_type_id) : '',
+    debitFromTypeId: row.debit_from_type_id ? String(row.debit_from_type_id) : '',
+    debitFactor: Number(row.debit_factor ?? 1),
     lifetimeMax: Number(row.lifetime_max ?? 0),
     maxSpellsPerYear: Number(row.max_spells_per_year ?? 0),
     quotas: [],
@@ -171,6 +175,20 @@ export async function parseLeaveTypeInput(body: unknown, selfId = 0): Promise<Le
       quotas.push({ employeeType, quota: q });
     }
   }
+  const rawDebit = v.raw('debitFromTypeId');
+  const debitText = rawDebit === undefined || rawDebit === null ? '' : String(rawDebit).trim();
+  let debitFromTypeId = '';
+  const debitFactor = Number(v.raw('debitFactor') ?? 1);
+  if (!Number.isFinite(debitFactor) || debitFactor < 0.5 || debitFactor > 10 || Math.round(debitFactor * 2) !== debitFactor * 2) v.errors.debitFactor ||= 'Enter days from 0.5 to 10, in steps of 0.5.';
+  if (debitText) {
+    if (!/^\d{1,20}$/.test(debitText) || Number(debitText) === selfId) v.errors.debitFromTypeId ||= 'Choose another leave type from the list.';
+    else {
+      const [found] = await pool.query<RowDataPacket[]>('SELECT id, is_debited FROM leave_types WHERE id = ?', [Number(debitText)]);
+      if (!found[0] || !found[0].is_debited) v.errors.debitFromTypeId ||= 'Choose a leave type that has a balance.';
+      else debitFromTypeId = debitText;
+    }
+    if (isDebited) v.errors.isDebited ||= 'A leave type that uses another leave type’s balance has no balance of its own.';
+  }
   if (carryForward && cf <= 0) v.errors.maxCarryForward ||= 'Enter how many days can be carried forward.';
   if (maxAccumulation && quota > maxAccumulation) v.errors.maxAccumulation ||= 'Cannot be less than the yearly quota.';
   v.assert();
@@ -178,7 +196,7 @@ export async function parseLeaveTypeInput(body: unknown, selfId = 0): Promise<Le
     code, name, description: description ?? '', defaultQuota: quota, accrual: accrual!, maxAccumulation: maxAccumulation!, carryForward,
     maxCarryForward: carryForward ? cf : 0, encashmentAllowed, approvalStages: stages as 1 | 2, minNoticeDays: minNoticeDays!, halfDayAllowed,
     medicalCertDays: medicalCertDays!, sandwichRule: sandwichRule!, employeeTypes, gender: gender!, minServiceMonths: minServiceMonths!,
-    maxConsecutiveDays: maxConsecutiveDays!, isDebited, isPaid, afterExhaustedTypeId, lifetimeMax, maxSpellsPerYear: maxSpellsPerYear!, quotas, status: status!,
+    maxConsecutiveDays: maxConsecutiveDays!, isDebited, isPaid, afterExhaustedTypeId, debitFromTypeId, debitFactor, lifetimeMax, maxSpellsPerYear: maxSpellsPerYear!, quotas, status: status!,
   };
 }
 
@@ -213,11 +231,11 @@ export async function leaveTypeOptions(): Promise<{ employeeTypes: Array<{ code:
 
 const COLS = `code, name, description, default_quota, accrual, max_accumulation, carry_forward, max_carry_forward, encashment_allowed, approval_stages,
   min_notice_days, half_day_allowed, medical_cert_days, sandwich_rule, employee_types, gender, min_service_months, max_consecutive_days,
-  is_debited, is_paid, after_exhausted_type_id, lifetime_max, max_spells_per_year, status`;
+  is_debited, is_paid, after_exhausted_type_id, debit_from_type_id, debit_factor, lifetime_max, max_spells_per_year, status`;
 const values = (t: LeaveTypeInput) => [
   t.code, t.name, t.description || null, t.defaultQuota, t.accrual, t.maxAccumulation, t.carryForward ? 1 : 0, t.maxCarryForward, t.encashmentAllowed ? 1 : 0,
   t.approvalStages, t.minNoticeDays, t.halfDayAllowed ? 1 : 0, t.medicalCertDays, t.sandwichRule, t.employeeTypes.join(','), t.gender, t.minServiceMonths,
-  t.maxConsecutiveDays, t.isDebited ? 1 : 0, t.isPaid ? 1 : 0, t.afterExhaustedTypeId ? Number(t.afterExhaustedTypeId) : null, t.lifetimeMax, t.maxSpellsPerYear, t.status,
+  t.maxConsecutiveDays, t.isDebited ? 1 : 0, t.isPaid ? 1 : 0, t.afterExhaustedTypeId ? Number(t.afterExhaustedTypeId) : null, t.debitFromTypeId ? Number(t.debitFromTypeId) : null, t.debitFactor, t.lifetimeMax, t.maxSpellsPerYear, t.status,
 ];
 
 function duplicate(error: unknown): never | void {
@@ -309,7 +327,7 @@ export async function deleteLeaveType(req: Request, id: number, reason: string |
       if ((await leaveTypeUsage(conn, id)) > 0) {
         throw new HttpError(409, 'This leave type is used by balances or requests. Make it Inactive instead of deleting it.', 'IN_USE');
       }
-      const [linked] = await conn.query<RowDataPacket[]>('SELECT name FROM leave_types WHERE after_exhausted_type_id = ? LIMIT 1', [id]);
+      const [linked] = await conn.query<RowDataPacket[]>('SELECT name FROM leave_types WHERE after_exhausted_type_id = ? OR debit_from_type_id = ? LIMIT 1', [id, id]);
       if (linked[0]) throw new HttpError(409, `“${linked[0].name}” depends on this leave type. Change it first.`, 'IN_USE');
       await conn.query('DELETE FROM leave_type_quotas WHERE leave_type_id = ?', [id]);
       await conn.query('DELETE FROM leave_types WHERE id = ?', [id]);

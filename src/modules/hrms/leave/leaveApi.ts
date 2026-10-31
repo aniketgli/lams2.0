@@ -26,6 +26,8 @@ export interface LeaveTypeRecord {
   isDebited: boolean;
   isPaid: boolean;
   afterExhaustedTypeId: string;
+  debitFromTypeId: string;
+  debitFactor: number;
   lifetimeMax: number;
   maxSpellsPerYear: number;
   quotas: Array<{ employeeType: string; quota: number }>;

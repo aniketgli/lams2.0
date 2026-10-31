@@ -21,7 +21,7 @@ const yesNo = [{ label: 'Yes', value: 'yes' }, { label: 'No', value: 'no' }];
 const blank = (): LeaveTypeInput => ({
   code: '', name: '', description: '', defaultQuota: 0, accrual: 'yearly', maxAccumulation: 0, carryForward: false, maxCarryForward: 0,
   encashmentAllowed: false, approvalStages: 1, minNoticeDays: 0, halfDayAllowed: false, medicalCertDays: 0, sandwichRule: 'excluded',
-  employeeTypes: [], gender: 'all', minServiceMonths: 0, maxConsecutiveDays: 0, isDebited: true, isPaid: true, afterExhaustedTypeId: '', lifetimeMax: 0, maxSpellsPerYear: 0, quotas: [], status: 'active',
+  employeeTypes: [], gender: 'all', minServiceMonths: 0, maxConsecutiveDays: 0, isDebited: true, isPaid: true, afterExhaustedTypeId: '', debitFromTypeId: '', debitFactor: 1, lifetimeMax: 0, maxSpellsPerYear: 0, quotas: [], status: 'active',
 });
 
 const flag = (b: boolean) => (b ? 'yes' : 'no');
@@ -154,6 +154,8 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
             t.sandwichRule === 'included' ? 'Holidays counted' : 'Holidays not counted',
             t.isPaid ? null : 'Unpaid',
             t.afterExhaustedTypeId ? `Only after ${nameOf(t.afterExhaustedTypeId)} is used up` : null,
+            t.debitFromTypeId ? `${t.debitFactor} day(s) of ${nameOf(t.debitFromTypeId)} per day` : null,
+            t.accrual === 'half_yearly' ? 'Credited every half-year' : null,
             t.lifetimeMax ? `Max ${t.lifetimeMax} days in service` : null,
             t.maxSpellsPerYear ? `${t.maxSpellsPerYear} times a year` : null,
             t.carryForward ? null : 'Lapses at year end',
@@ -229,6 +231,12 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
               <Select label="Can be taken only after" value={form.afterExhaustedTypeId} searchable={false} placeholder="Any time" error={Boolean(errors.afterExhaustedTypeId)}
                 onChange={(v: string) => set('afterExhaustedTypeId', v)}
                 options={[{ label: 'Any time', value: '' }, ...data.types.filter((t) => t.isDebited && t.id !== editing?.id).map((t) => ({ label: `${t.name} is used up`, value: t.id }))]} />
+              <Select label="Uses the balance of" value={form.debitFromTypeId} searchable={false} placeholder="Its own balance" error={Boolean(errors.debitFromTypeId)}
+                onChange={(v: string) => { set('debitFromTypeId', v); if (v) set('isDebited', false); }}
+                options={[{ label: 'Its own balance', value: '' }, ...data.types.filter((t) => t.isDebited && t.id !== editing?.id).map((t) => ({ label: t.name, value: t.id }))]} />
+              {form.debitFromTypeId && (
+                <Input label="Days used for each day taken" type="number" min={0.5} max={10} step="0.5" value={String(form.debitFactor)} error={errors.debitFactor} onChange={num('debitFactor')} />
+              )}
               <Input label="Limit in whole service (days, 0 = no limit)" type="number" min={0} step="0.5" value={String(form.lifetimeMax)} error={errors.lifetimeMax} onChange={num('lifetimeMax')} />
               <Input label="Times a year (0 = no limit)" type="number" min={0} value={String(form.maxSpellsPerYear)} error={errors.maxSpellsPerYear} onChange={num('maxSpellsPerYear')} />
               <Select label="Status" required value={form.status} searchable={false} onChange={(v: string) => set('status', v as 'active' | 'inactive')}

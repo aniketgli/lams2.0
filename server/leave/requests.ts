@@ -302,7 +302,7 @@ async function loadEmployee(q: { query: typeof pool.query }, userId: number): Pr
 interface Policy {
   id: number; code: string; name: string; quota: number; stages: 1 | 2; minNotice: number; halfDay: boolean; certDays: number;
   sandwich: 'included' | 'excluded'; employeeTypes: string[]; gender: string; minServiceMonths: number; maxConsecutive: number; debited: boolean;
-  status: string; maxAccumulation: number; afterExhaustedId: number; lifetimeMax: number; maxSpells: number; quotas: Record<string, number>;
+  status: string; maxAccumulation: number; afterExhaustedId: number; accrual: string; debitFromId: number; debitFactor: number; lifetimeMax: number; maxSpells: number; quotas: Record<string, number>;
 }
 
 function toPolicy(r: RowDataPacket): Policy {
@@ -312,13 +312,26 @@ function toPolicy(r: RowDataPacket): Policy {
     sandwich: String(r.sandwich_rule) === 'included' ? 'included' : 'excluded',
     employeeTypes: String(r.employee_types || '').split(',').map((s) => s.trim()).filter(Boolean), gender: String(r.gender),
     minServiceMonths: Number(r.min_service_months), maxConsecutive: Number(r.max_consecutive_days), debited: Boolean(r.is_debited),
-    status: String(r.status), maxAccumulation: Number(r.max_accumulation), afterExhaustedId: Number(r.after_exhausted_type_id ?? 0),
+    status: String(r.status), maxAccumulation: Number(r.max_accumulation), afterExhaustedId: Number(r.after_exhausted_type_id ?? 0), accrual: String(r.accrual ?? 'yearly'),
+    debitFromId: Number(r.debit_from_type_id ?? 0), debitFactor: Number(r.debit_factor ?? 1),
     lifetimeMax: Number(r.lifetime_max ?? 0), maxSpells: Number(r.max_spells_per_year ?? 0), quotas: {},
   };
 }
 
 /** Quota of the employee type where the master sets one, else the leave type's default quota. */
 export const quotaFor = (policy: Pick<Policy, 'quota' | 'quotas'>, employmentType: string): number => policy.quotas[employmentType] ?? policy.quota;
+
+/**
+ * Days credited so far in the leave year. A half-yearly type credits half the yearly quota at the start of each half
+ * (1 January and 1 July; 1 April and 1 October for a financial-year employee); other types credit everything upfront.
+ */
+export function creditedQuota(policy: Pick<Policy, 'quota' | 'quotas' | 'accrual'>, employmentType: string, cycleYear: number, basis: 'CY' | 'FY', asOf: string): number {
+  const yearly = quotaFor(policy, employmentType);
+  if (policy.accrual !== 'half_yearly') return yearly;
+  const start = basis === 'FY' ? 4 : 1;
+  const elapsed = (Number(asOf.slice(0, 4)) - cycleYear) * 12 + Number(asOf.slice(5, 7)) - start;
+  return num(elapsed >= 6 ? yearly : yearly / 2);
+}
 
 async function attachQuotas(q: { query: typeof pool.query }, policies: Policy[]): Promise<Policy[]> {
   if (!policies.length) return policies;
@@ -358,8 +371,14 @@ export async function balanceOf(
        FROM leave_requests WHERE user_id = ? AND leave_type_id = ? AND cycle_year = ? AND id <> ?`, [userId, policy.id, cycleYear, exceptRequestId]);
   const total = grant ? Number(grant.total) : policy.quota;
   const carryForward = grant ? Number(grant.carry_forward) : 0;
-  const used = Number(sums?.used ?? 0), pending = Number(sums?.pending ?? 0);
-  return { total, carryForward, used, pending, available: num(total + carryForward - used - pending) };
+  // Leave types that are debited from this one (commuted leave takes a multiple of its days from half pay leave).
+  const [linked] = await rows(q,
+    `SELECT COALESCE(SUM(CASE WHEN r.status = 'approved' THEN r.days_count * t.debit_factor ELSE 0 END), 0) AS used,
+            COALESCE(SUM(CASE WHEN r.status IN ('pending_l1', 'pending_l2') THEN r.days_count * t.debit_factor ELSE 0 END), 0) AS pending
+       FROM leave_requests r JOIN leave_types t ON t.id = r.leave_type_id
+      WHERE r.user_id = ? AND t.debit_from_type_id = ? AND r.cycle_year = ? AND r.id <> ?`, [userId, policy.id, cycleYear, exceptRequestId]);
+  const used = Number(sums?.used ?? 0) + Number(linked?.used ?? 0), pending = Number(sums?.pending ?? 0) + Number(linked?.pending ?? 0);
+  return { total, carryForward, used: num(used), pending: num(pending), available: num(total + carryForward - used - pending) };
 }
 
 /** Working weekdays of the employee's shift and the gazetted holidays in a range, for counting leave days. */
@@ -435,7 +454,7 @@ async function checkLeave(
   if (policy.afterExhaustedId && !errors.leaveTypeId) {
     const base = await loadPolicy(q, policy.afterExhaustedId);
     if (base && eligibilityProblem(base, emp, input.startDate) === null) {
-      const left = await balanceOf(q, targetId, { id: base.id, quota: quotaFor(base, emp.employmentType) }, cycleYear, 0);
+      const left = await balanceOf(q, targetId, { id: base.id, quota: creditedQuota(base, emp.employmentType, cycleYear, emp.basis, input.startDate) }, cycleYear, 0);
       if (left.available > 0) errors.leaveTypeId = `${policy.name} can be taken only after ${base.name} is used up. ${left.available} days of ${base.name} are still available.`;
     }
   }
@@ -463,7 +482,18 @@ async function checkLeave(
     [targetId, exceptId, input.endDate, input.startDate]);
   if (clash) throw new HttpError(409, 'This employee already has a leave on these dates.', 'DUPLICATE', { startDate: `Overlaps a pending or approved leave (${isoDate(clash.start_date)} to ${isoDate(clash.end_date)}).` });
 
-  const balance = await balanceOf(q, targetId, { id: policy.id, quota: quotaFor(policy, emp.employmentType) }, cycleYear, exceptId);
+  const balance = await balanceOf(q, targetId, { id: policy.id, quota: creditedQuota(policy, emp.employmentType, cycleYear, emp.basis, input.startDate) }, cycleYear, exceptId);
+  if (policy.debitFromId) {
+    const base = await loadPolicy(q, policy.debitFromId);
+    if (base) {
+      const left = await balanceOf(q, targetId, { id: base.id, quota: creditedQuota(base, emp.employmentType, cycleYear, emp.basis, input.startDate) }, cycleYear, exceptId);
+      const need = num(days * policy.debitFactor);
+      if (need > left.available) {
+        throw new HttpError(409, 'Not enough leave balance.', 'NO_BALANCE', { endDate: `${policy.name} uses ${policy.debitFactor} day(s) of ${base.name} for each day: ${need} needed, ${Math.max(0, left.available)} available for ${cycleLabel(cycleYear, emp.basis)}.` });
+      }
+      return { days, cycleYear, policy, emp, balance: left };
+    }
+  }
   if (policy.debited && days > balance.available) {
     const [next] = await rows(q, "SELECT name FROM leave_types WHERE after_exhausted_type_id = ? AND status = 'active' LIMIT 1", [policy.id]);
     const hint = next ? ` After it is used up, ${next.name} can be applied for.` : '';
@@ -700,6 +730,14 @@ export async function listBalances(viewer: Viewer, yearRaw: unknown): Promise<{ 
               COALESCE(SUM(CASE WHEN status = 'approved' THEN days_count ELSE 0 END), 0) AS used,
               COALESCE(SUM(CASE WHEN status IN ('pending_l1', 'pending_l2') THEN days_count ELSE 0 END), 0) AS pending
          FROM leave_requests WHERE cycle_year = ? GROUP BY user_id, leave_type_id`, [year]);
+    const linkedRows = await rows(pool,
+      `SELECT r.user_id, t.debit_from_type_id AS base_id,
+              COALESCE(SUM(CASE WHEN r.status = 'approved' THEN r.days_count * t.debit_factor ELSE 0 END), 0) AS used,
+              COALESCE(SUM(CASE WHEN r.status IN ('pending_l1', 'pending_l2') THEN r.days_count * t.debit_factor ELSE 0 END), 0) AS pending
+         FROM leave_requests r JOIN leave_types t ON t.id = r.leave_type_id
+        WHERE t.debit_from_type_id IS NOT NULL AND r.cycle_year = ? GROUP BY r.user_id, t.debit_from_type_id`, [year]);
+    const linkedOf = new Map(linkedRows.map((l) => [`${l.user_id}:${l.base_id}`, l]));
+    const today = todayInIndia();
     const grantOf = new Map(grants.map((g) => [`${g.user_id}:${g.leave_type_id}`, g]));
     const sumOf = new Map(sums.map((s) => [`${s.user_id}:${s.leave_type_id}`, s]));
     const out: BalanceRow[] = visible.map((r) => {
@@ -711,9 +749,11 @@ export async function listBalances(viewer: Viewer, yearRaw: unknown): Promise<{ 
         const eligible = eligibilityProblem(p, emp, `${year}-12-31`) === null;
         const g = grantOf.get(`${r.id}:${p.id}`), s = sumOf.get(`${r.id}:${p.id}`);
         if (!eligible && !g && !s) { balances[String(p.id)] = null; continue; }
-        const total = g ? Number(g.total) : quotaFor(p, emp.employmentType), carryForward = g ? Number(g.carry_forward) : 0;
-        const used = Number(s?.used ?? 0), pending = Number(s?.pending ?? 0);
-        balances[String(p.id)] = { total, carryForward, used, pending, available: num(total + carryForward - used - pending), eligible };
+        const asOf = year < Number(today.slice(0, 4)) ? `${year}-12-31` : year > Number(today.slice(0, 4)) ? `${year}-01-01` : today;
+        const total = g ? Number(g.total) : creditedQuota(p, emp.employmentType, year, basis, asOf), carryForward = g ? Number(g.carry_forward) : 0;
+        const l = linkedOf.get(`${r.id}:${p.id}`);
+        const used = Number(s?.used ?? 0) + Number(l?.used ?? 0), pending = Number(s?.pending ?? 0) + Number(l?.pending ?? 0);
+        balances[String(p.id)] = { total, carryForward, used: num(used), pending: num(pending), available: num(total + carryForward - used - pending), eligible };
       }
       return { userId: String(r.id), biometricId: String(r.biometric_id), name: String(r.name), designation: String(r.designation ?? ''), department: String(r.department ?? ''), basis, cycle: cycleLabel(year, basis), balances };
     });
@@ -746,7 +786,7 @@ export async function setBalance(req: Request, viewer: Viewer, body: unknown): P
       const policy = await loadPolicy(conn, Number(leaveTypeId));
       if (!policy) throw badRequest('Please correct the highlighted fields.', { leaveTypeId: 'Choose a leave type from the list.' });
       await rows(conn, 'SELECT id FROM users WHERE id = ? FOR UPDATE', [emp.id]);
-      const quotaPolicy = { id: policy.id, quota: quotaFor(policy, emp.employmentType) };
+      const quotaPolicy = { id: policy.id, quota: creditedQuota(policy, emp.employmentType, year!, emp.basis, todayInIndia()) };
       const before = await balanceOf(conn, emp.id, quotaPolicy, year!);
       if (total + carryForward < before.used + before.pending) {
         throw badRequest('Please correct the highlighted fields.', { total: `Days already used or pending are ${num(before.used + before.pending)}; the grant cannot be lower.` });
