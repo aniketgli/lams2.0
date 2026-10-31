@@ -16,13 +16,12 @@ const ACCRUALS = [
   { label: 'Yearly', value: 'yearly' }, { label: 'Half-yearly', value: 'half_yearly' }, { label: 'Quarterly', value: 'quarterly' },
   { label: 'Monthly', value: 'monthly' }, { label: 'Upfront', value: 'upfront' },
 ];
-const CCS_CATEGORIES = ['Debited Leave', 'Special Leave (Non-Debited)', 'Short Absence / Holiday'];
 const yesNo = [{ label: 'Yes', value: 'yes' }, { label: 'No', value: 'no' }];
 
 const blank = (): LeaveTypeInput => ({
   code: '', name: '', description: '', defaultQuota: 0, accrual: 'yearly', maxAccumulation: 0, carryForward: false, maxCarryForward: 0,
   encashmentAllowed: false, approvalStages: 1, minNoticeDays: 0, halfDayAllowed: false, medicalCertDays: 0, sandwichRule: 'excluded',
-  employeeTypes: [], gender: 'all', minServiceMonths: 0, maxConsecutiveDays: 0, isDebited: true, ccsRule: '', ccsCategory: '', status: 'active',
+  employeeTypes: [], gender: 'all', minServiceMonths: 0, maxConsecutiveDays: 0, isDebited: true, isPaid: true, afterExhaustedTypeId: '', lifetimeMax: 0, maxSpellsPerYear: 0, quotas: [], status: 'active',
 });
 
 const flag = (b: boolean) => (b ? 'yes' : 'no');
@@ -56,6 +55,7 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
   }, []);
   useEffect(() => { void load(); }, [load]);
 
+  const nameOf = (id: string) => data.types.find((t) => t.id === id)?.name ?? id;
   const typeName = (code: string) => data.employeeTypes.find((t) => t.code === code)?.name ?? code;
 
   const open = (record: LeaveTypeRecord | null) => {
@@ -117,7 +117,15 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
         </div>
       ),
     },
-    { key: 'quota', header: 'Yearly quota', width: '10%', sortValue: (t) => t.defaultQuota, render: (t) => <span className="font-semibold">{t.defaultQuota} days</span> },
+    {
+      key: 'quota', header: 'Yearly quota', width: '14%', sortValue: (t) => t.defaultQuota,
+      render: (t) => (
+        <div className="whitespace-normal leading-snug">
+          <div className="font-semibold">{t.isDebited ? `${t.defaultQuota} days` : 'No limit'}</div>
+          {t.isDebited && t.quotas.map((q) => <div key={q.employeeType} className="text-[11px] text-slate-600">{typeName(q.employeeType)}: {q.quota}</div>)}
+        </div>
+      ),
+    },
     {
       key: 'approval', header: 'Approval', width: '14%', sortValue: (t) => t.approvalStages,
       render: (t) => <span className="text-slate-700">{t.approvalStages === 2 ? 'Reporting Manager → HoD' : 'Reporting Manager'}</span>,
@@ -143,7 +151,12 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
             t.medicalCertDays ? `Certificate above ${t.medicalCertDays} days` : null,
             t.carryForward ? `Carry forward ${t.maxCarryForward}` : null,
             t.encashmentAllowed ? 'Encashable' : null,
-            t.sandwichRule === 'included' ? 'Holidays counted' : null,
+            t.sandwichRule === 'included' ? 'Holidays counted' : 'Holidays not counted',
+            t.isPaid ? null : 'Unpaid',
+            t.afterExhaustedTypeId ? `Only after ${nameOf(t.afterExhaustedTypeId)} is used up` : null,
+            t.lifetimeMax ? `Max ${t.lifetimeMax} days in service` : null,
+            t.maxSpellsPerYear ? `${t.maxSpellsPerYear} times a year` : null,
+            t.carryForward ? null : 'Lapses at year end',
           ].filter(Boolean).join(' · ') || '—'}
         </div>
       ),
@@ -212,9 +225,12 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
               )}
               <Select label="Encashment allowed" value={flag(form.encashmentAllowed)} searchable={false} onChange={(v: string) => set('encashmentAllowed', v === 'yes')} options={yesNo} />
               <Select label="Debited from balance" value={flag(form.isDebited)} searchable={false} onChange={(v: string) => set('isDebited', v === 'yes')} options={yesNo} />
-              <Input label="CCS rule" maxLength={50} value={form.ccsRule} error={errors.ccsRule} onChange={(e) => set('ccsRule', e.target.value)} />
-              <Select label="CCS category" value={form.ccsCategory} searchable={false} placeholder="Select category" error={Boolean(errors.ccsCategory)} onChange={(v: string) => set('ccsCategory', v)}
-                options={CCS_CATEGORIES.map((c) => ({ label: c, value: c }))} />
+              <Select label="Paid" value={flag(form.isPaid)} searchable={false} onChange={(v: string) => set('isPaid', v === 'yes')} options={yesNo} />
+              <Select label="Can be taken only after" value={form.afterExhaustedTypeId} searchable={false} placeholder="Any time" error={Boolean(errors.afterExhaustedTypeId)}
+                onChange={(v: string) => set('afterExhaustedTypeId', v)}
+                options={[{ label: 'Any time', value: '' }, ...data.types.filter((t) => t.isDebited && t.id !== editing?.id).map((t) => ({ label: `${t.name} is used up`, value: t.id }))]} />
+              <Input label="Limit in whole service (days, 0 = no limit)" type="number" min={0} step="0.5" value={String(form.lifetimeMax)} error={errors.lifetimeMax} onChange={num('lifetimeMax')} />
+              <Input label="Times a year (0 = no limit)" type="number" min={0} value={String(form.maxSpellsPerYear)} error={errors.maxSpellsPerYear} onChange={num('maxSpellsPerYear')} />
               <Select label="Status" required value={form.status} searchable={false} onChange={(v: string) => set('status', v as 'active' | 'inactive')}
                 options={[{ label: 'Active', value: 'active' }, { label: 'Inactive', value: 'inactive' }]} />
             </div>
@@ -234,6 +250,22 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
                 })}
               </div>
               {errors.employeeTypes && <p className="text-xs text-error mt-1">{errors.employeeTypes}</p>}
+            </fieldset>
+            <fieldset>
+              <legend className="text-xs font-semibold text-slate-700 mb-1.5">Quota by employee type (blank = yearly quota above)</legend>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {data.employeeTypes.filter((t) => !form.employeeTypes.length || form.employeeTypes.includes(t.code)).map((t) => {
+                  const found = form.quotas.find((q) => q.employeeType === t.code);
+                  return (
+                    <Input key={t.code} label={`${t.name} (days)`} type="number" min={0} max={400} step="0.5" value={found ? String(found.quota) : ''}
+                      onChange={(e) => {
+                        const rest = form.quotas.filter((q) => q.employeeType !== t.code);
+                        set('quotas', e.target.value === '' ? rest : [...rest, { employeeType: t.code, quota: Number(e.target.value) }]);
+                      }} />
+                  );
+                })}
+              </div>
+              {errors.quotas && <p className="text-xs text-error mt-1">{errors.quotas}</p>}
             </fieldset>
             <Textarea label="Description" rows={2} maxLength={500} value={form.description} onChange={(e) => set('description', e.target.value)} />
           </form>

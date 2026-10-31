@@ -16,7 +16,6 @@ import type { ActivityScope } from '../employees/activity';
 export const ACCRUALS = ['yearly', 'half_yearly', 'quarterly', 'monthly', 'upfront'] as const;
 export const SANDWICH = ['excluded', 'included'] as const;
 export const GENDERS = ['all', 'female_only', 'male_only'] as const;
-export const CCS_CATEGORIES = ['Debited Leave', 'Special Leave (Non-Debited)', 'Short Absence / Holiday'] as const;
 export const STAGES = [1, 2] as const;
 
 const AUDIT_KEY = 'leave_type';
@@ -50,8 +49,11 @@ export interface LeaveType {
   minServiceMonths: number;
   maxConsecutiveDays: number;
   isDebited: boolean;
-  ccsRule: string;
-  ccsCategory: string;
+  isPaid: boolean;
+  afterExhaustedTypeId: string;
+  lifetimeMax: number;
+  maxSpellsPerYear: number;
+  quotas: Array<{ employeeType: string; quota: number }>;
   status: 'active' | 'inactive';
   updatedAt: string | null;
 }
@@ -80,8 +82,11 @@ export function toLeaveType(row: RowDataPacket): LeaveType {
     minServiceMonths: Number(row.min_service_months),
     maxConsecutiveDays: Number(row.max_consecutive_days),
     isDebited: Boolean(row.is_debited),
-    ccsRule: row.ccs_rule ? String(row.ccs_rule) : '',
-    ccsCategory: row.ccs_category ? String(row.ccs_category) : '',
+    isPaid: row.is_paid === undefined ? true : Boolean(row.is_paid),
+    afterExhaustedTypeId: row.after_exhausted_type_id ? String(row.after_exhausted_type_id) : '',
+    lifetimeMax: Number(row.lifetime_max ?? 0),
+    maxSpellsPerYear: Number(row.max_spells_per_year ?? 0),
+    quotas: [],
     status: String(row.status) === 'inactive' ? 'inactive' : 'active',
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : null,
   };
@@ -103,7 +108,7 @@ async function employeeTypeCodes(): Promise<Set<string>> {
   return new Set(rows.map((r) => String(r.code)));
 }
 
-export async function parseLeaveTypeInput(body: unknown): Promise<LeaveTypeInput> {
+export async function parseLeaveTypeInput(body: unknown, selfId = 0): Promise<LeaveTypeInput> {
   const v = new Validator(body);
   const code = v.string('code', { min: 1, max: 20, pattern: /^[A-Za-z0-9_-]+$/, patternMessage: 'Use letters, numbers, - or _ only.' }).toUpperCase();
   const name = v.string('name', { min: 2, max: 100 }).replace(/\s+/g, ' ');
@@ -126,9 +131,21 @@ export async function parseLeaveTypeInput(body: unknown): Promise<LeaveTypeInput
   const minServiceMonths = v.int('minServiceMonths', { min: 0, max: 600 });
   const maxConsecutiveDays = v.int('maxConsecutiveDays', { min: 0, max: 730 });
   const isDebited = v.bool('isDebited', true);
-  const ccsRule = v.optionalString('ccsRule', { max: 50 });
-  const ccsCategory = v.optionalString('ccsCategory', { max: 40 });
-  if (ccsCategory && !(CCS_CATEGORIES as readonly string[]).includes(ccsCategory)) v.errors.ccsCategory ||= 'Choose one of the listed categories.';
+  const isPaid = v.bool('isPaid', true);
+  const lifetimeMax = Number(v.raw('lifetimeMax') ?? 0);
+  if (!Number.isFinite(lifetimeMax) || lifetimeMax < 0 || lifetimeMax > 5000 || Math.round(lifetimeMax * 2) !== lifetimeMax * 2) v.errors.lifetimeMax ||= 'Enter days from 0 to 5000, in steps of 0.5.';
+  const maxSpellsPerYear = v.int('maxSpellsPerYear', { min: 0, max: 100 });
+  const rawAfter = v.raw('afterExhaustedTypeId');
+  const afterText = rawAfter === undefined || rawAfter === null ? '' : String(rawAfter).trim();
+  let afterExhaustedTypeId = '';
+  if (afterText) {
+    if (!/^\d{1,20}$/.test(afterText) || Number(afterText) === selfId) v.errors.afterExhaustedTypeId ||= 'Choose another leave type from the list.';
+    else {
+      const [found] = await pool.query<RowDataPacket[]>('SELECT id, is_debited FROM leave_types WHERE id = ?', [Number(afterText)]);
+      if (!found[0] || !found[0].is_debited) v.errors.afterExhaustedTypeId ||= 'Choose a leave type that has a balance.';
+      else afterExhaustedTypeId = afterText;
+    }
+  }
   const status = v.oneOf('status', ['active', 'inactive'] as const);
   const rawTypes = v.raw('employeeTypes');
   let employeeTypes: string[] = [];
@@ -138,6 +155,22 @@ export async function parseLeaveTypeInput(body: unknown): Promise<LeaveTypeInput
     const known = await employeeTypeCodes();
     if (employeeTypes.some((t) => !known.has(t))) v.errors.employeeTypes ||= 'Choose employee types from the list.';
   }
+  const quotas: LeaveTypeInput['quotas'] = [];
+  const rawQuotas = v.raw('quotas');
+  if (rawQuotas !== undefined && !Array.isArray(rawQuotas)) v.errors.quotas ||= 'Enter the quota for each employee type.';
+  else if (Array.isArray(rawQuotas) && rawQuotas.length) {
+    const known = await employeeTypeCodes();
+    const seen = new Set<string>();
+    for (const item of rawQuotas) {
+      const employeeType = String((item as { employeeType?: unknown })?.employeeType ?? '').trim();
+      const q = Number((item as { quota?: unknown })?.quota);
+      if (!known.has(employeeType) || seen.has(employeeType) || (employeeTypes.length && !employeeTypes.includes(employeeType))) { v.errors.quotas ||= 'Choose each employee type once, from the allowed types.'; break; }
+      if (!Number.isFinite(q) || q < 0 || q > 400 || Math.round(q * 2) !== q * 2) { v.errors.quotas ||= 'Enter quota days from 0 to 400, in steps of 0.5.'; break; }
+      if (maxAccumulation && q > maxAccumulation) { v.errors.quotas ||= 'A quota cannot be more than the maximum balance.'; break; }
+      seen.add(employeeType);
+      quotas.push({ employeeType, quota: q });
+    }
+  }
   if (carryForward && cf <= 0) v.errors.maxCarryForward ||= 'Enter how many days can be carried forward.';
   if (maxAccumulation && quota > maxAccumulation) v.errors.maxAccumulation ||= 'Cannot be less than the yearly quota.';
   v.assert();
@@ -145,18 +178,32 @@ export async function parseLeaveTypeInput(body: unknown): Promise<LeaveTypeInput
     code, name, description: description ?? '', defaultQuota: quota, accrual: accrual!, maxAccumulation: maxAccumulation!, carryForward,
     maxCarryForward: carryForward ? cf : 0, encashmentAllowed, approvalStages: stages as 1 | 2, minNoticeDays: minNoticeDays!, halfDayAllowed,
     medicalCertDays: medicalCertDays!, sandwichRule: sandwichRule!, employeeTypes, gender: gender!, minServiceMonths: minServiceMonths!,
-    maxConsecutiveDays: maxConsecutiveDays!, isDebited, ccsRule: ccsRule ?? '', ccsCategory: ccsCategory ?? '', status: status!,
+    maxConsecutiveDays: maxConsecutiveDays!, isDebited, isPaid, afterExhaustedTypeId, lifetimeMax, maxSpellsPerYear: maxSpellsPerYear!, quotas, status: status!,
   };
 }
 
 export async function listLeaveTypes(): Promise<LeaveType[]> {
   try {
     const [rows] = await pool.query<RowDataPacket[]>('SELECT * FROM leave_types ORDER BY name');
-    return rows.map(toLeaveType);
+    return await withQuotas(pool, rows.map(toLeaveType));
   } catch (error) {
     missingTable(error);
     throw error;
   }
+}
+
+type Q = { query: typeof pool.query };
+
+async function withQuotas(q: Q, types: LeaveType[]): Promise<LeaveType[]> {
+  if (!types.length) return types;
+  const [rows] = await q.query<RowDataPacket[]>('SELECT leave_type_id, employee_type, quota FROM leave_type_quotas ORDER BY employee_type');
+  for (const t of types) t.quotas = rows.filter((r) => String(r.leave_type_id) === t.id).map((r) => ({ employeeType: String(r.employee_type), quota: Number(r.quota) }));
+  return types;
+}
+
+async function saveQuotas(conn: Q, id: number, quotas: LeaveTypeInput['quotas']): Promise<void> {
+  await conn.query('DELETE FROM leave_type_quotas WHERE leave_type_id = ?', [id]);
+  for (const q of quotas) await conn.query('INSERT INTO leave_type_quotas (leave_type_id, employee_type, quota) VALUES (?, ?, ?)', [id, q.employeeType, q.quota]);
 }
 
 export async function leaveTypeOptions(): Promise<{ employeeTypes: Array<{ code: string; name: string }> }> {
@@ -166,11 +213,11 @@ export async function leaveTypeOptions(): Promise<{ employeeTypes: Array<{ code:
 
 const COLS = `code, name, description, default_quota, accrual, max_accumulation, carry_forward, max_carry_forward, encashment_allowed, approval_stages,
   min_notice_days, half_day_allowed, medical_cert_days, sandwich_rule, employee_types, gender, min_service_months, max_consecutive_days,
-  is_debited, ccs_rule, ccs_category, status`;
+  is_debited, is_paid, after_exhausted_type_id, lifetime_max, max_spells_per_year, status`;
 const values = (t: LeaveTypeInput) => [
   t.code, t.name, t.description || null, t.defaultQuota, t.accrual, t.maxAccumulation, t.carryForward ? 1 : 0, t.maxCarryForward, t.encashmentAllowed ? 1 : 0,
   t.approvalStages, t.minNoticeDays, t.halfDayAllowed ? 1 : 0, t.medicalCertDays, t.sandwichRule, t.employeeTypes.join(','), t.gender, t.minServiceMonths,
-  t.maxConsecutiveDays, t.isDebited ? 1 : 0, t.ccsRule || null, t.ccsCategory || null, t.status,
+  t.maxConsecutiveDays, t.isDebited ? 1 : 0, t.isPaid ? 1 : 0, t.afterExhaustedTypeId ? Number(t.afterExhaustedTypeId) : null, t.lifetimeMax, t.maxSpellsPerYear, t.status,
 ];
 
 function duplicate(error: unknown): never | void {
@@ -188,7 +235,8 @@ export async function createLeaveType(req: Request, body: unknown): Promise<Leav
       const [result] = await conn.query(`INSERT INTO leave_types (${COLS}) VALUES (${COLS.split(',').map(() => '?').join(',')})`, values(input));
       const id = Number((result as { insertId: number }).insertId);
       const [rows] = await conn.query<RowDataPacket[]>('SELECT * FROM leave_types WHERE id = ?', [id]);
-      const created = toLeaveType(rows[0]);
+      await saveQuotas(conn, id, input.quotas);
+      const [created] = await withQuotas(conn, [toLeaveType(rows[0])]);
       await writeMasterAuditSql(conn, req, { masterKey: AUDIT_KEY, recordId: id, recordLabel: label(created), action: 'CREATE', after: auditView(input), reason: reasonOf(body) });
       return created;
     });
@@ -219,19 +267,20 @@ export async function leaveTypeUsage(conn: { query: typeof pool.query }, id: num
 }
 
 export async function updateLeaveType(req: Request, id: number, body: unknown): Promise<LeaveType> {
-  const input = await parseLeaveTypeInput(body);
+  const input = await parseLeaveTypeInput(body, id);
   try {
     return await inTransaction(async (conn) => {
       const [rows] = await conn.query<RowDataPacket[]>('SELECT * FROM leave_types WHERE id = ? FOR UPDATE', [id]);
       if (!rows[0]) throw notFound('Leave type not found.');
-      const before = toLeaveType(rows[0]);
+      const [before] = await withQuotas(conn, [toLeaveType(rows[0])]);
       if (before.code !== input.code && (await leaveTypeUsage(conn, id)) > 0) {
         throw new HttpError(409, 'This leave type is already used by balances or requests, so its code cannot change.', 'IN_USE', { code: 'The code cannot change once the leave type is in use.' });
       }
       const sets = COLS.split(',').map((c) => `${c.trim()} = ?`).join(', ');
       await conn.query(`UPDATE leave_types SET ${sets} WHERE id = ?`, [...values(input), id]);
+      await saveQuotas(conn, id, input.quotas);
       const [after] = await conn.query<RowDataPacket[]>('SELECT * FROM leave_types WHERE id = ?', [id]);
-      const updated = toLeaveType(after[0]);
+      const [updated] = await withQuotas(conn, [toLeaveType(after[0])]);
       const beforeView = auditView(before as unknown as LeaveTypeInput);
       const afterView = auditView(input);
       delete beforeView.id; delete beforeView.updatedAt;
@@ -256,10 +305,13 @@ export async function deleteLeaveType(req: Request, id: number, reason: string |
     await inTransaction(async (conn) => {
       const [rows] = await conn.query<RowDataPacket[]>('SELECT * FROM leave_types WHERE id = ? FOR UPDATE', [id]);
       if (!rows[0]) throw notFound('Leave type not found.');
-      const before = toLeaveType(rows[0]);
+      const [before] = await withQuotas(conn, [toLeaveType(rows[0])]);
       if ((await leaveTypeUsage(conn, id)) > 0) {
         throw new HttpError(409, 'This leave type is used by balances or requests. Make it Inactive instead of deleting it.', 'IN_USE');
       }
+      const [linked] = await conn.query<RowDataPacket[]>('SELECT name FROM leave_types WHERE after_exhausted_type_id = ? LIMIT 1', [id]);
+      if (linked[0]) throw new HttpError(409, `“${linked[0].name}” depends on this leave type. Change it first.`, 'IN_USE');
+      await conn.query('DELETE FROM leave_type_quotas WHERE leave_type_id = ?', [id]);
       await conn.query('DELETE FROM leave_types WHERE id = ?', [id]);
       const view = auditView(before as unknown as LeaveTypeInput);
       delete view.id; delete view.updatedAt;

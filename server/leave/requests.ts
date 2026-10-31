@@ -302,7 +302,7 @@ async function loadEmployee(q: { query: typeof pool.query }, userId: number): Pr
 interface Policy {
   id: number; code: string; name: string; quota: number; stages: 1 | 2; minNotice: number; halfDay: boolean; certDays: number;
   sandwich: 'included' | 'excluded'; employeeTypes: string[]; gender: string; minServiceMonths: number; maxConsecutive: number; debited: boolean;
-  status: string; maxAccumulation: number;
+  status: string; maxAccumulation: number; afterExhaustedId: number; lifetimeMax: number; maxSpells: number; quotas: Record<string, number>;
 }
 
 function toPolicy(r: RowDataPacket): Policy {
@@ -312,13 +312,26 @@ function toPolicy(r: RowDataPacket): Policy {
     sandwich: String(r.sandwich_rule) === 'included' ? 'included' : 'excluded',
     employeeTypes: String(r.employee_types || '').split(',').map((s) => s.trim()).filter(Boolean), gender: String(r.gender),
     minServiceMonths: Number(r.min_service_months), maxConsecutive: Number(r.max_consecutive_days), debited: Boolean(r.is_debited),
-    status: String(r.status), maxAccumulation: Number(r.max_accumulation),
+    status: String(r.status), maxAccumulation: Number(r.max_accumulation), afterExhaustedId: Number(r.after_exhausted_type_id ?? 0),
+    lifetimeMax: Number(r.lifetime_max ?? 0), maxSpells: Number(r.max_spells_per_year ?? 0), quotas: {},
   };
+}
+
+/** Quota of the employee type where the master sets one, else the leave type's default quota. */
+export const quotaFor = (policy: Pick<Policy, 'quota' | 'quotas'>, employmentType: string): number => policy.quotas[employmentType] ?? policy.quota;
+
+async function attachQuotas(q: { query: typeof pool.query }, policies: Policy[]): Promise<Policy[]> {
+  if (!policies.length) return policies;
+  const found = await rows(q, 'SELECT leave_type_id, employee_type, quota FROM leave_type_quotas');
+  for (const p of policies) for (const f of found) if (Number(f.leave_type_id) === p.id) p.quotas[String(f.employee_type)] = Number(f.quota);
+  return policies;
 }
 
 async function loadPolicy(q: { query: typeof pool.query }, id: number): Promise<Policy | null> {
   const [row] = await rows(q, 'SELECT * FROM leave_types WHERE id = ? LIMIT 1', [id]);
-  return row ? toPolicy(row) : null;
+  if (!row) return null;
+  const [policy] = await attachQuotas(q, [toPolicy(row)]);
+  return policy;
 }
 
 const monthsBetween = (from: string, to: string): number =>
@@ -419,6 +432,13 @@ async function checkLeave(
   if (cycleYearOf(input.endDate, emp.basis) !== cycleYear) errors.endDate ||= 'A leave cannot run across two leave years. Apply separately for each year.';
   if (daysBetween(input.startDate, input.endDate) > 366) errors.endDate ||= 'A leave can cover at most one year.';
   if ((input.startSession !== 'full' || input.endSession !== 'full') && !policy.halfDay) errors.startSession = `${policy.name} cannot be taken as a half day.`;
+  if (policy.afterExhaustedId && !errors.leaveTypeId) {
+    const base = await loadPolicy(q, policy.afterExhaustedId);
+    if (base && eligibilityProblem(base, emp, input.startDate) === null) {
+      const left = await balanceOf(q, targetId, { id: base.id, quota: quotaFor(base, emp.employmentType) }, cycleYear, 0);
+      if (left.available > 0) errors.leaveTypeId = `${policy.name} can be taken only after ${base.name} is used up. ${left.available} days of ${base.name} are still available.`;
+    }
+  }
   if (Object.keys(errors).length) throw badRequest('Please correct the highlighted fields.', errors);
 
   const rule = await dayRule(q, emp, policy, input.startDate, input.endDate);
@@ -426,6 +446,15 @@ async function checkLeave(
   if (days <= 0) throw badRequest('Please correct the highlighted fields.', { startDate: 'No working day falls in these dates.' });
   if (policy.maxConsecutive && days > policy.maxConsecutive) errors.endDate = `${policy.name} can be taken for at most ${policy.maxConsecutive} days at a time.`;
   if (policy.certDays && days > policy.certDays && !input.certificate) errors.certificate = `A medical certificate is needed for more than ${policy.certDays} days. Confirm that it will be submitted.`;
+  if (policy.lifetimeMax) {
+    const [taken] = await rows(q, "SELECT COALESCE(SUM(days_count), 0) AS n FROM leave_requests WHERE user_id = ? AND leave_type_id = ? AND status <> 'rejected' AND id <> ?", [targetId, policy.id, exceptId]);
+    const before = Number(taken?.n ?? 0);
+    if (before + days > policy.lifetimeMax) errors.endDate = `${policy.name} is limited to ${policy.lifetimeMax} days in the whole service; ${num(Math.max(0, policy.lifetimeMax - before))} days are left.`;
+  }
+  if (policy.maxSpells && !errors.endDate) {
+    const [spells] = await rows(q, "SELECT COUNT(*) AS n FROM leave_requests WHERE user_id = ? AND leave_type_id = ? AND cycle_year = ? AND status <> 'rejected' AND id <> ?", [targetId, policy.id, cycleYear, exceptId]);
+    if (Number(spells?.n ?? 0) >= policy.maxSpells) errors.startDate = `${policy.name} can be applied for at most ${policy.maxSpells} times in a leave year.`;
+  }
   if (policy.stages === 2 && !emp.reviewingManagerId) errors.leaveTypeId = 'This employee has no HoD set, which this leave type needs. Ask the administrator.';
   if (Object.keys(errors).length) throw badRequest('Please correct the highlighted fields.', errors);
 
@@ -434,9 +463,11 @@ async function checkLeave(
     [targetId, exceptId, input.endDate, input.startDate]);
   if (clash) throw new HttpError(409, 'This employee already has a leave on these dates.', 'DUPLICATE', { startDate: `Overlaps a pending or approved leave (${isoDate(clash.start_date)} to ${isoDate(clash.end_date)}).` });
 
-  const balance = await balanceOf(q, targetId, policy, cycleYear, exceptId);
+  const balance = await balanceOf(q, targetId, { id: policy.id, quota: quotaFor(policy, emp.employmentType) }, cycleYear, exceptId);
   if (policy.debited && days > balance.available) {
-    throw new HttpError(409, 'Not enough leave balance.', 'NO_BALANCE', { endDate: `${policy.name}: ${days} days asked, ${Math.max(0, balance.available)} available for ${cycleLabel(cycleYear, emp.basis)}.` });
+    const [next] = await rows(q, "SELECT name FROM leave_types WHERE after_exhausted_type_id = ? AND status = 'active' LIMIT 1", [policy.id]);
+    const hint = next ? ` After it is used up, ${next.name} can be applied for.` : '';
+    throw new HttpError(409, 'Not enough leave balance.', 'NO_BALANCE', { endDate: `${policy.name}: ${days} days asked, ${Math.max(0, balance.available)} available for ${cycleLabel(cycleYear, emp.basis)}.${hint}` });
   }
   return { days, cycleYear, policy, emp, balance };
 }
@@ -658,7 +689,7 @@ export async function listBalances(viewer: Viewer, yearRaw: unknown): Promise<{ 
   if (!Number.isInteger(year) || year < 2000 || year > 2100) throw badRequest('Choose a year between 2000 and 2100.');
   try {
     const typeRows = await rows(pool, "SELECT * FROM leave_types WHERE status = 'active' ORDER BY name");
-    const policies = typeRows.map(toPolicy);
+    const policies = await attachQuotas(pool, typeRows.map(toPolicy));
     const people = await rows(pool,
       `SELECT u.id, u.biometric_id, u.name, p.designation, p.department, p.employment_type, p.joining_date, p.profile_data
          FROM users u LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE LOWER(u.status) = 'active' ORDER BY u.name`);
@@ -680,7 +711,7 @@ export async function listBalances(viewer: Viewer, yearRaw: unknown): Promise<{ 
         const eligible = eligibilityProblem(p, emp, `${year}-12-31`) === null;
         const g = grantOf.get(`${r.id}:${p.id}`), s = sumOf.get(`${r.id}:${p.id}`);
         if (!eligible && !g && !s) { balances[String(p.id)] = null; continue; }
-        const total = g ? Number(g.total) : p.quota, carryForward = g ? Number(g.carry_forward) : 0;
+        const total = g ? Number(g.total) : quotaFor(p, emp.employmentType), carryForward = g ? Number(g.carry_forward) : 0;
         const used = Number(s?.used ?? 0), pending = Number(s?.pending ?? 0);
         balances[String(p.id)] = { total, carryForward, used, pending, available: num(total + carryForward - used - pending), eligible };
       }
@@ -715,7 +746,8 @@ export async function setBalance(req: Request, viewer: Viewer, body: unknown): P
       const policy = await loadPolicy(conn, Number(leaveTypeId));
       if (!policy) throw badRequest('Please correct the highlighted fields.', { leaveTypeId: 'Choose a leave type from the list.' });
       await rows(conn, 'SELECT id FROM users WHERE id = ? FOR UPDATE', [emp.id]);
-      const before = await balanceOf(conn, emp.id, policy, year!);
+      const quotaPolicy = { id: policy.id, quota: quotaFor(policy, emp.employmentType) };
+      const before = await balanceOf(conn, emp.id, quotaPolicy, year!);
       if (total + carryForward < before.used + before.pending) {
         throw badRequest('Please correct the highlighted fields.', { total: `Days already used or pending are ${num(before.used + before.pending)}; the grant cannot be lower.` });
       }
@@ -724,7 +756,7 @@ export async function setBalance(req: Request, viewer: Viewer, body: unknown): P
            ON DUPLICATE KEY UPDATE total = VALUES(total), carry_forward = VALUES(carry_forward)`,
         [emp.id, policy.id, year, total, carryForward],
       );
-      const after = await balanceOf(conn, emp.id, policy, year!);
+      const after = await balanceOf(conn, emp.id, quotaPolicy, year!);
       const [who] = await rows(conn, 'SELECT name, biometric_id FROM users WHERE id = ?', [emp.id]);
       const view = (b: Balance) => ({ total: b.total, carryForward: b.carryForward });
       await writeMasterAuditSql(conn, req, {

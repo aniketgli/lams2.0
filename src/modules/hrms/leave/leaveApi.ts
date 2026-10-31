@@ -24,8 +24,11 @@ export interface LeaveTypeRecord {
   minServiceMonths: number;
   maxConsecutiveDays: number;
   isDebited: boolean;
-  ccsRule: string;
-  ccsCategory: string;
+  isPaid: boolean;
+  afterExhaustedTypeId: string;
+  lifetimeMax: number;
+  maxSpellsPerYear: number;
+  quotas: Array<{ employeeType: string; quota: number }>;
   status: 'active' | 'inactive';
   updatedAt: string | null;
 }
