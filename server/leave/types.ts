@@ -6,6 +6,7 @@ import { inTransaction } from '../lib/tx';
 import { Validator } from '../lib/validate';
 import { changedFields, writeMasterAuditSql } from '../masters/audit';
 import type { ActivityScope } from '../employees/activity';
+import { COMBINES, type Combine, toCombine } from './combine';
 
 /**
  * Leave types (the Leave Policy master, table `leave_types`). Everyone signed in reads
@@ -46,6 +47,7 @@ export interface LeaveType {
   halfDayAllowed: boolean;
   medicalCertDays: number;
   sandwichRule: (typeof SANDWICH)[number];
+  combineWith: Combine;
   employeeTypes: string[];
   gender: (typeof GENDERS)[number];
   minServiceMonths: number;
@@ -83,6 +85,7 @@ export function toLeaveType(row: RowDataPacket): LeaveType {
     halfDayAllowed: Boolean(row.half_day_allowed),
     medicalCertDays: Number(row.medical_cert_days),
     sandwichRule: String(row.sandwich_rule) === 'included' ? 'included' : 'excluded',
+    combineWith: toCombine(row.combine_with),
     employeeTypes: String(row.employee_types || '').split(',').map((s) => s.trim()).filter(Boolean),
     gender: String(row.gender) as LeaveType['gender'],
     minServiceMonths: Number(row.min_service_months),
@@ -143,6 +146,7 @@ export async function parseLeaveTypeInput(body: unknown, selfId = 0): Promise<Le
   const medicalCertDays = v.int('medicalCertDays', { min: 0, max: 365 });
   const sandwichRule = v.oneOf('sandwichRule', SANDWICH);
   const gender = v.oneOf('gender', GENDERS);
+  const combineWith = v.oneOf('combineWith', COMBINES);
   const minServiceMonths = v.int('minServiceMonths', { min: 0, max: 600 });
   const maxConsecutiveDays = v.int('maxConsecutiveDays', { min: 0, max: 730 });
   const isDebited = v.bool('isDebited', true);
@@ -207,7 +211,7 @@ export async function parseLeaveTypeInput(body: unknown, selfId = 0): Promise<Le
   return {
     code, name, description: description ?? '', defaultQuota: quota, pwdQuota, pwdOnly, accrual: accrual!, maxAccumulation: maxAccumulation!, carryForward,
     maxCarryForward: carryForward ? cf : 0, encashmentAllowed, approvalStages: stages as 1 | 2, minNoticeDays: minNoticeDays!, halfDayAllowed,
-    medicalCertDays: medicalCertDays!, sandwichRule: sandwichRule!, employeeTypes, gender: gender!, minServiceMonths: minServiceMonths!,
+    medicalCertDays: medicalCertDays!, sandwichRule: sandwichRule!, combineWith: combineWith!, employeeTypes, gender: gender!, minServiceMonths: minServiceMonths!,
     maxConsecutiveDays: maxConsecutiveDays!, isDebited, isPaid, afterExhaustedTypeId, debitFromTypeId, debitFactor, lifetimeMax, maxSpellsPerYear: maxSpellsPerYear!, quotas, status: status!,
   };
 }
@@ -242,11 +246,11 @@ export async function leaveTypeOptions(): Promise<{ employeeTypes: Array<{ code:
 }
 
 const COLS = `code, name, description, default_quota, pwd_quota, accrual, max_accumulation, carry_forward, max_carry_forward, encashment_allowed, approval_stages,
-  min_notice_days, half_day_allowed, medical_cert_days, sandwich_rule, employee_types, pwd_only, gender, min_service_months, max_consecutive_days,
+  min_notice_days, half_day_allowed, medical_cert_days, sandwich_rule, combine_with, employee_types, pwd_only, gender, min_service_months, max_consecutive_days,
   is_debited, is_paid, after_exhausted_type_id, debit_from_type_id, debit_factor, lifetime_max, max_spells_per_year, status`;
 const values = (t: LeaveTypeInput) => [
   t.code, t.name, t.description || null, t.defaultQuota, t.pwdQuota, t.accrual, t.maxAccumulation, t.carryForward ? 1 : 0, t.maxCarryForward, t.encashmentAllowed ? 1 : 0,
-  t.approvalStages, t.minNoticeDays, t.halfDayAllowed ? 1 : 0, t.medicalCertDays, t.sandwichRule, t.employeeTypes.join(','), t.pwdOnly ? 1 : 0, t.gender, t.minServiceMonths,
+  t.approvalStages, t.minNoticeDays, t.halfDayAllowed ? 1 : 0, t.medicalCertDays, t.sandwichRule, t.combineWith, t.employeeTypes.join(','), t.pwdOnly ? 1 : 0, t.gender, t.minServiceMonths,
   t.maxConsecutiveDays, t.isDebited ? 1 : 0, t.isPaid ? 1 : 0, t.afterExhaustedTypeId ? Number(t.afterExhaustedTypeId) : null, t.debitFromTypeId ? Number(t.debitFromTypeId) : null, t.debitFactor, t.lifetimeMax, t.maxSpellsPerYear, t.status,
 ];
 

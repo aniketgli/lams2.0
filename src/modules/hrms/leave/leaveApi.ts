@@ -21,6 +21,7 @@ export interface LeaveTypeRecord {
   halfDayAllowed: boolean;
   medicalCertDays: number;
   sandwichRule: 'excluded' | 'included';
+  combineWith: 'none' | 'single' | 'double' | 'both';
   employeeTypes: string[];
   gender: 'all' | 'female_only' | 'male_only';
   minServiceMonths: number;

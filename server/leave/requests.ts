@@ -9,6 +9,7 @@ import type { RoleId } from '../lib/roles';
 import type { ActivityScope } from '../employees/activity';
 import { WEEK_DAYS } from '../attendance/compute';
 import { groupLeaveTypeIds, groupLeaveTypeMap } from './groups';
+import { LOOK_DAYS, type Combine, type Neighbour, combineProblem, toCombine } from './combine';
 import { SESSIONS_END, SESSIONS_START, countLeaveDays, cycleYearOf } from './days';
 
 /**
@@ -271,6 +272,7 @@ export async function listRequests(viewer: Viewer, query: { from?: unknown; to?:
 
 interface Employee {
   id: number;
+  biometricId: string;
   employmentType: string;
   gender: string;
   joining: string | null;
@@ -285,13 +287,14 @@ interface Employee {
 
 async function loadEmployee(q: { query: typeof pool.query }, userId: number): Promise<Employee> {
   const [row] = await rows(q,
-    `SELECT u.id, u.status, p.employment_type, p.joining_date, p.shift_id, p.profile_data FROM users u
+    `SELECT u.id, u.status, u.biometric_id, p.employment_type, p.joining_date, p.shift_id, p.profile_data FROM users u
        LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE u.id = ? LIMIT 1`, [userId]);
   if (!row) throw badRequest('Please correct the highlighted fields.', { userId: 'Choose an employee from the list.' });
   if (String(row.status).toLowerCase() !== 'active') throw badRequest('Please correct the highlighted fields.', { userId: 'This employee is not active.' });
   const data = profileData(row.profile_data);
   const id = (v: unknown) => (/^\d+$/.test(String(v ?? '')) ? String(v) : null);
   return {
+    biometricId: String(row.biometric_id ?? ''),
     id: Number(row.id),
     employmentType: String(row.employment_type ?? ''),
     gender: String(data.gender ?? ''),
@@ -308,7 +311,7 @@ async function loadEmployee(q: { query: typeof pool.query }, userId: number): Pr
 interface Policy {
   id: number; code: string; name: string; quota: number; pwdQuota: number | null; pwdOnly: boolean; stages: 1 | 2; minNotice: number; halfDay: boolean; certDays: number;
   sandwich: 'included' | 'excluded'; employeeTypes: string[]; gender: string; minServiceMonths: number; maxConsecutive: number; debited: boolean;
-  status: string; maxAccumulation: number; afterExhaustedId: number; accrual: string; debitFromId: number; debitFactor: number; lifetimeMax: number; maxSpells: number; quotas: Record<string, number>;
+  status: string; combineWith: Combine; maxAccumulation: number; afterExhaustedId: number; accrual: string; debitFromId: number; debitFactor: number; lifetimeMax: number; maxSpells: number; quotas: Record<string, number>;
 }
 
 function toPolicy(r: RowDataPacket): Policy {
@@ -318,7 +321,7 @@ function toPolicy(r: RowDataPacket): Policy {
     sandwich: String(r.sandwich_rule) === 'included' ? 'included' : 'excluded',
     employeeTypes: String(r.employee_types || '').split(',').map((s) => s.trim()).filter(Boolean), gender: String(r.gender),
     minServiceMonths: Number(r.min_service_months), maxConsecutive: Number(r.max_consecutive_days), debited: Boolean(r.is_debited),
-    status: String(r.status), maxAccumulation: Number(r.max_accumulation), afterExhaustedId: Number(r.after_exhausted_type_id ?? 0), accrual: String(r.accrual ?? 'yearly'),
+    status: String(r.status), combineWith: toCombine(r.combine_with), maxAccumulation: Number(r.max_accumulation), afterExhaustedId: Number(r.after_exhausted_type_id ?? 0), accrual: String(r.accrual ?? 'yearly'),
     debitFromId: Number(r.debit_from_type_id ?? 0), debitFactor: Number(r.debit_factor ?? 1),
     lifetimeMax: Number(r.lifetime_max ?? 0), maxSpells: Number(r.max_spells_per_year ?? 0), quotas: {},
   };
@@ -434,6 +437,24 @@ export function parseLeaveInput(body: unknown): LeaveInput {
   return { userId, leaveTypeId, startDate: startDate!, endDate: endDate!, startSession, endSession, reason: reason.replace(/\s+/g, ' '), certificate };
 }
 
+/** Looks at the employee's other leaves around the new one: see ./combine. */
+async function joinProblem(q: { query: typeof pool.query }, emp: Employee, policy: Policy, input: LeaveInput, targetId: number, exceptId: number): Promise<string | null> {
+  const from = addDays(input.startDate, -LOOK_DAYS);
+  const to = addDays(input.endDate, LOOK_DAYS);
+  const found = await rows(q,
+    `SELECT r.leave_type_id, r.start_date, r.end_date, t.name, t.approval_stages, t.combine_with FROM leave_requests r
+       JOIN leave_types t ON t.id = r.leave_type_id
+      WHERE r.user_id = ? AND r.status <> 'rejected' AND r.id <> ? AND r.end_date >= ? AND r.start_date <= ?`,
+    [targetId, exceptId, from, to]);
+  if (!found.length) return null;
+  const others: Neighbour[] = found.map((r) => ({
+    id: Number(r.leave_type_id), name: String(r.name), stages: Number(r.approval_stages) === 2 ? 2 : 1, combineWith: toCombine(r.combine_with), start: isoDate(r.start_date), end: isoDate(r.end_date),
+  }));
+  const { punchDates } = await import('../attendance/store'); // loaded here: the attendance module itself imports this one
+  const [rule, worked] = await Promise.all([dayRule(q, emp, policy, from, to), punchDates(emp.biometricId, from, to)]);
+  return combineProblem({ id: policy.id, name: policy.name, stages: policy.stages, combineWith: policy.combineWith }, input.startDate, input.endDate, others, rule.workingDays, rule.gazetted, worked);
+}
+
 export interface Checked { days: number; cycleYear: number; policy: Policy; emp: Employee; balance: Balance }
 
 /** Every rule of a leave application. Throws a field-level 400 / 409 when one fails. */
@@ -491,6 +512,9 @@ async function checkLeave(
     "SELECT id, start_date, end_date FROM leave_requests WHERE user_id = ? AND status <> 'rejected' AND id <> ? AND start_date <= ? AND end_date >= ? LIMIT 1",
     [targetId, exceptId, input.endDate, input.startDate]);
   if (clash) throw new HttpError(409, 'This employee already has a leave on these dates.', 'DUPLICATE', { startDate: `Overlaps a pending or approved leave (${isoDate(clash.start_date)} to ${isoDate(clash.end_date)}).` });
+
+  const joined = await joinProblem(q, emp, policy, input, targetId, exceptId);
+  if (joined) throw new HttpError(409, 'This leave cannot be joined with the leave next to it.', 'COMBINE', { startDate: joined });
 
   const balance = await balanceOf(q, targetId, { id: policy.id, quota: creditedQuota(policy, emp.employmentType, cycleYear, emp.basis, input.startDate, emp.isPwd) }, cycleYear, exceptId);
   if (policy.debitFromId) {
