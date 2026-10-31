@@ -164,11 +164,11 @@ export const BiometricMachinesPanel: React.FC<{ readOnly: boolean }> = ({ readOn
           <form id="machine-editor" onSubmit={save} className="grid grid-cols-1 sm:grid-cols-2 gap-4" noValidate>
             {formMessage && <p role="alert" className="sm:col-span-2 rounded-lg border border-error-border bg-error-subtle px-3 py-2 text-xs text-error">{formMessage}</p>}
             <Input label="Device ID" required maxLength={64} value={form.id} error={errors.id} disabled={Boolean(editing)}
-              helperText={editing ? 'The device ID cannot be changed.' : 'e.g. BIO-01'} onChange={(e) => set('id', e.target.value)} />
-            <Input label="Short name" required maxLength={80} value={form.shortName} error={errors.shortName} helperText="e.g. MAIN-GATE" onChange={(e) => set('shortName', e.target.value)} />
+              placeholder="e.g. BIO-01" onChange={(e) => set('id', e.target.value)} />
+            <Input label="Short name" required maxLength={80} value={form.shortName} error={errors.shortName} placeholder="e.g. MAIN-GATE" onChange={(e) => set('shortName', e.target.value)} />
             <Input label="Device full name" required maxLength={255} value={form.fullName} error={errors.fullName} onChange={(e) => set('fullName', e.target.value)} containerClassName="sm:col-span-2" />
             <Input label="Serial number" required maxLength={120} value={form.serialNumber} error={errors.serialNumber} onChange={(e) => set('serialNumber', e.target.value)} />
-            <Input label="IP address" required maxLength={45} value={form.ipAddress} error={errors.ipAddress} placeholder="192.168.1.100" onChange={(e) => set('ipAddress', e.target.value)} />
+            <Input label="IP address" required maxLength={45} value={form.ipAddress} error={errors.ipAddress} placeholder="e.g. 192.168.1.100" onChange={(e) => set('ipAddress', e.target.value)} />
             <Select label="Purpose" required value={form.purpose} error={errors.purpose} onChange={(v: MachinePurpose) => set('purpose', v)}
               options={Object.entries(PURPOSE_LABEL).map(([value, label]) => ({ label, value }))} />
             <Select label="Status" required value={form.status} error={errors.status} onChange={(v: MasterStatus) => set('status', v)}
