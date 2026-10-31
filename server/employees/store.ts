@@ -242,6 +242,7 @@ function profileDataFor(input: EmployeeInput, layout: FormLayout, refs: Resolved
     hodName: refs.hodName,
     validUntilDate: input.validUntilDate,
     isOnProbation: input.isOnProbation || undefined,
+    isPwd: input.isPwd || undefined,
     probationEndDate: input.probationEndDate,
     isPhDEnrolled: input.isPhDEnrolled || undefined,
     piName: input.piName ?? (layout === 'researcher' ? refs.reportingManagerName : null),

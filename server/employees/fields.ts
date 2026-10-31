@@ -78,6 +78,8 @@ export interface EmployeeInput {
   hodName: string | null;
   validUntilDate: string | null;
   isOnProbation: boolean;
+  /** Person with disability (PwD); decides the leave quota and special leave. */
+  isPwd: boolean;
   probationEndDate: string | null;
   isPhDEnrolled: boolean;
   piName: string | null;
@@ -179,6 +181,7 @@ export function parseEmployeeInput(body: unknown, layout: FormLayout | null, tod
   const validUntilDate = validUntilWanted ? v.date('validUntilDate') : null;
   if (validUntilDate && joiningDate && validUntilDate < joiningDate) v.errors.validUntilDate ||= 'Valid up to must be on or after the date of joining.';
 
+  const isPwd = v.bool('isPwd');
   const isOnProbation = rules?.probation ? v.bool('isOnProbation') : false;
   const probationEndDate = isOnProbation ? v.date('probationEndDate') : null;
   if (probationEndDate && joiningDate && probationEndDate < joiningDate) v.errors.probationEndDate ||= 'Probation must end after the date of joining.';
@@ -192,7 +195,7 @@ export function parseEmployeeInput(body: unknown, layout: FormLayout | null, tod
   return {
     biometricId, salutation, name, email: email!, gender, dob: dob!, phone: phone!, employmentType, shiftId,
     leaveCycle: leaveCycle!, joiningDate: joiningDate!, institute, department, designation, employeeCategory,
-    permanentEmploymentType, reportingManagerId, reviewingManagerId, hodName, validUntilDate, isOnProbation,
+    permanentEmploymentType, reportingManagerId, reviewingManagerId, hodName, validUntilDate, isOnProbation, isPwd,
     probationEndDate, isPhDEnrolled, piName, courseProgram, courseBatch, enrolledThrough, guideSupervisor,
   };
 }
@@ -206,7 +209,7 @@ export function accountValidUpto(input: EmployeeInput, layout: FormLayout): stri
 /** Keys of profile_data that come from the form. Anything else already stored there is kept. */
 export const PROFILE_DATA_KEYS = [
   'gender', 'dob', 'leaveCycle', 'leaveCycleBasis', 'employeeCategory', 'permanentEmploymentType',
-  'reportingManagerId', 'reviewingManagerId', 'hodName', 'validUntilDate', 'isOnProbation', 'probationEndDate',
+  'reportingManagerId', 'reviewingManagerId', 'hodName', 'validUntilDate', 'isOnProbation', 'isPwd', 'probationEndDate',
   'isPhDEnrolled', 'piName', 'courseProgram', 'courseBatch', 'enrolledThrough', 'guideSupervisor', 'retirementDate',
 ] as const;
 

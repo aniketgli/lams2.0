@@ -695,6 +695,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     joiningDate: '',
     dob: '',
     isOnProbation: false,
+    isPwd: false,
     probationEndDate: '',
     validUntilDate: '',
     piName: '',
@@ -1327,6 +1328,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       joiningDate: u.joiningDate || '',
       dob: u.dob || '',
       isOnProbation: Boolean(u.isOnProbation),
+      isPwd: Boolean(u.isPwd),
       probationEndDate: u.probationEndDate || '',
       validUntilDate: u.validUntilDate || '',
       piName: u.piName || '',
@@ -1476,6 +1478,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       joiningDate: '',
       dob: '',
       isOnProbation: false,
+      isPwd: false,
       probationEndDate: '',
       validUntilDate: '',
       piName: '',
@@ -3168,6 +3171,20 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                       />
                       </div>
                       {fieldError('gender')}
+                    </div>
+
+                    {/* Person with disability */}
+                    <div>
+                      <label className="block text-slate-700 font-bold mb-1 text-xs">Person with disability (PwD)</label>
+                      <div className={controlBox('isPwd')} title={errorOf('isPwd') || undefined}>
+                      <AppSelect
+                        value={newUserForm.isPwd ? 'yes' : 'no'}
+                        onChange={(val) => setField('isPwd', val === 'yes')}
+                        options={[{ label: 'No', value: 'no' }, { label: 'Yes', value: 'yes' }]}
+                        className="w-full"
+                      />
+                      </div>
+                      {fieldError('isPwd')}
                     </div>
 
                     {/* Date of Birth (DOB) */}

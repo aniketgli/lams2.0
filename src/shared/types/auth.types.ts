@@ -44,6 +44,7 @@ export interface User {
   joiningDate?: string;
   dob?: string;
   isOnProbation?: boolean;
+  isPwd?: boolean;
   probationEndDate?: string;
   validUntilDate?: string;
   piName?: string;

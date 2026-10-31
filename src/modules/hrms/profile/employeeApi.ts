@@ -59,6 +59,7 @@ export function employeePayload(user: Partial<User>): Record<string, unknown> {
     hodName: user.hodName,
     validUntilDate: user.validUntilDate,
     isOnProbation: Boolean(user.isOnProbation),
+    isPwd: Boolean(user.isPwd),
     probationEndDate: user.probationEndDate,
     isPhDEnrolled: Boolean(user.isPhDEnrolled),
     piName: user.piName,
@@ -71,7 +72,7 @@ export function employeePayload(user: Partial<User>): Record<string, unknown> {
 
 /** Readable names for server field keys, used in the summary message. */
 export const EMPLOYEE_FIELD_LABELS: Record<string, string> = {
-  biometricId: 'Biometric ID', suffix: 'Salutation', name: 'Full name', email: 'Email', gender: 'Gender', dob: 'Date of birth',
+  biometricId: 'Biometric ID', suffix: 'Salutation', name: 'Full name', email: 'Email', gender: 'Gender', isPwd: 'Person with disability', dob: 'Date of birth',
   phone: 'Mobile number', employmentType: 'Employee type', shiftId: 'Shift', leaveCycle: 'Leave year type',
   joiningDate: 'Date of joining', institute: 'Organization', department: 'Department / project',
   designation: 'Designation', employeeCategory: 'Cadre', permanentEmploymentType: 'Category',
