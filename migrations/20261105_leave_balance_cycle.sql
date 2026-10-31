@@ -7,4 +7,7 @@ ALTER TABLE leave_balances
 UPDATE leave_balances b
   JOIN users u ON u.id = b.user_id
   JOIN employee_profiles p ON p.biometric_id = u.biometric_id
-   SET b.cycle_type = IF(JSON_UNQUOTE(JSON_EXTRACT(p.profile_data, '$.leaveCycle')) = 'FY', 'FY', 'CY');
+   SET b.cycle_type = IF(JSON_UNQUOTE(JSON_EXTRACT(p.profile_data, '$.leaveCycle')) = 'FY', 'FY', 'CY')
+ WHERE b.id > 0;   -- keeps MySQL Workbench's safe-update mode (error 1175) from refusing the statement
+
+-- If the ALTER above already ran (Duplicate column name), run only the UPDATE.
