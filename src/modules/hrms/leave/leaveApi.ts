@@ -1,4 +1,5 @@
 import { api } from '../../../shared/services/api';
+import { downloadCsv } from '../../../shared/services/activityApi';
 
 export type LeaveStages = 1 | 2;
 export type LeaveAccrual = 'yearly' | 'half_yearly' | 'quarterly' | 'monthly' | 'upfront';
@@ -106,6 +107,7 @@ export interface LeaveRequest {
   cycleYear: number;
   reason: string;
   certificate: boolean;
+  certificateName: string | null;
   stages: 1 | 2;
   status: LeaveStatus;
   appliedAt: string;
@@ -143,7 +145,8 @@ export interface LeaveInput {
   startSession: 'full' | 'second_half';
   endSession: 'full' | 'first_half';
   reason: string;
-  certificate: boolean;
+  /** Medical certificate chosen in the form (a data URL); the server checks the real file type and size. */
+  certificateFile?: { name: string; data: string } | null;
 }
 
 export interface LeaveBalance { total: number; carryForward: number; used: number; pending: number; available: number }
@@ -191,7 +194,7 @@ export interface ImportReview {
 
 const base = '/hrms/leave';
 const one = (id: string) => `${base}/requests/${encodeURIComponent(id)}`;
-const body = (i: LeaveInput) => ({ ...i, userId: i.userId || undefined });
+const body = (i: LeaveInput) => ({ ...i, userId: i.userId || undefined, certificateFile: i.certificateFile || undefined });
 
 export const leaveApi = {
   list: (from: string, to: string) => api<LeaveList>(`${base}/requests?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
@@ -205,6 +208,7 @@ export const leaveApi = {
     const q = new URLSearchParams(Object.entries(input).filter(([, v]) => v) as [string, string][]);
     return api<LeavePreview>(`${base}/preview?${q.toString()}`);
   },
+  downloadCertificate: (id: string) => downloadCsv(`${one(id)}/certificate`, 'medical-certificate'),
   balances: (year: number) => api<BalanceList>(`${base}/balances?year=${year}`),
   importTemplate: (year: number, cycle: 'CY' | 'FY') =>
     api<{ year: number; headers: string[]; rows: Array<Array<string | number>> }>(`${base}/balances/import/template?year=${year}&cycle=${cycle}`),
