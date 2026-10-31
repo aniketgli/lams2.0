@@ -336,6 +336,16 @@ export const quotaFor = (policy: Pick<Policy, 'quota' | 'quotas' | 'pwdQuota'>, 
  * Days credited so far in the leave year. A half-yearly type credits half the yearly quota at the start of each half
  * (1 January and 1 July; 1 April and 1 October for a financial-year employee); other types credit everything upfront.
  */
+/**
+ * The date a year's balance is read at: the latest balance for the running year (today), the closing balance for a
+ * year that has ended (its last day: 31 Dec, or 31 Mar for a financial year) and the opening one for a year not yet begun.
+ */
+export function balanceAsOn(year: number, basis: 'CY' | 'FY', today: string): string {
+  const start = basis === 'FY' ? `${year}-04-01` : `${year}-01-01`;
+  const end = basis === 'FY' ? `${year + 1}-03-31` : `${year}-12-31`;
+  return today < start ? start : today > end ? end : today;
+}
+
 export function creditedQuota(policy: Pick<Policy, 'quota' | 'quotas' | 'pwdQuota' | 'accrual'>, employmentType: string, cycleYear: number, basis: 'CY' | 'FY', asOf: string, isPwd = false): number {
   const yearly = quotaFor(policy, employmentType, isPwd);
   if (policy.accrual !== 'half_yearly') return yearly;
@@ -752,7 +762,7 @@ export async function applicableEmployees(viewer: Viewer): Promise<{ id: string;
 // ---------------------------------------------------------------------------
 
 export interface BalanceRow {
-  userId: string; biometricId: string; name: string; designation: string; department: string; employmentType: string; basis: 'CY' | 'FY'; cycle: string;
+  userId: string; biometricId: string; name: string; designation: string; department: string; employmentType: string; basis: 'CY' | 'FY'; cycle: string; asOn: string;
   balances: Record<string, (Balance & { eligible: boolean }) | null>;
 }
 
@@ -794,13 +804,13 @@ export async function listBalances(viewer: Viewer, yearRaw: unknown): Promise<{ 
         const eligible = eligibilityProblem(p, emp, `${year}-12-31`) === null;
         const g = grantOf.get(`${r.id}:${p.id}`), s = sumOf.get(`${r.id}:${p.id}`);
         if (!eligible && !g && !s) { balances[String(p.id)] = null; continue; }
-        const asOf = year < Number(today.slice(0, 4)) ? `${year}-12-31` : year > Number(today.slice(0, 4)) ? `${year}-01-01` : today;
+        const asOf = balanceAsOn(year, basis, today);
         const total = g ? Number(g.total) : creditedQuota(p, emp.employmentType, year, basis, asOf, emp.isPwd), carryForward = g ? Number(g.carry_forward) : 0;
         const l = linkedOf.get(`${r.id}:${p.id}`);
         const used = Number(s?.used ?? 0) + Number(l?.used ?? 0), pending = Number(s?.pending ?? 0) + Number(l?.pending ?? 0);
         balances[String(p.id)] = { total, carryForward, used: num(used), pending: num(pending), available: num(total + carryForward - used - pending), eligible };
       }
-      return { userId: String(r.id), biometricId: String(r.biometric_id), name: String(r.name), designation: String(r.designation ?? ''), department: String(r.department ?? ''), employmentType: String(r.employment_type ?? ''), basis, cycle: cycleLabel(year, basis), balances };
+      return { userId: String(r.id), biometricId: String(r.biometric_id), name: String(r.name), designation: String(r.designation ?? ''), department: String(r.department ?? ''), employmentType: String(r.employment_type ?? ''), basis, cycle: cycleLabel(year, basis), asOn: balanceAsOn(year, basis, today), balances };
     });
     const found = await rows(pool, 'SELECT cycle_year AS y FROM leave_balances UNION SELECT cycle_year AS y FROM leave_requests');
     const years = [...new Set([...found.map((f) => Number(f.y)), Number(today.slice(0, 4)), year])].sort((a, b) => b - a);
@@ -813,7 +823,7 @@ export async function listBalances(viewer: Viewer, yearRaw: unknown): Promise<{ 
 }
 
 export interface HistoryYear {
-  year: number; cycleType: 'CY' | 'FY'; cycle: string;
+  year: number; cycleType: 'CY' | 'FY'; cycle: string; asOn: string;
   types: Array<{ code: string; name: string; isDebited: boolean; total: number; carryForward: number; used: number; pending: number; available: number }>;
 }
 
@@ -846,7 +856,7 @@ export async function leaveHistory(viewer: Viewer, userIdRaw: unknown): Promise<
     const yearsSeen = [...new Set([...grants, ...sums, ...linked].map((r) => Number(r.cycle_year)))].sort((a, b) => b - a);
     const years: HistoryYear[] = yearsSeen.map((year) => {
       const cycleType: 'CY' | 'FY' = grants.find((g) => Number(g.cycle_year) === year)?.cycle_type === 'FY' ? 'FY' : grants.find((g) => Number(g.cycle_year) === year) ? 'CY' : basis;
-      const asOf = year < Number(today.slice(0, 4)) ? `${year}-12-31` : year > Number(today.slice(0, 4)) ? `${year}-01-01` : today;
+      const asOf = balanceAsOn(year, cycleType, today);
       const list: HistoryYear['types'] = [];
       for (const p of policies) {
         const g = grants.find((x) => Number(x.cycle_year) === year && Number(x.leave_type_id) === p.id);
@@ -858,7 +868,7 @@ export async function leaveHistory(viewer: Viewer, userIdRaw: unknown): Promise<
         const used = num(Number(s?.used ?? 0) + Number(l?.used ?? 0)), pending = num(Number(s?.pending ?? 0) + Number(l?.pending ?? 0));
         list.push({ code: p.code, name: p.name, isDebited: p.debited, total, carryForward, used, pending, available: num(total + carryForward - used - pending) });
       }
-      return { year, cycleType, cycle: cycleLabel(year, cycleType), types: list };
+      return { year, cycleType, cycle: cycleLabel(year, cycleType), asOn: asOf, types: list };
     });
     return { employee: { id: String(person.id), name: String(person.name), biometricId: String(person.biometric_id) }, years };
   } catch (error) {
