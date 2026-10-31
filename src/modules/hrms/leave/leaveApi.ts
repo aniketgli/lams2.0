@@ -178,11 +178,6 @@ export interface BalanceList {
   rows: BalanceRow[];
 }
 
-export interface HistoryYear {
-  year: number; cycleType: 'CY' | 'FY'; cycle: string; asOn: string;
-  types: Array<{ code: string; name: string; isDebited: boolean; total: number; carryForward: number; used: number; pending: number; available: number }>;
-}
-export interface LeaveHistory { employee: { id: string; name: string; biometricId: string }; years: HistoryYear[] }
 export type ImportStrategy = 'set' | 'add' | 'deduct';
 export interface ImportRow {
   line: number; biometricId: string; employee: string; cycle: string; leaveCode: string; leaveType: string; value: string;
@@ -213,7 +208,6 @@ export const leaveApi = {
   balances: (year: number) => api<BalanceList>(`${base}/balances?year=${year}`),
   importTemplate: (year: number, cycle: 'CY' | 'FY') =>
     api<{ year: number; headers: string[]; rows: Array<Array<string | number>> }>(`${base}/balances/import/template?year=${year}&cycle=${cycle}`),
-  history: (userId: string) => api<LeaveHistory>(`${base}/balances/history?userId=${encodeURIComponent(userId)}`),
   reviewImport: (input: { strategy: ImportStrategy; csv: string }) =>
     api<ImportReview>(`${base}/balances/import/review`, { method: 'POST', body: input }),
   applyImport: (input: { strategy: ImportStrategy; csv: string }) =>
