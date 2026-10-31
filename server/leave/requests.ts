@@ -779,6 +779,7 @@ export interface BalanceRow {
 
 /** Balances of the people the viewer may see (self; managers their team; administrator and auditor everyone) for one leave year. */
 export async function listBalances(viewer: Viewer, yearRaw: unknown): Promise<{ year: number; years: number[]; employeeTypes: Array<{ code: string; name: string }>; types: Array<{ id: string; code: string; name: string; isDebited: boolean }>; rows: BalanceRow[] }> {
+  if (viewer.role !== 'administrator' && viewer.role !== 'audit') throw forbidden('Only an administrator or auditor can see leave balances.');
   const year = yearRaw === undefined || yearRaw === '' ? Number(todayInIndia().slice(0, 4)) : Number(yearRaw);
   if (!Number.isInteger(year) || year < 2000 || year > 2100) throw badRequest('Choose a year between 2000 and 2100.');
   try {
