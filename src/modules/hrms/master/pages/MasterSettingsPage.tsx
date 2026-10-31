@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Building2, Clock, Cpu, FileText, Sliders, Users } from 'lucide-react';
+import { Building2, Clock, Cpu, FileText, Layers, Sliders, Users } from 'lucide-react';
 import { useSession } from '../../../../auth/SessionContext';
 import { PageHeader } from '../../../../shared/components/PageHeader';
 import { ActivityLogPanel, ActivitySource } from '../../../../shared/components/ActivityLogPanel';
 import { activityEndpoints } from '../../../../shared/services/activityApi';
 import { LeavePolicyMaster } from '../components/LeavePolicyMaster';
+import { LeaveGroupsPanel } from '../components/LeaveGroupsPanel';
 import { ShiftsPanel } from '../components/ShiftsPanel';
 import { BiometricMachinesPanel } from '../components/BiometricMachinesPanel';
 import { MasterRegistryPanel } from '../components/MasterRegistryPanel';
@@ -14,6 +15,12 @@ import { EmailSettingsCard } from '../components/EmailSettingsCard';
 import { DefaultPasswordCard } from '../components/DefaultPasswordCard';
 import { TabStrip } from '../components/masterUi';
 import { MasterCatalog, masterApi } from '../masterApi';
+
+type LeaveTab = 'groups' | 'types';
+const LEAVE_TABS: { id: LeaveTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { id: 'groups', label: 'Leave Groups', icon: Layers },
+  { id: 'types', label: 'Leave Types', icon: FileText },
+];
 
 type Section = 'shifts' | 'biometric' | 'leave' | 'profile' | 'organization' | 'activity';
 
@@ -35,6 +42,7 @@ export const MasterSettingsPage: React.FC = () => {
   const { session } = useSession();
   const readOnly = session?.activeRole !== 'administrator';
   const [section, setSection] = useState<Section>('shifts');
+  const [leaveTab, setLeaveTab] = useState<LeaveTab>('groups');
   const [catalog, setCatalog] = useState<MasterCatalog | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
 
@@ -69,7 +77,13 @@ export const MasterSettingsPage: React.FC = () => {
 
       {section === 'shifts' && <ShiftsPanel readOnly={readOnly} />}
       {section === 'biometric' && <BiometricMachinesPanel readOnly={readOnly} />}
-      {section === 'leave' && <LeavePolicyMaster readOnly={readOnly} />}
+      {section === 'leave' && (
+        <>
+          <TabStrip tabs={LEAVE_TABS} value={leaveTab} onChange={setLeaveTab} size="sm" />
+          {leaveTab === 'groups' && <LeaveGroupsPanel readOnly={readOnly} />}
+          {leaveTab === 'types' && <LeavePolicyMaster readOnly={readOnly} />}
+        </>
+      )}
       {section === 'organization' && (
         <>
           <OrganizationPanel readOnly={readOnly} />

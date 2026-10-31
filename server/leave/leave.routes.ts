@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express';
+import { pool } from '../../src/db';
 import { asyncHandler } from '../lib/http';
 import { Validator } from '../lib/validate';
 import { requireActiveRole, requireAuth } from '../middleware/auth.middleware';
@@ -6,6 +7,9 @@ import { activityCsv, activityTable, listActivity, parseActivityFilter } from '.
 import {
   LEAVE_TYPE_SCOPE, createLeaveType, deleteLeaveType, leaveTypeId, leaveTypeOptions, listLeaveTypes, updateLeaveType,
 } from './types';
+import {
+  LEAVE_GROUP_SCOPE, createLeaveGroup, deleteLeaveGroup, groupLeaveTypeIdsOfUser, listLeaveGroups, updateLeaveGroup,
+} from './groups';
 import {
   LEAVE_SCOPE, applicableEmployees, createRequest, decideRequest, deleteRequest, listBalances, listRequests, previewLeave, requestId, setBalance,
   undoDecision, updateRequest,
@@ -63,6 +67,36 @@ router.delete('/leave-types/:id', ...isAdmin, asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Leave type deleted.' });
 }));
 
+// ---- Leave groups: everyone signed in reads, administrator changes, auditor reads the log ----------
+router.get('/leave-groups', requireAuth, asyncHandler(async (_req, res) => {
+  res.json(await listLeaveGroups());
+}));
+router.get('/leave-groups/activity', ...isAuditor, asyncHandler(async (req, res) => {
+  res.json(await listActivity(parseActivityFilter(req.query as Record<string, unknown>, LEAVE_GROUP_SCOPE), LEAVE_GROUP_SCOPE));
+}));
+router.get('/leave-groups/activity.csv', ...isAuditor, asyncHandler(async (req, res) => {
+  sendCsv(res, await activityCsv(req, parseActivityFilter(req.query as Record<string, unknown>, LEAVE_GROUP_SCOPE), LEAVE_GROUP_SCOPE));
+}));
+router.get('/leave-groups/activity/export-pdf', ...isAuditor, asyncHandler(async (req, res) => {
+  const table = await activityTable(req, parseActivityFilter(req.query as Record<string, unknown>, LEAVE_GROUP_SCOPE), 'pdf', LEAVE_GROUP_SCOPE);
+  res.json({ generatedAt: new Date().toISOString(), ...table });
+}));
+router.post('/leave-groups', ...isAdmin, asyncHandler(async (req, res) => {
+  const group = await createLeaveGroup(req, req.body);
+  res.status(201).json({ group, message: `Leave group "${group.name}" created.` });
+}));
+router.put('/leave-groups/:id', ...isAdmin, asyncHandler(async (req, res) => {
+  const group = await updateLeaveGroup(req, leaveTypeId(req.params.id), req.body);
+  res.json({ group, message: `Leave group "${group.name}" updated.` });
+}));
+router.delete('/leave-groups/:id', ...isAdmin, asyncHandler(async (req, res) => {
+  const v = new Validator(req.body ?? {});
+  const reason = v.optionalString('reason', { max: 500 });
+  v.assert();
+  await deleteLeaveGroup(req, leaveTypeId(req.params.id), reason);
+  res.json({ success: true, message: 'Leave group deleted.' });
+}));
+
 // ---- Leave requests and balances -------------------------------------------------------------
 const viewerOf = (req: Request) => ({ id: req.auth!.account.id, role: req.auth!.activeRole });
 
@@ -70,7 +104,9 @@ router.get('/leave/requests', requireAuth, asyncHandler(async (req, res) => {
   const q = req.query as Record<string, unknown>;
   const viewer = viewerOf(req);
   const [list, employees, types] = await Promise.all([listRequests(viewer, { from: q.from, to: q.to }), applicableEmployees(viewer), listLeaveTypes()]);
-  res.json({ ...list, employees, types: types.filter((t) => t.status === 'active') });
+  // A staff member applies only for the leave types of their own leave group.
+  const own = viewer.role === 'general_staff' ? await groupLeaveTypeIdsOfUser(pool, viewer.id) : null;
+  res.json({ ...list, employees, types: types.filter((t) => t.status === 'active' && (!own || own.has(Number(t.id)))) });
 }));
 
 router.get('/leave/preview', requireAuth, asyncHandler(async (req, res) => {

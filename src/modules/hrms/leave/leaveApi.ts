@@ -51,6 +51,34 @@ export const leaveTypeApi = {
   remove: (id: string, reason?: string) => api<{ message: string }>(`/hrms/leave-types/${encodeURIComponent(id)}`, { method: 'DELETE', body: { reason } }),
 };
 
+// ---- Leave groups ---------------------------------------------------------------------------------
+
+export interface LeaveGroupRecord {
+  id: string;
+  code: string;
+  name: string;
+  leaveYear: 'CY' | 'FY';
+  leaveTypeIds: string[];
+  leaves: Array<{ id: string; code: string; name: string }>;
+  status: 'active' | 'inactive';
+  employeeCount: number;
+  updatedAt: string | null;
+}
+
+export type LeaveGroupInput = Pick<LeaveGroupRecord, 'code' | 'name' | 'leaveYear' | 'leaveTypeIds' | 'status'> & { reason?: string };
+
+export interface LeaveGroupList {
+  groups: LeaveGroupRecord[];
+  leaveTypes: Array<{ id: string; code: string; name: string }>;
+}
+
+export const leaveGroupApi = {
+  list: () => api<LeaveGroupList>('/hrms/leave-groups'),
+  create: (input: LeaveGroupInput) => api<{ group: LeaveGroupRecord; message: string }>('/hrms/leave-groups', { method: 'POST', body: input }),
+  update: (id: string, input: LeaveGroupInput) => api<{ group: LeaveGroupRecord; message: string }>(`/hrms/leave-groups/${encodeURIComponent(id)}`, { method: 'PUT', body: input }),
+  remove: (id: string, reason?: string) => api<{ message: string }>(`/hrms/leave-groups/${encodeURIComponent(id)}`, { method: 'DELETE', body: { reason } }),
+};
+
 // ---- Leave requests -----------------------------------------------------------------------------
 
 export type LeaveStatus = 'pending_l1' | 'pending_l2' | 'approved' | 'rejected';

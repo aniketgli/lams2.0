@@ -73,6 +73,8 @@ export interface ResolvedReferences {
   reviewingManagerId: string | null;
   hodName: string | null;
   reportingManagerName: string | null;
+  /** Leave year of the employee's leave group. */
+  leaveCycle: 'CY' | 'FY';
 }
 
 /**
@@ -90,6 +92,13 @@ export async function checkReferences(q: Querier, input: EmployeeInput, layout: 
 
   const [shift] = await rows(q, 'SELECT id, status FROM shifts WHERE id = ? LIMIT 1', [Number(input.shiftId)]);
   if (!shift || String(shift.status).toLowerCase() !== 'active') errors.shiftId = 'Choose an active shift.';
+
+  let leaveCycle: 'CY' | 'FY' = 'CY';
+  if (input.leaveGroup) {
+    const [group] = await rows(q, "SELECT leave_year FROM leave_groups WHERE code = ? AND status = 'active' LIMIT 1", [input.leaveGroup]);
+    if (!group) errors.leaveGroup = 'Choose an active leave group from Master Settings.';
+    else leaveCycle = String(group.leave_year) === 'FY' ? 'FY' : 'CY';
+  }
 
   const masterChecks: [keyof EmployeeInput, MasterRef | undefined, string][] = [
     ['department', rules.department, rules.department === 'projects' ? 'project' : 'department'],
@@ -176,5 +185,5 @@ export async function checkReferences(q: Querier, input: EmployeeInput, layout: 
   }
 
   if (Object.keys(errors).length) throw badRequest('Please correct the highlighted fields.', errors);
-  return { reviewingManagerId: rules.hod ? reviewingManagerId : null, hodName, reportingManagerName };
+  return { reviewingManagerId: rules.hod ? reviewingManagerId : null, hodName, reportingManagerName, leaveCycle };
 }

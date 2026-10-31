@@ -339,6 +339,12 @@ export async function deleteLeaveType(req: Request, id: number, reason: string |
       if ((await leaveTypeUsage(conn, id)) > 0) {
         throw new HttpError(409, 'This leave type is used by balances or requests. Make it Inactive instead of deleting it.', 'IN_USE');
       }
+      try {
+        const [grouped] = await conn.query<RowDataPacket[]>('SELECT g.name FROM leave_group_types t JOIN leave_groups g ON g.id = t.group_id WHERE t.leave_type_id = ? LIMIT 1', [id]);
+        if (grouped[0]) throw new HttpError(409, `This leave type is part of the leave group “${grouped[0].name}”. Remove it from the group first.`, 'IN_USE');
+      } catch (error) {
+        if ((error as { code?: string })?.code !== 'ER_NO_SUCH_TABLE') throw error;
+      }
       const [linked] = await conn.query<RowDataPacket[]>('SELECT name FROM leave_types WHERE after_exhausted_type_id = ? OR debit_from_type_id = ? LIMIT 1', [id, id]);
       if (linked[0]) throw new HttpError(409, `“${linked[0].name}” depends on this leave type. Change it first.`, 'IN_USE');
       await conn.query('DELETE FROM leave_type_quotas WHERE leave_type_id = ?', [id]);

@@ -233,8 +233,9 @@ function profileDataFor(input: EmployeeInput, layout: FormLayout, refs: Resolved
   const fromForm: Record<string, unknown> = {
     gender: input.gender,
     dob: input.dob,
-    leaveCycle: input.leaveCycle,
-    leaveCycleBasis: input.leaveCycle === 'FY' ? 'financial_year' : 'calendar_year',
+    leaveGroup: input.leaveGroup,
+    leaveCycle: refs.leaveCycle,
+    leaveCycleBasis: refs.leaveCycle === 'FY' ? 'financial_year' : 'calendar_year',
     employeeCategory: input.employeeCategory,
     permanentEmploymentType: input.permanentEmploymentType,
     reportingManagerId: input.reportingManagerId,
