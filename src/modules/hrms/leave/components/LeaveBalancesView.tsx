@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pencil } from 'lucide-react';
+import { History, Pencil } from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
 import { DataTable, Input, Modal, Select } from '../../../../shared/components';
 import type { ColumnDef } from '../../../../shared/components';
@@ -11,6 +11,7 @@ import { downloadCsvText, downloadTablePdf, printedAt, toCsvText } from '../../.
 import { NoticeBar, useNotice } from '../../master/components/masterUi';
 import { BalanceList, BalanceRow, leaveApi } from '../leaveApi';
 import { LeaveImportModal } from './LeaveImportModal';
+import { LeaveHistoryModal } from './LeaveHistoryModal';
 
 /**
  * Leave balances for one leave year. Used and pending days come from the requests; the
@@ -47,6 +48,7 @@ export const LeaveBalancesView: React.FC<{ importSignal?: number }> = ({ importS
   useEffect(() => { void load(); }, [load, role]);
 
   const [importing, setImporting] = useState(false);
+  const [historyOf, setHistoryOf] = useState<{ id: string; name: string } | null>(null);
   useEffect(() => { if (importSignal > 0 && isAdmin) setImporting(true); }, [importSignal, isAdmin]);
 
   const [search, setSearch] = useState('');
@@ -122,6 +124,13 @@ export const LeaveBalancesView: React.FC<{ importSignal?: number }> = ({ importS
         ) : cell;
       },
     })),
+    {
+      key: 'history', header: 'History', width: '70px', align: 'center' as const,
+      render: (r: BalanceRow) => (
+        <button type="button" onClick={() => setHistoryOf({ id: r.userId, name: r.name })} title="Year-wise leave history" aria-label={`Leave history of ${r.name}`}
+          className="p-1.5 rounded-lg text-slate-500 hover:text-primary hover:bg-slate-50 cursor-pointer"><History className="w-4 h-4" /></button>
+      ),
+    },
   ];
 
   const exportHeaders = ['Biometric ID', 'Employee', 'Department', 'Leave year', ...types.flatMap((t) => [`${t.code} total`, `${t.code} used`, `${t.code} pending`, `${t.code} available`])];
@@ -137,8 +146,9 @@ export const LeaveBalancesView: React.FC<{ importSignal?: number }> = ({ importS
   return (
     <div className="space-y-5">
       <NoticeBar notice={notice} onClose={clearNotice} />
+      <LeaveHistoryModal userId={historyOf?.id ?? null} name={historyOf?.name ?? ''} onClose={() => setHistoryOf(null)} />
       {isAdmin && (
-        <LeaveImportModal open={importing} year={year} data={data} onClose={() => setImporting(false)}
+        <LeaveImportModal open={importing} year={year} onClose={() => setImporting(false)}
           onImported={(message) => { setImporting(false); showNotice('success', message); void load(true); }} />
       )}
       {error && <div role="alert" className="px-4 py-3 rounded-2xl border text-xs font-semibold bg-error-subtle border-error-border text-error">{error}</div>}
@@ -147,7 +157,7 @@ export const LeaveBalancesView: React.FC<{ importSignal?: number }> = ({ importS
         start={(
           <div className="w-44">
             <Select value={String(year)} searchable={false} onChange={(v: string) => setYear(Number(v))}
-              options={[thisYear - 3, thisYear - 2, thisYear - 1, thisYear, thisYear + 1].map((y) => ({ label: `Leave year ${y}`, value: String(y) }))} />
+              options={(data?.years ?? [year]).map((y) => ({ label: `CY ${y} · FY ${y}-${String(y + 1).slice(2)}`, value: String(y) }))} />
           </div>
         )}
         exports={cards ? null : {

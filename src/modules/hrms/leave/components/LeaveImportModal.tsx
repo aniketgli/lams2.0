@@ -1,20 +1,23 @@
 import React, { useRef, useState } from 'react';
-import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Download, FileSpreadsheet, FileText, Layers, Minus, Plus, RefreshCw, Upload } from 'lucide-react';
-import { Button, DataTable, Modal } from '../../../../shared/components';
+import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Download, FileSpreadsheet, Minus, Plus, RefreshCw, Upload } from 'lucide-react';
+import { Button, DataTable, Modal, Select } from '../../../../shared/components';
 import type { ColumnDef } from '../../../../shared/components';
 import { ApiError } from '../../../../shared/services/api';
 import { downloadCsvText, toCsvText } from '../../../../shared/services/printTable';
-import { BalanceList, ImportReview, ImportRow, ImportStrategy, leaveApi } from '../leaveApi';
+import { ImportReview, ImportRow, ImportStrategy, leaveApi } from '../leaveApi';
 
 /**
- * Import leave quotas from a CSV (Biometric_ID, Leave_Code, Total_Quota).
+ * Import leave quotas from a CSV (Biometric_ID, Leave_Cycle, Leave_Code, Total_Quota).
  * Step 1 picks a template / strategy and the file; step 2 shows what the server found in every
  * row (nothing is written yet); importing writes all rows, or none when one has a problem.
- * The templates are filled from the balances on the page, so nothing here is hard-coded.
+ * The template is made by the server from the database, so nothing here is hard-coded.
  */
 
 const MAX_BYTES = 1024 * 1024;
-const HEADERS = ['Biometric_ID', 'Leave_Code', 'Total_Quota'];
+const HEADERS = ['Biometric_ID', 'Leave_Cycle', 'Leave_Code', 'Total_Quota'];
+const CYCLES: { value: 'all' | 'CY' | 'FY'; label: string }[] = [
+  { value: 'all', label: 'All employees' }, { value: 'CY', label: 'Calendar year (CY)' }, { value: 'FY', label: 'Financial year (FY)' },
+];
 const STRATEGIES: { value: ImportStrategy; label: string; icon: React.ElementType; note: string }[] = [
   { value: 'set', label: 'Set Quota', icon: RefreshCw, note: 'Total_Quota becomes the new total' },
   { value: 'add', label: 'Add (+)', icon: Plus, note: 'Total_Quota is added to the current total' },
@@ -25,12 +28,11 @@ const days = (n: number | null) => (n === null ? '—' : String(Math.round(n * 1
 interface Props {
   open: boolean;
   year: number;
-  data: BalanceList | null;
   onClose: () => void;
   onImported: (message: string) => void;
 }
 
-export const LeaveImportModal: React.FC<Props> = ({ open, year, data, onClose, onImported }) => {
+export const LeaveImportModal: React.FC<Props> = ({ open, year, onClose, onImported }) => {
   const [strategy, setStrategy] = useState<ImportStrategy>('set');
   const [fileName, setFileName] = useState('');
   const [csv, setCsv] = useState('');
@@ -38,19 +40,21 @@ export const LeaveImportModal: React.FC<Props> = ({ open, year, data, onClose, o
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [review, setReview] = useState<ImportReview | null>(null);
+  const [cycle, setCycle] = useState<'all' | 'CY' | 'FY'>('all');
   const input = useRef<HTMLInputElement>(null);
 
   const reset = () => { setStrategy('set'); setFileName(''); setCsv(''); setBusy(false); setError(null); setReview(null); };
   const close = () => { if (busy) return; reset(); onClose(); };
 
-  // ---- Templates, from the balances on the page ------------------------------------------------
-  const template = (kind: 'sample' | 'CY' | 'FY' | 'all') => {
-    const types = (data?.types ?? []).filter((t) => t.isDebited);
-    const rows = (data?.rows ?? []).filter((r) => kind === 'sample' || kind === 'all' || r.basis === kind);
-    const lines = rows.flatMap((r) => types.filter((t) => r.balances[t.id]).map((t) => [r.biometricId, t.code, r.balances[t.id]!.total]));
-    const picked = kind === 'sample' ? lines.slice(0, 3) : lines;
-    const name = { sample: 'Sample', CY: 'Regular_CY', FY: 'Project_FY', all: 'All_Staff' }[kind];
-    downloadCsvText(toCsvText(HEADERS, picked), `WII_Leave_Quota_${name}_${year}`);
+  // ---- Template, made by the server from the database -------------------------------------------
+  const download = async () => {
+    if (busy) return;
+    setBusy(true); setError(null);
+    try {
+      const t = await leaveApi.importTemplate(year, cycle);
+      if (t.rows.length === 0) { setError('There are no employees and leave types to put in the template for this selection.'); return; }
+      downloadCsvText(toCsvText(t.headers, t.rows), `WII_Leave_Quota_Template_${cycle === 'all' ? 'All' : cycle}_${year}`);
+    } catch (e) { fail(e, 'The template could not be made. Please try again.'); } finally { setBusy(false); }
   };
 
   // ---- File ------------------------------------------------------------------------------------
@@ -63,9 +67,9 @@ export const LeaveImportModal: React.FC<Props> = ({ open, year, data, onClose, o
     setFileName(file.name);
   };
 
-  const fail = (e: unknown, fallback: string) => {
+  function fail(e: unknown, fallback: string) {
     if (e instanceof ApiError) setError(e.details?.csv || e.message); else setError(fallback);
-  };
+  }
   const doReview = async () => {
     if (!csv || busy) return;
     setBusy(true); setError(null);
@@ -89,6 +93,7 @@ export const LeaveImportModal: React.FC<Props> = ({ open, year, data, onClose, o
       key: 'employee', header: 'Employee', sortValue: (r) => r.employee || r.biometricId,
       render: (r) => <div className="leading-tight"><div className="font-semibold text-slate-900">{r.employee || '—'}</div><div className="text-[11px] text-slate-500">B.I. {r.biometricId || '—'}</div></div>,
     },
+    { key: 'cycle', header: 'Leave year', align: 'center', sortValue: (r) => r.cycle, render: (r) => (r.cycle ? (r.cycle.startsWith('FY') ? r.cycle : `CY ${r.cycle}`) : '—') },
     { key: 'leave', header: 'Leave', render: (r) => <div className="leading-tight"><div className="font-semibold">{r.leaveCode || '—'}</div>{r.leaveType && <div className="text-[11px] text-slate-500">{r.leaveType}</div>}</div> },
     { key: 'value', header: 'Total_Quota', align: 'center', render: (r) => r.value || '—' },
     { key: 'change', header: 'Total days', align: 'center', render: (r) => (r.before === null ? '—' : <span className="whitespace-nowrap">{days(r.before)} → <b>{days(r.after)}</b></span>) },
@@ -100,13 +105,6 @@ export const LeaveImportModal: React.FC<Props> = ({ open, year, data, onClose, o
     },
   ];
 
-  const templates = [
-    { key: 'sample', label: 'Sample CSV', icon: Download, tone: 'text-slate-700 border-slate-200 bg-white' },
-    { key: 'CY', label: 'Regular (CY)', icon: FileText, tone: 'text-blue-700 border-blue-200 bg-blue-50' },
-    { key: 'FY', label: 'Project (FY)', icon: FileText, tone: 'text-emerald-700 border-emerald-200 bg-emerald-50' },
-    { key: 'all', label: 'All Staff', icon: Layers, tone: 'text-slate-700 border-slate-200 bg-white' },
-  ] as const;
-
   return (
     <Modal
       isOpen={open}
@@ -114,7 +112,6 @@ export const LeaveImportModal: React.FC<Props> = ({ open, year, data, onClose, o
       size={review ? '2xl' : 'lg'}
       icon={Upload}
       title="Import Leave Quotas"
-      subtitle={`Leave year ${year}`}
       footer={review ? (
         <div className="flex justify-between gap-2">
           <Button variant="outline" size="sm" leftIcon={ArrowLeft} onClick={() => { setReview(null); setError(null); }} disabled={busy}>Back</Button>
@@ -147,14 +144,10 @@ export const LeaveImportModal: React.FC<Props> = ({ open, year, data, onClose, o
       ) : (
         <div className="space-y-5">
           <section>
-            <h3 className="text-xs font-bold text-slate-700 mb-2">Download Pre-Formatted Templates</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {templates.map(({ key, label, icon: Icon, tone }) => (
-                <button key={key} type="button" onClick={() => template(key)} disabled={!data}
-                  className={`h-10 px-3 rounded-xl border text-xs font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 hover:brightness-95 ${tone}`}>
-                  <Icon className="w-3.5 h-3.5" />{label}
-                </button>
-              ))}
+            <h3 className="text-xs font-bold text-slate-700 mb-2">Download Template</h3>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="w-56"><Select value={cycle} searchable={false} onChange={(v: string) => setCycle(v as 'all' | 'CY' | 'FY')} options={CYCLES} /></div>
+              <Button variant="outline" size="sm" leftIcon={Download} onClick={() => void download()} disabled={busy}>Download template</Button>
             </div>
           </section>
 
@@ -168,7 +161,6 @@ export const LeaveImportModal: React.FC<Props> = ({ open, year, data, onClose, o
                 </button>
               ))}
             </div>
-            <p className="mt-1.5 text-[11px] text-slate-500">{STRATEGIES.find((s) => s.value === strategy)?.note}</p>
           </section>
 
           <section>
