@@ -6,11 +6,11 @@ import { inTransaction } from '../lib/tx';
 import { Validator, todayInIndia } from '../lib/validate';
 import { writeMasterAuditSql } from '../masters/audit';
 import {
-  BALANCE_KEY, type Employee, type Policy, balanceOf, creditedQuota, eligibilityProblem, loadEmployee, loadPolicy, missingTable, num,
+  BALANCE_KEY, type Employee, type Policy, type Viewer, balanceOf, creditedQuota, cycleLabel, eligibilityProblem, listBalances, loadEmployee, loadPolicy, missingTable, num,
 } from './requests';
 
 /**
- * Leave quota import (administrator). A CSV with Biometric_ID, Leave_Code and Total_Quota sets, adds to
+ * Leave quota import (administrator). A CSV with Biometric_ID, Leave_Cycle (CY / FY), Leave_Code and Total_Quota sets, adds to
  * or deducts from the days granted for one leave year. The browser first asks for a review (nothing is
  * written); importing re-checks every row on the server and writes all of them in one transaction, or
  * none when a single row has a problem. Each changed balance is audited like a manual change.
@@ -19,6 +19,7 @@ import {
 export const IMPORT_STRATEGIES = ['set', 'add', 'deduct'] as const;
 export type ImportStrategy = (typeof IMPORT_STRATEGIES)[number];
 export const MAX_IMPORT_ROWS = 3000;
+export const IMPORT_HEADERS = ['Biometric_ID', 'Leave_Cycle', 'Leave_Code', 'Total_Quota'] as const;
 const MAX_CSV_CHARS = 1_000_000;
 const STRATEGY_LABEL: Record<ImportStrategy, string> = { set: 'Set quota', add: 'Add', deduct: 'Deduct' };
 
@@ -48,7 +49,7 @@ export function parseDelimited(text: string): string[][] {
 const key = (h: string) => h.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 export interface ImportRow {
-  line: number; biometricId: string; employee: string; leaveCode: string; leaveType: string; value: string;
+  line: number; biometricId: string; employee: string; cycleType: string; cycle: string; leaveCode: string; leaveType: string; value: string;
   before: number | null; after: number | null; status: 'ok' | 'unchanged' | 'error'; error: string | null;
 }
 export interface ImportReview {
@@ -74,9 +75,9 @@ async function plan(q: Q, input: { year: number; strategy: ImportStrategy; csv: 
   if (table.length === 0) throw badRequest('The file is empty.', { csv: 'The file is empty.' });
   const heads = table[0].map(key);
   const col = (name: string) => heads.indexOf(key(name));
-  const [cBio, cCode, cQuota] = [col('Biometric_ID'), col('Leave_Code'), col('Total_Quota')];
-  const missing = [['Biometric_ID', cBio], ['Leave_Code', cCode], ['Total_Quota', cQuota]].filter(([, i]) => i === -1).map(([n]) => n);
-  if (missing.length) throw badRequest(`Missing column: ${missing.join(', ')}.`, { csv: `The first row must have the columns Biometric_ID, Leave_Code and Total_Quota. Missing: ${missing.join(', ')}.` });
+  const [cBio, cCycle, cCode, cQuota] = IMPORT_HEADERS.map(col);
+  const missing = IMPORT_HEADERS.filter((_, i) => [cBio, cCycle, cCode, cQuota][i] === -1);
+  if (missing.length) throw badRequest(`Missing column: ${missing.join(', ')}.`, { csv: `The first row must have the columns ${IMPORT_HEADERS.join(', ')}. Missing: ${missing.join(', ')}.` });
   const body = table.slice(1);
   if (body.length === 0) throw badRequest('The file has no data rows.', { csv: 'The file has a header but no data rows.' });
   if (body.length > MAX_IMPORT_ROWS) throw badRequest(`At most ${MAX_IMPORT_ROWS} rows can be imported at once.`, { csv: `The file has ${body.length} rows; at most ${MAX_IMPORT_ROWS} can be imported at once.` });
@@ -95,7 +96,8 @@ async function plan(q: Q, input: { year: number; strategy: ImportStrategy; csv: 
     const cells = body[i];
     const line = i + 2;
     const biometricId = (cells[cBio] ?? '').trim(), leaveCode = (cells[cCode] ?? '').trim(), value = (cells[cQuota] ?? '').trim();
-    const row: ImportRow = { line, biometricId, employee: '', leaveCode, leaveType: '', value, before: null, after: null, status: 'error', error: null };
+    const cycleText = (cells[cCycle] ?? '').trim().toUpperCase();
+    const row: ImportRow = { line, biometricId, employee: '', cycleType: cycleText, cycle: '', leaveCode, leaveType: '', value, before: null, after: null, status: 'error', error: null };
     rowsOut.push(row);
     const fail = (message: string) => { row.error = message; };
 
@@ -112,6 +114,7 @@ async function plan(q: Q, input: { year: number; strategy: ImportStrategy; csv: 
     if (!policy) { fail(`${leaveCode} is not an active leave type.`); continue; }
     row.leaveType = policy.name;
     if (!policy.debited) { fail(`${policy.name} has no balance (it is not debited), so it has no quota.`); continue; }
+    if (cycleText !== 'CY' && cycleText !== 'FY') { fail('Leave_Cycle must be CY or FY.'); continue; }
     const quota = Number(value);
     if (value === '' || !Number.isFinite(quota) || quota < 0 || quota > 400 || Math.round(quota * 2) !== quota * 2) { fail('Total_Quota must be days from 0 to 400, in steps of 0.5.'); continue; }
     const dup = `${person.id}:${policy.id}`;
@@ -123,6 +126,8 @@ async function plan(q: Q, input: { year: number; strategy: ImportStrategy; csv: 
       try { emp = await loadEmployee(q, person.id); } catch (error) { if (error instanceof HttpError) { fail('This employee cannot be loaded.'); continue; } throw error; }
       employees.set(person.id, emp);
     }
+    row.cycle = cycleLabel(input.year, emp.basis);
+    if (emp.basis !== cycleText) { fail(`${person.name} follows ${emp.basis === 'FY' ? 'the financial year (FY)' : 'the calendar year (CY)'}, not ${cycleText}.`); continue; }
     const problem = eligibilityProblem(policy, emp, `${input.year}-12-31`);
     if (problem) { fail(problem); continue; }
     const before = await balanceOf(q, emp.id, { id: policy.id, quota: creditedQuota(policy, emp.employmentType, input.year, emp.basis, today, emp.isPwd) }, input.year);
@@ -163,9 +168,9 @@ export async function applyImport(req: Request, viewer: { role: string | null },
       }
       for (const p of planned.filter((x) => x.row.status === 'ok')) {
         await conn.query(
-          `INSERT INTO leave_balances (user_id, leave_type_id, cycle_year, total, carry_forward) VALUES (?, ?, ?, ?, ?)
-             ON DUPLICATE KEY UPDATE total = VALUES(total), carry_forward = VALUES(carry_forward)`,
-          [p.emp.id, p.policy.id, input.year, p.total, p.carryForward],
+          `INSERT INTO leave_balances (user_id, leave_type_id, cycle_year, total, carry_forward, cycle_type) VALUES (?, ?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE total = VALUES(total), carry_forward = VALUES(carry_forward), cycle_type = VALUES(cycle_type)`,
+          [p.emp.id, p.policy.id, input.year, p.total, p.carryForward, p.emp.basis],
         );
         await writeMasterAuditSql(conn, req, {
           masterKey: BALANCE_KEY, recordId: `${p.emp.id}:${p.policy.id}:${input.year}`,
@@ -180,4 +185,21 @@ export async function applyImport(req: Request, viewer: { role: string | null },
     missingTable(error);
     throw error;
   }
+}
+
+export const TEMPLATE_CYCLES = ['all', 'CY', 'FY'] as const;
+
+/**
+ * The rows of the import file for one leave year, taken from the database: every active employee of the
+ * chosen cycle with every leave type that has a balance for them, and the days granted today.
+ */
+export async function importTemplate(viewer: Viewer, yearRaw: unknown, cycleRaw: unknown): Promise<{ year: number; headers: string[]; rows: Array<Array<string | number>> }> {
+  if (viewer.role !== 'administrator') throw forbidden('Only an administrator can import leave quotas.');
+  const cycle = cycleRaw === undefined || cycleRaw === '' ? 'all' : String(cycleRaw);
+  if (!(TEMPLATE_CYCLES as readonly string[]).includes(cycle)) throw badRequest('Choose All, CY or FY.');
+  const list = await listBalances(viewer, yearRaw);
+  const types = list.types.filter((t) => t.isDebited);
+  const rows = list.rows.filter((r) => cycle === 'all' || r.basis === cycle)
+    .flatMap((r) => types.filter((t) => r.balances[t.id]).map((t) => [r.biometricId, r.basis, t.code, r.balances[t.id]!.total]));
+  return { year: list.year, headers: [...IMPORT_HEADERS], rows };
 }

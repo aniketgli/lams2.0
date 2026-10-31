@@ -1,4 +1,4 @@
-import { applyImport, reviewImport } from './balanceImport';
+import { applyImport, importTemplate, reviewImport } from './balanceImport';
 import { Router, type Request, type Response } from 'express';
 import { pool } from '../../src/db';
 import { asyncHandler } from '../lib/http';
@@ -12,7 +12,7 @@ import {
   LEAVE_GROUP_SCOPE, createLeaveGroup, deleteLeaveGroup, groupLeaveTypeIdsOfUser, listLeaveGroups, updateLeaveGroup,
 } from './groups';
 import {
-  LEAVE_SCOPE, applicableEmployees, createRequest, decideRequest, deleteRequest, listBalances, listRequests, previewLeave, requestId, setBalance,
+  LEAVE_SCOPE, applicableEmployees, createRequest, decideRequest, deleteRequest, leaveHistory, listBalances, listRequests, previewLeave, requestId, setBalance,
   undoDecision, updateRequest,
 } from './requests';
 
@@ -121,6 +121,15 @@ router.get('/leave/balances', requireAuth, asyncHandler(async (req, res) => {
 router.put('/leave/balances', requireAuth, asyncHandler(async (req, res) => {
   const balance = await setBalance(req, viewerOf(req), req.body);
   res.json({ balance, message: 'Leave balance saved.' });
+}));
+
+router.get('/leave/balances/import/template', requireAuth, asyncHandler(async (req, res) => {
+  const q = req.query as Record<string, unknown>;
+  res.json(await importTemplate(viewerOf(req), q.year, q.cycle));
+}));
+
+router.get('/leave/balances/history', requireAuth, asyncHandler(async (req, res) => {
+  res.json(await leaveHistory(viewerOf(req), (req.query as Record<string, unknown>).userId));
 }));
 
 router.post('/leave/balances/import/review', requireAuth, asyncHandler(async (req, res) => {

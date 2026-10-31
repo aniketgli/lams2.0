@@ -757,7 +757,7 @@ export interface BalanceRow {
 }
 
 /** Balances of the people the viewer may see (self; managers their team; administrator and auditor everyone) for one leave year. */
-export async function listBalances(viewer: Viewer, yearRaw: unknown): Promise<{ year: number; types: Array<{ id: string; code: string; name: string; isDebited: boolean }>; rows: BalanceRow[] }> {
+export async function listBalances(viewer: Viewer, yearRaw: unknown): Promise<{ year: number; years: number[]; types: Array<{ id: string; code: string; name: string; isDebited: boolean }>; rows: BalanceRow[] }> {
   const year = yearRaw === undefined || yearRaw === '' ? Number(todayInIndia().slice(0, 4)) : Number(yearRaw);
   if (!Number.isInteger(year) || year < 2000 || year > 2100) throw badRequest('Choose a year between 2000 and 2100.');
   try {
@@ -802,7 +802,64 @@ export async function listBalances(viewer: Viewer, yearRaw: unknown): Promise<{ 
       }
       return { userId: String(r.id), biometricId: String(r.biometric_id), name: String(r.name), designation: String(r.designation ?? ''), department: String(r.department ?? ''), basis, cycle: cycleLabel(year, basis), balances };
     });
-    return { year, types: policies.map((p) => ({ id: String(p.id), code: p.code, name: p.name, isDebited: p.debited })), rows: out };
+    const found = await rows(pool, 'SELECT cycle_year AS y FROM leave_balances UNION SELECT cycle_year AS y FROM leave_requests');
+    const years = [...new Set([...found.map((f) => Number(f.y)), Number(today.slice(0, 4)), year])].sort((a, b) => b - a);
+    return { year, years, types: policies.map((p) => ({ id: String(p.id), code: p.code, name: p.name, isDebited: p.debited })), rows: out };
+  } catch (error) {
+    missingTable(error);
+    throw error;
+  }
+}
+
+export interface HistoryYear {
+  year: number; cycleType: 'CY' | 'FY'; cycle: string;
+  types: Array<{ code: string; name: string; isDebited: boolean; total: number; carryForward: number; used: number; pending: number; available: number }>;
+}
+
+/** Every leave year of one employee: the days granted and what was taken, year by year and leave type by leave type. */
+export async function leaveHistory(viewer: Viewer, userIdRaw: unknown): Promise<{ employee: { id: string; name: string; biometricId: string }; years: HistoryYear[] }> {
+  const userId = Number(userIdRaw);
+  if (!Number.isInteger(userId) || userId <= 0) throw badRequest('Choose an employee.');
+  try {
+    const [person] = await rows(pool,
+      `SELECT u.id, u.biometric_id, u.name, p.employment_type, p.joining_date, p.profile_data
+         FROM users u LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE u.id = ? LIMIT 1`, [userId]);
+    if (!person || !canSee(viewer, { ...person, user_id: person.id })) throw notFound('Employee not found.');
+    const data = profileData(person.profile_data);
+    const basis: 'CY' | 'FY' = data.leaveCycle === 'FY' ? 'FY' : 'CY';
+    const policies = await attachQuotas(pool, (await rows(pool, 'SELECT * FROM leave_types ORDER BY name')).map(toPolicy));
+    const grants = await rows(pool, 'SELECT cycle_year, cycle_type, leave_type_id, total, carry_forward FROM leave_balances WHERE user_id = ?', [userId]);
+    const sums = await rows(pool,
+      `SELECT cycle_year, leave_type_id,
+              COALESCE(SUM(CASE WHEN status = 'approved' THEN days_count ELSE 0 END), 0) AS used,
+              COALESCE(SUM(CASE WHEN status IN ('pending_l1', 'pending_l2') THEN days_count ELSE 0 END), 0) AS pending
+         FROM leave_requests WHERE user_id = ? GROUP BY cycle_year, leave_type_id`, [userId]);
+    const linked = await rows(pool,
+      `SELECT r.cycle_year, t.debit_from_type_id AS base_id,
+              COALESCE(SUM(CASE WHEN r.status = 'approved' THEN r.days_count * t.debit_factor ELSE 0 END), 0) AS used,
+              COALESCE(SUM(CASE WHEN r.status IN ('pending_l1', 'pending_l2') THEN r.days_count * t.debit_factor ELSE 0 END), 0) AS pending
+         FROM leave_requests r JOIN leave_types t ON t.id = r.leave_type_id
+        WHERE r.user_id = ? AND t.debit_from_type_id IS NOT NULL GROUP BY r.cycle_year, t.debit_from_type_id`, [userId]);
+    const emp = { employmentType: String(person.employment_type ?? ''), isPwd: data.isPwd === true || data.isPwd === 'true' };
+    const today = todayInIndia();
+    const yearsSeen = [...new Set([...grants, ...sums, ...linked].map((r) => Number(r.cycle_year)))].sort((a, b) => b - a);
+    const years: HistoryYear[] = yearsSeen.map((year) => {
+      const cycleType: 'CY' | 'FY' = grants.find((g) => Number(g.cycle_year) === year)?.cycle_type === 'FY' ? 'FY' : grants.find((g) => Number(g.cycle_year) === year) ? 'CY' : basis;
+      const asOf = year < Number(today.slice(0, 4)) ? `${year}-12-31` : year > Number(today.slice(0, 4)) ? `${year}-01-01` : today;
+      const list: HistoryYear['types'] = [];
+      for (const p of policies) {
+        const g = grants.find((x) => Number(x.cycle_year) === year && Number(x.leave_type_id) === p.id);
+        const s = sums.find((x) => Number(x.cycle_year) === year && Number(x.leave_type_id) === p.id);
+        const l = linked.find((x) => Number(x.cycle_year) === year && Number(x.base_id) === p.id);
+        if (!g && !s && !l) continue;
+        const total = g ? Number(g.total) : p.debited ? creditedQuota(p, emp.employmentType, year, cycleType, asOf, emp.isPwd) : 0;
+        const carryForward = g ? Number(g.carry_forward) : 0;
+        const used = num(Number(s?.used ?? 0) + Number(l?.used ?? 0)), pending = num(Number(s?.pending ?? 0) + Number(l?.pending ?? 0));
+        list.push({ code: p.code, name: p.name, isDebited: p.debited, total, carryForward, used, pending, available: num(total + carryForward - used - pending) });
+      }
+      return { year, cycleType, cycle: cycleLabel(year, cycleType), types: list };
+    });
+    return { employee: { id: String(person.id), name: String(person.name), biometricId: String(person.biometric_id) }, years };
   } catch (error) {
     missingTable(error);
     throw error;
@@ -837,9 +894,9 @@ export async function setBalance(req: Request, viewer: Viewer, body: unknown): P
         throw badRequest('Please correct the highlighted fields.', { total: `Days already used or pending are ${num(before.used + before.pending)}; the grant cannot be lower.` });
       }
       await conn.query(
-        `INSERT INTO leave_balances (user_id, leave_type_id, cycle_year, total, carry_forward) VALUES (?, ?, ?, ?, ?)
-           ON DUPLICATE KEY UPDATE total = VALUES(total), carry_forward = VALUES(carry_forward)`,
-        [emp.id, policy.id, year, total, carryForward],
+        `INSERT INTO leave_balances (user_id, leave_type_id, cycle_year, total, carry_forward, cycle_type) VALUES (?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE total = VALUES(total), carry_forward = VALUES(carry_forward), cycle_type = VALUES(cycle_type)`,
+        [emp.id, policy.id, year, total, carryForward, emp.basis],
       );
       const after = await balanceOf(conn, emp.id, quotaPolicy, year!);
       const [who] = await rows(conn, 'SELECT name, biometric_id FROM users WHERE id = ?', [emp.id]);

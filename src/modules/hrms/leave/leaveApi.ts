@@ -169,13 +169,20 @@ export interface BalanceRow {
 
 export interface BalanceList {
   year: number;
+  /** Leave years that have data, newest first (always includes this year). */
+  years: number[];
   types: Array<{ id: string; code: string; name: string; isDebited: boolean }>;
   rows: BalanceRow[];
 }
 
+export interface HistoryYear {
+  year: number; cycleType: 'CY' | 'FY'; cycle: string;
+  types: Array<{ code: string; name: string; isDebited: boolean; total: number; carryForward: number; used: number; pending: number; available: number }>;
+}
+export interface LeaveHistory { employee: { id: string; name: string; biometricId: string }; years: HistoryYear[] }
 export type ImportStrategy = 'set' | 'add' | 'deduct';
 export interface ImportRow {
-  line: number; biometricId: string; employee: string; leaveCode: string; leaveType: string; value: string;
+  line: number; biometricId: string; employee: string; cycleType: string; cycle: string; leaveCode: string; leaveType: string; value: string;
   before: number | null; after: number | null; status: 'ok' | 'unchanged' | 'error'; error: string | null;
 }
 export interface ImportReview {
@@ -201,6 +208,9 @@ export const leaveApi = {
     return api<LeavePreview>(`${base}/preview?${q.toString()}`);
   },
   balances: (year: number) => api<BalanceList>(`${base}/balances?year=${year}`),
+  importTemplate: (year: number, cycle: 'all' | 'CY' | 'FY') =>
+    api<{ year: number; headers: string[]; rows: Array<Array<string | number>> }>(`${base}/balances/import/template?year=${year}&cycle=${cycle}`),
+  history: (userId: string) => api<LeaveHistory>(`${base}/balances/history?userId=${encodeURIComponent(userId)}`),
   reviewImport: (input: { year: number; strategy: ImportStrategy; csv: string }) =>
     api<ImportReview>(`${base}/balances/import/review`, { method: 'POST', body: input }),
   applyImport: (input: { year: number; strategy: ImportStrategy; csv: string }) =>
