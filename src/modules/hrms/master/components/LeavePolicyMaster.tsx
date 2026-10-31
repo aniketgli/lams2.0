@@ -21,7 +21,7 @@ const yesNo = [{ label: 'Yes', value: 'yes' }, { label: 'No', value: 'no' }];
 const blank = (): LeaveTypeInput => ({
   code: '', name: '', description: '', defaultQuota: 0, pwdQuota: null, pwdOnly: false, accrual: 'yearly', maxAccumulation: 0, carryForward: false, maxCarryForward: 0,
   encashmentAllowed: false, approvalStages: 1, minNoticeDays: 0, halfDayAllowed: false, medicalCertDays: 0, sandwichRule: 'excluded', combineWith: 'none',
-  employeeTypes: [], gender: 'all', minServiceMonths: 0, maxConsecutiveDays: 0, isDebited: true, isPaid: true, afterExhaustedTypeId: '', debitFromTypeId: '', debitFactor: 1, lifetimeMax: 0, maxSpellsPerYear: 0, quotas: [], status: 'active',
+  employeeTypes: [], gender: 'all', minServiceMonths: 0, maxConsecutiveDays: 0, isDebited: true, isPaid: true, afterExhaustedTypeId: '', debitFromTypeId: '', debitFactor: 1, lifetimeMax: 0, maxSpellsPerYear: 0, minDaysPerApplication: 0, maxSpellsPerMonth: 0, maxSpellsLifetime: 0, quotas: [], status: 'active',
 });
 
 const flag = (b: boolean) => (b ? 'yes' : 'no');
@@ -174,6 +174,9 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
             t.accrual === 'half_yearly' ? 'Credited every half-year' : null,
             t.lifetimeMax ? `Max ${t.lifetimeMax} days in service` : null,
             t.maxSpellsPerYear ? `${t.maxSpellsPerYear} times a year` : null,
+            t.minDaysPerApplication ? `Min ${t.minDaysPerApplication} days at a time` : null,
+            t.maxSpellsPerMonth ? `${t.maxSpellsPerMonth} times a month` : null,
+            t.maxSpellsLifetime ? `${t.maxSpellsLifetime} times in service` : null,
             t.carryForward ? null : 'Lapses at year end',
           ].filter(Boolean).join(' · ') || '—'}
         </div>
@@ -227,23 +230,24 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
                 options={[{ label: 'Active', value: 'active' }, { label: 'Inactive', value: 'inactive' }]} />
             </FormSection>
 
-            <FormSection step={2} title="Rules for taking leave" errorCount={countErrors(['halfDayAllowed', 'minNoticeDays', 'maxConsecutiveDays', 'maxSpellsPerYear', 'lifetimeMax', 'medicalCertDays', 'minServiceMonths', 'gender', 'sandwichRule', 'approvalStages', 'combineWith'])}>
-              <Select label="Half day allowed" value={flag(form.halfDayAllowed)} searchable={false} onChange={(v: string) => set('halfDayAllowed', v === 'yes')} options={yesNo} />
-              <Input label="Notice needed (days)" type="number" min={0} max={365} value={String(form.minNoticeDays)} error={errors.minNoticeDays} onChange={num('minNoticeDays')} />
-              <Input label="Longest at a time (days, 0 = no limit)" type="number" min={0} value={String(form.maxConsecutiveDays)} error={errors.maxConsecutiveDays} onChange={num('maxConsecutiveDays')} />
-              <Input label="Times a year (0 = no limit)" type="number" min={0} value={String(form.maxSpellsPerYear)} error={errors.maxSpellsPerYear} onChange={num('maxSpellsPerYear')} />
-              <Input label="Limit in whole service (days, 0 = no limit)" type="number" min={0} step="0.5" value={String(form.lifetimeMax)} error={errors.lifetimeMax} onChange={num('lifetimeMax')} />
-              <Input label="Certificate needed above (days, 0 = never)" type="number" min={0} value={String(form.medicalCertDays)} error={errors.medicalCertDays} onChange={num('medicalCertDays')} />
-              <Input label="Minimum service (months)" type="number" min={0} value={String(form.minServiceMonths)} error={errors.minServiceMonths} onChange={num('minServiceMonths')} />
-              <Select label="Gender" required value={form.gender} searchable={false} error={Boolean(errors.gender)} onChange={(v: string) => set('gender', v as LeaveTypeInput['gender'])}
-                options={[{ label: 'All', value: 'all' }, { label: 'Female only', value: 'female_only' }, { label: 'Male only', value: 'male_only' }]} />
-              <Select label="Holidays in between" required value={form.sandwichRule} searchable={false} error={Boolean(errors.sandwichRule)} onChange={(v: string) => set('sandwichRule', v as LeaveTypeInput['sandwichRule'])}
-                options={[{ label: 'Not counted', value: 'excluded' }, { label: 'Counted as leave', value: 'included' }]} />
+            <FormSection step={2} title="Rules for taking leave" errorCount={countErrors(['approvalStages', 'combineWith', 'sandwichRule', 'halfDayAllowed', 'minDaysPerApplication', 'maxConsecutiveDays', 'gender', 'pwdOnly', 'maxSpellsPerMonth', 'maxSpellsLifetime'])}>
               <Select label="Approval stages" required value={String(form.approvalStages)} searchable={false} error={Boolean(errors.approvalStages)}
                 onChange={(v: string) => set('approvalStages', Number(v) as 1 | 2)}
-                options={[{ label: '1 · Reporting Manager approves', value: '1' }, { label: '2 · Reporting Manager forwards, HoD approves', value: '2' }]} />
+                options={[{ label: '1 stage · Reporting Manager', value: '1' }, { label: '2 stages · Reporting Manager, HoD', value: '2' }]} />
               <Select label="Can be combined with" required value={form.combineWith} searchable={false} error={Boolean(errors.combineWith)} onChange={(v: string) => set('combineWith', v as LeaveTypeInput['combineWith'])}
                 options={[{ label: 'Nothing', value: 'none' }, { label: '1-stage leaves', value: 'single' }, { label: '2-stage leaves', value: 'double' }, { label: 'Both 1-stage and 2-stage leaves', value: 'both' }]} />
+              <Select label="Holidays in between" required value={form.sandwichRule} searchable={false} error={Boolean(errors.sandwichRule)} onChange={(v: string) => set('sandwichRule', v as LeaveTypeInput['sandwichRule'])}
+                options={[{ label: 'Not counted', value: 'excluded' }, { label: 'Counted as leave', value: 'included' }]} />
+
+              <Select label="Half day allowed" value={flag(form.halfDayAllowed)} searchable={false} onChange={(v: string) => set('halfDayAllowed', v === 'yes')} options={yesNo} />
+              <Input label="Minimum days per application (0 = no limit)" type="number" min={0} step="0.5" value={String(form.minDaysPerApplication)} error={errors.minDaysPerApplication} onChange={num('minDaysPerApplication')} />
+              <Input label="Maximum days per application (0 = no limit)" type="number" min={0} value={String(form.maxConsecutiveDays)} error={errors.maxConsecutiveDays} onChange={num('maxConsecutiveDays')} />
+
+              <Select label="Who can take it" required value={form.pwdOnly ? 'pwd' : form.gender} searchable={false} error={Boolean(errors.gender || errors.pwdOnly)}
+                onChange={(v: string) => { set('pwdOnly', v === 'pwd'); set('gender', v === 'pwd' ? 'all' : (v as LeaveTypeInput['gender'])); }}
+                options={[{ label: 'All', value: 'all' }, { label: 'Male', value: 'male_only' }, { label: 'Female', value: 'female_only' }, { label: 'Persons with disability', value: 'pwd' }]} />
+              <Input label="Times in a month (0 = no limit)" type="number" min={0} max={31} value={String(form.maxSpellsPerMonth)} error={errors.maxSpellsPerMonth} onChange={num('maxSpellsPerMonth')} />
+              <Input label="Times in the whole service (0 = no limit)" type="number" min={0} value={String(form.maxSpellsLifetime)} error={errors.maxSpellsLifetime} onChange={num('maxSpellsLifetime')} />
             </FormSection>
 
             <FormSection step={3} title="Balance" errorCount={countErrors(['isPaid', 'isDebited', 'debitFromTypeId', 'debitFactor', 'afterExhaustedTypeId'])}>
