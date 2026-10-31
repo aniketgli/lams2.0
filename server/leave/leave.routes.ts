@@ -7,6 +7,9 @@ import {
   LEAVE_TYPE_SCOPE, createLeaveType, deleteLeaveType, leaveTypeId, leaveTypeOptions, listLeaveTypes, updateLeaveType,
 } from './types';
 import {
+  LEAVE_POLICY_SCOPE, createPolicy, deletePolicy, listPolicies, newPolicyVersion, policyOptions, setPolicyStatus, updatePolicy,
+} from './policies';
+import {
   LEAVE_SCOPE, applicableEmployees, createRequest, decideRequest, deleteRequest, listBalances, listRequests, previewLeave, requestId, setBalance,
   undoDecision, updateRequest,
 } from './requests';
@@ -61,6 +64,47 @@ router.delete('/leave-types/:id', ...isAdmin, asyncHandler(async (req, res) => {
   v.assert();
   await deleteLeaveType(req, leaveTypeId(req.params.id), reason);
   res.json({ success: true, message: 'Leave type deleted.' });
+}));
+
+// ---- Leave policies (category-wise): administrator changes, auditor reads ------------------------
+const canReadPolicies = [requireAuth, requireActiveRole('hrms', 'administrator', 'audit')];
+
+router.get('/leave-policies', ...canReadPolicies, asyncHandler(async (_req, res) => {
+  const [policies, options] = await Promise.all([listPolicies(), policyOptions()]);
+  res.json({ policies, options });
+}));
+router.get('/leave-policies/activity', ...isAuditor, asyncHandler(async (req, res) => {
+  res.json(await listActivity(parseActivityFilter(req.query as Record<string, unknown>, LEAVE_POLICY_SCOPE), LEAVE_POLICY_SCOPE));
+}));
+router.get('/leave-policies/activity.csv', ...isAuditor, asyncHandler(async (req, res) => {
+  sendCsv(res, await activityCsv(req, parseActivityFilter(req.query as Record<string, unknown>, LEAVE_POLICY_SCOPE), LEAVE_POLICY_SCOPE));
+}));
+router.get('/leave-policies/activity/export-pdf', ...isAuditor, asyncHandler(async (req, res) => {
+  const table = await activityTable(req, parseActivityFilter(req.query as Record<string, unknown>, LEAVE_POLICY_SCOPE), 'pdf', LEAVE_POLICY_SCOPE);
+  res.json({ generatedAt: new Date().toISOString(), ...table });
+}));
+router.post('/leave-policies', ...isAdmin, asyncHandler(async (req, res) => {
+  const policy = await createPolicy(req, req.body);
+  res.status(201).json({ policy, message: policy.status === 'active' ? `Policy "${policy.name}" is active.` : `Policy "${policy.name}" saved as draft.` });
+}));
+router.put('/leave-policies/:id', ...isAdmin, asyncHandler(async (req, res) => {
+  const policy = await updatePolicy(req, leaveTypeId(req.params.id), req.body);
+  res.json({ policy, message: policy.status === 'active' ? `Policy "${policy.name}" is active.` : `Policy "${policy.name}" updated.` });
+}));
+router.post('/leave-policies/:id/status', ...isAdmin, asyncHandler(async (req, res) => {
+  const policy = await setPolicyStatus(req, leaveTypeId(req.params.id), req.body);
+  res.json({ policy, message: `Policy "${policy.name}" is now ${policy.status}.` });
+}));
+router.post('/leave-policies/:id/version', ...isAdmin, asyncHandler(async (req, res) => {
+  const policy = await newPolicyVersion(req, leaveTypeId(req.params.id), req.body);
+  res.status(201).json({ policy, message: `Version ${policy.version} of "${policy.name}" created as a draft.` });
+}));
+router.delete('/leave-policies/:id', ...isAdmin, asyncHandler(async (req, res) => {
+  const v = new Validator(req.body ?? {});
+  const reason = v.optionalString('reason', { max: 500 });
+  v.assert();
+  await deletePolicy(req, leaveTypeId(req.params.id), reason);
+  res.json({ success: true, message: 'Draft policy deleted.' });
 }));
 
 // ---- Leave requests and balances -------------------------------------------------------------
