@@ -15,6 +15,7 @@ import attendanceRoutes from './attendance/attendance.routes';
 import manualAttendanceRoutes from './manualAttendance/manualAttendance.routes';
 import outdoorDutyRoutes from './outdoorDuty/outdoorDuty.routes';
 import leaveRoutes from './leave/leave.routes';
+import dashboardRoutes from './dashboard/dashboard.routes';
 import mastersRoutes from './masters/masters.routes';
 import settingsRoutes from './masters/settings.routes';
 import { apiNotFound, errorHandler } from './middleware/errorHandler';
@@ -97,6 +98,7 @@ export async function createApp(httpServer?: HttpServer) {
   api.use('/hrms', attendanceRoutes); // biometric attendance (read-only, from the Attendance punch table)
   api.use('/hrms', manualAttendanceRoutes); // manual attendance requests
   api.use('/hrms', outdoorDutyRoutes); // outdoor duty (OD) requests
+  api.use('/hrms', dashboardRoutes); // role dashboards
   api.use('/hrms', leaveRoutes); // leave types (policy), balances and requests
   api.use(apiNotFound);
   app.use('/api', api);
