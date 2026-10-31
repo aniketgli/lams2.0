@@ -36,6 +36,7 @@ mysql lams_db < migrations/20261102_leave_combine.sql   # which leaves may be ta
 mysql lams_db < migrations/20261103_leave_rules_counts.sql   # shortest leave, applications per month / in service
 mysql lams_db < migrations/20261104_leave_joining.sql   # whether a joining form is needed after a leave
 mysql lams_db < migrations/20261105_leave_balance_cycle.sql   # leave balances record CY / FY per year
+mysql lams_db < migrations/20261106_leave_certificates.sql   # medical certificate upload of a leave request
 mysql lams_db < migrations/20261031_leave_requests.sql
 npm run dev                   # http://localhost:3000
 npm run lint                  # type-check

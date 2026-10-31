@@ -12,7 +12,7 @@ import {
   LEAVE_GROUP_SCOPE, createLeaveGroup, deleteLeaveGroup, groupLeaveTypeIdsOfUser, listLeaveGroups, updateLeaveGroup,
 } from './groups';
 import {
-  LEAVE_SCOPE, applicableEmployees, createRequest, decideRequest, deleteRequest, leaveHistory, listBalances, listRequests, previewLeave, requestId, setBalance,
+  LEAVE_SCOPE, applicableEmployees, certificateOf, createRequest, decideRequest, deleteRequest, leaveHistory, listBalances, listRequests, previewLeave, requestId, setBalance,
   undoDecision, updateRequest,
 } from './requests';
 
@@ -161,6 +161,15 @@ router.post('/leave/requests', requireAuth, asyncHandler(async (req, res) => {
 router.put('/leave/requests/:id', requireAuth, asyncHandler(async (req, res) => {
   const { request, changed } = await updateRequest(req, viewerOf(req), requestId(req.params.id), req.body);
   res.json({ request, changed, message: changed.length ? 'Request updated.' : 'No changes to save.' });
+}));
+
+router.get('/leave/requests/:id/certificate', requireAuth, asyncHandler(async (req, res) => {
+  const file = await certificateOf(viewerOf(req), requestId(req.params.id));
+  res.setHeader('Content-Type', file.mime);
+  res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.send(file.data);
 }));
 
 router.post('/leave/requests/:id/decision', requireAuth, asyncHandler(async (req, res) => {

@@ -199,7 +199,7 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
     <div className="space-y-4">
       <NoticeBar notice={notice} onClose={clearNotice} />
       <PanelCard
-        title={<><FileText className="w-4 h-4 text-primary" />Leave Policy</>}
+        title={<><FileText className="w-4 h-4 text-primary" />Leave types</>}
         count={data.types.length}
         actions={!readOnly && <Button variant="primary" size="sm" leftIcon={Plus} onClick={() => open(null)}>Add leave type</Button>}
       >

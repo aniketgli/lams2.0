@@ -6,6 +6,7 @@ import { ActivityLogPanel, ActivitySource } from '../../../../shared/components/
 import { activityEndpoints } from '../../../../shared/services/activityApi';
 import { LeaveRequestsView } from '../components/LeaveRequestsView';
 import { LeaveBalancesView } from '../components/LeaveBalancesView';
+import { LeavePolicyMaster } from '../../master/components/LeavePolicyMaster';
 
 /**
  * Leave Management. "Leaves" shows the requests and "Leave Balance" the balances, each as its own
@@ -23,7 +24,7 @@ const LEAVE_ACTIVITY: ActivitySource = {
   ...activityEndpoints('/hrms/leave/activity', 'WII_Leave_Activity.csv'),
 };
 
-type AuditorView = 'requests' | 'activity';
+type LeaveView = 'requests' | 'types' | 'activity';
 
 interface LeaveManagementPageProps {
   onNavigate?: (tab: string) => void;
@@ -37,7 +38,9 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ initia
   const isAudit = role === 'audit';
   const canApply = isAdmin || role === 'general_staff';
   const balances = initialTab === 'leave_balance';
-  const [auditorView, setAuditorView] = useState<AuditorView>('requests');
+  const [view, setView] = useState<LeaveView>('requests');
+  const viewTabs: Array<readonly [LeaveView, string]> = isAdmin ? [['requests', 'Requests'], ['types', 'Leave Types']]
+    : isAudit ? [['requests', 'Requests'], ['types', 'Leave Types'], ['activity', 'Activity log']] : [];
   const [applySignal, setApplySignal] = useState(0);
   const [importSignal, setImportSignal] = useState(0);
 
@@ -62,7 +65,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ initia
             className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-xl inline-flex items-center gap-1.5 shadow-2xs cursor-pointer">
             <Upload className="w-4 h-4" /> Import Leave
           </button>
-        ) : canApply && !balances && auditorView === 'requests' ? (
+        ) : canApply && !balances && view === 'requests' ? (
           <button type="button" onClick={() => setApplySignal((n) => n + 1)}
             className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-xl inline-flex items-center gap-1.5 shadow-2xs cursor-pointer">
             <Plus className="w-4 h-4" /> Apply leave
@@ -72,17 +75,19 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ initia
 
       {balances ? <LeaveBalancesView importSignal={importSignal} /> : (
         <>
-          {isAudit && (
+          {viewTabs.length > 0 && (
             <div role="tablist" aria-label="Leave views" className="inline-flex items-center gap-0.5 p-0.5 rounded-xl bg-slate-100 border border-slate-200">
-              {([['requests', 'Requests'], ['activity', 'Activity log']] as const).map(([key, label]) => (
-                <button key={key} type="button" role="tab" aria-selected={auditorView === key} onClick={() => setAuditorView(key)}
-                  className={`h-7 px-3.5 rounded-lg text-xs font-bold cursor-pointer transition-colors ${auditorView === key ? 'bg-white text-primary shadow-2xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'}`}>
+              {viewTabs.map(([key, label]) => (
+                <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => setView(key)}
+                  className={`h-7 px-3.5 rounded-lg text-xs font-bold cursor-pointer transition-colors ${view === key ? 'bg-white text-primary shadow-2xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'}`}>
                   {label}
                 </button>
               ))}
             </div>
           )}
-          {isAudit && auditorView === 'activity' ? <ActivityLogPanel source={LEAVE_ACTIVITY} /> : <LeaveRequestsView applySignal={applySignal} />}
+          {view === 'types' && (isAdmin || isAudit) ? <LeavePolicyMaster readOnly={!isAdmin} />
+            : isAudit && view === 'activity' ? <ActivityLogPanel source={LEAVE_ACTIVITY} />
+            : <LeaveRequestsView applySignal={applySignal} />}
         </>
       )}
     </div>

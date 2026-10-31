@@ -1,6 +1,7 @@
 import type { Request } from 'express';
 import type { RowDataPacket } from 'mysql2/promise';
 import { pool } from '../../src/db';
+import { loadCertificate, parseCertificate, saveCertificate, type CertificateFile } from './certificates';
 import { HttpError, badRequest, forbidden, notFound } from '../lib/http';
 import { inTransaction } from '../lib/tx';
 import { Validator, isValidIsoDate, todayInIndia } from '../lib/validate';
@@ -66,6 +67,7 @@ export interface LeaveRequest {
   cycleYear: number;
   reason: string;
   certificate: boolean;
+  certificateName: string | null;
   stages: 1 | 2;
   status: LeaveStatus;
   appliedAt: string;
@@ -96,7 +98,10 @@ export interface LeaveInput {
   startSession: (typeof SESSIONS_START)[number];
   endSession: (typeof SESSIONS_END)[number];
   reason: string;
+  /** Whether a medical certificate is on file (set by the server from the upload, never from the request body). */
   certificate: boolean;
+  /** A certificate uploaded with this application. */
+  file: CertificateFile | null;
 }
 
 async function rows(q: { query: typeof pool.query }, sql: string, params: unknown[] = []): Promise<RowDataPacket[]> {
@@ -128,7 +133,7 @@ export const num = (n: number) => Math.round(n * 10) / 10;
 
 const SELECT = `
   SELECT m.*, u.biometric_id, u.name AS user_name, p.designation, p.department, p.profile_data,
-         t.name AS type_name, t.code AS type_code,
+         t.name AS type_name, t.code AS type_code, (SELECT c.file_name FROM leave_certificates c WHERE c.request_id = m.id) AS certificate_name,
          ab.name AS applied_by_name, mg.name AS manager_name, rv.name AS reviewer_name, l1.name AS l1_name, ac.name AS action_by_name
     FROM leave_requests m
     JOIN users u ON u.id = m.user_id
@@ -207,6 +212,7 @@ function toRequest(viewer: Viewer, row: RowDataPacket): LeaveRequest {
     cycleYear: Number(row.cycle_year),
     reason: String(row.reason),
     certificate: Boolean(row.certificate),
+    certificateName: row.certificate_name ? String(row.certificate_name) : null,
     stages: Number(row.stages) === 2 ? 2 : 1,
     status,
     appliedAt: isoTime(row.created_at) ?? '',
@@ -231,7 +237,7 @@ function toRequest(viewer: Viewer, row: RowDataPacket): LeaveRequest {
 function auditView(r: LeaveRequest): Record<string, unknown> {
   return {
     employee: `${r.name} (${r.biometricId})`, leaveType: `${r.leaveTypeName} (${r.leaveTypeCode})`, startDate: r.startDate, endDate: r.endDate,
-    startSession: r.startSession, endSession: r.endSession, days: r.daysCount, reason: r.reason, certificate: r.certificate, status: r.status,
+    startSession: r.startSession, endSession: r.endSession, days: r.daysCount, reason: r.reason, certificate: r.certificateName ?? (r.certificate ? 'Yes' : 'No'), status: r.status,
     forwardedBy: r.forwardedByName, comment: r.comment,
   };
 }
@@ -441,10 +447,10 @@ export function parseLeaveInput(body: unknown): LeaveInput {
   const startSession = v.oneOf('startSession', SESSIONS_START, false) ?? 'full';
   const endSession = v.oneOf('endSession', SESSIONS_END, false) ?? 'full';
   const reason = v.string('reason', { min: 5, max: 1000 });
-  const certificate = v.bool('certificate');
   if (startDate && endDate && startDate > endDate) v.errors.endDate ||= 'End date cannot be before the start date.';
   v.assert();
-  return { userId, leaveTypeId, startDate: startDate!, endDate: endDate!, startSession, endSession, reason: reason.replace(/\s+/g, ' '), certificate };
+  const file = parseCertificate((body as Record<string, unknown> | null)?.certificateFile);
+  return { userId, leaveTypeId, startDate: startDate!, endDate: endDate!, startSession, endSession, reason: reason.replace(/\s+/g, ' '), certificate: Boolean(file), file };
 }
 
 /** Looks at the employee's other leaves around the new one: see ./combine. */
@@ -506,7 +512,7 @@ async function checkLeave(
   if (days <= 0) throw badRequest('Please correct the highlighted fields.', { startDate: 'No working day falls in these dates.' });
   if (policy.minDays && days < policy.minDays) errors.endDate = `${policy.name} needs at least ${policy.minDays} days in one application.`;
   if (policy.maxConsecutive && days > policy.maxConsecutive) errors.endDate = `${policy.name} can be taken for at most ${policy.maxConsecutive} days at a time.`;
-  if (policy.certDays && days > policy.certDays && !input.certificate) errors.certificate = `A medical certificate is needed for more than ${policy.certDays} days. Confirm that it will be submitted.`;
+  if (policy.certDays && days > policy.certDays && !input.certificate) errors.certificate = `Upload a medical certificate: it is needed for more than ${policy.certDays} days.`;
   if (policy.lifetimeMax) {
     const [taken] = await rows(q, "SELECT COALESCE(SUM(days_count), 0) AS n FROM leave_requests WHERE user_id = ? AND leave_type_id = ? AND status <> 'rejected' AND id <> ?", [targetId, policy.id, exceptId]);
     const before = Number(taken?.n ?? 0);
@@ -561,7 +567,7 @@ export const cycleLabel = (year: number, basis: 'CY' | 'FY') => (basis === 'FY' 
 export async function previewLeave(viewer: Viewer, query: Record<string, unknown>): Promise<{ days: number; cycleYear: number; cycle: string; balance: Balance | null; error: string | null }> {
   const input = (() => {
     try {
-      return parseLeaveInput({ ...query, reason: 'preview', certificate: true });
+      return { ...parseLeaveInput({ ...query, reason: 'preview' }), certificate: true };
     } catch {
       return null;
     }
@@ -611,6 +617,7 @@ export async function createRequest(req: Request, viewer: Viewer, body: unknown)
           c.policy.stages, viewer.id, c.emp.reportingManagerId, c.emp.reviewingManagerId],
       );
       const id = Number((result as { insertId: number }).insertId);
+      if (input.file) await saveCertificate(conn, id, input.file, viewer.id);
       const created = toRequest(viewer, (await fetchOne(conn, id))!);
       await writeMasterAuditSql(conn, req, { masterKey: AUDIT_KEY, recordId: id, recordLabel: label(created), action: 'CREATE', after: auditView(created) });
       return created;
@@ -631,6 +638,8 @@ export async function updateRequest(req: Request, viewer: Viewer, id: number, bo
       const before = toRequest(viewer, row);
       if (before.status !== 'pending_l1') throw new HttpError(409, 'Only a leave that has not been looked at yet can be edited. Ask for the step to be undone first.', 'NOT_PENDING');
       if (input.userId && input.userId !== String(row.user_id)) throw badRequest('Please correct the highlighted fields.', { userId: 'The employee of a request cannot be changed.' });
+      // A certificate already on file stays unless a new one is uploaded.
+      input.certificate = Boolean(input.file) || Boolean(row.certificate);
       const c = await checkLeave(conn, viewer, input, Number(row.user_id), id);
       await conn.query(
         `UPDATE leave_requests SET leave_type_id = ?, start_date = ?, end_date = ?, start_session = ?, end_session = ?, days_count = ?, cycle_year = ?,
@@ -638,6 +647,7 @@ export async function updateRequest(req: Request, viewer: Viewer, id: number, bo
         [c.policy.id, input.startDate, input.endDate, input.startSession, input.endSession, c.days, c.cycleYear, input.reason, input.certificate ? 1 : 0,
           c.policy.stages, c.emp.reportingManagerId, c.emp.reviewingManagerId, id],
       );
+      if (input.file) await saveCertificate(conn, id, input.file, viewer.id);
       const after = toRequest(viewer, (await fetchOne(conn, id))!);
       const changed = changedFields(auditView(before), auditView(after));
       if (changed.length) await writeMasterAuditSql(conn, req, { masterKey: AUDIT_KEY, recordId: id, recordLabel: label(after), action: 'UPDATE', before: auditView(before), after: auditView(after) });
@@ -732,6 +742,7 @@ export async function deleteRequest(req: Request, viewer: Viewer, id: number, re
       const target = toRequest(viewer, row);
       if (target.status !== 'pending_l1') throw new HttpError(409, 'Only a leave that has not been looked at yet can be deleted. Ask for the step to be undone first.', 'NOT_PENDING');
       await writeMasterAuditSql(conn, req, { masterKey: AUDIT_KEY, recordId: id, recordLabel: label(target), action: 'DELETE', before: auditView(target), reason });
+      await conn.query('DELETE FROM leave_certificates WHERE request_id = ?', [id]);
       await conn.query('DELETE FROM leave_requests WHERE id = ?', [id]);
       return target;
     });
@@ -956,4 +967,18 @@ export async function approvedLeaveDays(from: string, to: string, onlyUserId: st
 /** Dates in the range on which the employee is on approved leave. */
 export async function leaveDates(userId: string, from: string, to: string): Promise<Set<string>> {
   return new Set((await approvedLeaveDays(from, to, userId)).get(userId)?.keys() ?? []);
+}
+
+/** The certificate of a request, for whoever may see the request. */
+export async function certificateOf(viewer: Viewer, id: number): Promise<{ name: string; mime: string; data: Buffer }> {
+  try {
+    const row = await fetchOne(pool, id);
+    if (!row || !canSee(viewer, row)) throw notFound('Request not found.');
+    const file = await loadCertificate(pool, id);
+    if (!file) throw notFound('No medical certificate is attached to this request.');
+    return file;
+  } catch (error) {
+    missingTable(error);
+    throw error;
+  }
 }
