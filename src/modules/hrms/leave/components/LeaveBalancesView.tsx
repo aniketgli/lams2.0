@@ -77,22 +77,25 @@ export const LeaveBalancesView: React.FC<{ importSignal?: number }> = ({ importS
         </div>
       ),
     },
+    {
+      key: 'labels', header: '', width: '64px',
+      render: () => (
+        <div className="text-[11px] leading-5 text-slate-500">
+          <div>Given</div><div>Used</div><div className="font-bold text-slate-700">Balance</div>
+        </div>
+      ),
+    },
     ...types.map((t) => ({
-      key: `t${t.id}`, header: t.code, align: 'center' as const, sortValue: (r: BalanceRow) => r.balances[t.id]?.available ?? -1,
+      key: `t${t.id}`, header: <span title={t.name}>{t.code}</span>, align: 'center' as const, width: '3rem',
       render: (r: BalanceRow) => {
         const b = r.balances[t.id];
         if (!b) return <span className="text-slate-300">—</span>;
-        const line = (label: string, value: React.ReactNode, strong = false) => (
-          <div className="flex items-center justify-between gap-3 text-[11px] leading-5">
-            <span className="text-slate-500">{label}</span>
-            <span className={strong ? 'font-bold' : 'font-medium text-slate-700'}>{value}</span>
-          </div>
-        );
+        const dash = <span className="text-slate-300">—</span>;
         return (
-          <div className="mx-auto w-28 text-left" title={`${t.name}${b.pending ? `: ${days(b.pending)} pending` : ''}`}>
-            {line('Given', t.isDebited ? days(b.total + b.carryForward) : '—')}
-            {line('Used', days(b.used))}
-            {line('Balance', t.isDebited ? days(b.available) : '—', true)}
+          <div className="text-[11px] leading-5 text-center" title={`${t.name}${b.pending ? `: ${days(b.pending)} pending` : ''}`}>
+            <div className="font-medium text-slate-700">{t.isDebited ? days(b.total + b.carryForward) : dash}</div>
+            <div className="font-medium text-slate-700">{days(b.used)}</div>
+            <div className={`font-bold ${t.isDebited && b.available <= 0 ? 'text-rose-600' : 'text-slate-900'}`}>{t.isDebited ? days(b.available) : dash}</div>
           </div>
         );
       },
@@ -165,7 +168,7 @@ export const LeaveBalancesView: React.FC<{ importSignal?: number }> = ({ importS
           data={pageRows}
           loading={loading}
           keyExtractor={(r) => r.userId}
-          className="min-w-[900px]"
+          className="[&_th]:px-1.5 [&_td]:px-1.5"
           emptyTitle={rows.length ? 'No employees match these filters' : 'No balances'}
           emptyDescription={rows.length ? 'Change the filters or search.' : types.length ? 'There are no employees to show.' : 'Add leave types in Master Settings first.'}
           pagination={{ currentPage: page, totalPages, totalItems: visible.length, pageSize, onPageChange: setPage, onPageSizeChange: setPageSize, pageSizeOptions: PAGE_SIZES }}
