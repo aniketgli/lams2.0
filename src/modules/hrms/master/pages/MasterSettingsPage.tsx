@@ -4,7 +4,6 @@ import { useSession } from '../../../../auth/SessionContext';
 import { PageHeader } from '../../../../shared/components/PageHeader';
 import { ActivityLogPanel, ActivitySource } from '../../../../shared/components/ActivityLogPanel';
 import { activityEndpoints } from '../../../../shared/services/activityApi';
-import { LeavePolicyMaster } from '../components/LeavePolicyMaster';
 import { LeaveGroupsPanel } from '../components/LeaveGroupsPanel';
 import { ShiftsPanel } from '../components/ShiftsPanel';
 import { BiometricMachinesPanel } from '../components/BiometricMachinesPanel';
@@ -16,18 +15,12 @@ import { DefaultPasswordCard } from '../components/DefaultPasswordCard';
 import { TabStrip } from '../components/masterUi';
 import { MasterCatalog, masterApi } from '../masterApi';
 
-type LeaveTab = 'groups' | 'types';
-const LEAVE_TABS: { id: LeaveTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { id: 'groups', label: 'Leave Groups', icon: Layers },
-  { id: 'types', label: 'Leave Types', icon: FileText },
-];
-
 type Section = 'shifts' | 'biometric' | 'leave' | 'profile' | 'organization' | 'activity';
 
 const SECTIONS: { id: Section; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: 'shifts', label: 'Shifts', icon: Clock },
   { id: 'biometric', label: 'Biometric Machines', icon: Cpu },
-  { id: 'leave', label: 'Leave Policy', icon: FileText },
+  { id: 'leave', label: 'Leave Groups', icon: Layers },
   { id: 'profile', label: 'Profile Masters', icon: Users },
   { id: 'organization', label: 'Organization', icon: Building2 },
 ];
@@ -42,7 +35,6 @@ export const MasterSettingsPage: React.FC = () => {
   const { session } = useSession();
   const readOnly = session?.activeRole !== 'administrator';
   const [section, setSection] = useState<Section>('shifts');
-  const [leaveTab, setLeaveTab] = useState<LeaveTab>('groups');
   const [catalog, setCatalog] = useState<MasterCatalog | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
 
@@ -77,13 +69,7 @@ export const MasterSettingsPage: React.FC = () => {
 
       {section === 'shifts' && <ShiftsPanel readOnly={readOnly} />}
       {section === 'biometric' && <BiometricMachinesPanel readOnly={readOnly} />}
-      {section === 'leave' && (
-        <>
-          <TabStrip tabs={LEAVE_TABS} value={leaveTab} onChange={setLeaveTab} size="sm" />
-          {leaveTab === 'groups' && <LeaveGroupsPanel readOnly={readOnly} />}
-          {leaveTab === 'types' && <LeavePolicyMaster readOnly={readOnly} />}
-        </>
-      )}
+      {section === 'leave' && <LeaveGroupsPanel readOnly={readOnly} />}
       {section === 'organization' && (
         <>
           <OrganizationPanel readOnly={readOnly} />
