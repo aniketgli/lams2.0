@@ -752,12 +752,12 @@ export async function applicableEmployees(viewer: Viewer): Promise<{ id: string;
 // ---------------------------------------------------------------------------
 
 export interface BalanceRow {
-  userId: string; biometricId: string; name: string; designation: string; department: string; basis: 'CY' | 'FY'; cycle: string;
+  userId: string; biometricId: string; name: string; designation: string; department: string; employmentType: string; basis: 'CY' | 'FY'; cycle: string;
   balances: Record<string, (Balance & { eligible: boolean }) | null>;
 }
 
 /** Balances of the people the viewer may see (self; managers their team; administrator and auditor everyone) for one leave year. */
-export async function listBalances(viewer: Viewer, yearRaw: unknown): Promise<{ year: number; years: number[]; types: Array<{ id: string; code: string; name: string; isDebited: boolean }>; rows: BalanceRow[] }> {
+export async function listBalances(viewer: Viewer, yearRaw: unknown): Promise<{ year: number; years: number[]; employeeTypes: Array<{ code: string; name: string }>; types: Array<{ id: string; code: string; name: string; isDebited: boolean }>; rows: BalanceRow[] }> {
   const year = yearRaw === undefined || yearRaw === '' ? Number(todayInIndia().slice(0, 4)) : Number(yearRaw);
   if (!Number.isInteger(year) || year < 2000 || year > 2100) throw badRequest('Choose a year between 2000 and 2100.');
   try {
@@ -800,11 +800,12 @@ export async function listBalances(viewer: Viewer, yearRaw: unknown): Promise<{ 
         const used = Number(s?.used ?? 0) + Number(l?.used ?? 0), pending = Number(s?.pending ?? 0) + Number(l?.pending ?? 0);
         balances[String(p.id)] = { total, carryForward, used: num(used), pending: num(pending), available: num(total + carryForward - used - pending), eligible };
       }
-      return { userId: String(r.id), biometricId: String(r.biometric_id), name: String(r.name), designation: String(r.designation ?? ''), department: String(r.department ?? ''), basis, cycle: cycleLabel(year, basis), balances };
+      return { userId: String(r.id), biometricId: String(r.biometric_id), name: String(r.name), designation: String(r.designation ?? ''), department: String(r.department ?? ''), employmentType: String(r.employment_type ?? ''), basis, cycle: cycleLabel(year, basis), balances };
     });
     const found = await rows(pool, 'SELECT cycle_year AS y FROM leave_balances UNION SELECT cycle_year AS y FROM leave_requests');
     const years = [...new Set([...found.map((f) => Number(f.y)), Number(today.slice(0, 4)), year])].sort((a, b) => b - a);
-    return { year, years, types: policies.map((p) => ({ id: String(p.id), code: p.code, name: p.name, isDebited: p.debited })), rows: out };
+    const employeeTypes = (await rows(pool, "SELECT code, name FROM lookup_values WHERE lookup_type = 'employee_type' ORDER BY name")).map((t) => ({ code: String(t.code), name: String(t.name) }));
+    return { year, years, employeeTypes, types: policies.map((p) => ({ id: String(p.id), code: p.code, name: p.name, isDebited: p.debited })), rows: out };
   } catch (error) {
     missingTable(error);
     throw error;

@@ -52,14 +52,17 @@ export const LeaveBalancesView: React.FC<{ importSignal?: number }> = ({ importS
   useEffect(() => { if (importSignal > 0 && isAdmin) setImporting(true); }, [importSignal, isAdmin]);
 
   const [search, setSearch] = useState('');
+  const [employees, setEmployees] = useState<string[]>(['all']);
   const [departments, setDepartments] = useState<string[]>(['all']);
+  const [employeeTypes, setEmployeeTypes] = useState<string[]>(['all']);
+  const [cycles, setCycles] = useState<string[]>(['all']);
   const rows = data?.rows ?? [];
   const types = data?.types ?? [];
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return rows.filter((r) => matchesMultiSelect(departments, r.department) && (!q || [r.name, r.biometricId, r.department, r.designation].some((v) => (v || '').toLowerCase().includes(q))));
-  }, [rows, search, departments]);
-  const filtered = Boolean(search.trim()) || !departments.includes('all');
+    return rows.filter((r) => matchesMultiSelect(employees, r.userId) && matchesMultiSelect(departments, r.department) && matchesMultiSelect(employeeTypes, r.employmentType) && matchesMultiSelect(cycles, r.basis) && (!q || [r.name, r.biometricId, r.department, r.designation].some((v) => (v || '').toLowerCase().includes(q))));
+  }, [rows, search, employees, departments, employeeTypes, cycles]);
+  const filtered = Boolean(search.trim()) || [employees, departments, employeeTypes, cycles].some((f) => !f.includes('all'));
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZES[0]);
@@ -169,9 +172,14 @@ export const LeaveBalancesView: React.FC<{ importSignal?: number }> = ({ importS
           disabled: visible.length === 0,
           csvTitle: 'Download the balances shown below as CSV', pdfTitle: 'Download the balances shown below as PDF',
         }}
-        search={cards ? undefined : { value: search, onChange: setSearch, placeholder: 'Search employee, department…' }}
-        onReset={filtered ? () => { setSearch(''); setDepartments(['all']); } : null}
-        filters={cards ? [] : [<MultiSelectFilter key="dept" label="Department" options={[...new Set(rows.map((r) => r.department).filter(Boolean))].sort().map((v) => ({ label: v, value: v }))} selectedValues={departments} onChange={setDepartments} />]}
+        search={cards ? undefined : { value: search, onChange: setSearch, placeholder: 'Search employee, department, designation…' }}
+        onReset={filtered ? () => { setSearch(''); setEmployees(['all']); setDepartments(['all']); setEmployeeTypes(['all']); setCycles(['all']); } : null}
+        filters={cards ? [] : [
+          <MultiSelectFilter key="emp" label="Employee" options={rows.map((r) => ({ label: `${r.name} (${r.biometricId})`, value: r.userId }))} selectedValues={employees} onChange={setEmployees} />,
+          <MultiSelectFilter key="dept" label="Department" options={[...new Set(rows.map((r) => r.department).filter(Boolean))].sort().map((v) => ({ label: v, value: v }))} selectedValues={departments} onChange={setDepartments} />,
+          <MultiSelectFilter key="etype" label="Employee type" options={(data?.employeeTypes ?? []).map((t) => ({ label: t.name, value: t.code }))} selectedValues={employeeTypes} onChange={setEmployeeTypes} />,
+          <MultiSelectFilter key="cycle" label="Leave year" options={[{ label: 'Calendar year (CY)', value: 'CY' }, { label: 'Financial year (FY)', value: 'FY' }]} selectedValues={cycles} onChange={setCycles} />,
+        ]}
       />
 
       {cards ? (

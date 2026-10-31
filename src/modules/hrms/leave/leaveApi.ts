@@ -162,6 +162,7 @@ export interface BalanceRow {
   name: string;
   designation: string;
   department: string;
+  employmentType: string;
   basis: 'CY' | 'FY';
   cycle: string;
   balances: Record<string, (LeaveBalance & { eligible: boolean }) | null>;
@@ -171,6 +172,7 @@ export interface BalanceList {
   year: number;
   /** Leave years that have data, newest first (always includes this year). */
   years: number[];
+  employeeTypes: Array<{ code: string; name: string }>;
   types: Array<{ id: string; code: string; name: string; isDebited: boolean }>;
   rows: BalanceRow[];
 }
