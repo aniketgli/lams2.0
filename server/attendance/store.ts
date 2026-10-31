@@ -1,4 +1,5 @@
 import type { RowDataPacket } from 'mysql2/promise';
+import { approvedLeaveDays } from '../leave/requests';
 import { pool } from '../../src/db';
 import { HttpError, badRequest } from '../lib/http';
 import { isValidIsoDate, todayInIndia } from '../lib/validate';
@@ -272,8 +273,9 @@ export async function listAttendance(viewer: AttendanceViewer, query: { from?: u
   const onlyUserId = query.userId ? String(query.userId) : null;
   if (onlyUserId && !/^\d{1,20}$/.test(onlyUserId)) throw badRequest('Invalid employee.');
 
-  const [employees, machines, shifts, holidays, manual, od] = await Promise.all([
+  const [employees, machines, shifts, holidays, manual, od, leave] = await Promise.all([
     employeesInScope(viewer, onlyUserId), attendanceMachines(), shiftRules(), gazettedHolidays(from, to), approvedManual(from, to), approvedOutdoorDuty(from, to),
+    approvedLeaveDays(from, to, onlyUserId),
   ]);
   const everyone = viewer.role === 'administrator' || viewer.role === 'audit';
   const punches = await loadPunches(from, to, machines, everyone && !onlyUserId ? null : employees.map((e) => e.biometricId));
@@ -295,10 +297,14 @@ export async function listAttendance(viewer: AttendanceViewer, query: { from?: u
         // Approved outdoor duty marks a working day as OD, whatever the punches say; off days stay as they are.
         const odPlace = od.get(emp.userId)?.get(date);
         const onDuty = odPlace !== undefined && ['PP', 'PA', 'AP', 'AA'].includes(day.status);
-        records.push({
-          ...(onDuty ? { ...day, status: 'OD' as const, workMode: 'field_od' as const, lateByMins: 0, earlyByMins: 0, remark: `Outdoor duty · ${odPlace}` } : day),
-          userId: emp.userId, biometricId: emp.biometricId,
-        });
+        // Approved leave marks an unattended working day as LV (a half-day leave only adds a remark); punches always win.
+        const away = leave.get(emp.userId)?.get(date);
+        const onLeave = !onDuty && away !== undefined && !away.half && day.status === 'AA';
+        const shaped = onDuty ? { ...day, status: 'OD' as const, workMode: 'field_od' as const, lateByMins: 0, earlyByMins: 0, remark: `Outdoor duty · ${odPlace}` }
+          : onLeave ? { ...day, status: 'LV' as const, workMode: 'on_leave' as const, lateByMins: 0, earlyByMins: 0, remark: `Leave · ${away!.code}` }
+          : away && !onDuty && ['PP', 'PA', 'AP', 'AA'].includes(day.status) ? { ...day, remark: `${away.half ? 'Half-day leave' : 'Leave'} · ${away.code}` }
+          : day;
+        records.push({ ...shaped, userId: emp.userId, biometricId: emp.biometricId });
       }
     }
   }

@@ -35,6 +35,7 @@ const STATUS_META: Record<AttendanceDay['status'], { label: string; pill: string
   GH: { label: 'Holiday', pill: 'bg-blue-50 text-blue-700 border-blue-200', dot: 'bg-blue-600' },
   'HH#': { label: 'Worked on holiday', pill: 'bg-sky-50 text-sky-700 border-sky-200', dot: 'bg-sky-600' },
   OD: { label: 'Outdoor duty', pill: 'bg-indigo-50 text-indigo-700 border-indigo-200', dot: 'bg-indigo-600' },
+  LV: { label: 'On leave', pill: 'bg-violet-50 text-violet-700 border-violet-200', dot: 'bg-violet-600' },
 };
 const STATUSES = Object.keys(STATUS_META) as AttendanceDay['status'][];
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -292,7 +293,7 @@ export const AttendanceView: React.FC = () => {
             </>
           ) : items.length > 0 ? (
             <div className="flex flex-wrap gap-1">
-              {(['PP', 'PA', 'AP', 'AA'] as const).map((s) => {
+              {(['PP', 'PA', 'AP', 'AA', 'LV'] as const).map((s) => {
                 const n = items.filter((r) => r.status === s || (s === 'PP' && (r.status === 'WW#' || r.status === 'HH#' || r.status === 'OD'))).length;
                 return n ? <span key={s} title={STATUS_META[s].label} className={`px-1.5 py-0.5 rounded-md border text-[10px] font-bold ${STATUS_META[s].pill}`}>{s} {n}</span> : null;
               })}

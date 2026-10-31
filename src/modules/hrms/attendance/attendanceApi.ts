@@ -10,8 +10,8 @@ export interface AttendanceDay {
   clockOut: string | null;
   totalHours: number | null;
   punches: number;
-  status: 'PP' | 'AA' | 'PA' | 'AP' | 'WW' | 'WW#' | 'GH' | 'HH#' | 'OD';
-  workMode: 'in_office' | 'absent' | 'field_od';
+  status: 'PP' | 'AA' | 'PA' | 'AP' | 'WW' | 'WW#' | 'GH' | 'HH#' | 'OD' | 'LV';
+  workMode: 'in_office' | 'absent' | 'field_od' | 'on_leave';
   shiftCode: string;
   lateByMins: number;
   earlyByMins: number;

@@ -59,8 +59,7 @@ export const MasterSettingsPage: React.FC = () => {
 
       {section === 'shifts' && <ShiftsPanel readOnly={readOnly} />}
       {section === 'biometric' && <BiometricMachinesPanel readOnly={readOnly} />}
-      {/* Leave Policy is unchanged in this step. */}
-      {section === 'leave' && <LeavePolicyMaster />}
+      {section === 'leave' && <LeavePolicyMaster readOnly={readOnly} />}
       {section === 'organization' && (
         <>
           <OrganizationPanel readOnly={readOnly} />
