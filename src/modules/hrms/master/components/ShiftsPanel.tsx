@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { Clock, Pencil, Plus, Star, Trash2 } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Clock, Pencil, Plus, Search, Star, Trash2 } from 'lucide-react';
 import { Button, DataTable, Input, Modal, Select, Textarea } from '../../../../shared/components';
 import type { ColumnDef } from '../../../../shared/components';
 import { ApiError } from '../../../../shared/services/api';
@@ -24,6 +24,7 @@ function duration(start: string, end: string): string {
 export const ShiftsPanel: React.FC<{ readOnly: boolean }> = ({ readOnly }) => {
   const [shifts, setShifts] = useState<ShiftRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
   const [loadError, setLoadError] = useState<string | undefined>();
   const [notice, showNotice, clearNotice] = useNotice();
 
@@ -136,6 +137,13 @@ export const ShiftsPanel: React.FC<{ readOnly: boolean }> = ({ readOnly }) => {
 
   const set = <K extends keyof ShiftInput>(key: K, value: ShiftInput[K]) => form && setForm({ ...form, [key]: value });
 
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return shifts;
+    return shifts.filter((s) => [s.code, s.name, s.startTime, s.endTime, s.description, s.applicableDays.join(' '), s.status, s.isDefault ? 'default' : '']
+      .some((v) => v.toLowerCase().includes(q)));
+  }, [shifts, search]);
+
   return (
     <div className="space-y-4">
       <NoticeBar notice={notice} onClose={clearNotice} />
@@ -144,8 +152,13 @@ export const ShiftsPanel: React.FC<{ readOnly: boolean }> = ({ readOnly }) => {
         count={shifts.length}
         actions={!readOnly && <Button variant="primary" size="sm" leftIcon={Plus} onClick={() => open(null)}>Add shift</Button>}
       >
-        <DataTable columns={columns} data={shifts} loading={loading} error={loadError} keyExtractor={(s) => s.id}
-          emptyTitle="No shifts yet" emptyDescription={readOnly ? 'Nothing has been added yet.' : 'Add the institute’s first shift.'} />
+        <div className="mb-4">
+          <Input aria-label="Search" placeholder="Search by code, name, timing or working day" leftIcon={Search} value={search}
+            onChange={(e) => setSearch(e.target.value)} />
+        </div>
+        <DataTable columns={columns} data={visible} loading={loading} error={loadError} keyExtractor={(s) => s.id}
+          emptyTitle={shifts.length ? 'No matching shifts' : 'No shifts yet'}
+          emptyDescription={shifts.length ? 'Try a different search.' : readOnly ? 'Nothing has been added yet.' : 'Add the institute’s first shift.'} />
       </PanelCard>
 
       <Modal
