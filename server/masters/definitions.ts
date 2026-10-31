@@ -69,7 +69,9 @@ interface BaseDef {
   fields: FieldDef[];
   usage: UsageCheck[];
   /** The set of records is fixed: they can be renamed or (de)activated, never added or deleted. */
-  fixedRecords?: boolean;
+  noCreate?: boolean;
+  /** A list (lookup) whose code may be changed; the server then updates every record that stores the old code. */
+  codeEditable?: boolean;
   /** Form and table show this field where Status normally is, and Status where the field is (field key). */
   swapStatusWith?: string;
 }
@@ -214,11 +216,13 @@ export const MASTERS: MasterDef[] = [
     kind: 'lookup', key: 'employeeType', lookupType: 'employee_type', group: 'lists',
     label: 'Employee Types', noun: 'Employee type',
     description: 'Each type uses one form layout, which decides the fields asked for.',
-    fixedRecords: true,
+    noCreate: true, codeEditable: true,
     fields: [{ key: 'formLayout', label: 'Form layout', type: 'layout', required: true, hidden: true }],
     usage: [
       { what: 'employee profiles', sql: PROFILE_COLUMN('employment_type'), by: 'code' },
       { what: 'designations', sql: METADATA_JSON('designations', 'empType'), by: 'code' },
+      { what: 'leave types', sql: 'SELECT COUNT(*) AS n FROM leave_types WHERE FIND_IN_SET(?, employee_types)', by: 'code' },
+      { what: 'leave quotas', sql: 'SELECT COUNT(*) AS n FROM leave_type_quotas WHERE employee_type = ?', by: 'code' },
     ],
   },
   {
@@ -292,8 +296,14 @@ export function auditMasterLabels(): Record<string, string> {
 export async function findUsage(def: MasterDef, record: { name: string; code: string }): Promise<{ what: string; count: number }[]> {
   const found: { what: string; count: number }[] = [];
   for (const check of def.usage) {
-    const [rows] = await pool.query<RowDataPacket[]>(check.sql, [check.by === 'code' ? record.code : record.name]);
-    const count = Number(rows[0]?.n ?? 0);
+    let count = 0;
+    try {
+      const [rows] = await pool.query<RowDataPacket[]>(check.sql, [check.by === 'code' ? record.code : record.name]);
+      count = Number(rows[0]?.n ?? 0);
+    } catch (error) {
+      // A module whose tables are not installed yet cannot be using the record.
+      if ((error as { code?: string })?.code !== 'ER_NO_SUCH_TABLE') throw error;
+    }
     if (count > 0) found.push({ what: check.what, count });
   }
   return found;
