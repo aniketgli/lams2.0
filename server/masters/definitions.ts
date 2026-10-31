@@ -306,9 +306,9 @@ export function auditMasterLabels(): Record<string, string> {
 /** Everything on the Master Settings screen, for the auditor's activity log. */
 export function masterActivityScope(): { keys: string[]; areaLabels: Record<string, string> } {
   const labels = auditMasterLabels();
-  const keys = ['shift', 'biometric_machine', 'organization_settings', 'notification_recipient', 'email_settings', 'default_password', 'leave_type', 'leave_policy', ...MASTERS.map(auditKey)];
+  const keys = ['shift', 'biometric_machine', 'organization_settings', 'notification_recipient', 'email_settings', 'default_password', 'leave_type', ...MASTERS.map(auditKey)];
   const unique = [...new Set(keys)];
-  const areaLabels: Record<string, string> = { leave_type: 'Leave type', leave_policy: 'Leave policy', master_export: 'Log download' };
+  const areaLabels: Record<string, string> = { leave_type: 'Leave policy', master_export: 'Log download' };
   for (const k of unique) areaLabels[k] ||= labels[k] ?? k;
   return { keys: [...unique, 'master_export'], areaLabels };
 }
