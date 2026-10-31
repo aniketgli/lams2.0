@@ -473,10 +473,10 @@ export const ManualAttendanceView: React.FC = () => {
             onSort={(key) => setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }))}
             emptyTitle={requests.length ? 'No requests match these filters' : 'No manual attendance requests'}
             emptyDescription={requests.length ? 'Change the filters or search.' : canApply ? 'Choose other dates, or apply for a missed punch.' : 'Choose other dates.'}
-            pagination={sorted.length > PAGE_SIZES[0] ? {
+            pagination={{
               currentPage: page, totalPages, totalItems: sorted.length, pageSize,
               onPageChange: setPage, onPageSizeChange: setPageSize, pageSizeOptions: PAGE_SIZES,
-            } : undefined}
+            }}
           />
         </>
       )}
