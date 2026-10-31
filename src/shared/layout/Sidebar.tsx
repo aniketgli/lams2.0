@@ -242,7 +242,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   )}
                 </div>
 
-                {/* 4. Employee Management Accordion */}
+                {/* 4. Employee Management: a group only when it has more than one page; otherwise the one page directly */}
+                {!show('user_controls') && (
+                  <button
+                    onClick={() => {
+                      setExpandedGroup(null);
+                      handleNavClick('profile');
+                    }}
+                    className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-medium transition-all text-left cursor-pointer ${
+                      activeTab === 'profile'
+                        ? 'bg-primary/10 text-primary font-bold border-l-3 border-primary shadow-2xs'
+                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                    }`}
+                  >
+                    <User className={`w-4 h-4 shrink-0 ${activeTab === 'profile' ? 'text-primary' : 'text-slate-400'}`} />
+                    <span>Profiles</span>
+                  </button>
+                )}
+                {show('user_controls') && (
                 <div className="space-y-0.5">
                   <button
                     onClick={() => {
@@ -309,6 +326,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </div>
                   )}
                 </div>
+                )}
 
                 {/* 5. Master Settings (For Administrator & Audit) */}
                 {show('master') && (

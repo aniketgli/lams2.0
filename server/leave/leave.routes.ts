@@ -12,7 +12,7 @@ import {
   LEAVE_GROUP_SCOPE, createLeaveGroup, deleteLeaveGroup, groupLeaveTypeIdsOfUser, listLeaveGroups, updateLeaveGroup,
 } from './groups';
 import {
-  LEAVE_SCOPE, applicableEmployees, certificateOf, createRequest, decideRequest, deleteRequest, leaveHistory, listBalances, listRequests, previewLeave, requestId, setBalance,
+  LEAVE_SCOPE, applicableEmployees, certificateOf, createRequest, decideRequest, deleteRequest, leaveHistory, listBalancesPage, listRequests, previewLeave, requestId, setBalance,
   undoDecision, updateRequest,
 } from './requests';
 
@@ -115,7 +115,7 @@ router.get('/leave/preview', requireAuth, asyncHandler(async (req, res) => {
 }));
 
 router.get('/leave/balances', requireAuth, asyncHandler(async (req, res) => {
-  res.json(await listBalances(viewerOf(req), (req.query as Record<string, unknown>).year));
+  res.json(await listBalancesPage(viewerOf(req), (req.query as Record<string, unknown>).year));
 }));
 
 router.put('/leave/balances', requireAuth, asyncHandler(async (req, res) => {
