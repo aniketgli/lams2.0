@@ -10,8 +10,8 @@ import {
 } from './requests';
 
 /**
- * Leave quota import (administrator). A CSV with Biometric_ID, Leave_Cycle (CY / FY), Leave_Code and Total_Quota sets, adds to
- * or deducts from the days granted for one leave year. The browser first asks for a review (nothing is
+ * Leave quota import (administrator). A CSV with Biometric_ID, Leave_Year (CY 2026 / FY 2026-27), Leave_Code and Total_Quota sets, adds to
+ * or deducts from the days granted for the leave year named in each row. The browser first asks for a review (nothing is
  * written); importing re-checks every row on the server and writes all of them in one transaction, or
  * none when a single row has a problem. Each changed balance is audited like a manual change.
  */
@@ -19,7 +19,19 @@ import {
 export const IMPORT_STRATEGIES = ['set', 'add', 'deduct'] as const;
 export type ImportStrategy = (typeof IMPORT_STRATEGIES)[number];
 export const MAX_IMPORT_ROWS = 3000;
-export const IMPORT_HEADERS = ['Biometric_ID', 'Leave_Cycle', 'Leave_Code', 'Total_Quota'] as const;
+export const IMPORT_HEADERS = ['Biometric_ID', 'Leave_Year', 'Leave_Code', 'Total_Quota'] as const;
+
+/** "CY 2026" / "FY 2026-27" (or FY 2026-2027) → the cycle and the year it starts; null when the text is neither. */
+export function parseLeaveYear(text: string): { type: 'CY' | 'FY'; year: number } | null {
+  const m = /^(CY|FY)\s*(\d{4})(?:\s*-\s*(\d{2}|\d{4}))?$/i.exec(text.trim());
+  if (!m) return null;
+  const type = m[1].toUpperCase() as 'CY' | 'FY', year = Number(m[2]);
+  if (year < 2000 || year > 2100) return null;
+  if (type === 'CY') return m[3] ? null : { type, year };
+  if (!m[3]) return null;
+  const end = m[3].length === 2 ? Math.floor(year / 100) * 100 + Number(m[3]) : Number(m[3]);
+  return end === year + 1 ? { type, year } : null;
+}
 const MAX_CSV_CHARS = 1_000_000;
 const STRATEGY_LABEL: Record<ImportStrategy, string> = { set: 'Set quota', add: 'Add', deduct: 'Deduct' };
 
@@ -49,28 +61,27 @@ export function parseDelimited(text: string): string[][] {
 const key = (h: string) => h.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 export interface ImportRow {
-  line: number; biometricId: string; employee: string; cycleType: string; cycle: string; leaveCode: string; leaveType: string; value: string;
+  line: number; biometricId: string; employee: string; cycle: string; leaveCode: string; leaveType: string; value: string;
   before: number | null; after: number | null; status: 'ok' | 'unchanged' | 'error'; error: string | null;
 }
 export interface ImportReview {
-  year: number; strategy: ImportStrategy;
+  strategy: ImportStrategy;
   summary: { rows: number; ok: number; unchanged: number; errors: number };
   rows: ImportRow[];
 }
-interface Planned { row: ImportRow; emp: Employee; policy: Policy; carryForward: number; total: number; before: { total: number; carryForward: number } }
+interface Planned { row: ImportRow; year: number; emp: Employee; policy: Policy; carryForward: number; total: number; before: { total: number; carryForward: number } }
 
-function parseInput(body: unknown, admin: boolean): { year: number; strategy: ImportStrategy; csv: string } {
+function parseInput(body: unknown, admin: boolean): { strategy: ImportStrategy; csv: string } {
   if (!admin) throw forbidden('Only an administrator can import leave quotas.');
   const v = new Validator(body);
-  const year = v.int('year', { min: 2000, max: 2100 });
   const strategy = v.oneOf('strategy', IMPORT_STRATEGIES);
   const csv = v.string('csv', { min: 1, max: MAX_CSV_CHARS });
   v.assert();
-  return { year: year!, strategy: strategy!, csv };
+  return { strategy: strategy!, csv };
 }
 
 /** Checks every row against the database. Writes nothing. */
-async function plan(q: Q, input: { year: number; strategy: ImportStrategy; csv: string }): Promise<{ review: ImportReview; planned: Planned[] }> {
+async function plan(q: Q, input: { strategy: ImportStrategy; csv: string }): Promise<{ review: ImportReview; planned: Planned[] }> {
   const table = parseDelimited(input.csv);
   if (table.length === 0) throw badRequest('The file is empty.', { csv: 'The file is empty.' });
   const heads = table[0].map(key);
@@ -96,8 +107,8 @@ async function plan(q: Q, input: { year: number; strategy: ImportStrategy; csv: 
     const cells = body[i];
     const line = i + 2;
     const biometricId = (cells[cBio] ?? '').trim(), leaveCode = (cells[cCode] ?? '').trim(), value = (cells[cQuota] ?? '').trim();
-    const cycleText = (cells[cCycle] ?? '').trim().toUpperCase();
-    const row: ImportRow = { line, biometricId, employee: '', cycleType: cycleText, cycle: '', leaveCode, leaveType: '', value, before: null, after: null, status: 'error', error: null };
+    const cycleText = (cells[cCycle] ?? '').trim();
+    const row: ImportRow = { line, biometricId, employee: '', cycle: cycleText, leaveCode, leaveType: '', value, before: null, after: null, status: 'error', error: null };
     rowsOut.push(row);
     const fail = (message: string) => { row.error = message; };
 
@@ -114,10 +125,12 @@ async function plan(q: Q, input: { year: number; strategy: ImportStrategy; csv: 
     if (!policy) { fail(`${leaveCode} is not an active leave type.`); continue; }
     row.leaveType = policy.name;
     if (!policy.debited) { fail(`${policy.name} has no balance (it is not debited), so it has no quota.`); continue; }
-    if (cycleText !== 'CY' && cycleText !== 'FY') { fail('Leave_Cycle must be CY or FY.'); continue; }
+    const when = parseLeaveYear(cycleText);
+    if (!when) { fail('Leave_Year must be like CY 2026 or FY 2026-27.'); continue; }
+    row.cycle = when.type === 'FY' ? cycleLabel(when.year, 'FY') : `CY ${when.year}`;
     const quota = Number(value);
     if (value === '' || !Number.isFinite(quota) || quota < 0 || quota > 400 || Math.round(quota * 2) !== quota * 2) { fail('Total_Quota must be days from 0 to 400, in steps of 0.5.'); continue; }
-    const dup = `${person.id}:${policy.id}`;
+    const dup = `${person.id}:${policy.id}:${when.type}${when.year}`;
     if (seen.has(dup)) { fail(`Repeated: line ${seen.get(dup)} has the same employee and leave type.`); continue; }
     seen.set(dup, line);
 
@@ -126,22 +139,21 @@ async function plan(q: Q, input: { year: number; strategy: ImportStrategy; csv: 
       try { emp = await loadEmployee(q, person.id); } catch (error) { if (error instanceof HttpError) { fail('This employee cannot be loaded.'); continue; } throw error; }
       employees.set(person.id, emp);
     }
-    row.cycle = cycleLabel(input.year, emp.basis);
-    if (emp.basis !== cycleText) { fail(`${person.name} follows ${emp.basis === 'FY' ? 'the financial year (FY)' : 'the calendar year (CY)'}, not ${cycleText}.`); continue; }
-    const problem = eligibilityProblem(policy, emp, `${input.year}-12-31`);
+    if (emp.basis !== when.type) { fail(`${person.name} follows ${emp.basis === 'FY' ? 'the financial year (FY)' : 'the calendar year (CY)'}, not ${when.type}.`); continue; }
+    const problem = eligibilityProblem(policy, emp, `${when.year}-12-31`);
     if (problem) { fail(problem); continue; }
-    const before = await balanceOf(q, emp.id, { id: policy.id, quota: creditedQuota(policy, emp.employmentType, input.year, emp.basis, today, emp.isPwd) }, input.year);
+    const before = await balanceOf(q, emp.id, { id: policy.id, quota: creditedQuota(policy, emp.employmentType, when.year, emp.basis, today, emp.isPwd) }, when.year);
     const total = input.strategy === 'set' ? quota : input.strategy === 'add' ? before.total + quota : before.total - quota;
     row.before = before.total; row.after = num(total);
     if (total < 0) { fail(`Deducting ${quota} from ${num(before.total)} would go below 0.`); continue; }
     if (total > 400) { fail('The total cannot be more than 400 days.'); continue; }
     if (total + before.carryForward < before.used + before.pending) { fail(`Days already used or pending are ${num(before.used + before.pending)}; the grant cannot be lower.`); continue; }
     row.status = num(total) === num(before.total) ? 'unchanged' : 'ok';
-    planned.push({ row, emp, policy, carryForward: before.carryForward, total: num(total), before: { total: before.total, carryForward: before.carryForward } });
+    planned.push({ row, year: when.year, emp, policy, carryForward: before.carryForward, total: num(total), before: { total: before.total, carryForward: before.carryForward } });
   }
   const count = (s: ImportRow['status']) => rowsOut.filter((r) => r.status === s).length;
   return {
-    review: { year: input.year, strategy: input.strategy, summary: { rows: rowsOut.length, ok: count('ok'), unchanged: count('unchanged'), errors: count('error') }, rows: rowsOut },
+    review: { strategy: input.strategy, summary: { rows: rowsOut.length, ok: count('ok'), unchanged: count('unchanged'), errors: count('error') }, rows: rowsOut },
     planned,
   };
 }
@@ -170,11 +182,11 @@ export async function applyImport(req: Request, viewer: { role: string | null },
         await conn.query(
           `INSERT INTO leave_balances (user_id, leave_type_id, cycle_year, total, carry_forward, cycle_type) VALUES (?, ?, ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE total = VALUES(total), carry_forward = VALUES(carry_forward), cycle_type = VALUES(cycle_type)`,
-          [p.emp.id, p.policy.id, input.year, p.total, p.carryForward, p.emp.basis],
+          [p.emp.id, p.policy.id, p.year, p.total, p.carryForward, p.emp.basis],
         );
         await writeMasterAuditSql(conn, req, {
-          masterKey: BALANCE_KEY, recordId: `${p.emp.id}:${p.policy.id}:${input.year}`,
-          recordLabel: `${p.row.employee} (${p.row.biometricId}) · ${p.policy.code} · ${input.year}`,
+          masterKey: BALANCE_KEY, recordId: `${p.emp.id}:${p.policy.id}:${p.year}`,
+          recordLabel: `${p.row.employee} (${p.row.biometricId}) · ${p.policy.code} · ${p.row.cycle}`,
           action: 'UPDATE', before: p.before, after: { total: p.total, carryForward: p.carryForward },
           reason: `CSV import: ${STRATEGY_LABEL[input.strategy]} (line ${p.row.line})`,
         });
@@ -200,6 +212,6 @@ export async function importTemplate(viewer: Viewer, yearRaw: unknown, cycleRaw:
   const list = await listBalances(viewer, yearRaw);
   const types = list.types.filter((t) => t.isDebited);
   const rows = list.rows.filter((r) => cycle === 'all' || r.basis === cycle)
-    .flatMap((r) => types.filter((t) => r.balances[t.id]).map((t) => [r.biometricId, r.basis, t.code, r.balances[t.id]!.total]));
+    .flatMap((r) => types.filter((t) => r.balances[t.id]).map((t) => [r.biometricId, r.basis === 'FY' ? cycleLabel(list.year, 'FY') : `CY ${list.year}`, t.code, r.balances[t.id]!.total]));
   return { year: list.year, headers: [...IMPORT_HEADERS], rows };
 }
