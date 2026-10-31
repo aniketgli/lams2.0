@@ -8,6 +8,7 @@ import { changedFields, writeMasterAuditSql } from '../masters/audit';
 import type { RoleId } from '../lib/roles';
 import type { ActivityScope } from '../employees/activity';
 import { biometricDay, outdoorDutyDates, punchGaps, type PunchDay } from '../attendance/store';
+import { leaveDates } from '../leave/requests';
 
 /**
  * Manual attendance: a request to correct a missed or wrong punch (table
@@ -492,5 +493,6 @@ export async function missingPunchDates(viewer: Viewer, userIdRaw: unknown): Pro
   }
   const taken = new Set(open.map((r) => String(r.d)));
   const onDuty = await outdoorDutyDates(String(target.id), from.toISOString().slice(0, 10), to.toISOString().slice(0, 10));
-  return gaps.filter((g) => !taken.has(g.date) && !onDuty.has(g.date));
+  const onLeave = await leaveDates(String(target.id), from.toISOString().slice(0, 10), to.toISOString().slice(0, 10));
+  return gaps.filter((g) => !taken.has(g.date) && !onDuty.has(g.date) && !onLeave.has(g.date));
 }

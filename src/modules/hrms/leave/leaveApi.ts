@@ -43,3 +43,113 @@ export const leaveTypeApi = {
   update: (id: string, input: LeaveTypeInput) => api<{ leaveType: LeaveTypeRecord; message: string }>(`/hrms/leave-types/${encodeURIComponent(id)}`, { method: 'PUT', body: input }),
   remove: (id: string, reason?: string) => api<{ message: string }>(`/hrms/leave-types/${encodeURIComponent(id)}`, { method: 'DELETE', body: { reason } }),
 };
+
+// ---- Leave requests -----------------------------------------------------------------------------
+
+export type LeaveStatus = 'pending_l1' | 'pending_l2' | 'approved' | 'rejected';
+
+export interface LeaveRequest {
+  id: string;
+  userId: string;
+  biometricId: string;
+  name: string;
+  designation: string;
+  department: string;
+  leaveTypeId: string;
+  leaveTypeName: string;
+  leaveTypeCode: string;
+  startDate: string;
+  endDate: string;
+  startSession: 'full' | 'second_half';
+  endSession: 'full' | 'first_half';
+  daysCount: number;
+  cycleYear: number;
+  reason: string;
+  certificate: boolean;
+  stages: 1 | 2;
+  status: LeaveStatus;
+  appliedAt: string;
+  appliedByName: string;
+  managerName: string | null;
+  reviewerName: string | null;
+  forwardedByName: string | null;
+  forwardedAt: string | null;
+  forwardComment: string | null;
+  actionByName: string | null;
+  actionAt: string | null;
+  comment: string | null;
+  waitingFor: string | null;
+  canDecide: boolean;
+  decideStep: 'approve' | 'forward';
+  canEdit: boolean;
+  canDelete: boolean;
+  canUndo: boolean;
+}
+
+export interface LeaveList {
+  from: string;
+  to: string;
+  requests: LeaveRequest[];
+  /** Employees an administrator can apply for (empty for everyone else). */
+  employees: { id: string; biometricId: string; name: string; designation: string }[];
+  types: LeaveTypeRecord[];
+}
+
+export interface LeaveInput {
+  userId: string;
+  leaveTypeId: string;
+  startDate: string;
+  endDate: string;
+  startSession: 'full' | 'second_half';
+  endSession: 'full' | 'first_half';
+  reason: string;
+  certificate: boolean;
+}
+
+export interface LeaveBalance { total: number; carryForward: number; used: number; pending: number; available: number }
+
+export interface LeavePreview {
+  days: number;
+  cycleYear: number;
+  cycle: string;
+  balance: LeaveBalance | null;
+  error: string | null;
+}
+
+export interface BalanceRow {
+  userId: string;
+  biometricId: string;
+  name: string;
+  designation: string;
+  department: string;
+  basis: 'CY' | 'FY';
+  cycle: string;
+  balances: Record<string, (LeaveBalance & { eligible: boolean }) | null>;
+}
+
+export interface BalanceList {
+  year: number;
+  types: Array<{ id: string; code: string; name: string; isDebited: boolean }>;
+  rows: BalanceRow[];
+}
+
+const base = '/hrms/leave';
+const one = (id: string) => `${base}/requests/${encodeURIComponent(id)}`;
+const body = (i: LeaveInput) => ({ ...i, userId: i.userId || undefined });
+
+export const leaveApi = {
+  list: (from: string, to: string) => api<LeaveList>(`${base}/requests?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+  create: (input: LeaveInput) => api<{ request: LeaveRequest; message: string }>(`${base}/requests`, { method: 'POST', body: body(input) }),
+  update: (id: string, input: LeaveInput) => api<{ request: LeaveRequest; changed: string[]; message: string }>(one(id), { method: 'PUT', body: body(input) }),
+  decide: (id: string, action: 'approve' | 'reject', comment: string) =>
+    api<{ request: LeaveRequest; outcome: 'approved' | 'forwarded' | 'rejected'; message: string }>(`${one(id)}/decision`, { method: 'POST', body: { action, comment: comment || undefined } }),
+  undo: (id: string, reason?: string) => api<{ request: LeaveRequest; message: string }>(`${one(id)}/undo`, { method: 'POST', body: { reason: reason || undefined } }),
+  remove: (id: string, reason?: string) => api<{ message: string }>(one(id), { method: 'DELETE', body: { reason: reason || undefined } }),
+  preview: (input: Pick<LeaveInput, 'userId' | 'leaveTypeId' | 'startDate' | 'endDate' | 'startSession' | 'endSession'>) => {
+    const q = new URLSearchParams(Object.entries(input).filter(([, v]) => v) as [string, string][]);
+    return api<LeavePreview>(`${base}/preview?${q.toString()}`);
+  },
+  balances: (year: number) => api<BalanceList>(`${base}/balances?year=${year}`),
+  setBalance: (input: { userId: string; leaveTypeId: string; year: number; total: number; carryForward: number; reason?: string }) =>
+    api<{ balance: LeaveBalance; message: string }>(`${base}/balances`, { method: 'PUT', body: { ...input, reason: input.reason || undefined } }),
+};
