@@ -173,6 +173,17 @@ export interface BalanceList {
   rows: BalanceRow[];
 }
 
+export type ImportStrategy = 'set' | 'add' | 'deduct';
+export interface ImportRow {
+  line: number; biometricId: string; employee: string; leaveCode: string; leaveType: string; value: string;
+  before: number | null; after: number | null; status: 'ok' | 'unchanged' | 'error'; error: string | null;
+}
+export interface ImportReview {
+  year: number; strategy: ImportStrategy;
+  summary: { rows: number; ok: number; unchanged: number; errors: number };
+  rows: ImportRow[];
+}
+
 const base = '/hrms/leave';
 const one = (id: string) => `${base}/requests/${encodeURIComponent(id)}`;
 const body = (i: LeaveInput) => ({ ...i, userId: i.userId || undefined });
@@ -190,6 +201,10 @@ export const leaveApi = {
     return api<LeavePreview>(`${base}/preview?${q.toString()}`);
   },
   balances: (year: number) => api<BalanceList>(`${base}/balances?year=${year}`),
+  reviewImport: (input: { year: number; strategy: ImportStrategy; csv: string }) =>
+    api<ImportReview>(`${base}/balances/import/review`, { method: 'POST', body: input }),
+  applyImport: (input: { year: number; strategy: ImportStrategy; csv: string }) =>
+    api<ImportReview & { message: string }>(`${base}/balances/import`, { method: 'POST', body: input }),
   setBalance: (input: { userId: string; leaveTypeId: string; year: number; total: number; carryForward: number; reason?: string }) =>
     api<{ balance: LeaveBalance; message: string }>(`${base}/balances`, { method: 'PUT', body: { ...input, reason: input.reason || undefined } }),
 };

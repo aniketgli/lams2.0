@@ -31,7 +31,7 @@ export const STATUSES = ['pending_l1', 'pending_l2', 'approved', 'rejected'] as 
 export type LeaveStatus = (typeof STATUSES)[number];
 
 export const AUDIT_KEY = 'leave_request';
-const BALANCE_KEY = 'leave_balance';
+export const BALANCE_KEY = 'leave_balance';
 export const ADMIN_BACKDATE_DAYS = 60;
 /** An employee may apply this many days back when the leave type needs no notice (e.g. sick leave). */
 export const EMPLOYEE_BACKDATE_DAYS = 7;
@@ -124,7 +124,7 @@ const addDays = (date: string, n: number): string => {
   return d.toISOString().slice(0, 10);
 };
 const daysBetween = (from: string, to: string): number => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000) + 1;
-const num = (n: number) => Math.round(n * 10) / 10;
+export const num = (n: number) => Math.round(n * 10) / 10;
 
 const SELECT = `
   SELECT m.*, u.biometric_id, u.name AS user_name, p.designation, p.department, p.profile_data,
@@ -237,7 +237,7 @@ function auditView(r: LeaveRequest): Record<string, unknown> {
 }
 const label = (r: LeaveRequest) => `${r.name} (${r.biometricId}) · ${r.leaveTypeCode} · ${r.startDate}${r.endDate !== r.startDate ? ` to ${r.endDate}` : ''}`;
 
-function missingTable(error: unknown): never | undefined {
+export function missingTable(error: unknown): never | undefined {
   const code = (error as { code?: string })?.code;
   if (code === 'ER_NO_SUCH_TABLE' || code === 'ER_BAD_FIELD_ERROR') {
     throw new HttpError(503, 'Leave is not set up yet. Ask the administrator to run the leave migrations.', 'NOT_CONFIGURED');
@@ -270,7 +270,7 @@ export async function listRequests(viewer: Viewer, query: { from?: unknown; to?:
 // Employee, policy and balance lookups
 // ---------------------------------------------------------------------------
 
-interface Employee {
+export interface Employee {
   id: number;
   biometricId: string;
   employmentType: string;
@@ -285,7 +285,7 @@ interface Employee {
   reviewingManagerId: string | null;
 }
 
-async function loadEmployee(q: { query: typeof pool.query }, userId: number): Promise<Employee> {
+export async function loadEmployee(q: { query: typeof pool.query }, userId: number): Promise<Employee> {
   const [row] = await rows(q,
     `SELECT u.id, u.status, u.biometric_id, p.employment_type, p.joining_date, p.shift_id, p.profile_data FROM users u
        LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE u.id = ? LIMIT 1`, [userId]);
@@ -308,7 +308,7 @@ async function loadEmployee(q: { query: typeof pool.query }, userId: number): Pr
   };
 }
 
-interface Policy {
+export interface Policy {
   id: number; code: string; name: string; quota: number; pwdQuota: number | null; pwdOnly: boolean; stages: 1 | 2; minNotice: number; halfDay: boolean; certDays: number;
   sandwich: 'included' | 'excluded'; employeeTypes: string[]; gender: string; minServiceMonths: number; maxConsecutive: number; debited: boolean;
   status: string; combineWith: Combine; maxAccumulation: number; afterExhaustedId: number; accrual: string; debitFromId: number; debitFactor: number; lifetimeMax: number; maxSpells: number; minDays: number; maxSpellsMonth: number; maxSpellsLifetime: number; quotas: Record<string, number>;
@@ -351,7 +351,7 @@ async function attachQuotas(q: { query: typeof pool.query }, policies: Policy[])
   return policies;
 }
 
-async function loadPolicy(q: { query: typeof pool.query }, id: number): Promise<Policy | null> {
+export async function loadPolicy(q: { query: typeof pool.query }, id: number): Promise<Policy | null> {
   const [row] = await rows(q, 'SELECT * FROM leave_types WHERE id = ? LIMIT 1', [id]);
   if (!row) return null;
   const [policy] = await attachQuotas(q, [toPolicy(row)]);

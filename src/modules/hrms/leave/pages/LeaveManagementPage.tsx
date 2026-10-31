@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CalendarCheck, Plus } from 'lucide-react';
+import { CalendarCheck, Plus, Upload } from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
 import { PageHeader } from '../../../../shared/components/PageHeader';
 import { ActivityLogPanel, ActivitySource } from '../../../../shared/components/ActivityLogPanel';
@@ -39,6 +39,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ initia
   const balances = initialTab === 'leave_balance';
   const [auditorView, setAuditorView] = useState<AuditorView>('requests');
   const [applySignal, setApplySignal] = useState(0);
+  const [importSignal, setImportSignal] = useState(0);
 
   const subtitle = balances
     ? (isAdmin ? 'Leave balance of every employee for the leave year; set or adjust a balance'
@@ -56,7 +57,12 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ initia
         icon={CalendarCheck}
         title={balances ? 'Leave Balance' : 'Leave Management'}
         subtitle={subtitle}
-        rightAction={canApply && !balances && auditorView === 'requests' ? (
+        rightAction={balances && isAdmin ? (
+          <button type="button" onClick={() => setImportSignal((n) => n + 1)}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-xl inline-flex items-center gap-1.5 shadow-2xs cursor-pointer">
+            <Upload className="w-4 h-4" /> Import Leave
+          </button>
+        ) : canApply && !balances && auditorView === 'requests' ? (
           <button type="button" onClick={() => setApplySignal((n) => n + 1)}
             className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-xl inline-flex items-center gap-1.5 shadow-2xs cursor-pointer">
             <Plus className="w-4 h-4" /> Apply leave
@@ -64,7 +70,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ initia
         ) : undefined}
       />
 
-      {balances ? <LeaveBalancesView /> : (
+      {balances ? <LeaveBalancesView importSignal={importSignal} /> : (
         <>
           {isAudit && (
             <div role="tablist" aria-label="Leave views" className="inline-flex items-center gap-0.5 p-0.5 rounded-xl bg-slate-100 border border-slate-200">

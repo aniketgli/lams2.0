@@ -10,6 +10,7 @@ import { ApiError } from '../../../../shared/services/api';
 import { downloadCsvText, downloadTablePdf, printedAt, toCsvText } from '../../../../shared/services/printTable';
 import { NoticeBar, useNotice } from '../../master/components/masterUi';
 import { BalanceList, BalanceRow, leaveApi } from '../leaveApi';
+import { LeaveImportModal } from './LeaveImportModal';
 
 /**
  * Leave balances for one leave year. Used and pending days come from the requests; the
@@ -19,7 +20,7 @@ import { BalanceList, BalanceRow, leaveApi } from '../leaveApi';
 const PAGE_SIZES = [25, 50, 100];
 const days = (n: number) => String(Math.round(n * 10) / 10);
 
-export const LeaveBalancesView: React.FC = () => {
+export const LeaveBalancesView: React.FC<{ importSignal?: number }> = ({ importSignal = 0 }) => {
   const { currentUser } = useApp();
   const role = currentUser.role;
   const isAdmin = role === 'administrator';
@@ -44,6 +45,9 @@ export const LeaveBalancesView: React.FC = () => {
     }
   }, [year]);
   useEffect(() => { void load(); }, [load, role]);
+
+  const [importing, setImporting] = useState(false);
+  useEffect(() => { if (importSignal > 0 && isAdmin) setImporting(true); }, [importSignal, isAdmin]);
 
   const [search, setSearch] = useState('');
   const [departments, setDepartments] = useState<string[]>(['all']);
@@ -133,6 +137,10 @@ export const LeaveBalancesView: React.FC = () => {
   return (
     <div className="space-y-5">
       <NoticeBar notice={notice} onClose={clearNotice} />
+      {isAdmin && (
+        <LeaveImportModal open={importing} year={year} data={data} onClose={() => setImporting(false)}
+          onImported={(message) => { setImporting(false); showNotice('success', message); void load(true); }} />
+      )}
       {error && <div role="alert" className="px-4 py-3 rounded-2xl border text-xs font-semibold bg-error-subtle border-error-border text-error">{error}</div>}
 
       <FilterToolbar
