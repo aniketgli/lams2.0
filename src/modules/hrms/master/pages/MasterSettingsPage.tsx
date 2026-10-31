@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Building2, Clock, Cpu, FileText, Sliders, Users } from 'lucide-react';
 import { useSession } from '../../../../auth/SessionContext';
 import { PageHeader } from '../../../../shared/components/PageHeader';
+import { ActivityLogPanel, ActivitySource } from '../../../../shared/components/ActivityLogPanel';
+import { activityEndpoints } from '../../../../shared/services/activityApi';
 import { LeavePolicyMaster } from '../components/LeavePolicyMaster';
 import { ShiftsPanel } from '../components/ShiftsPanel';
 import { BiometricMachinesPanel } from '../components/BiometricMachinesPanel';
@@ -13,7 +15,7 @@ import { DefaultPasswordCard } from '../components/DefaultPasswordCard';
 import { ReadOnlyNotice, TabStrip } from '../components/masterUi';
 import { MasterCatalog, masterApi } from '../masterApi';
 
-type Section = 'shifts' | 'biometric' | 'leave' | 'profile' | 'organization';
+type Section = 'shifts' | 'biometric' | 'leave' | 'profile' | 'organization' | 'activity';
 
 const SECTIONS: { id: Section; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: 'shifts', label: 'Shifts', icon: Clock },
@@ -22,11 +24,12 @@ const SECTIONS: { id: Section; label: string; icon: React.ComponentType<{ classN
   { id: 'profile', label: 'Profile Masters', icon: Users },
   { id: 'organization', label: 'Organization', icon: Building2 },
 ];
+const ACTIVITY_SECTION = { id: 'activity' as Section, label: 'Activity log', icon: FileText };
 
 /**
  * Master Settings. Administrators can change everything; Auditors see the
- * same screens read-only. Every change is still recorded in master_audit_logs
- * for the Auditor role's own screens (to be built). The server enforces both.
+ * same screens read-only plus an Activity log of every change (who, what, when,
+ * with CSV / PDF downloads that are logged too). The server enforces both.
  */
 export const MasterSettingsPage: React.FC = () => {
   const { session } = useSession();
@@ -43,7 +46,16 @@ export const MasterSettingsPage: React.FC = () => {
     return () => { cancelled = true; };
   }, []);
 
-  const needsCatalog = section === 'profile';
+  const isAudit = session?.activeRole === 'audit';
+  const needsCatalog = section === 'profile' || section === 'activity';
+  const activitySource = useMemo<ActivitySource | null>(() => !catalog ? null : ({
+    title: 'Master settings activity log',
+    recordLabel: 'Record',
+    searchPlaceholder: 'Record, done by, reason…',
+    areas: catalog.activityAreas.filter((a) => a.value !== 'master_export'),
+    actions: ['CREATE', 'UPDATE', 'STATUS', 'DELETE', 'EXPORT'],
+    ...activityEndpoints('/hrms/masters/activity', 'WII_Master_Settings_Activity.csv'),
+  }), [catalog]);
 
   return (
     <div className="space-y-5 pb-6">
@@ -55,7 +67,7 @@ export const MasterSettingsPage: React.FC = () => {
 
       {readOnly && <ReadOnlyNotice />}
 
-      <TabStrip tabs={SECTIONS} value={section} onChange={setSection} />
+      <TabStrip tabs={isAudit ? [...SECTIONS, ACTIVITY_SECTION] : SECTIONS} value={section} onChange={setSection} />
 
       {section === 'shifts' && <ShiftsPanel readOnly={readOnly} />}
       {section === 'biometric' && <BiometricMachinesPanel readOnly={readOnly} />}
@@ -75,6 +87,7 @@ export const MasterSettingsPage: React.FC = () => {
         </div>
       )}
       {/* Profile masters and the employee-form lists (salutation, gender, …) in one place. */}
+      {catalog && section === 'activity' && isAudit && activitySource && <ActivityLogPanel source={activitySource} />}
       {catalog && section === 'profile' && <MasterRegistryPanel catalog={catalog} readOnly={readOnly} />}
     </div>
   );

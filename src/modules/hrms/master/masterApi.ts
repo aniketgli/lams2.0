@@ -43,6 +43,8 @@ export interface MasterCatalog {
   masters: MasterDefinition[];
   formLayouts: { code: string; name: string }[];
   auditMasters: Record<string, string>;
+  /** Areas offered in the auditor's activity log. */
+  activityAreas: Array<{ value: string; label: string }>;
 }
 
 export interface MasterRecord {

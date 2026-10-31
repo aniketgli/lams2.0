@@ -288,6 +288,16 @@ export function auditMasterLabels(): Record<string, string> {
   return labels;
 }
 
+/** Everything on the Master Settings screen, for the auditor's activity log. */
+export function masterActivityScope(): { keys: string[]; areaLabels: Record<string, string> } {
+  const labels = auditMasterLabels();
+  const keys = ['shift', 'biometric_machine', 'organization_settings', 'notification_recipient', 'email_settings', 'default_password', 'leave_type', ...MASTERS.map(auditKey)];
+  const unique = [...new Set(keys)];
+  const areaLabels: Record<string, string> = { leave_type: 'Leave policy', master_export: 'Log download' };
+  for (const k of unique) areaLabels[k] ||= labels[k] ?? k;
+  return { keys: [...unique, 'master_export'], areaLabels };
+}
+
 /** Where a record is referenced. Empty list = safe to delete or rename. */
 export async function findUsage(def: MasterDef, record: { name: string; code: string }): Promise<{ what: string; count: number }[]> {
   const found: { what: string; count: number }[] = [];
