@@ -21,7 +21,7 @@ const yesNo = [{ label: 'Yes', value: 'yes' }, { label: 'No', value: 'no' }];
 const blank = (): LeaveTypeInput => ({
   code: '', name: '', description: '', defaultQuota: 0, pwdQuota: null, pwdOnly: false, accrual: 'yearly', maxAccumulation: 0, carryForward: false, maxCarryForward: 0,
   encashmentAllowed: false, approvalStages: 1, minNoticeDays: 0, halfDayAllowed: false, medicalCertDays: 0, sandwichRule: 'excluded', combineWith: 'none',
-  employeeTypes: [], gender: 'all', minServiceMonths: 0, maxConsecutiveDays: 0, isDebited: true, isPaid: true, afterExhaustedTypeId: '', debitFromTypeId: '', debitFactor: 1, lifetimeMax: 0, maxSpellsPerYear: 0, minDaysPerApplication: 0, maxSpellsPerMonth: 0, maxSpellsLifetime: 0, quotas: [], status: 'active',
+  employeeTypes: [], gender: 'all', minServiceMonths: 0, maxConsecutiveDays: 0, isDebited: true, isPaid: true, joiningRequired: false, afterExhaustedTypeId: '', debitFromTypeId: '', debitFactor: 1, lifetimeMax: 0, maxSpellsPerYear: 0, minDaysPerApplication: 0, maxSpellsPerMonth: 0, maxSpellsLifetime: 0, quotas: [], status: 'active',
 });
 
 const flag = (b: boolean) => (b ? 'yes' : 'no');
@@ -230,7 +230,7 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
                 options={[{ label: 'Active', value: 'active' }, { label: 'Inactive', value: 'inactive' }]} />
             </FormSection>
 
-            <FormSection step={2} title="Rules for taking leave" errorCount={countErrors(['approvalStages', 'combineWith', 'sandwichRule', 'halfDayAllowed', 'minDaysPerApplication', 'maxConsecutiveDays', 'gender', 'pwdOnly', 'maxSpellsPerMonth', 'maxSpellsLifetime'])}>
+            <FormSection step={2} title="Rules for taking leave" errorCount={countErrors(['approvalStages', 'combineWith', 'sandwichRule', 'halfDayAllowed', 'minDaysPerApplication', 'maxConsecutiveDays', 'gender', 'pwdOnly', 'maxSpellsPerMonth', 'maxSpellsLifetime', 'joiningRequired', 'isPaid', 'isDebited'])}>
               <Select label="Approval stages" required value={String(form.approvalStages)} searchable={false} error={Boolean(errors.approvalStages)}
                 onChange={(v: string) => set('approvalStages', Number(v) as 1 | 2)}
                 options={[{ label: '1 stage · Reporting Manager', value: '1' }, { label: '2 stages · Reporting Manager, HoD', value: '2' }]} />
@@ -248,20 +248,12 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
                 options={[{ label: 'All', value: 'all' }, { label: 'Male', value: 'male_only' }, { label: 'Female', value: 'female_only' }, { label: 'Persons with disability', value: 'pwd' }]} />
               <Input label="Times in a month (0 = no limit)" type="number" min={0} max={31} value={String(form.maxSpellsPerMonth)} error={errors.maxSpellsPerMonth} onChange={num('maxSpellsPerMonth')} />
               <Input label="Times in the whole service (0 = no limit)" type="number" min={0} value={String(form.maxSpellsLifetime)} error={errors.maxSpellsLifetime} onChange={num('maxSpellsLifetime')} />
-            </FormSection>
 
-            <FormSection step={3} title="Balance" errorCount={countErrors(['isPaid', 'isDebited', 'debitFromTypeId', 'debitFactor', 'afterExhaustedTypeId'])}>
-              <Select label="Paid" value={flag(form.isPaid)} searchable={false} onChange={(v: string) => set('isPaid', v === 'yes')} options={yesNo} />
-              <Select label="Debited from balance" value={flag(form.isDebited)} searchable={false} onChange={(v: string) => set('isDebited', v === 'yes')} options={yesNo} />
-              <Select label="Uses the balance of" value={form.debitFromTypeId} searchable={false} placeholder="Its own balance" error={Boolean(errors.debitFromTypeId)}
-                onChange={(v: string) => { set('debitFromTypeId', v); if (v) set('isDebited', false); }}
-                options={[{ label: 'Its own balance', value: '' }, ...data.types.filter((t) => t.isDebited && t.id !== editing?.id).map((t) => ({ label: t.name, value: t.id }))]} />
-              {form.debitFromTypeId && (
-                <Input label="Days used for each day taken" type="number" min={0.5} max={10} step="0.5" value={String(form.debitFactor)} error={errors.debitFactor} onChange={num('debitFactor')} />
-              )}
-              <Select label="Can be taken only after" value={form.afterExhaustedTypeId} searchable={false} placeholder="Any time" error={Boolean(errors.afterExhaustedTypeId)}
-                onChange={(v: string) => set('afterExhaustedTypeId', v)}
-                options={[{ label: 'Any time', value: '' }, ...data.types.filter((t) => t.isDebited && t.id !== editing?.id).map((t) => ({ label: `${t.name} is used up`, value: t.id }))]} />
+              <Select label="Joining form needed" value={flag(form.joiningRequired)} searchable={false} onChange={(v: string) => set('joiningRequired', v === 'yes')} options={yesNo} />
+              <Select label="Paid" value={flag(form.isPaid)} searchable={false}
+                onChange={(v: string) => { set('isPaid', v === 'yes'); if (v === 'no') set('isDebited', false); }} options={yesNo} />
+              <Select label="Debited from balance" value={flag(form.isDebited)} searchable={false} disabled={!form.isPaid} error={Boolean(errors.isDebited)}
+                onChange={(v: string) => set('isDebited', v === 'yes')} options={yesNo} />
             </FormSection>
           </form>
         )}

@@ -54,6 +54,7 @@ export interface LeaveType {
   maxConsecutiveDays: number;
   isDebited: boolean;
   isPaid: boolean;
+  joiningRequired: boolean;
   afterExhaustedTypeId: string;
   debitFromTypeId: string;
   debitFactor: number;
@@ -95,6 +96,7 @@ export function toLeaveType(row: RowDataPacket): LeaveType {
     maxConsecutiveDays: Number(row.max_consecutive_days),
     isDebited: Boolean(row.is_debited),
     isPaid: row.is_paid === undefined ? true : Boolean(row.is_paid),
+    joiningRequired: Boolean(row.joining_required),
     afterExhaustedTypeId: row.after_exhausted_type_id ? String(row.after_exhausted_type_id) : '',
     debitFromTypeId: row.debit_from_type_id ? String(row.debit_from_type_id) : '',
     debitFactor: Number(row.debit_factor ?? 1),
@@ -157,6 +159,8 @@ export async function parseLeaveTypeInput(body: unknown, selfId = 0): Promise<Le
   const maxConsecutiveDays = v.int('maxConsecutiveDays', { min: 0, max: 730 });
   const isDebited = v.bool('isDebited', true);
   const isPaid = v.bool('isPaid', true);
+  const joiningRequired = v.bool('joiningRequired', false);
+  if (!isPaid && isDebited) v.errors.isDebited ||= 'Unpaid leave has no limit. Set Debited from balance to No.';
   const lifetimeMax = Number(v.raw('lifetimeMax') ?? 0);
   if (!Number.isFinite(lifetimeMax) || lifetimeMax < 0 || lifetimeMax > 5000 || Math.round(lifetimeMax * 2) !== lifetimeMax * 2) v.errors.lifetimeMax ||= 'Enter days from 0 to 5000, in steps of 0.5.';
   const maxSpellsPerYear = v.int('maxSpellsPerYear', { min: 0, max: 100 });
@@ -223,7 +227,7 @@ export async function parseLeaveTypeInput(body: unknown, selfId = 0): Promise<Le
     code, name, description: description ?? '', defaultQuota: quota, pwdQuota, pwdOnly, accrual: accrual!, maxAccumulation: maxAccumulation!, carryForward,
     maxCarryForward: carryForward ? cf : 0, encashmentAllowed, approvalStages: stages as 1 | 2, minNoticeDays: minNoticeDays!, halfDayAllowed,
     medicalCertDays: medicalCertDays!, sandwichRule: sandwichRule!, combineWith: combineWith!, employeeTypes, gender: gender!, minServiceMonths: minServiceMonths!,
-    maxConsecutiveDays: maxConsecutiveDays!, isDebited, isPaid, afterExhaustedTypeId, debitFromTypeId, debitFactor, lifetimeMax, maxSpellsPerYear: maxSpellsPerYear!, minDaysPerApplication, maxSpellsPerMonth: maxSpellsPerMonth!, maxSpellsLifetime: maxSpellsLifetime!, quotas, status: status!,
+    maxConsecutiveDays: maxConsecutiveDays!, isDebited, isPaid, joiningRequired, afterExhaustedTypeId, debitFromTypeId, debitFactor, lifetimeMax, maxSpellsPerYear: maxSpellsPerYear!, minDaysPerApplication, maxSpellsPerMonth: maxSpellsPerMonth!, maxSpellsLifetime: maxSpellsLifetime!, quotas, status: status!,
   };
 }
 
@@ -258,11 +262,11 @@ export async function leaveTypeOptions(): Promise<{ employeeTypes: Array<{ code:
 
 const COLS = `code, name, description, default_quota, pwd_quota, accrual, max_accumulation, carry_forward, max_carry_forward, encashment_allowed, approval_stages,
   min_notice_days, half_day_allowed, medical_cert_days, sandwich_rule, combine_with, employee_types, pwd_only, gender, min_service_months, max_consecutive_days,
-  is_debited, is_paid, after_exhausted_type_id, debit_from_type_id, debit_factor, lifetime_max, max_spells_per_year, min_days_per_application, max_spells_per_month, max_spells_lifetime, status`;
+  is_debited, is_paid, joining_required, after_exhausted_type_id, debit_from_type_id, debit_factor, lifetime_max, max_spells_per_year, min_days_per_application, max_spells_per_month, max_spells_lifetime, status`;
 const values = (t: LeaveTypeInput) => [
   t.code, t.name, t.description || null, t.defaultQuota, t.pwdQuota, t.accrual, t.maxAccumulation, t.carryForward ? 1 : 0, t.maxCarryForward, t.encashmentAllowed ? 1 : 0,
   t.approvalStages, t.minNoticeDays, t.halfDayAllowed ? 1 : 0, t.medicalCertDays, t.sandwichRule, t.combineWith, t.employeeTypes.join(','), t.pwdOnly ? 1 : 0, t.gender, t.minServiceMonths,
-  t.maxConsecutiveDays, t.isDebited ? 1 : 0, t.isPaid ? 1 : 0, t.afterExhaustedTypeId ? Number(t.afterExhaustedTypeId) : null, t.debitFromTypeId ? Number(t.debitFromTypeId) : null, t.debitFactor, t.lifetimeMax, t.maxSpellsPerYear, t.minDaysPerApplication, t.maxSpellsPerMonth, t.maxSpellsLifetime, t.status,
+  t.maxConsecutiveDays, t.isDebited ? 1 : 0, t.isPaid ? 1 : 0, t.joiningRequired ? 1 : 0, t.afterExhaustedTypeId ? Number(t.afterExhaustedTypeId) : null, t.debitFromTypeId ? Number(t.debitFromTypeId) : null, t.debitFactor, t.lifetimeMax, t.maxSpellsPerYear, t.minDaysPerApplication, t.maxSpellsPerMonth, t.maxSpellsLifetime, t.status,
 ];
 
 function duplicate(error: unknown): never | void {

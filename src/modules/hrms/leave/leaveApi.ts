@@ -28,6 +28,7 @@ export interface LeaveTypeRecord {
   maxConsecutiveDays: number;
   isDebited: boolean;
   isPaid: boolean;
+  joiningRequired: boolean;
   afterExhaustedTypeId: string;
   debitFromTypeId: string;
   debitFactor: number;

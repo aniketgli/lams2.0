@@ -34,6 +34,7 @@ mysql lams_db < migrations/20261031_leave_policy_pwd.sql
 mysql lams_db < migrations/20261101_leave_groups.sql
 mysql lams_db < migrations/20261102_leave_combine.sql   # which leaves may be taken straight before / after each leave type
 mysql lams_db < migrations/20261103_leave_rules_counts.sql   # shortest leave, applications per month / in service
+mysql lams_db < migrations/20261104_leave_joining.sql   # whether a joining form is needed after a leave
 mysql lams_db < migrations/20261031_leave_requests.sql
 npm run dev                   # http://localhost:3000
 npm run lint                  # type-check
