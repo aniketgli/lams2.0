@@ -644,7 +644,7 @@ export const cycleLabel = (year: number, basis: 'CY' | 'FY') => (basis === 'FY' 
 export async function previewLeave(viewer: Viewer, query: Record<string, unknown>): Promise<{ days: number; cycleYear: number; cycle: string; balance: Balance | null; error: string | null; prefix: HolidayBlock | null; suffix: HolidayBlock | null }> {
   const input = (() => {
     try {
-      return { ...parseLeaveInput({ ...query, reason: 'preview', stationLeave: false, ltcType: 'none', availPrefix: false, availSuffix: false }), certificate: true };
+      return { ...parseLeaveInput({ ...query, reason: 'preview', stationLeave: false, contactAddress: 'preview', ltcType: 'none', availPrefix: false, availSuffix: false }), certificate: true };
     } catch {
       return null;
     }
