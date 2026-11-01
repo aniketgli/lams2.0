@@ -3,7 +3,7 @@ import { Mail, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Button, DataTable, Input, Modal, Select } from '../../../../shared/components';
 import type { ColumnDef } from '../../../../shared/components';
 import { ApiError } from '../../../../shared/services/api';
-import { MasterStatus, NotificationRecipient, RecipientInput, RecipientType, recipientApi } from '../masterApi';
+import { MasterStatus, NotificationRecipient, RecipientInput, RecipientScope, RecipientType, recipientApi } from '../masterApi';
 import { ConfirmDialog, NoticeBar, PanelCard, StatusPill, useNotice } from './masterUi';
 
 const TYPE_LABEL: Record<RecipientType, string> = {
@@ -11,7 +11,17 @@ const TYPE_LABEL: Record<RecipientType, string> = {
   BCC: 'BCC (hidden from recipients)',
 };
 
-const blank = (): RecipientInput => ({ type: 'CC', email: '', name: '', status: 'ACTIVE' });
+const SCOPE_LABEL: Record<RecipientScope, string> = {
+  ALL: 'All transactions',
+  LEAVE: 'Leave requests',
+  OD: 'Outdoor duty',
+  MANUAL: 'Manual attendance',
+  JOINING: 'Joining reports',
+  EMPLOYEE: 'New employee & account',
+  REPORT: 'Scheduled reports',
+};
+
+const blank = (): RecipientInput => ({ type: 'CC', scope: 'ALL', email: '', name: '', status: 'ACTIVE' });
 
 /**
  * Organization-wide CC / BCC addresses copied on every notification email
@@ -45,7 +55,7 @@ export const NotificationRecipientsCard: React.FC<{ readOnly: boolean }> = ({ re
 
   const open = (r: NotificationRecipient | null) => {
     setEditing(r);
-    setForm(r ? { type: r.type, email: r.email, name: r.name, status: r.status } : blank());
+    setForm(r ? { type: r.type, scope: r.scope, email: r.email, name: r.name, status: r.status } : blank());
     setErrors({});
     setFormMessage(null);
   };
@@ -59,7 +69,7 @@ export const NotificationRecipientsCard: React.FC<{ readOnly: boolean }> = ({ re
       const payload = { ...form, email: form.email.trim() };
       const saved = editing ? await recipientApi.update(editing.id, payload) : await recipientApi.create(payload);
       setRows((prev) => (editing ? prev.map((r) => (r.id === saved.id ? saved : r)) : [...prev, saved])
-        .sort((a, b) => a.type.localeCompare(b.type) || a.email.localeCompare(b.email)));
+        .sort((a, b) => a.scope.localeCompare(b.scope) || a.type.localeCompare(b.type) || a.email.localeCompare(b.email)));
       setForm(null);
       showNotice('success', `${saved.email} ${editing ? 'updated' : `added to ${saved.type}`}.`);
     } catch (error) {
@@ -90,7 +100,8 @@ export const NotificationRecipientsCard: React.FC<{ readOnly: boolean }> = ({ re
 
   const columns: ColumnDef<NotificationRecipient>[] = [
     { key: 'type', header: 'Copy as', width: '12%', sortValue: (r) => r.type, render: (r) => <span className="inline-flex rounded-md bg-primary-subtle text-primary border border-primary-border px-2 py-0.5 text-[11px] font-semibold">{r.type}</span> },
-    { key: 'email', header: 'Email', width: '32%', sortValue: (r) => r.email, render: (r) => <span className="font-semibold text-slate-900">{r.email}</span> },
+    { key: 'scope', header: 'Applies to', width: '20%', sortValue: (r) => SCOPE_LABEL[r.scope], render: (r) => <span className="text-slate-700">{SCOPE_LABEL[r.scope]}</span> },
+    { key: 'email', header: 'Email', width: '28%', sortValue: (r) => r.email, render: (r) => <span className="font-semibold text-slate-900">{r.email}</span> },
     { key: 'name', header: 'Name / purpose', sortValue: (r) => r.name, render: (r) => <span className="text-slate-600">{r.name || '—'}</span> },
     { key: 'status', header: 'Status', width: '12%', sortValue: (r) => r.status, render: (r) => <StatusPill active={r.status === 'ACTIVE'} /> },
     ...(readOnly ? [] : [{
@@ -111,7 +122,7 @@ export const NotificationRecipientsCard: React.FC<{ readOnly: boolean }> = ({ re
       <NoticeBar notice={notice} onClose={clearNotice} />
       <PanelCard
         title={<><Mail className="w-4 h-4 text-primary" />Email notification copies</>}
-        description="These addresses receive a copy of every notification email (leave, attendance, OD, …). Password and other security emails are never copied."
+        description="Each address is copied on the transactions chosen in Applies to. Password and other security emails are never copied."
         count={rows.length}
         actions={!readOnly && <Button variant="primary" size="sm" leftIcon={Plus} onClick={() => open(null)}>Add email</Button>}
       >
@@ -136,6 +147,8 @@ export const NotificationRecipientsCard: React.FC<{ readOnly: boolean }> = ({ re
             {formMessage && <p role="alert" className="rounded-lg border border-error-border bg-error-subtle px-3 py-2 text-xs text-error">{formMessage}</p>}
             <Select label="Copy as" required value={form.type} error={errors.type} onChange={(v: RecipientType) => set('type', v)}
               options={(Object.keys(TYPE_LABEL) as RecipientType[]).map((value) => ({ label: TYPE_LABEL[value], value }))} />
+            <Select label="Applies to" required value={form.scope} error={errors.scope} onChange={(v: RecipientScope) => set('scope', v)}
+              options={(Object.keys(SCOPE_LABEL) as RecipientScope[]).map((value) => ({ label: SCOPE_LABEL[value], value }))} />
             <Input label="Email" type="email" required maxLength={254} value={form.email} error={errors.email}
               autoComplete="off" onChange={(e) => set('email', e.target.value)} placeholder="name@wii.gov.in" />
             <Input label="Name / purpose" maxLength={255} value={form.name} error={errors.name}
