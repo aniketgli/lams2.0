@@ -520,7 +520,9 @@ async function joinProblem(q: { query: typeof pool.query }, emp: Employee, polic
 }
 
 export interface HolidayBlock { from: string; to: string; days: number }
-export interface Checked { days: number; cycleYear: number; policy: Policy; emp: Employee; balance: Balance; stages: 1 | 2; prefix: HolidayBlock | null; suffix: HolidayBlock | null; stationOk: boolean }
+/** Weekly offs / holidays between two straight 2-stage leaves: they become leave days of the earlier leave. */
+export interface JoinedGap { requestId: number; typeId: number; typeName: string; side: 'after' | 'before'; from: string; to: string; days: number }
+export interface Checked { days: number; cycleYear: number; policy: Policy; emp: Employee; balance: Balance; stages: 1 | 2; prefix: HolidayBlock | null; suffix: HolidayBlock | null; stationOk: boolean; joins: JoinedGap[] }
 
 /** Every rule of a leave application. Throws a field-level 400 / 409 when one fails. */
 async function checkLeave(
@@ -591,24 +593,64 @@ async function checkLeave(
   const block = (from: string, to: string): HolidayBlock | null => (from <= to ? { from, to, days: datesBetween(from, to).length } : null);
   let pf = addDays(input.startDate, -1);
   while (pf >= oldestApplicationDate(today) && pf >= addDays(input.startDate, -31) && off(pf)) pf = addDays(pf, -1);
-  const prefix = block(addDays(pf, 1), addDays(input.startDate, -1));
+  let prefix = block(addDays(pf, 1), addDays(input.startDate, -1));
   let sf = addDays(input.endDate, 1);
   while (sf <= addDays(input.endDate, 31) && off(sf)) sf = addDays(sf, 1);
-  const suffix = block(addDays(input.endDate, 1), addDays(sf, -1));
+  let suffix = block(addDays(input.endDate, 1), addDays(sf, -1));
+
+  // The employee's own leaves straight before / after this one (only weekly offs and holidays in between).
+  const around = await rows(q,
+    `SELECT r.id, r.leave_type_id, r.start_date, r.end_date, r.days_count, t.name, t.approval_stages, t.max_consecutive_days
+       FROM leave_requests r JOIN leave_types t ON t.id = r.leave_type_id
+      WHERE r.user_id = ? AND r.status <> 'rejected' AND r.id <> ? AND r.end_date >= ? AND r.start_date <= ? ORDER BY r.start_date`,
+    [targetId, exceptId, addDays(input.startDate, -46), addDays(input.endDate, 46)]);
+  const reach = (from: string, step: 1 | -1) => {
+    const gap: string[] = [];
+    for (let i = 0, d = from; i < 45; i++, d = addDays(d, step)) {
+      const hit = around.find((n) => isoDate(n.start_date) <= d && d <= isoDate(n.end_date));
+      if (hit) return { hit, gap: gap.sort() };
+      if (!off(d)) return null;
+      gap.push(d);
+    }
+    return null;
+  };
+  const joins: JoinedGap[] = [];
+  for (const [side, found] of [['after', reach(addDays(input.startDate, -1), -1)], ['before', reach(addDays(input.endDate, 1), 1)]] as const) {
+    if (!found) continue;
+    const other = found.hit;
+    const otherStages = Number(other.approval_stages) === 2 ? 2 : 1;
+    const range = `${isoDate(other.start_date)} to ${isoDate(other.end_date)}`;
+    if (otherStages !== policy.stages) {
+      throw new HttpError(409, 'This leave cannot be joined with the leave next to it.', 'COMBINE', {
+        startDate: `${policy.name} (${policy.stages}-stage) cannot be taken straight ${side === 'after' ? 'after' : 'before'} ${other.name} (${otherStages}-stage, ${range}). Only a ${otherStages}-stage leave can follow it.`,
+      });
+    }
+    if (policy.stages === 2 && found.gap.length > 0) {
+      joins.push({ requestId: Number(other.id), typeId: Number(other.leave_type_id), typeName: String(other.name), side, from: found.gap[0], to: found.gap[found.gap.length - 1], days: found.gap.length });
+      if (side === 'after') prefix = null; else suffix = null; // these days now count with the earlier leave
+    }
+    const cap = Number(other.max_consecutive_days ?? 0);
+    const gapDays = found.gap.length;
+    if (policy.stages === 2 && gapDays && cap && Number(other.days_count) + gapDays > cap && !soft) {
+      throw new HttpError(409, 'This leave cannot be joined with the leave next to it.', 'COMBINE', { startDate: `Joining it with ${other.name} (${range}) would take that leave beyond ${cap} days.` });
+    }
+  }
   // Station permission goes only with a leave that is continuous with weekly offs / gazetted holidays.
   const stationOk = Boolean(prefix) || Boolean(suffix) || datesBetween(input.startDate, input.endDate).some(off);
   if (input.stationLeave && !stationOk) errors.stationLeave = 'Station leave can be taken only in one continuous stretch with a weekend or holiday.';
   {
     if (input.prefix) {
       const { from, to } = input.prefix;
-      if (to >= input.startDate) errors.prefixTo = 'The prefix must end before the leave starts.';
+      if (!prefix) errors.prefixFrom = 'There are no holidays to add before this leave. Any between it and your earlier leave count with that leave.';
+      else if (to >= input.startDate) errors.prefixTo = 'The prefix must end before the leave starts.';
       else if (from < oldestApplicationDate(today)) errors.prefixFrom = TOO_OLD_MESSAGE;
       else if (!datesBetween(from, addDays(input.startDate, -1)).every(off)) errors.prefixFrom = 'Prefix days must be unbroken holidays or weekly offs just before the leave.';
       else if (to !== addDays(input.startDate, -1)) errors.prefixTo = 'The prefix must run up to the day before the leave starts.';
     }
     if (input.suffix) {
       const { from, to } = input.suffix;
-      if (from <= input.endDate) errors.suffixFrom = 'The suffix must start after the leave ends.';
+      if (!suffix) errors.suffixFrom = 'There are no holidays to add after this leave. Any between it and your next leave count with that leave.';
+      else if (from <= input.endDate) errors.suffixFrom = 'The suffix must start after the leave ends.';
       else if (!datesBetween(addDays(input.endDate, 1), to).every(off)) errors.suffixTo = 'Suffix days must be unbroken holidays or weekly offs just after the leave.';
       else if (from !== addDays(input.endDate, 1)) errors.suffixFrom = 'The suffix must start the day after the leave ends.';
     }
@@ -632,23 +674,35 @@ async function checkLeave(
       throw badRequest('Please correct the highlighted fields.', { encashDays: `Leave encashment needs a balance of at least ${LTC_ENCASH_MIN_BALANCE} days. ${num(Math.max(0, balance.available))} available.` });
     }
   }
+  // Days of holidays that now count with an earlier leave of the same type come off the same balance.
+  const carry = joins.filter((j) => j.typeId === policy.id).reduce((a, j) => a + j.days, 0);
+  if (!soft) {
+    for (const j of joins.filter((x) => x.typeId !== policy.id)) {
+      const other = await loadPolicy(q, j.typeId);
+      if (!other?.debited) continue;
+      const left = await balanceOf(q, targetId, { id: other.id, quota: creditedQuota(other, emp.employmentType, cycleYear, emp.basis, input.startDate, emp.isPwd) }, cycleYear, 0);
+      if (j.days > left.available) {
+        throw new HttpError(409, 'Not enough leave balance.', 'NO_BALANCE', { startDate: `The ${j.days} holiday day(s) between this leave and ${other.name} count as ${other.name}: ${Math.max(0, left.available)} available.` });
+      }
+    }
+  }
   if (policy.debitFromId) {
     const base = await loadPolicy(q, policy.debitFromId);
     if (base) {
       const left = await balanceOf(q, targetId, { id: base.id, quota: creditedQuota(base, emp.employmentType, cycleYear, emp.basis, input.startDate, emp.isPwd) }, cycleYear, exceptId);
-      const need = num((days + extra) * policy.debitFactor);
+      const need = num((days + extra + carry) * policy.debitFactor);
       if (need > left.available && !soft) {
         throw new HttpError(409, 'Not enough leave balance.', 'NO_BALANCE', { endDate: `${policy.name} uses ${policy.debitFactor} day(s) of ${base.name} for each day: ${need} needed, ${Math.max(0, left.available)} available for ${cycleLabel(cycleYear, emp.basis)}.` });
       }
-      return { days, cycleYear, policy, emp, balance: left, stages, prefix, suffix, stationOk };
+      return { days, cycleYear, policy, emp, balance: left, stages, prefix, suffix, stationOk, joins };
     }
   }
-  if (policy.debited && days + extra > balance.available && !soft) {
+  if (policy.debited && days + extra + carry > balance.available && !soft) {
     const [next] = await rows(q, "SELECT name FROM leave_types WHERE after_exhausted_type_id = ? AND status = 'active' LIMIT 1", [policy.id]);
     const hint = next ? ` After it is used up, ${next.name} can be applied for.` : '';
-    throw new HttpError(409, 'Not enough leave balance.', 'NO_BALANCE', { endDate: `${policy.name}: ${days} days asked${extra ? ` + ${extra} days encashment` : ''}, ${Math.max(0, balance.available)} available for ${cycleLabel(cycleYear, emp.basis)}.${hint}` });
+    throw new HttpError(409, 'Not enough leave balance.', 'NO_BALANCE', { endDate: `${policy.name}: ${days} days asked${extra ? ` + ${extra} days encashment` : ''}${carry ? ` + ${carry} holiday days joined with your earlier leave` : ''}, ${Math.max(0, balance.available)} available for ${cycleLabel(cycleYear, emp.basis)}.${hint}` });
   }
-  return { days, cycleYear, policy, emp, balance, stages, prefix, suffix, stationOk };
+  return { days, cycleYear, policy, emp, balance, stages, prefix, suffix, stationOk, joins };
 }
 
 export const cycleLabel = (year: number, basis: 'CY' | 'FY') => (basis === 'FY' ? `FY ${year}-${String(year + 1).slice(2)}` : `${year}`);
@@ -709,6 +763,28 @@ async function fetchOne(conn: { query: typeof pool.query }, id: number, lock = f
   return row ?? null;
 }
 
+/**
+ * Straight 2-stage leaves: the weekly offs / holidays between them become leave days of the earlier leave
+ * (its dates grow, its prefix / suffix is dropped, the balance follows, and the change is audited).
+ */
+async function applyJoins(conn: { query: typeof pool.query }, req: Request, viewer: Viewer, joins: JoinedGap[]): Promise<void> {
+  for (const j of joins) {
+    const row = await fetchOne(conn, j.requestId, true);
+    if (!row) continue;
+    const before = toRequest(viewer, row);
+    if (j.side === 'after') {
+      await conn.query('UPDATE leave_requests SET end_date = ?, days_count = days_count + ?, suffix_from = NULL, suffix_to = NULL WHERE id = ?', [j.to, j.days, j.requestId]);
+    } else {
+      await conn.query('UPDATE leave_requests SET start_date = ?, days_count = days_count + ?, prefix_from = NULL, prefix_to = NULL WHERE id = ?', [j.from, j.days, j.requestId]);
+    }
+    const after = toRequest(viewer, (await fetchOne(conn, j.requestId))!);
+    await writeMasterAuditSql(conn, req, {
+      masterKey: AUDIT_KEY, recordId: j.requestId, recordLabel: label(after), action: 'UPDATE', before: auditView(before), after: auditView(after),
+      reason: `Holidays ${j.from} to ${j.to} now count as leave: another ${j.typeName} follows straight on`,
+    });
+  }
+}
+
 export async function createRequest(req: Request, viewer: Viewer, body: unknown): Promise<LeaveRequest> {
   const input = parseLeaveInput(body);
   let targetId: number;
@@ -736,6 +812,7 @@ export async function createRequest(req: Request, viewer: Viewer, body: unknown)
       );
       const id = Number((result as { insertId: number }).insertId);
       if (input.file) await saveCertificate(conn, id, input.file, viewer.id);
+      await applyJoins(conn, req, viewer, c.joins);
       const created = toRequest(viewer, (await fetchOne(conn, id))!);
       await writeMasterAuditSql(conn, req, { masterKey: AUDIT_KEY, recordId: id, recordLabel: label(created), action: 'CREATE', after: auditView(created) });
       return created;
@@ -767,6 +844,7 @@ export async function updateRequest(req: Request, viewer: Viewer, id: number, bo
           c.stages, c.emp.reportingManagerId, c.emp.reviewingManagerId, id],
       );
       if (input.file) await saveCertificate(conn, id, input.file, viewer.id);
+      await applyJoins(conn, req, viewer, c.joins);
       const after = toRequest(viewer, (await fetchOne(conn, id))!);
       const changed = changedFields(auditView(before), auditView(after));
       if (changed.length) await writeMasterAuditSql(conn, req, { masterKey: AUDIT_KEY, recordId: id, recordLabel: label(after), action: 'UPDATE', before: auditView(before), after: auditView(after) });
