@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { WIILogo } from '../components/WIILogo';
 import { canOpenPage } from '../../modules/hrms/hrmsPages';
 import {
+  FileBarChart,
   LayoutDashboard,
   Clock,
   MapPin,
@@ -343,6 +344,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   >
                     <Sliders className={`w-4 h-4 shrink-0 ${activeTab === 'master' ? 'text-primary' : 'text-slate-400'}`} />
                     <span>Master Settings</span>
+                  </button>
+                )}
+
+                {/* 6. Reports: scheduled report emails (Administrator) */}
+                {show('reports') && (
+                  <button
+                    onClick={() => {
+                      setExpandedGroup(null);
+                      handleNavClick('reports');
+                    }}
+                    className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-medium transition-all text-left cursor-pointer ${
+                      activeTab === 'reports'
+                        ? 'bg-primary/10 text-primary font-bold border-l-3 border-primary shadow-2xs'
+                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                    }`}
+                  >
+                    <FileBarChart className={`w-4 h-4 shrink-0 ${activeTab === 'reports' ? 'text-primary' : 'text-slate-400'}`} />
+                    <span>Reports</span>
                   </button>
                 )}
               </>
