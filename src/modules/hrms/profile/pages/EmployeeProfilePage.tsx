@@ -83,6 +83,7 @@ import {
 import { RoleMatrixTable } from '../../master/components/RoleMatrixTable';
 import { exportHRMSToCSV, exportHRMSToPDF, HRMSExportColumn, HRMSFilterTag } from '../../utils/hrmsExportUtils';
 import { UserAvatar } from '../../../../shared/components/UserAvatar';
+import { actionBtn } from '../../../../shared/components/actionStyles';
 
 // Master Data Lists for Dropdowns
 export const DEPARTMENTS_MASTER = [
@@ -2410,7 +2411,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                           {isAdmin && (
                             <button
                               onClick={() => setHistoryUser(u)}
-                              className="bg-purple-50 hover:bg-purple-100 text-purple-700 font-extrabold p-2 rounded-xl text-xs border border-purple-200 cursor-pointer transition-colors"
+                              className={actionBtn('neutral')}
                               title="Manage project & career history"
                             >
                               <Briefcase className="w-3.5 h-3.5" />
@@ -2422,7 +2423,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                               onClick={() => {
                                 openEditEmployee(u);
                               }}
-                              className="bg-blue-50 hover:bg-blue-100 text-blue-700 font-extrabold p-2 rounded-xl text-xs border border-blue-200 cursor-pointer transition-colors"
+                              className={actionBtn('neutral')}
                               title="Edit User Profile"
                             >
                               <Edit3 className="w-3.5 h-3.5" />
@@ -2671,9 +2672,9 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             <button
                               onClick={() => setHistoryUser(u)}
                               title="View Project & Career Posting History"
-                              className="w-7 h-7 min-w-[28px] min-h-[28px] max-w-[28px] max-h-[28px] aspect-square p-0 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold cursor-pointer inline-flex items-center justify-center border border-purple-200 transition-all active:scale-95 shadow-2xs shrink-0"
+                              className={actionBtn('neutral')}
                             >
-                              <Briefcase className="w-3.5 h-3.5 text-purple-600 stroke-[2] shrink-0" />
+                              <Briefcase className="w-3.5 h-3.5" />
                             </button>
 
                             {/* Edit User Roles & 2D Matrix Button */}
@@ -2681,9 +2682,9 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                               <button
                                 onClick={() => handleOpenEditRoles(u)}
                                 title="Configure User Roles & 2D Matrix Permissions"
-                                className="w-7 h-7 min-w-[28px] min-h-[28px] max-w-[28px] max-h-[28px] aspect-square p-0 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold cursor-pointer inline-flex items-center justify-center border border-indigo-200 transition-all active:scale-95 shadow-2xs shrink-0"
+                                className={actionBtn('neutral')}
                               >
-                                <Shield className="w-3.5 h-3.5 text-indigo-700 stroke-[2.2] shrink-0" />
+                                <Shield className="w-3.5 h-3.5" />
                               </button>
                             )}
 
@@ -2691,9 +2692,9 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             <button
                               onClick={() => handleTriggerResetPassword(u)}
                               title="Reset User Password"
-                              className="w-7 h-7 min-w-[28px] min-h-[28px] max-w-[28px] max-h-[28px] aspect-square p-0 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold cursor-pointer inline-flex items-center justify-center border border-slate-200 transition-all active:scale-95 shadow-2xs shrink-0"
+                              className={actionBtn('neutral')}
                             >
-                              <KeyRound className="w-3.5 h-3.5 text-slate-600 stroke-[2] shrink-0" />
+                              <KeyRound className="w-3.5 h-3.5" />
                             </button>
 
                             {/* Toggle Active/Deactive */}
@@ -2708,9 +2709,9 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                                 }`}
                               >
                                 {u.status === 'deactivated' ? (
-                                  <UserCheck className="w-3.5 h-3.5 text-emerald-700 stroke-[2] shrink-0" />
+                                  <UserCheck className="w-3.5 h-3.5" />
                                 ) : (
-                                  <UserX className="w-3.5 h-3.5 text-amber-700 stroke-[2] shrink-0" />
+                                  <UserX className="w-3.5 h-3.5" />
                                 )}
                               </button>
                             )}
@@ -2720,9 +2721,9 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                               <button
                                 onClick={() => { setDeleteError(''); setDeleteReason(''); setDeleteReference(''); setUserToDelete(u); }}
                                 title="Delete User"
-                                className="w-7 h-7 min-w-[28px] min-h-[28px] max-w-[28px] max-h-[28px] aspect-square p-0 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold cursor-pointer inline-flex items-center justify-center border border-rose-200 transition-all shrink-0 active:scale-95 shadow-2xs"
+                                className={actionBtn('danger')}
                               >
-                                <Trash2 className="w-3.5 h-3.5 text-rose-600 stroke-[2] shrink-0" />
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             )}
                           </div>

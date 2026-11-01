@@ -16,6 +16,7 @@ import { activityEndpoints } from '../../../../shared/services/activityApi';
 import { downloadCsvText, downloadTablePdf, printedAt, toCsvText } from '../../../../shared/services/printTable';
 import { ConfirmDialog, NoticeBar, useNotice } from '../../master/components/masterUi';
 import { ManualInput, ManualList, ManualRequest, ManualStatus, PunchGap, manualAttendanceApi } from '../manualAttendanceApi';
+import { actionBtn } from '../../../../shared/components/actionStyles';
 
 /**
  * Manual Attendance: a request to correct a missed or wrong punch.
@@ -266,8 +267,6 @@ export const ManualAttendanceView: React.FC = () => {
       setUndoBusy(false);
     }
   };
-
-  const iconBtn = 'w-8 h-8 rounded-lg border flex items-center justify-center cursor-pointer shrink-0';
   const statusBy = (r: ManualRequest) => (r.status === 'pending' ? `by ${r.managerName ?? 'Administrator'} (${r.managerName ? 'R.M.' : 'Admin'})` : `by ${r.actionByName ?? '—'}${r.actionByRole ? ` (${r.actionByRole})` : ''}`);
   // Who sees which columns: the employee column for everyone who sees other people's requests.
   const columns: ColumnDef<ManualRequest>[] = [
@@ -320,26 +319,26 @@ export const ManualAttendanceView: React.FC = () => {
       render: (r: ManualRequest) => (
         <div className="flex items-center justify-center gap-1">
           <button type="button" onClick={() => setViewing(r)} title="View" aria-label={`View request of ${r.name} for ${formatDate(r.date)}`}
-            className={`${iconBtn} border-slate-200 text-slate-600 hover:text-primary hover:bg-slate-50`}><Eye className="w-3.5 h-3.5" /></button>
+            className={actionBtn('neutral')}><Eye className="w-3.5 h-3.5" /></button>
           {r.canEdit && (
             <button type="button" onClick={() => openEdit(r)} title="Edit" aria-label={`Edit ${r.name}`}
-              className={`${iconBtn} border-slate-200 text-slate-600 hover:text-primary hover:bg-slate-50`}><Pencil className="w-3.5 h-3.5" /></button>
+              className={actionBtn('neutral')}><Pencil className="w-3.5 h-3.5" /></button>
           )}
           {r.canDelete && (
             <button type="button" onClick={() => { setDeleting(r); setDeleteError(null); }} title="Delete" aria-label={`Delete ${r.name}`}
-              className={`${iconBtn} border-slate-200 text-slate-600 hover:text-error hover:bg-error-subtle`}><Trash2 className="w-3.5 h-3.5" /></button>
+              className={actionBtn('danger')}><Trash2 className="w-3.5 h-3.5" /></button>
           )}
           {r.canDecide && (
             <>
               <button type="button" onClick={() => openDecide(r, 'approve')} title="Approve" aria-label={`Approve ${r.name}`}
-                className={`${iconBtn} border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100`}><Check className="w-3.5 h-3.5" /></button>
+                className={actionBtn('success')}><Check className="w-3.5 h-3.5" /></button>
               <button type="button" onClick={() => openDecide(r, 'reject')} title="Reject" aria-label={`Reject ${r.name}`}
-                className={`${iconBtn} border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100`}><X className="w-3.5 h-3.5" /></button>
+                className={actionBtn('danger')}><X className="w-3.5 h-3.5" /></button>
             </>
           )}
           {r.canUndo && (
             <button type="button" onClick={() => { setUndoing(r); setUndoError(null); }} title="Undo the decision" aria-label={`Undo decision on ${r.name}`}
-              className={`${iconBtn} border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100`}><RotateCcw className="w-3.5 h-3.5" /></button>
+              className={actionBtn('warning')}><RotateCcw className="w-3.5 h-3.5" /></button>
           )}
         </div>
       ),

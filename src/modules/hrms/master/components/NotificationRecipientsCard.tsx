@@ -98,7 +98,7 @@ export const NotificationRecipientsCard: React.FC<{ readOnly: boolean }> = ({ re
       render: (r: NotificationRecipient) => (
         <div className="flex justify-end gap-1.5">
           <Button variant="icon" size="sm" leftIcon={Pencil} title="Edit" aria-label={`Edit ${r.email}`} onClick={() => open(r)} />
-          <Button variant="icon" size="sm" leftIcon={Trash2} title="Delete" aria-label={`Delete ${r.email}`} className="text-error hover:bg-error-subtle" onClick={() => { setDeleteError(null); setDeleting(r); }} />
+          <Button variant="icon" size="sm" leftIcon={Trash2} title="Delete" aria-label={`Delete ${r.email}`} tone="danger" onClick={() => { setDeleteError(null); setDeleting(r); }} />
         </div>
       ),
     }]),

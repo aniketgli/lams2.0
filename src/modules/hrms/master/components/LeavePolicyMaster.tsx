@@ -188,7 +188,7 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
       render: (t: LeaveTypeRecord) => (
         <div className="flex justify-end gap-1.5">
           <Button variant="icon" size="sm" leftIcon={Pencil} title="Edit" aria-label={`Edit ${t.name}`} onClick={() => open(t)} />
-          <Button variant="icon" size="sm" leftIcon={Trash2} title="Delete" aria-label={`Delete ${t.name}`} className="text-error hover:bg-error-subtle"
+          <Button variant="icon" size="sm" leftIcon={Trash2} title="Delete" aria-label={`Delete ${t.name}`} tone="danger"
             onClick={() => { setDeleteError(null); setDeleting(t); }} />
         </div>
       ),
