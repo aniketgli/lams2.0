@@ -625,7 +625,7 @@ async function checkLeave(
     const range = `${isoDate(other.start_date)} to ${isoDate(other.end_date)}`;
     if (otherStages !== policy.stages) {
       throw new HttpError(409, 'This leave cannot be joined with the leave next to it.', 'COMBINE', {
-        startDate: `${policy.name} (${policy.stages}-stage) cannot be taken straight ${side === 'after' ? 'after' : 'before'} ${other.name} (${otherStages}-stage, ${range}). Only a ${otherStages}-stage leave can follow it.`,
+        startDate: `A ${policy.stages}-stage leave cannot be joined with a ${otherStages}-stage leave.`,
       });
     }
     if (policy.stages === 2 && found.gap.length > 0) {
