@@ -49,6 +49,7 @@ mysql lams_db < migrations/20261115_station_leave_type.sql   # Station leave typ
 mysql lams_db < migrations/20261116_leave_stages_by_type.sql   # CL / SCL / RH / C-OFF / STN are 1-stage (R.M.); every other leave is 2-stage (R.M. forwards, HoD approves)
 mysql lams_db < migrations/20261117_one_stage_more_types.sql   # CL20 / CL30 / UL are 1-stage as well
 mysql lams_db < migrations/20261118_leave_joining_reports.sql   # Joining reports after 2-stage leave (+ fitness certificate for HPL / Commuted)
+mysql lams_db < migrations/20261119_scl_like_cl.sql   # SCL takes the leave form rules of CL; only PwD can take it
 mysql lams_db < migrations/20261031_leave_requests.sql
 npm run dev                   # http://localhost:3000
 npm run lint                  # type-check
