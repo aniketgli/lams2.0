@@ -104,6 +104,9 @@ export interface LeaveRequest {
   canEdit: boolean;
   canDelete: boolean;
   canUndo: boolean;
+  /** Joining report after a 2-stage leave: none needed (yet), due now, or already filed (with its status). */
+  joiningState: 'none' | 'due' | 'filed';
+  joiningStatus: string | null;
 }
 
 export interface LeaveInput {
@@ -156,7 +159,7 @@ export const num = (n: number) => Math.round(n * 10) / 10;
 
 const SELECT = `
   SELECT m.*, u.biometric_id, u.name AS user_name, p.designation, p.department, p.profile_data,
-         t.name AS type_name, t.code AS type_code, (SELECT c.file_name FROM leave_certificates c WHERE c.request_id = m.id) AS certificate_name,
+         t.name AS type_name, t.code AS type_code, t.joining_required, t.approval_stages AS type_stages, (SELECT c.file_name FROM leave_certificates c WHERE c.request_id = m.id) AS certificate_name,
          ab.name AS applied_by_name, mg.name AS manager_name, rv.name AS reviewer_name, l1.name AS l1_name, ac.name AS action_by_name
     FROM leave_requests m
     JOIN users u ON u.id = m.user_id
@@ -266,6 +269,8 @@ function toRequest(viewer: Viewer, row: RowDataPacket): LeaveRequest {
     canEdit: canModify(viewer, row),
     canDelete: canModify(viewer, row),
     canUndo: canUndo(viewer, row),
+    joiningState: 'none',
+    joiningStatus: null,
   };
 }
 
@@ -304,7 +309,27 @@ export async function listRequests(viewer: Viewer, query: { from?: unknown; to?:
     missingTable(error);
     throw error;
   }
-  return { from, to, requests: found.filter((row) => canSee(viewer, row)).map((row) => toRequest(viewer, row)) };
+  const requests = found.filter((row) => canSee(viewer, row)).map((row) => toRequest(viewer, row));
+  await markJoining(found, requests);
+  return { from, to, requests };
+}
+
+/** Which leaves need a joining report now, and which already have one. Never breaks the list (e.g. before the migration is run). */
+async function markJoining(found: RowDataPacket[], requests: LeaveRequest[]): Promise<void> {
+  const today = todayInIndia();
+  const needs = found.filter((r) => (Number(r.joining_required) === 1 || Number(r.type_stages) === 2) && String(r.status) !== 'rejected' && !r.linked_to && isoDate(r.end_date) < today);
+  if (!needs.length) return;
+  try {
+    const filed = new Map((await rows(pool, `SELECT request_id, status FROM leave_joining_reports WHERE request_id IN (${needs.map(() => '?').join(',')})`, needs.map((r) => Number(r.id)))).map((r) => [Number(r.request_id), String(r.status)]));
+    for (const row of needs) {
+      const target = requests.find((r) => r.id === String(row.id));
+      if (!target) continue;
+      if (filed.has(Number(row.id))) { target.joiningState = 'filed'; target.joiningStatus = filed.get(Number(row.id)) ?? null; continue; }
+      if (await joiningDateOf(pool, row) <= today) target.joiningState = 'due';
+    }
+  } catch (error) {
+    if ((error as { code?: string })?.code !== 'ER_NO_SUCH_TABLE' && !(error instanceof HttpError)) throw error;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -471,6 +496,23 @@ export async function dayRule(q: { query: typeof pool.query }, emp: Employee, po
   return { sandwich: policy.sandwich === 'included' || policy.offDaysOnly ? 'included' as const : 'excluded' as const, workingDays, gazetted };
 }
 
+/** The first working day after `end`: not a weekly off of the shift and not a gazetted holiday. */
+export function firstWorkingDayAfter(end: string, workingDays: string[], gazetted: Set<string>): string {
+  for (const date of datesBetween(addDays(end, 1), addDays(end, 60))) {
+    if (workingDays.includes(weekdayOf(date)) && !gazetted.has(date)) return date;
+  }
+  return addDays(end, 1);
+}
+
+export async function joiningDateOf(q: { query: typeof pool.query }, row: RowDataPacket): Promise<string> {
+  const emp = await loadEmployee(q, Number(row.user_id));
+  const end = isoDate(row.end_date);
+  // Only the shift's working days and the gazetted holidays matter here.
+  const rule = await dayRule(q, emp, { sandwich: 'excluded', offDaysOnly: false } as never, addDays(end, 1), addDays(end, 60));
+  return firstWorkingDayAfter(end, rule.workingDays, rule.gazetted);
+}
+
+
 // ---------------------------------------------------------------------------
 // Validation
 // ---------------------------------------------------------------------------
@@ -551,7 +593,7 @@ async function checkLeave(
     let s = input.startDate; let e = input.endDate;
     while (s <= e && isOff(s)) s = addDays(s, 1);
     while (e >= s && isOff(e)) e = addDays(e, -1);
-    if (s > e) throw badRequest('Please correct the highlighted fields.', { startDate: 'No working day falls in these dates. Weekly offs and holidays alone are taken as a station leave.' });
+    if (s > e) throw badRequest('Please correct the highlighted fields.', { startDate: 'No working day in these dates.' });
     if (s !== input.startDate) { input.startDate = s; input.startSession = 'full'; }
     if (e !== input.endDate) { input.endDate = e; input.endSession = 'full'; }
   }
@@ -577,7 +619,7 @@ async function checkLeave(
     const base = await loadPolicy(q, policy.afterExhaustedId);
     if (base && eligibilityProblem(base, emp, input.startDate) === null) {
       const left = await balanceOf(q, targetId, { id: base.id, quota: creditedQuota(base, emp.employmentType, cycleYear, emp.basis, input.startDate, emp.isPwd) }, cycleYear, 0);
-      if (left.available > 0) errors.leaveTypeId = `${policy.name} can be taken only after ${base.name} is used up. ${left.available} days of ${base.name} are still available.`;
+      if (left.available > 0) errors.leaveTypeId = `Only after ${base.name} is used up.`;
     }
   }
   if (Object.keys(errors).length) throw badRequest('Please correct the highlighted fields.', errors);
@@ -588,19 +630,19 @@ async function checkLeave(
   if (policy.minDays && days < policy.minDays) errors.endDate = `${policy.name} needs at least ${policy.minDays} days in one application.`;
   if (policy.maxConsecutive && days > policy.maxConsecutive) errors.endDate = `${policy.name} can be taken for at most ${policy.maxConsecutive} days at a time.`;
   if (policy.certificateRequired && !input.certificate) errors.certificate = `Upload a medical certificate: ${policy.name} needs one.`;
-  else if (policy.certDays && days > policy.certDays && !input.certificate) errors.certificate = `Upload a medical certificate: it is needed for more than ${policy.certDays} days.`;
+  else if (policy.certDays && days > policy.certDays && !input.certificate) errors.certificate = `Medical certificate needed above ${policy.certDays} days.`;
   if (policy.lifetimeMax) {
     const [taken] = await rows(q, "SELECT COALESCE(SUM(days_count), 0) AS n FROM leave_requests WHERE user_id = ? AND leave_type_id = ? AND status <> 'rejected' AND id <> ?", [targetId, policy.id, exceptId]);
     const before = Number(taken?.n ?? 0);
-    if (before + days > policy.lifetimeMax) errors.endDate = `${policy.name} is limited to ${policy.lifetimeMax} days in the whole service; ${num(Math.max(0, policy.lifetimeMax - before))} days are left.`;
+    if (before + days > policy.lifetimeMax) errors.endDate = `Only ${num(Math.max(0, policy.lifetimeMax - before))} days left in your service.`;
   }
   if (policy.maxSpellsMonth && !errors.endDate) {
     const [monthly] = await rows(q, "SELECT COUNT(*) AS n FROM leave_requests WHERE user_id = ? AND leave_type_id = ? AND DATE_FORMAT(start_date, '%Y-%m') = ? AND status <> 'rejected' AND id <> ?", [targetId, policy.id, input.startDate.slice(0, 7), exceptId]);
-    if (Number(monthly?.n ?? 0) >= policy.maxSpellsMonth) errors.startDate = `${policy.name} can be applied for at most ${policy.maxSpellsMonth} times in a month.`;
+    if (Number(monthly?.n ?? 0) >= policy.maxSpellsMonth) errors.startDate = `At most ${policy.maxSpellsMonth} times a month.`;
   }
   if (policy.maxSpellsLifetime && !errors.endDate && !errors.startDate) {
     const [ever] = await rows(q, "SELECT COUNT(*) AS n FROM leave_requests WHERE user_id = ? AND leave_type_id = ? AND status <> 'rejected' AND id <> ?", [targetId, policy.id, exceptId]);
-    if (Number(ever?.n ?? 0) >= policy.maxSpellsLifetime) errors.startDate = `${policy.name} can be applied for at most ${policy.maxSpellsLifetime} times in the whole service.`;
+    if (Number(ever?.n ?? 0) >= policy.maxSpellsLifetime) errors.startDate = `At most ${policy.maxSpellsLifetime} times in your service.`;
   }
   if (policy.maxSpells && !errors.endDate) {
     const [spells] = await rows(q, "SELECT COUNT(*) AS n FROM leave_requests WHERE user_id = ? AND leave_type_id = ? AND cycle_year = ? AND status <> 'rejected' AND id <> ?", [targetId, policy.id, cycleYear, exceptId]);
@@ -609,7 +651,7 @@ async function checkLeave(
   // A leave type with two steps may need the HoD only for longer leaves (e.g. EL above 2 days).
   const stages: 1 | 2 = policy.stages === 2 && (policy.hodAfterDays <= 0 || days > policy.hodAfterDays) ? 2 : 1;
   if (stages === 2 && !emp.reviewingManagerId) errors.leaveTypeId = 'This employee has no HoD set, which this leave type needs. Ask the administrator.';
-  if ((policy.needsContact || input.stationLeave) && !input.contactAddress) errors.contactAddress = 'Enter the address and mobile number to reach you during the leave.';
+  if ((policy.needsContact || input.stationLeave) && !input.contactAddress) errors.contactAddress = 'Enter address and mobile number.';
   if (input.ltcType !== 'none' && !policy.ltcAllowed) errors.ltcType = `LTC and Ex-India are not available with ${policy.name}.`;
   // Weekly offs and gazetted holidays touching the leave can be added to it as a prefix / suffix, for every leave type.
   const wide = await dayRule(q, emp, policy, addDays(input.startDate, -45), addDays(input.endDate, 45));
@@ -663,22 +705,22 @@ async function checkLeave(
   // A station leave covers weekly offs and gazetted holidays only; all days between the two dates are off, so they are one stretch.
   if (policy.offDaysOnly) { prefix = null; suffix = null; }
   const stationOk = Boolean(prefix) || Boolean(suffix) || datesBetween(input.startDate, input.endDate).some(off);
-  if (input.stationLeave && !policy.offDaysOnly && !stationOk) errors.stationLeave = 'Station leave can be taken only in one continuous stretch with a weekend or holiday.';
-  if (policy.offDaysOnly && !datesBetween(input.startDate, input.endDate).every(off)) errors.startDate = `${policy.name} can be taken only on weekly offs and holidays, in one continuous stretch.`;
+  if (input.stationLeave && !policy.offDaysOnly && !stationOk) errors.stationLeave = 'Not next to a weekend or holiday.';
+  if (policy.offDaysOnly && !datesBetween(input.startDate, input.endDate).every(off)) errors.startDate = 'Only weekly offs and holidays.';
   {
     if (input.prefix) {
       const { from, to } = input.prefix;
       if (!prefix) errors.prefixFrom = 'There are no holidays to add before this leave. Any between it and your earlier leave count with that leave.';
       else if (to >= input.startDate) errors.prefixTo = 'The prefix must end before the leave starts.';
       else if (from < oldestApplicationDate(today)) errors.prefixFrom = TOO_OLD_MESSAGE;
-      else if (!datesBetween(from, addDays(input.startDate, -1)).every(off)) errors.prefixFrom = 'Prefix days must be unbroken holidays or weekly offs just before the leave.';
+      else if (!datesBetween(from, addDays(input.startDate, -1)).every(off)) errors.prefixFrom = 'Not a continuous weekly off / holiday before the leave.';
       else if (to !== addDays(input.startDate, -1)) errors.prefixTo = 'The prefix must run up to the day before the leave starts.';
     }
     if (input.suffix) {
       const { from, to } = input.suffix;
       if (!suffix) errors.suffixFrom = 'There are no holidays to add after this leave. Any between it and your next leave count with that leave.';
       else if (from <= input.endDate) errors.suffixFrom = 'The suffix must start after the leave ends.';
-      else if (!datesBetween(addDays(input.endDate, 1), to).every(off)) errors.suffixTo = 'Suffix days must be unbroken holidays or weekly offs just after the leave.';
+      else if (!datesBetween(addDays(input.endDate, 1), to).every(off)) errors.suffixTo = 'Not a continuous weekly off / holiday after the leave.';
       else if (from !== addDays(input.endDate, 1)) errors.suffixFrom = 'The suffix must start the day after the leave ends.';
     }
   }
@@ -687,7 +729,7 @@ async function checkLeave(
   const [clash] = await rows(q,
     "SELECT id, start_date, end_date FROM leave_requests WHERE user_id = ? AND status <> 'rejected' AND id <> ? AND start_date <= ? AND end_date >= ? AND (linked_to IS NULL OR linked_to <> ?) LIMIT 1",
     [targetId, exceptId, input.endDate, input.startDate, exceptId]);
-  if (clash) throw new HttpError(409, 'This employee already has a leave on these dates.', 'DUPLICATE', { startDate: `Overlaps a pending or approved leave (${isoDate(clash.start_date)} to ${isoDate(clash.end_date)}).` });
+  if (clash) throw new HttpError(409, 'This employee already has a leave on these dates.', 'DUPLICATE', { startDate: `Overlaps another leave (${isoDate(clash.start_date)} to ${isoDate(clash.end_date)}).` });
 
   const joined = policy.offDaysOnly ? null : await joinProblem(q, emp, policy, input, targetId, exceptId);
   if (joined) throw new HttpError(409, 'This leave cannot be joined with the leave next to it.', 'COMBINE', { startDate: joined });

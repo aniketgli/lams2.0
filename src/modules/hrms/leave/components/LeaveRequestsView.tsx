@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Building2, CalendarDays, MapPin, Send, Check, Paperclip, CheckCircle2, ChevronsRight, Clock, Eye, FileText, Pencil, RotateCcw, Trash2, X, XCircle } from 'lucide-react';
+import { Building2, CalendarDays, ClipboardCheck, MapPin, Send, Check, Paperclip, CheckCircle2, ChevronsRight, Clock, Eye, FileText, Pencil, RotateCcw, Trash2, X, XCircle } from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
 import { DataTable, Modal, Select } from '../../../../shared/components';
 import type { ColumnDef } from '../../../../shared/components';
@@ -62,7 +62,7 @@ const EMPTY_FORM: LeaveInput = { userId: '', leaveTypeId: '', startDate: '', end
 
 const shiftDate = (iso: string, days: number) => { const d = new Date(`${iso}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
 
-export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySignal }) => {
+export const LeaveRequestsView: React.FC<{ applySignal: number; onOpenJoining?: () => void }> = ({ applySignal, onOpenJoining }) => {
   const { currentUser, users } = useApp();
   const role = currentUser.role;
   const isAdmin = role === 'administrator';
@@ -402,6 +402,10 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
         <div className="flex items-center justify-center gap-1">
           <button type="button" onClick={() => setViewing(r)} title="View" aria-label={`View leave of ${r.name}`}
             className={`${iconBtn} border-slate-200 text-slate-600 hover:text-primary hover:bg-slate-50`}><Eye className="w-3.5 h-3.5" /></button>
+          {r.joiningState === 'due' && onOpenJoining && (isAdmin || r.userId === String(currentUser.id)) && (
+            <button type="button" onClick={onOpenJoining} title="Joining form is due" aria-label={`Fill joining form of ${r.name}`}
+              className={`${iconBtn} border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100`}><ClipboardCheck className="w-3.5 h-3.5" /></button>
+          )}
           {r.canEdit && (
             <button type="button" onClick={() => openEdit(r)} title="Edit" aria-label={`Edit ${r.name}`}
               className={`${iconBtn} border-slate-200 text-slate-600 hover:text-primary hover:bg-slate-50`}><Pencil className="w-3.5 h-3.5" /></button>
@@ -547,7 +551,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
           )}
         >
           <form id="leave-form" onSubmit={save} noValidate className="space-y-4">
-            {formMessage && <NoticeBar notice={{ kind: 'error', text: formMessage }} onClose={() => setFormMessage(null)} />}
+            {formMessage && <p role="alert" className="text-[11px] font-semibold text-rose-600 leading-tight">{Object.keys(formErrors).some((k) => formErrors[k]) ? 'Please check the highlighted fields.' : formMessage}</p>}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {isAdmin && (

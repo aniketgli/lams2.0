@@ -147,6 +147,9 @@ export interface LeaveRequest {
   canEdit: boolean;
   canDelete: boolean;
   canUndo: boolean;
+  /** Joining report after a 2-stage leave. */
+  joiningState: 'none' | 'due' | 'filed';
+  joiningStatus: string | null;
 }
 
 export interface LeaveList {
