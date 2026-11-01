@@ -185,6 +185,8 @@ export interface LeavePreview {
   /** Weekly offs / gazetted holidays just before and after the leave that can be added to it. */
   prefix: HolidayBlock | null;
   suffix: HolidayBlock | null;
+  /** Station permission can be asked for only when the leave is continuous with a weekend or holiday. */
+  stationOk: boolean;
 }
 
 export interface HolidayBlock { from: string; to: string; days: number }

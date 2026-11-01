@@ -165,7 +165,7 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
             t.medicalCertDays ? `Certificate above ${t.medicalCertDays} days` : null,
             t.carryForward ? `Carry forward ${t.maxCarryForward}` : null,
             t.encashmentAllowed ? 'Encashable' : null,
-            t.sandwichRule === 'included' ? 'Holidays counted' : 'Holidays not counted',
+            t.approvalStages === 2 ? 'Holidays counted' : 'Holidays not counted',
             t.isPaid ? null : 'Unpaid',
             t.pwdOnly ? 'Persons with disability only' : null,
             t.afterExhaustedTypeId ? `Only after ${nameOf(t.afterExhaustedTypeId)} is used up` : null,
@@ -230,14 +230,12 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
                 options={[{ label: 'Active', value: 'active' }, { label: 'Inactive', value: 'inactive' }]} />
             </FormSection>
 
-            <FormSection step={2} title="Rules for taking leave" errorCount={countErrors(['approvalStages', 'combineWith', 'sandwichRule', 'halfDayAllowed', 'minDaysPerApplication', 'maxConsecutiveDays', 'gender', 'pwdOnly', 'maxSpellsPerMonth', 'maxSpellsLifetime', 'joiningRequired', 'isPaid', 'isDebited', 'needsContact', 'ltcAllowed', 'hodAfterDays'])}>
+            <FormSection step={2} title="Rules for taking leave" errorCount={countErrors(['approvalStages', 'combineWith', 'halfDayAllowed', 'minDaysPerApplication', 'maxConsecutiveDays', 'gender', 'pwdOnly', 'maxSpellsPerMonth', 'maxSpellsLifetime', 'joiningRequired', 'isPaid', 'isDebited', 'needsContact', 'ltcAllowed', 'hodAfterDays'])}>
               <Select label="Approval stages" required value={String(form.approvalStages)} searchable={false} error={Boolean(errors.approvalStages)}
                 onChange={(v: string) => { set('approvalStages', Number(v) as 1 | 2); if (v === '1') set('hodAfterDays', 0); }}
                 options={[{ label: '1 stage · Reporting Manager', value: '1' }, { label: '2 stages · Reporting Manager, HoD', value: '2' }]} />
               <Select label="Can be combined with" required value={form.combineWith} searchable={false} error={Boolean(errors.combineWith)} onChange={(v: string) => set('combineWith', v as LeaveTypeInput['combineWith'])}
                 options={[{ label: 'Nothing', value: 'none' }, { label: '1-stage leaves', value: 'single' }, { label: '2-stage leaves', value: 'double' }, { label: 'Both 1-stage and 2-stage leaves', value: 'both' }]} />
-              <Select label="Holidays in between" required value={form.sandwichRule} searchable={false} error={Boolean(errors.sandwichRule)} onChange={(v: string) => set('sandwichRule', v as LeaveTypeInput['sandwichRule'])}
-                options={[{ label: 'Not counted', value: 'excluded' }, { label: 'Counted as leave', value: 'included' }]} />
 
               <Select label="Half day allowed" value={flag(form.halfDayAllowed)} searchable={false} onChange={(v: string) => set('halfDayAllowed', v === 'yes')} options={yesNo} />
               <Input label="Minimum days per application (0 = no limit)" type="number" min={0} step="0.5" value={String(form.minDaysPerApplication)} error={errors.minDaysPerApplication} onChange={num('minDaysPerApplication')} />
