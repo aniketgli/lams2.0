@@ -37,6 +37,8 @@ export const BALANCE_KEY = 'leave_balance';
 export const EMPLOYEE_BACKDATE_DAYS = MAX_BACKDATE_DAYS;
 /** Most days of leave encashment that can be taken with one LTC. */
 export const LTC_ENCASH_MAX = 10;
+/** Leave encashment with LTC needs at least this many days of balance. */
+export const LTC_ENCASH_MIN_BALANCE = 30;
 export const MAX_RANGE_DAYS = 400;
 
 export const LEAVE_SCOPE: ActivityScope = {
@@ -422,15 +424,15 @@ export async function balanceOf(
 ): Promise<Balance> {
   const [grant] = await rows(q, 'SELECT total, carry_forward FROM leave_balances WHERE user_id = ? AND leave_type_id = ? AND cycle_year = ? LIMIT 1', [userId, policy.id, cycleYear]);
   const [sums] = await rows(q,
-    `SELECT COALESCE(SUM(CASE WHEN status = 'approved' THEN days_count ELSE 0 END), 0) AS used,
-            COALESCE(SUM(CASE WHEN status IN ('pending_l1', 'pending_l2') THEN days_count ELSE 0 END), 0) AS pending
+    `SELECT COALESCE(SUM(CASE WHEN status = 'approved' THEN days_count + encash_days ELSE 0 END), 0) AS used,
+            COALESCE(SUM(CASE WHEN status IN ('pending_l1', 'pending_l2') THEN days_count + encash_days ELSE 0 END), 0) AS pending
        FROM leave_requests WHERE user_id = ? AND leave_type_id = ? AND cycle_year = ? AND id <> ?`, [userId, policy.id, cycleYear, exceptRequestId]);
   const total = grant ? Number(grant.total) : policy.quota;
   const carryForward = grant ? Number(grant.carry_forward) : 0;
   // Leave types that are debited from this one (commuted leave takes a multiple of its days from half pay leave).
   const [linked] = await rows(q,
-    `SELECT COALESCE(SUM(CASE WHEN r.status = 'approved' THEN r.days_count * t.debit_factor ELSE 0 END), 0) AS used,
-            COALESCE(SUM(CASE WHEN r.status IN ('pending_l1', 'pending_l2') THEN r.days_count * t.debit_factor ELSE 0 END), 0) AS pending
+    `SELECT COALESCE(SUM(CASE WHEN r.status = 'approved' THEN (r.days_count + r.encash_days) * t.debit_factor ELSE 0 END), 0) AS used,
+            COALESCE(SUM(CASE WHEN r.status IN ('pending_l1', 'pending_l2') THEN (r.days_count + r.encash_days) * t.debit_factor ELSE 0 END), 0) AS pending
        FROM leave_requests r JOIN leave_types t ON t.id = r.leave_type_id
       WHERE r.user_id = ? AND t.debit_from_type_id = ? AND r.cycle_year = ? AND r.id <> ?`, [userId, policy.id, cycleYear, exceptRequestId]);
   const used = Number(sums?.used ?? 0) + Number(linked?.used ?? 0), pending = Number(sums?.pending ?? 0) + Number(linked?.pending ?? 0);
@@ -522,7 +524,7 @@ export interface Checked { days: number; cycleYear: number; policy: Policy; emp:
 
 /** Every rule of a leave application. Throws a field-level 400 / 409 when one fails. */
 async function checkLeave(
-  q: { query: typeof pool.query }, viewer: Viewer, input: LeaveInput, targetId: number, exceptId: number, today = todayInIndia(),
+  q: { query: typeof pool.query }, viewer: Viewer, input: LeaveInput, targetId: number, exceptId: number, today = todayInIndia(), soft = false,
 ): Promise<Checked> {
   const emp = await loadEmployee(q, targetId);
   const policy = await loadPolicy(q, Number(input.leaveTypeId));
@@ -619,21 +621,29 @@ async function checkLeave(
   if (joined) throw new HttpError(409, 'This leave cannot be joined with the leave next to it.', 'COMBINE', { startDate: joined });
 
   const balance = await balanceOf(q, targetId, { id: policy.id, quota: creditedQuota(policy, emp.employmentType, cycleYear, emp.basis, input.startDate, emp.isPwd) }, cycleYear, exceptId);
+  // Leave encashment with LTC is taken from the same balance, on top of the leave days, and only from a balance of 30 days or more.
+  const extra = input.ltcType === 'ltc' ? input.encashDays : 0;
+  if (extra > 0 && !soft) {
+    if (!policy.debited) throw badRequest('Please correct the highlighted fields.', { encashDays: `Leave encashment is not available with ${policy.name}.` });
+    if (balance.available < LTC_ENCASH_MIN_BALANCE) {
+      throw badRequest('Please correct the highlighted fields.', { encashDays: `Leave encashment needs a balance of at least ${LTC_ENCASH_MIN_BALANCE} days. ${num(Math.max(0, balance.available))} available.` });
+    }
+  }
   if (policy.debitFromId) {
     const base = await loadPolicy(q, policy.debitFromId);
     if (base) {
       const left = await balanceOf(q, targetId, { id: base.id, quota: creditedQuota(base, emp.employmentType, cycleYear, emp.basis, input.startDate, emp.isPwd) }, cycleYear, exceptId);
-      const need = num(days * policy.debitFactor);
-      if (need > left.available) {
+      const need = num((days + extra) * policy.debitFactor);
+      if (need > left.available && !soft) {
         throw new HttpError(409, 'Not enough leave balance.', 'NO_BALANCE', { endDate: `${policy.name} uses ${policy.debitFactor} day(s) of ${base.name} for each day: ${need} needed, ${Math.max(0, left.available)} available for ${cycleLabel(cycleYear, emp.basis)}.` });
       }
       return { days, cycleYear, policy, emp, balance: left, stages, prefix, suffix };
     }
   }
-  if (policy.debited && days > balance.available) {
+  if (policy.debited && days + extra > balance.available && !soft) {
     const [next] = await rows(q, "SELECT name FROM leave_types WHERE after_exhausted_type_id = ? AND status = 'active' LIMIT 1", [policy.id]);
     const hint = next ? ` After it is used up, ${next.name} can be applied for.` : '';
-    throw new HttpError(409, 'Not enough leave balance.', 'NO_BALANCE', { endDate: `${policy.name}: ${days} days asked, ${Math.max(0, balance.available)} available for ${cycleLabel(cycleYear, emp.basis)}.${hint}` });
+    throw new HttpError(409, 'Not enough leave balance.', 'NO_BALANCE', { endDate: `${policy.name}: ${days} days asked${extra ? ` + ${extra} days encashment` : ''}, ${Math.max(0, balance.available)} available for ${cycleLabel(cycleYear, emp.basis)}.${hint}` });
   }
   return { days, cycleYear, policy, emp, balance, stages, prefix, suffix };
 }
@@ -644,7 +654,9 @@ export const cycleLabel = (year: number, basis: 'CY' | 'FY') => (basis === 'FY' 
 export async function previewLeave(viewer: Viewer, query: Record<string, unknown>): Promise<{ days: number; cycleYear: number; cycle: string; balance: Balance | null; error: string | null; prefix: HolidayBlock | null; suffix: HolidayBlock | null }> {
   const input = (() => {
     try {
-      return { ...parseLeaveInput({ ...query, reason: 'preview', stationLeave: false, contactAddress: 'preview', ltcType: 'none', availPrefix: false, availSuffix: false }), certificate: true };
+      const encash = Number(query.encashDays);
+      const withEncash = query.ltcType === 'ltc' && query.encashLtc === 'true' && Number.isInteger(encash) && encash >= 1 && encash <= LTC_ENCASH_MAX;
+      return { ...parseLeaveInput({ ...query, reason: 'preview', stationLeave: false, contactAddress: 'preview', ltcType: withEncash ? 'ltc' : 'none', encashLtc: withEncash, encashDays: encash, availPrefix: false, availSuffix: false }), certificate: true };
     } catch {
       return null;
     }
@@ -652,7 +664,7 @@ export async function previewLeave(viewer: Viewer, query: Record<string, unknown
   const target = viewer.role === 'administrator' ? Number(input?.userId ?? 0) : viewer.id;
   if (!input || !target) return { days: 0, cycleYear: 0, cycle: '', balance: null, error: null, prefix: null, suffix: null };
   try {
-    const c = await checkLeave(pool, viewer, input, target, 0);
+    const c = await checkLeave(pool, viewer, input, target, 0, undefined, true);
     return { days: c.days, cycleYear: c.cycleYear, cycle: cycleLabel(c.cycleYear, c.emp.basis), balance: c.balance, error: null, prefix: c.prefix, suffix: c.suffix };
   } catch (error) {
     if (error instanceof HttpError) return { days: 0, cycleYear: 0, cycle: '', balance: null, error: Object.values(error.details ?? {})[0] ?? error.message, prefix: null, suffix: null };
@@ -901,13 +913,13 @@ export async function listBalances(viewer: Viewer, yearRaw: unknown): Promise<{ 
     const grants = await rows(pool, 'SELECT user_id, leave_type_id, total, carry_forward FROM leave_balances WHERE cycle_year = ?', [year]);
     const sums = await rows(pool,
       `SELECT user_id, leave_type_id,
-              COALESCE(SUM(CASE WHEN status = 'approved' THEN days_count ELSE 0 END), 0) AS used,
-              COALESCE(SUM(CASE WHEN status IN ('pending_l1', 'pending_l2') THEN days_count ELSE 0 END), 0) AS pending
+              COALESCE(SUM(CASE WHEN status = 'approved' THEN days_count + encash_days ELSE 0 END), 0) AS used,
+              COALESCE(SUM(CASE WHEN status IN ('pending_l1', 'pending_l2') THEN days_count + encash_days ELSE 0 END), 0) AS pending
          FROM leave_requests WHERE cycle_year = ? GROUP BY user_id, leave_type_id`, [year]);
     const linkedRows = await rows(pool,
       `SELECT r.user_id, t.debit_from_type_id AS base_id,
-              COALESCE(SUM(CASE WHEN r.status = 'approved' THEN r.days_count * t.debit_factor ELSE 0 END), 0) AS used,
-              COALESCE(SUM(CASE WHEN r.status IN ('pending_l1', 'pending_l2') THEN r.days_count * t.debit_factor ELSE 0 END), 0) AS pending
+              COALESCE(SUM(CASE WHEN r.status = 'approved' THEN (r.days_count + r.encash_days) * t.debit_factor ELSE 0 END), 0) AS used,
+              COALESCE(SUM(CASE WHEN r.status IN ('pending_l1', 'pending_l2') THEN (r.days_count + r.encash_days) * t.debit_factor ELSE 0 END), 0) AS pending
          FROM leave_requests r JOIN leave_types t ON t.id = r.leave_type_id
         WHERE t.debit_from_type_id IS NOT NULL AND r.cycle_year = ? GROUP BY r.user_id, t.debit_from_type_id`, [year]);
     const linkedOf = new Map(linkedRows.map((l) => [`${l.user_id}:${l.base_id}`, l]));
@@ -963,13 +975,13 @@ export async function leaveHistory(viewer: Viewer, userIdRaw: unknown): Promise<
     const grants = await rows(pool, 'SELECT cycle_year, cycle_type, leave_type_id, total, carry_forward FROM leave_balances WHERE user_id = ?', [userId]);
     const sums = await rows(pool,
       `SELECT cycle_year, leave_type_id,
-              COALESCE(SUM(CASE WHEN status = 'approved' THEN days_count ELSE 0 END), 0) AS used,
-              COALESCE(SUM(CASE WHEN status IN ('pending_l1', 'pending_l2') THEN days_count ELSE 0 END), 0) AS pending
+              COALESCE(SUM(CASE WHEN status = 'approved' THEN days_count + encash_days ELSE 0 END), 0) AS used,
+              COALESCE(SUM(CASE WHEN status IN ('pending_l1', 'pending_l2') THEN days_count + encash_days ELSE 0 END), 0) AS pending
          FROM leave_requests WHERE user_id = ? GROUP BY cycle_year, leave_type_id`, [userId]);
     const linked = await rows(pool,
       `SELECT r.cycle_year, t.debit_from_type_id AS base_id,
-              COALESCE(SUM(CASE WHEN r.status = 'approved' THEN r.days_count * t.debit_factor ELSE 0 END), 0) AS used,
-              COALESCE(SUM(CASE WHEN r.status IN ('pending_l1', 'pending_l2') THEN r.days_count * t.debit_factor ELSE 0 END), 0) AS pending
+              COALESCE(SUM(CASE WHEN r.status = 'approved' THEN (r.days_count + r.encash_days) * t.debit_factor ELSE 0 END), 0) AS used,
+              COALESCE(SUM(CASE WHEN r.status IN ('pending_l1', 'pending_l2') THEN (r.days_count + r.encash_days) * t.debit_factor ELSE 0 END), 0) AS pending
          FROM leave_requests r JOIN leave_types t ON t.id = r.leave_type_id
         WHERE r.user_id = ? AND t.debit_from_type_id IS NOT NULL GROUP BY r.cycle_year, t.debit_from_type_id`, [userId]);
     const emp = { employmentType: String(person.employment_type ?? ''), isPwd: data.isPwd === true || data.isPwd === 'true' };
