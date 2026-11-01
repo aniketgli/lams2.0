@@ -45,6 +45,7 @@ mysql lams_db < migrations/20261111_el_form_flags.sql   # Earned Leave: LTC / Ex
 mysql lams_db < migrations/20261112_sandwich_by_stages.sql   # holidays inside a leave: counted for 2-stage, not counted for 1-stage leaves
 mysql lams_db < migrations/20261113_two_stage_types.sql   # EL, HPL, Commuted Leave become 2-stage leaves
 mysql lams_db < migrations/20261114_hpl_conversion.sql   # HPL / Commuted: one leave with a conversion option; certificate_required
+mysql lams_db < migrations/20261115_station_leave_type.sql   # Station leave type: weekly offs / holidays only; linked station leave for prefix / suffix
 mysql lams_db < migrations/20261031_leave_requests.sql
 npm run dev                   # http://localhost:3000
 npm run lint                  # type-check
