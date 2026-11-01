@@ -6,7 +6,6 @@ import { ActivityLogPanel, ActivitySource } from '../../../../shared/components/
 import { activityEndpoints } from '../../../../shared/services/activityApi';
 import { LeaveRequestsView } from '../components/LeaveRequestsView';
 import { LeaveBalancesView } from '../components/LeaveBalancesView';
-import { JoiningView } from '../components/JoiningView';
 import { LeavePolicyMaster } from '../../master/components/LeavePolicyMaster';
 
 /**
@@ -25,7 +24,7 @@ const LEAVE_ACTIVITY: ActivitySource = {
   ...activityEndpoints('/hrms/leave/activity', 'WII_Leave_Activity.csv'),
 };
 
-type LeaveView = 'requests' | 'joining' | 'types' | 'activity';
+type LeaveView = 'requests' | 'types' | 'activity';
 
 interface LeaveManagementPageProps {
   onNavigate?: (tab: string) => void;
@@ -40,8 +39,8 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ initia
   const canApply = isAdmin || role === 'general_staff';
   const balances = initialTab === 'leave_balance';
   const [view, setView] = useState<LeaveView>('requests');
-  const viewTabs: Array<readonly [LeaveView, string]> = isAdmin ? [['requests', 'Requests'], ['joining', 'Joining'], ['types', 'Leave Types']]
-    : isAudit ? [['requests', 'Requests'], ['joining', 'Joining'], ['types', 'Leave Types'], ['activity', 'Activity log']] : [['requests', 'Requests'], ['joining', 'Joining']];
+  const viewTabs: Array<readonly [LeaveView, string]> = isAdmin ? [['requests', 'Requests'], ['types', 'Leave Types']]
+    : isAudit ? [['requests', 'Requests'], ['types', 'Leave Types'], ['activity', 'Activity log']] : [['requests', 'Requests']];
   const [applySignal, setApplySignal] = useState(0);
   const [importSignal, setImportSignal] = useState(0);
 
@@ -88,8 +87,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ initia
           )}
           {view === 'types' && (isAdmin || isAudit) ? <LeavePolicyMaster readOnly={!isAdmin} />
             : isAudit && view === 'activity' ? <ActivityLogPanel source={LEAVE_ACTIVITY} />
-            : view === 'joining' ? <JoiningView />
-            : <LeaveRequestsView applySignal={applySignal} onOpenJoining={() => setView('joining')} />}
+            : <LeaveRequestsView applySignal={applySignal} />}
         </>
       )}
     </div>

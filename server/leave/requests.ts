@@ -105,8 +105,6 @@ export interface LeaveRequest {
   canDelete: boolean;
   canUndo: boolean;
   /** Joining report after a 2-stage leave: none needed (yet), due now, or already filed (with its status). */
-  joiningState: 'none' | 'due' | 'filed';
-  joiningStatus: string | null;
 }
 
 export interface LeaveInput {
@@ -159,7 +157,7 @@ export const num = (n: number) => Math.round(n * 10) / 10;
 
 const SELECT = `
   SELECT m.*, u.biometric_id, u.name AS user_name, p.designation, p.department, p.profile_data,
-         t.name AS type_name, t.code AS type_code, t.joining_required, t.approval_stages AS type_stages, (SELECT c.file_name FROM leave_certificates c WHERE c.request_id = m.id) AS certificate_name,
+         t.name AS type_name, t.code AS type_code, (SELECT c.file_name FROM leave_certificates c WHERE c.request_id = m.id) AS certificate_name,
          ab.name AS applied_by_name, mg.name AS manager_name, rv.name AS reviewer_name, l1.name AS l1_name, ac.name AS action_by_name
     FROM leave_requests m
     JOIN users u ON u.id = m.user_id
@@ -269,8 +267,6 @@ function toRequest(viewer: Viewer, row: RowDataPacket): LeaveRequest {
     canEdit: canModify(viewer, row),
     canDelete: canModify(viewer, row),
     canUndo: canUndo(viewer, row),
-    joiningState: 'none',
-    joiningStatus: null,
   };
 }
 
@@ -310,26 +306,7 @@ export async function listRequests(viewer: Viewer, query: { from?: unknown; to?:
     throw error;
   }
   const requests = found.filter((row) => canSee(viewer, row)).map((row) => toRequest(viewer, row));
-  await markJoining(found, requests);
   return { from, to, requests };
-}
-
-/** Which leaves need a joining report now, and which already have one. Never breaks the list (e.g. before the migration is run). */
-async function markJoining(found: RowDataPacket[], requests: LeaveRequest[]): Promise<void> {
-  const today = todayInIndia();
-  const needs = found.filter((r) => (Number(r.joining_required) === 1 || Number(r.type_stages) === 2) && String(r.status) !== 'rejected' && !r.linked_to && isoDate(r.end_date) < today);
-  if (!needs.length) return;
-  try {
-    const filed = new Map((await rows(pool, `SELECT request_id, status FROM leave_joining_reports WHERE request_id IN (${needs.map(() => '?').join(',')})`, needs.map((r) => Number(r.id)))).map((r) => [Number(r.request_id), String(r.status)]));
-    for (const row of needs) {
-      const target = requests.find((r) => r.id === String(row.id));
-      if (!target) continue;
-      if (filed.has(Number(row.id))) { target.joiningState = 'filed'; target.joiningStatus = filed.get(Number(row.id)) ?? null; continue; }
-      if (await joiningDateOf(pool, row) <= today) target.joiningState = 'due';
-    }
-  } catch (error) {
-    if ((error as { code?: string })?.code !== 'ER_NO_SUCH_TABLE' && !(error instanceof HttpError)) throw error;
-  }
 }
 
 // ---------------------------------------------------------------------------
