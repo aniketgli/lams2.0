@@ -81,7 +81,6 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
   const [notice, showNotice, clearNotice] = useNotice();
 
   const load = useCallback(async (silent = false) => {
-    if (from > to) { setData(null); setError('The From date must be on or before the To date.'); return; }
     if (!silent) setLoading(true);
     setError(null);
     try {
@@ -641,7 +640,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
 
             {type?.needsContact && (
               <div>
-                <Textarea label={`Contact address during ${type.code} with mobile number`} required rows={2} maxLength={300} placeholder="Address and mobile number where you can be reached"
+                <Textarea label={`Contact address during ${type.code} with mobile number`} required rows={2} maxLength={300} placeholder={`Enter contact address & mobile number during ${type.code}...`}
                   value={form.contactAddress} error={Boolean(formErrors.contactAddress)} onChange={(e) => setField('contactAddress', e.target.value)} />
                 {formErrors.contactAddress && <p className="text-xs text-error mt-1">{formErrors.contactAddress}</p>}
               </div>

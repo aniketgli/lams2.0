@@ -53,10 +53,6 @@ export const NotificationRecipientsCard: React.FC<{ readOnly: boolean }> = ({ re
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form) return;
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
-      setErrors({ email: 'Enter a valid email address.' });
-      return;
-    }
     setSaving(true);
     setFormMessage(null);
     try {
