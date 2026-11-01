@@ -200,10 +200,12 @@ export function announceMastersChanged() {
 // ---- Notification CC / BCC recipients -------------------------------------------
 
 export type RecipientType = 'CC' | 'BCC';
+export type RecipientScope = 'ALL' | 'LEAVE' | 'OD' | 'MANUAL' | 'JOINING' | 'EMPLOYEE' | 'REPORT';
 
 export interface NotificationRecipient {
   id: string;
   type: RecipientType;
+  scope: RecipientScope;
   email: string;
   name: string;
   status: MasterStatus;
