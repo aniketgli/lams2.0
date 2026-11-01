@@ -533,6 +533,8 @@ async function checkLeave(
   const policy = await loadPolicy(q, Number(input.leaveTypeId));
   const errors: Record<string, string> = {};
   // Station permission is not asked: it goes with a prefix / suffix, and a station leave is always one.
+  // A station leave has no prefix / suffix of its own.
+  if (policy?.offDaysOnly) { input.prefix = null; input.suffix = null; }
   input.stationLeave = Boolean(input.prefix || input.suffix) || Boolean(policy?.offDaysOnly);
   if (!policy || policy.status !== 'active') throw badRequest('Please correct the highlighted fields.', { leaveTypeId: 'Choose a leave type from the list.' });
 
@@ -641,6 +643,7 @@ async function checkLeave(
     }
   }
   // A station leave covers weekly offs and gazetted holidays only; all days between the two dates are off, so they are one stretch.
+  if (policy.offDaysOnly) { prefix = null; suffix = null; }
   const stationOk = Boolean(prefix) || Boolean(suffix) || datesBetween(input.startDate, input.endDate).some(off);
   if (policy.offDaysOnly && !datesBetween(input.startDate, input.endDate).every(off)) errors.startDate = `${policy.name} can be taken only on weekly offs and holidays, in one continuous stretch.`;
   {

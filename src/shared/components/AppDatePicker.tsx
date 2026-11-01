@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useCalendarHolidays } from '../../context/AppContext';
 import { Calendar, ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react';
 
 export interface AppDatePickerHoliday {
@@ -53,7 +54,7 @@ export const AppDatePicker: React.FC<AppDatePickerProps> = ({
   isOpen,
   onToggle,
   restrictToStationLeave = false,
-  holidays = [],
+  holidays: holidaysProp,
   marks = {},
   placeholder = 'Select Date',
   className = '',
@@ -61,6 +62,9 @@ export const AppDatePicker: React.FC<AppDatePickerProps> = ({
   isRightColumn = false,
   size = 'md',
 }) => {
+  // Gazetted holidays always come from the Holiday Calendar (database) unless a list is passed in.
+  const calendarHolidays = useCalendarHolidays();
+  const holidays: AppDatePickerHoliday[] = holidaysProp ?? calendarHolidays;
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const openState = isOpen !== undefined ? isOpen : internalIsOpen;
   
