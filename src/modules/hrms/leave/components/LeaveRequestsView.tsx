@@ -231,8 +231,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
     } catch (error) {
       if (error instanceof ApiError) {
         setFormErrors(error.details ?? {});
-        const first = Object.values(error.details ?? {}).find(Boolean);
-        setFormMessage(first ? `${error.message} ${first}` : error.message);
+        setFormMessage(error.message); // the details are shown under their own fields
       } else {
         setFormMessage('The request could not be saved.');
       }
@@ -519,7 +518,8 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
                 <Select label="Leave type" required value={form.leaveTypeId} searchable placeholder="Select leave type" error={formErrors.leaveTypeId}
                   onChange={(v: string) => {
                     setForm((f) => ({ ...f, leaveTypeId: v, ltcType: 'none', encashLtc: false, availPrefix: false, availSuffix: false }));
-                    setFormErrors((e) => ({ ...e, leaveTypeId: '' }));
+                    setFormErrors({});
+                    setFormMessage(null);
                   }}
                   options={(data?.types ?? []).map((t) => ({ label: `${t.name} (${t.code})`, value: t.id }))} />
                 {balanceBadge?.balance && (
@@ -538,8 +538,8 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
               </div>
               {type?.halfDayAllowed && (
                 <>
-                  <Select label="Start day" value={form.startSession} searchable={false} onChange={(v: string) => setField('startSession', v as LeaveInput['startSession'])} options={sessionOptions.start} />
-                  <Select label="End day" value={form.endSession} searchable={false} onChange={(v: string) => setField('endSession', v as LeaveInput['endSession'])} options={sessionOptions.end} />
+                  <Select label="Start day" error={formErrors.startSession} value={form.startSession} searchable={false} onChange={(v: string) => setField('startSession', v as LeaveInput['startSession'])} options={sessionOptions.start} />
+                  <Select label="End day" error={formErrors.endSession} value={form.endSession} searchable={false} onChange={(v: string) => setField('endSession', v as LeaveInput['endSession'])} options={sessionOptions.end} />
                 </>
               )}
             </div>
