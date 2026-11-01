@@ -118,8 +118,8 @@ router.get('/me', requireAuth, asyncHandler(async (req, res) => {
 const changeLimiter = new AttemptLimiter(5, WINDOW_MS);
 
 /**
- * The signed-in user sets their own password. Required at first sign-in
- * (default password) and after an administrator reset; also available any time.
+ * The signed-in user sets their own password. Offered once at first sign-in
+ * (default password) and after an administrator reset; available any time.
  * Every other session of this user is signed out; this one stays.
  */
 router.post('/change-password', requireAuth, asyncHandler(async (req, res) => {
@@ -175,6 +175,25 @@ router.post('/change-password', requireAuth, asyncHandler(async (req, res) => {
   req.session.lastActivityAt = Date.now();
   await saveSession(req);
   res.json({ ...(await buildSessionPayload(req)), message: 'Your password has been changed.' });
+}));
+
+/**
+ * A new or reactivated account is offered a password change once, right after its first sign-in. It is never forced:
+ * skipping clears the offer, and the lobby always has the change-password page.
+ */
+router.post('/skip-password-change', requireAuth, asyncHandler(async (req, res) => {
+  const account = req.auth!.account;
+  if (account.mustChangePassword) {
+    await inTransaction(async (conn) => {
+      await conn.query('UPDATE users SET must_change_password = 0 WHERE id = ?', [account.id]);
+      await writeMasterAuditSql(conn, req, {
+        masterKey: 'employee_password', recordId: account.biometricId, recordLabel: account.name, action: 'UPDATE',
+        before: { passwordOffer: 'pending' }, after: { passwordOffer: 'skipped by the user' },
+      });
+    });
+  }
+  req.auth = { ...req.auth!, account: { ...account, mustChangePassword: false } };
+  res.json(await buildSessionPayload(req));
 }));
 
 export const authRoutes = router;

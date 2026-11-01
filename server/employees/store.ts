@@ -461,9 +461,14 @@ export async function setEmployeeStatus(req: Request, id: number, change: Status
     }
 
     const verb = change.status === 'inactive' ? 'Deactivated' : 'Reactivated';
+    // A reactivated account signs in with the default password again and is offered (not forced) to choose its own, once.
+    const resetHash = change.status === 'active' ? await defaultPasswordHash(conn) : null;
+    if (change.status === 'active' && !resetHash) {
+      throw new HttpError(409, 'Set the default password first (Master Settings → Organization).', 'DEFAULT_PASSWORD_MISSING');
+    }
     await conn.query(
-      'UPDATE users SET status = ?, last_updated_by = ?, last_updated_at = NOW(), last_update_summary = ? WHERE id = ?',
-      [change.status, actor, `${verb} effective ${change.effectiveDate}${change.reason ? `: ${change.reason}` : ''}`.slice(0, 1000), id],
+      `UPDATE users SET status = ?, last_updated_by = ?, last_updated_at = NOW(), last_update_summary = ?${resetHash ? ', password_hash = ?, must_change_password = 1' : ''} WHERE id = ?`,
+      [change.status, actor, `${verb} effective ${change.effectiveDate}${change.reason ? `: ${change.reason}` : ''}`.slice(0, 1000), ...(resetHash ? [resetHash] : []), id],
     );
     const data: Record<string, unknown> = { ...existing.rawData, statusChangeReason: change.reason, statusEffectiveDate: change.effectiveDate, statusChangedBy: actor };
     delete data.status;
@@ -473,7 +478,7 @@ export async function setEmployeeStatus(req: Request, id: number, change: Status
     await writeMasterAuditSql(conn, req, {
       masterKey: AUDIT_EMPLOYEE, recordId: before.biometricId, recordLabel: before.name, action: 'STATUS',
       before: { status: before.status, effectiveDate: existing.rawData.statusEffectiveDate ?? null },
-      after: { status: after.status, effectiveDate: change.effectiveDate },
+      after: { status: after.status, effectiveDate: change.effectiveDate, ...(resetHash ? { password: 'default (change offered at first sign-in)' } : {}) },
       reason: change.reason || null,
     });
     return after;
