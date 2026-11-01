@@ -726,7 +726,7 @@ export async function createRequest(req: Request, viewer: Viewer, body: unknown)
       const [result] = await conn.query(
         `INSERT INTO leave_requests
            (user_id, leave_type_id, start_date, end_date, start_session, end_session, days_count, cycle_year, reason, certificate, station_leave, ltc_type, encash_days, contact_address, prefix_from, prefix_to, suffix_from, suffix_to, stages, status, applied_by, manager_id, reviewer_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_l1', ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_l1', ?, ?, ?)`,
         [targetId, c.policy.id, input.startDate, input.endDate, input.startSession, input.endSession, c.days, c.cycleYear, input.reason, input.certificate ? 1 : 0, input.stationLeave ? 1 : 0,
           input.ltcType, input.encashDays, input.contactAddress || null, input.prefix?.from ?? null, input.prefix?.to ?? null, input.suffix?.from ?? null, input.suffix?.to ?? null,
           c.stages, viewer.id, c.emp.reportingManagerId, c.emp.reviewingManagerId],
