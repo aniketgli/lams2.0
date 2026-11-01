@@ -6,6 +6,7 @@ import { ActivityLogPanel, ActivitySource } from '../../../../shared/components/
 import { activityEndpoints } from '../../../../shared/services/activityApi';
 import { LeaveRequestsView } from '../components/LeaveRequestsView';
 import { LeaveBalancesView } from '../components/LeaveBalancesView';
+import { JoiningView } from '../components/JoiningView';
 import { LeavePolicyMaster } from '../../master/components/LeavePolicyMaster';
 
 /**
@@ -18,13 +19,13 @@ const LEAVE_ACTIVITY: ActivitySource = {
   title: 'Leave activity log',
   recordLabel: 'Request / balance',
   searchPlaceholder: 'Employee, leave type, done by, reason…',
-  areas: [{ value: 'leave_request', label: 'Leave request' }, { value: 'leave_balance', label: 'Leave balance' }, { value: 'leave_export', label: 'Log download' }],
+  areas: [{ value: 'leave_request', label: 'Leave request' }, { value: 'leave_balance', label: 'Leave balance' }, { value: 'leave_joining', label: 'Joining report' }, { value: 'leave_export', label: 'Log download' }],
   actions: ['CREATE', 'UPDATE', 'STATUS', 'DELETE', 'EXPORT'],
   actionLabels: { CREATE: 'Applied / set', UPDATE: 'Edited', STATUS: 'Approved / forwarded / rejected', DELETE: 'Deleted', EXPORT: 'Downloaded' },
   ...activityEndpoints('/hrms/leave/activity', 'WII_Leave_Activity.csv'),
 };
 
-type LeaveView = 'requests' | 'types' | 'activity';
+type LeaveView = 'requests' | 'joining' | 'types' | 'activity';
 
 interface LeaveManagementPageProps {
   onNavigate?: (tab: string) => void;
@@ -39,8 +40,8 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ initia
   const canApply = isAdmin || role === 'general_staff';
   const balances = initialTab === 'leave_balance';
   const [view, setView] = useState<LeaveView>('requests');
-  const viewTabs: Array<readonly [LeaveView, string]> = isAdmin ? [['requests', 'Requests'], ['types', 'Leave Types']]
-    : isAudit ? [['requests', 'Requests'], ['types', 'Leave Types'], ['activity', 'Activity log']] : [];
+  const viewTabs: Array<readonly [LeaveView, string]> = isAdmin ? [['requests', 'Requests'], ['joining', 'Joining'], ['types', 'Leave Types']]
+    : isAudit ? [['requests', 'Requests'], ['joining', 'Joining'], ['types', 'Leave Types'], ['activity', 'Activity log']] : [['requests', 'Requests'], ['joining', 'Joining']];
   const [applySignal, setApplySignal] = useState(0);
   const [importSignal, setImportSignal] = useState(0);
 
@@ -87,6 +88,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ initia
           )}
           {view === 'types' && (isAdmin || isAudit) ? <LeavePolicyMaster readOnly={!isAdmin} />
             : isAudit && view === 'activity' ? <ActivityLogPanel source={LEAVE_ACTIVITY} />
+            : view === 'joining' ? <JoiningView />
             : <LeaveRequestsView applySignal={applySignal} />}
         </>
       )}
