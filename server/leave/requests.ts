@@ -345,7 +345,7 @@ export interface Policy {
   id: number; code: string; name: string; quota: number; pwdQuota: number | null; pwdOnly: boolean; stages: 1 | 2; minNotice: number; halfDay: boolean; certDays: number;
   sandwich: 'included' | 'excluded'; employeeTypes: string[]; gender: string; minServiceMonths: number; maxConsecutive: number; debited: boolean;
   status: string; combineWith: Combine; maxAccumulation: number; afterExhaustedId: number; accrual: string; debitFromId: number; debitFactor: number; lifetimeMax: number; maxSpells: number; minDays: number; maxSpellsMonth: number; maxSpellsLifetime: number; quotas: Record<string, number>;
-  needsContact: boolean; ltcAllowed: boolean; prefixSuffix: boolean; hodAfterDays: number;
+  needsContact: boolean; ltcAllowed: boolean; prefixSuffix: boolean; hodAfterDays: number; certificateRequired: boolean;
 }
 
 function toPolicy(r: RowDataPacket): Policy {
@@ -358,7 +358,7 @@ function toPolicy(r: RowDataPacket): Policy {
     status: String(r.status), combineWith: toCombine(r.combine_with), maxAccumulation: Number(r.max_accumulation), afterExhaustedId: Number(r.after_exhausted_type_id ?? 0), accrual: String(r.accrual ?? 'yearly'),
     debitFromId: Number(r.debit_from_type_id ?? 0), debitFactor: Number(r.debit_factor ?? 1),
     lifetimeMax: Number(r.lifetime_max ?? 0), maxSpells: Number(r.max_spells_per_year ?? 0), minDays: Number(r.min_days_per_application ?? 0), maxSpellsMonth: Number(r.max_spells_per_month ?? 0), maxSpellsLifetime: Number(r.max_spells_lifetime ?? 0), quotas: {},
-    needsContact: Boolean(r.needs_contact), ltcAllowed: Boolean(r.ltc_allowed), prefixSuffix: Boolean(r.prefix_suffix), hodAfterDays: Number(r.hod_after_days ?? 0),
+    needsContact: Boolean(r.needs_contact), ltcAllowed: Boolean(r.ltc_allowed), prefixSuffix: Boolean(r.prefix_suffix), hodAfterDays: Number(r.hod_after_days ?? 0), certificateRequired: Boolean(r.certificate_required),
   };
 }
 
@@ -531,6 +531,8 @@ async function checkLeave(
   const emp = await loadEmployee(q, targetId);
   const policy = await loadPolicy(q, Number(input.leaveTypeId));
   const errors: Record<string, string> = {};
+  // Availing a prefix or suffix means leaving the station for those days: the station permission is filled in for the employee.
+  if (input.prefix || input.suffix) input.stationLeave = true;
   if (!policy || policy.status !== 'active') throw badRequest('Please correct the highlighted fields.', { leaveTypeId: 'Choose a leave type from the list.' });
 
   const problem = eligibilityProblem(policy, emp, input.startDate);
@@ -564,7 +566,8 @@ async function checkLeave(
   if (days <= 0) throw badRequest('Please correct the highlighted fields.', { startDate: 'No working day falls in these dates.' });
   if (policy.minDays && days < policy.minDays) errors.endDate = `${policy.name} needs at least ${policy.minDays} days in one application.`;
   if (policy.maxConsecutive && days > policy.maxConsecutive) errors.endDate = `${policy.name} can be taken for at most ${policy.maxConsecutive} days at a time.`;
-  if (policy.certDays && days > policy.certDays && !input.certificate) errors.certificate = `Upload a medical certificate: it is needed for more than ${policy.certDays} days.`;
+  if (policy.certificateRequired && !input.certificate) errors.certificate = `Upload a medical certificate: ${policy.name} needs one.`;
+  else if (policy.certDays && days > policy.certDays && !input.certificate) errors.certificate = `Upload a medical certificate: it is needed for more than ${policy.certDays} days.`;
   if (policy.lifetimeMax) {
     const [taken] = await rows(q, "SELECT COALESCE(SUM(days_count), 0) AS n FROM leave_requests WHERE user_id = ? AND leave_type_id = ? AND status <> 'rejected' AND id <> ?", [targetId, policy.id, exceptId]);
     const before = Number(taken?.n ?? 0);
@@ -585,7 +588,7 @@ async function checkLeave(
   // A leave type with two steps may need the HoD only for longer leaves (e.g. EL above 2 days).
   const stages: 1 | 2 = policy.stages === 2 && (policy.hodAfterDays <= 0 || days > policy.hodAfterDays) ? 2 : 1;
   if (stages === 2 && !emp.reviewingManagerId) errors.leaveTypeId = 'This employee has no HoD set, which this leave type needs. Ask the administrator.';
-  if (policy.needsContact && !input.contactAddress) errors.contactAddress = 'Enter the address and mobile number to reach you during the leave.';
+  if ((policy.needsContact || input.stationLeave) && !input.contactAddress) errors.contactAddress = input.stationLeave ? 'Enter the outstation location and contact address.' : 'Enter the address and mobile number to reach you during the leave.';
   if (input.ltcType !== 'none' && !policy.ltcAllowed) errors.ltcType = `LTC and Ex-India are not available with ${policy.name}.`;
   // Weekly offs and gazetted holidays touching the leave can be added to it as a prefix / suffix, for every leave type.
   const wide = await dayRule(q, emp, policy, addDays(input.startDate, -45), addDays(input.endDate, 45));

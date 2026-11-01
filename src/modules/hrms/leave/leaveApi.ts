@@ -43,6 +43,8 @@ export interface LeaveTypeRecord {
   prefixSuffix: boolean;
   /** HoD approval is needed only above this many days (0 = always, when the type has two steps). */
   hodAfterDays: number;
+  /** A medical certificate is needed for every application. */
+  certificateRequired: boolean;
   quotas: Array<{ employeeType: string; quota: number }>;
   status: 'active' | 'inactive';
   updatedAt: string | null;
