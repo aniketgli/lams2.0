@@ -502,7 +502,7 @@ export function parseLeaveInput(body: unknown): LeaveInput {
   const suffix = raw.availSuffix === true ? range('suffixFrom', 'suffixTo', 'Suffix') : null;
   if (Object.keys(v.errors).length) v.assert();
   const file = parseCertificate((body as Record<string, unknown> | null)?.certificateFile);
-  return { userId, leaveTypeId, startDate: startDate!, endDate: endDate!, startSession, endSession, reason: reason.replace(/\s+/g, ' '), certificate: Boolean(file), stationLeave: false, ltcType, encashDays, contactAddress, prefix, suffix, file };
+  return { userId, leaveTypeId, startDate: startDate!, endDate: endDate!, startSession, endSession, reason: reason.replace(/\s+/g, ' '), certificate: Boolean(file), stationLeave: raw.stationLeave === true, ltcType, encashDays, contactAddress, prefix, suffix, file };
 }
 
 /** Looks at the employee's other leaves around the new one: see ./combine. */
@@ -526,7 +526,7 @@ async function joinProblem(q: { query: typeof pool.query }, emp: Employee, polic
 export interface HolidayBlock { from: string; to: string; days: number }
 /** Weekly offs / holidays between two straight 2-stage leaves: they become leave days of the earlier leave. */
 export interface JoinedGap { requestId: number; typeId: number; typeName: string; side: 'after' | 'before'; from: string; to: string; days: number }
-export interface Checked { days: number; cycleYear: number; policy: Policy; emp: Employee; balance: Balance; stages: 1 | 2; prefix: HolidayBlock | null; suffix: HolidayBlock | null; stationOk: boolean; joins: JoinedGap[] }
+export interface Checked { requested: { startDate: string; endDate: string }; days: number; cycleYear: number; policy: Policy; emp: Employee; balance: Balance; stages: 1 | 2; prefix: HolidayBlock | null; suffix: HolidayBlock | null; stationOk: boolean; joins: JoinedGap[] }
 
 /** Every rule of a leave application. Throws a field-level 400 / 409 when one fails. */
 async function checkLeave(
@@ -535,11 +535,24 @@ async function checkLeave(
   const emp = await loadEmployee(q, targetId);
   const policy = await loadPolicy(q, Number(input.leaveTypeId));
   const errors: Record<string, string> = {};
-  // Station permission is not asked: it goes with a prefix / suffix, and a station leave is always one.
-  // A station leave has no prefix / suffix of its own.
-  if (policy?.offDaysOnly) { input.prefix = null; input.suffix = null; }
-  input.stationLeave = Boolean(input.prefix || input.suffix) || Boolean(policy?.offDaysOnly);
   if (!policy || policy.status !== 'active') throw badRequest('Please correct the highlighted fields.', { leaveTypeId: 'Choose a leave type from the list.' });
+  // A station leave has no prefix / suffix of its own and is always a station leave; for every other leave, station
+  // permission is chosen by the employee, and availing a prefix / suffix means it is taken.
+  if (policy.offDaysOnly) { input.prefix = null; input.suffix = null; }
+  input.stationLeave = input.stationLeave || Boolean(input.prefix || input.suffix) || policy.offDaysOnly;
+  // Weekly offs / holidays at the very start or end of a leave are not leave days: the dates move to the first and
+  // last working day, and those days become the prefix / suffix.
+  const requested = { startDate: input.startDate, endDate: input.endDate };
+  if (!policy.offDaysOnly) {
+    const edge = await dayRule(q, emp, policy, addDays(input.startDate, -1), addDays(input.endDate, 1));
+    const isOff = (d: string) => !edge.workingDays.includes(weekdayOf(d)) || edge.gazetted.has(d);
+    let s = input.startDate; let e = input.endDate;
+    while (s <= e && isOff(s)) s = addDays(s, 1);
+    while (e >= s && isOff(e)) e = addDays(e, -1);
+    if (s > e) throw badRequest('Please correct the highlighted fields.', { startDate: 'No working day falls in these dates. Weekly offs and holidays alone are taken as a station leave.' });
+    if (s !== input.startDate) { input.startDate = s; input.startSession = 'full'; }
+    if (e !== input.endDate) { input.endDate = e; input.endSession = 'full'; }
+  }
 
   const problem = eligibilityProblem(policy, emp, input.startDate);
   if (problem) errors.leaveTypeId = problem;
@@ -648,6 +661,7 @@ async function checkLeave(
   // A station leave covers weekly offs and gazetted holidays only; all days between the two dates are off, so they are one stretch.
   if (policy.offDaysOnly) { prefix = null; suffix = null; }
   const stationOk = Boolean(prefix) || Boolean(suffix) || datesBetween(input.startDate, input.endDate).some(off);
+  if (input.stationLeave && !policy.offDaysOnly && !stationOk) errors.stationLeave = 'Station leave can be taken only in one continuous stretch with a weekend or holiday.';
   if (policy.offDaysOnly && !datesBetween(input.startDate, input.endDate).every(off)) errors.startDate = `${policy.name} can be taken only on weekly offs and holidays, in one continuous stretch.`;
   {
     if (input.prefix) {
@@ -705,7 +719,7 @@ async function checkLeave(
       if (need > left.available && !soft) {
         throw new HttpError(409, 'Not enough leave balance.', 'NO_BALANCE', { endDate: `${policy.name} uses ${policy.debitFactor} day(s) of ${base.name} for each day: ${need} needed, ${Math.max(0, left.available)} available for ${cycleLabel(cycleYear, emp.basis)}.` });
       }
-      return { days, cycleYear, policy, emp, balance: left, stages, prefix, suffix, stationOk, joins };
+      return { requested, days, cycleYear, policy, emp, balance: left, stages, prefix, suffix, stationOk, joins };
     }
   }
   if (policy.debited && days + extra + carry > balance.available && !soft) {
@@ -713,13 +727,13 @@ async function checkLeave(
     const hint = next ? ` After it is used up, ${next.name} can be applied for.` : '';
     throw new HttpError(409, 'Not enough leave balance.', 'NO_BALANCE', { endDate: `${policy.name}: ${days} days asked${extra ? ` + ${extra} days encashment` : ''}${carry ? ` + ${carry} holiday days joined with your earlier leave` : ''}, ${Math.max(0, balance.available)} available for ${cycleLabel(cycleYear, emp.basis)}.${hint}` });
   }
-  return { days, cycleYear, policy, emp, balance, stages, prefix, suffix, stationOk, joins };
+  return { requested, days, cycleYear, policy, emp, balance, stages, prefix, suffix, stationOk, joins };
 }
 
 export const cycleLabel = (year: number, basis: 'CY' | 'FY') => (basis === 'FY' ? `FY ${year}-${String(year + 1).slice(2)}` : `${year}`);
 
 /** What the apply form shows while it is filled: the days and balance the server will use. Never writes. */
-export async function previewLeave(viewer: Viewer, query: Record<string, unknown>): Promise<{ days: number; cycleYear: number; cycle: string; balance: Balance | null; error: string | null; prefix: HolidayBlock | null; suffix: HolidayBlock | null; stationOk: boolean }> {
+export async function previewLeave(viewer: Viewer, query: Record<string, unknown>): Promise<{ days: number; cycleYear: number; cycle: string; balance: Balance | null; error: string | null; prefix: HolidayBlock | null; suffix: HolidayBlock | null; stationOk: boolean; startDate: string; endDate: string; requestedStart: string; requestedEnd: string }> {
   const input = (() => {
     try {
       const encash = Number(query.encashDays);
@@ -730,12 +744,13 @@ export async function previewLeave(viewer: Viewer, query: Record<string, unknown
     }
   })();
   const target = viewer.role === 'administrator' ? Number(input?.userId ?? 0) : viewer.id;
-  if (!input || !target) return { days: 0, cycleYear: 0, cycle: '', balance: null, error: null, prefix: null, suffix: null, stationOk: false };
+  const none = { startDate: String(query.startDate ?? ''), endDate: String(query.endDate ?? ''), requestedStart: String(query.startDate ?? ''), requestedEnd: String(query.endDate ?? '') };
+  if (!input || !target) return { days: 0, cycleYear: 0, cycle: '', balance: null, error: null, prefix: null, suffix: null, stationOk: false, ...none };
   try {
     const c = await checkLeave(pool, viewer, input, target, 0, undefined, true);
-    return { days: c.days, cycleYear: c.cycleYear, cycle: cycleLabel(c.cycleYear, c.emp.basis), balance: c.balance, error: null, prefix: c.prefix, suffix: c.suffix, stationOk: c.stationOk };
+    return { days: c.days, cycleYear: c.cycleYear, cycle: cycleLabel(c.cycleYear, c.emp.basis), balance: c.balance, error: null, prefix: c.prefix, suffix: c.suffix, stationOk: c.stationOk, startDate: input.startDate, endDate: input.endDate, requestedStart: c.requested.startDate, requestedEnd: c.requested.endDate };
   } catch (error) {
-    if (error instanceof HttpError) return { days: 0, cycleYear: 0, cycle: '', balance: null, error: Object.values(error.details ?? {})[0] ?? error.message, prefix: null, suffix: null, stationOk: false };
+    if (error instanceof HttpError) return { days: 0, cycleYear: 0, cycle: '', balance: null, error: Object.values(error.details ?? {})[0] ?? error.message, prefix: null, suffix: null, stationOk: false, ...none };
     throw error;
   }
 }
