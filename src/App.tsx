@@ -12,6 +12,7 @@ import { AttendanceManagementPage } from './modules/hrms/attendance/pages/Attend
 import { LeaveManagementPage } from './modules/hrms/leave/pages/LeaveManagementPage';
 import { HolidayCalendarPage } from './modules/hrms/holidays/pages/HolidayCalendarPage';
 import { MasterSettingsPage } from './modules/hrms/master/pages/MasterSettingsPage';
+import { ReportsPage } from './modules/hrms/reports/pages/ReportsPage';
 import { EmployeeProfilePage } from './modules/hrms/profile/pages/EmployeeProfilePage';
 import { SlackHubModal } from './shared/modals/SlackHubModal';
 import { EmailToast } from './shared/components/EmailToast';
@@ -111,6 +112,7 @@ const AppContent: React.FC = () => {
               <EmployeeProfilePage key={tab} initialTab={tab as 'profile' | 'user_controls' | 'transfers'} />
             )}
             {tab === 'master' && <MasterSettingsPage />}
+            {tab === 'reports' && <ReportsPage />}
           </React.Fragment>
         )}
 
