@@ -33,4 +33,5 @@ export interface SendEmailPayload {
   category?: string;
   eventType?: string;
   referenceId?: string;
+  attachments?: Array<{ filename: string; content: Buffer; contentType: string }>;
 }
