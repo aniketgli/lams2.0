@@ -131,6 +131,7 @@ export async function parseLeaveTypeInput(body: unknown, selfId = 0): Promise<Le
   const v = new Validator(body);
   const code = v.string('code', { min: 1, max: 20, pattern: /^[A-Za-z0-9_-]+$/, patternMessage: 'Use letters, numbers, - or _ only.' }).toUpperCase();
   const name = v.string('name', { min: 2, max: 100 }).replace(/\s+/g, ' ');
+  if (name.toUpperCase().endsWith(`(${code})`)) v.errors.name ||= 'Write the name without the code; the code is shown next to the name.';
   const description = v.optionalString('description', { max: 500 });
   const quota = Number(v.raw('defaultQuota'));
   if (!Number.isFinite(quota) || quota < 0 || quota > 400 || Math.round(quota * 2) !== quota * 2) v.errors.defaultQuota ||= 'Enter days from 0 to 400, in steps of 0.5.';
