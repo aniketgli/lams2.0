@@ -119,7 +119,7 @@ export const BiometricMachinesPanel: React.FC<{ readOnly: boolean }> = ({ readOn
         <div className="flex justify-end gap-1.5">
           <Button variant="icon" size="sm" leftIcon={Pencil} title="Edit" aria-label={`Edit ${m.fullName}`} onClick={() => open(m)} />
           <Button variant="icon" size="sm" leftIcon={Power} title={m.status === 'ACTIVE' ? 'Deactivate' : 'Activate'} aria-label={`${m.status === 'ACTIVE' ? 'Deactivate' : 'Activate'} ${m.fullName}`} onClick={() => { setConfirmError(null); setConfirm({ kind: 'status', machine: m }); }} />
-          <Button variant="icon" size="sm" leftIcon={Trash2} title="Delete" aria-label={`Delete ${m.fullName}`} className="text-error hover:bg-error-subtle" onClick={() => { setConfirmError(null); setConfirm({ kind: 'delete', machine: m }); }} />
+          <Button variant="icon" size="sm" leftIcon={Trash2} title="Delete" aria-label={`Delete ${m.fullName}`} tone="danger" onClick={() => { setConfirmError(null); setConfirm({ kind: 'delete', machine: m }); }} />
         </div>
       ),
     }]),

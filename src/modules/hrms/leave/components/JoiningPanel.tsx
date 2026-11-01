@@ -5,6 +5,7 @@ import { Modal } from '../../../../shared/components';
 import { Textarea } from '../../../../shared/components/forms/Textarea';
 import { ApiError } from '../../../../shared/services/api';
 import { JoiningFile, JoiningItem, leaveApi } from '../leaveApi';
+import { actionBtn } from '../../../../shared/components/actionStyles';
 
 /**
  * Joining report after a 2-stage leave, shown on the leave's own row. The server works out the joining day (the first
@@ -81,8 +82,6 @@ export const JoiningDetails: React.FC<{ item: JoiningItem }> = ({ item }) => {
     </div>
   );
 };
-
-const iconBtn = 'w-8 h-8 rounded-lg border flex items-center justify-center cursor-pointer shrink-0';
 const cancelBtn = 'h-9 px-4 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer';
 
 export function useJoining(onDone: (message: string) => void) {
@@ -176,16 +175,16 @@ export function useJoining(onDone: (message: string) => void) {
     <>
       {(item.canSubmit || item.canEdit) && (
         <button type="button" onClick={() => void openForm(item)} title={item.report ? 'Check the joining form and submit again' : 'Fill joining form'} aria-label={`Joining form of ${item.name}`}
-          className={`${iconBtn} border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100`}>{item.report ? <Pencil className="w-3.5 h-3.5" /> : <ClipboardCheck className="w-3.5 h-3.5" />}</button>
+          className={actionBtn('primary')}>{item.report ? <Pencil className="w-3.5 h-3.5" /> : <ClipboardCheck className="w-3.5 h-3.5" />}</button>
       )}
       {item.canDecide && (
         <>
           <button type="button" onClick={() => { setDeciding({ item, action: 'approve' }); setComment(''); setDecideError(null); }} title={item.decideStep === 'forward' ? 'Forward joining report to HoD' : 'Approve joining report'}
-            aria-label={`${item.decideStep === 'forward' ? 'Forward' : 'Approve'} joining report of ${item.name}`} className={`${iconBtn} border-violet-300 bg-violet-100 text-violet-800 hover:bg-violet-200`}>
+            aria-label={`${item.decideStep === 'forward' ? 'Forward' : 'Approve'} joining report of ${item.name}`} className={actionBtn('success')}>
             {item.decideStep === 'forward' ? <ChevronsRight className="w-3.5 h-3.5" /> : <Check className="w-3.5 h-3.5" />}
           </button>
           <button type="button" onClick={() => { setDeciding({ item, action: 'reject' }); setComment(''); setDecideError(null); }} title="Reject joining report" aria-label={`Reject joining report of ${item.name}`}
-            className={`${iconBtn} border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100`}><X className="w-3.5 h-3.5" /></button>
+            className={actionBtn('danger')}><X className="w-3.5 h-3.5" /></button>
         </>
       )}
     </>

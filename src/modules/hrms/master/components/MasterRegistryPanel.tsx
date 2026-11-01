@@ -161,7 +161,7 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
         <div className="flex justify-end gap-1.5">
           <Button variant="icon" size="sm" leftIcon={Pencil} aria-label={`Edit ${r.name}`} title="Edit" onClick={() => openEditor(r)} />
           <Button variant="icon" size="sm" leftIcon={Power} aria-label={r.status === 'ACTIVE' ? `Deactivate ${r.name}` : `Activate ${r.name}`} title={r.status === 'ACTIVE' ? 'Deactivate' : 'Activate'} onClick={() => { setConfirmError(null); setConfirm({ kind: 'status', record: r }); }} />
-          <Button variant="icon" size="sm" leftIcon={Trash2} aria-label={`Delete ${r.name}`} title="Delete" className="text-error hover:bg-error-subtle" onClick={() => { setConfirmError(null); setConfirm({ kind: 'delete', record: r }); }} />
+          <Button variant="icon" size="sm" leftIcon={Trash2} aria-label={`Delete ${r.name}`} title="Delete" tone="danger" onClick={() => { setConfirmError(null); setConfirm({ kind: 'delete', record: r }); }} />
         </div>
       ),
     }]),

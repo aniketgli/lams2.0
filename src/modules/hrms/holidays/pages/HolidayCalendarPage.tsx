@@ -18,6 +18,7 @@ import { downloadCsvText, downloadTablePdf, printedAt, toCsvText } from '../../.
 import { ConfirmDialog, NoticeBar, useNotice } from '../../master/components/masterUi';
 import { HolidayItem, MONTH_NAMES } from '../data/holidayData';
 import { HolidayInput, holidayApi } from '../holidayApi';
+import { actionBtn } from '../../../../shared/components/actionStyles';
 
 /**
  * Holiday Calendar.
@@ -242,11 +243,11 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = () => {
       render: (h: HolidayItem) => (
         <div className="flex items-center justify-end gap-1.5">
           <button type="button" onClick={() => openEdit(h)} title="Edit holiday" aria-label={`Edit ${h.name}`}
-            className="w-8 h-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-primary hover:border-primary/40 cursor-pointer">
+            className={actionBtn('neutral')}>
             <Pencil className="w-4 h-4" />
           </button>
           <button type="button" onClick={() => { setDeleteError(null); setDeleting(h); }} title="Delete holiday" aria-label={`Delete ${h.name}`}
-            className="w-8 h-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-error hover:border-error-border cursor-pointer">
+            className={actionBtn('danger')}>
             <Trash2 className="w-4 h-4" />
           </button>
         </div>

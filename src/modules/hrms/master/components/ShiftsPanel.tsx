@@ -129,7 +129,7 @@ export const ShiftsPanel: React.FC<{ readOnly: boolean }> = ({ readOnly }) => {
       render: (s: ShiftRecord) => (
         <div className="flex justify-end gap-1.5">
           <Button variant="icon" size="sm" leftIcon={Pencil} title="Edit" aria-label={`Edit ${s.name}`} onClick={() => open(s)} />
-          <Button variant="icon" size="sm" leftIcon={Trash2} title="Delete" aria-label={`Delete ${s.name}`} className="text-error hover:bg-error-subtle"
+          <Button variant="icon" size="sm" leftIcon={Trash2} title="Delete" aria-label={`Delete ${s.name}`} tone="danger"
             disabled={s.isDefault} onClick={() => { setDeleteError(null); setDeleting(s); }} />
         </div>
       ),

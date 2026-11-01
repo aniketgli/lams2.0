@@ -1,5 +1,6 @@
 import React from 'react';
 import { Loader2, LucideIcon } from 'lucide-react';
+import { ACTION_TONES, ActionTone } from './actionStyles';
 
 export type ButtonVariant =
   | 'primary'
@@ -15,6 +16,8 @@ export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg';
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
+  /** Colour of an icon-only action button (see actionStyles): neutral by default, danger for delete, and so on. */
+  tone?: ActionTone;
   size?: ButtonSize;
   leftIcon?: LucideIcon | React.ReactNode;
   rightIcon?: LucideIcon | React.ReactNode;
@@ -28,6 +31,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     {
       children,
       variant = 'primary',
+      tone = 'neutral',
       size = 'md',
       leftIcon,
       rightIcon,
@@ -73,8 +77,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         'bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white focus:ring-rose-600/30 shadow-xs border border-transparent',
       link:
         'bg-transparent p-0 h-auto text-primary hover:underline focus:ring-0 active:scale-100 shadow-none',
-      icon:
-        'bg-white hover:bg-slate-50 active:bg-slate-100 text-slate-700 border border-slate-200/90 focus:ring-slate-400/20 shadow-2xs'
+      icon: ACTION_TONES[tone]
     };
 
     const isIconOnly = variant === 'icon' || (!children && (leftIcon || rightIcon));

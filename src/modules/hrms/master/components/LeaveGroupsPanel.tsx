@@ -115,7 +115,7 @@ export const LeaveGroupsPanel: React.FC<{ readOnly?: boolean }> = ({ readOnly = 
       render: (g: LeaveGroupRecord) => (
         <div className="flex justify-end gap-1.5">
           <Button variant="icon" size="sm" leftIcon={Pencil} title="Edit" aria-label={`Edit ${g.name}`} onClick={() => open(g)} />
-          <Button variant="icon" size="sm" leftIcon={Trash2} title="Delete" aria-label={`Delete ${g.name}`} className="text-error hover:bg-error-subtle"
+          <Button variant="icon" size="sm" leftIcon={Trash2} title="Delete" aria-label={`Delete ${g.name}`} tone="danger"
             onClick={() => { setDeleteError(null); setDeleting(g); }} />
         </div>
       ),

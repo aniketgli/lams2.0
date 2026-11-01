@@ -22,7 +22,8 @@ export interface DirectoryTableProps {
   onHistory?: (u: User) => void;
 }
 
-const iconButton = 'w-8 h-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-primary hover:border-primary/40 cursor-pointer transition-colors';
+import { actionBtn } from '../../../../shared/components/actionStyles';
+const iconButton = actionBtn('neutral');
 
 export const DirectoryTable: React.FC<DirectoryTableProps> = ({ rows, typeLabel, instituteName, managerName, onView, onEdit, onHistory }) => {
   const [page, setPage] = useState(1);
@@ -80,16 +81,16 @@ export const DirectoryTable: React.FC<DirectoryTableProps> = ({ rows, typeLabel,
       render: (u) => (
         <div className="flex items-center justify-end gap-1.5">
           <button type="button" className={iconButton} onClick={() => onView(u)} title="View full profile" aria-label={`View ${u.name}`}>
-            <Eye className="w-4 h-4" />
+            <Eye className="w-3.5 h-3.5" />
           </button>
           {onHistory && (
             <button type="button" className={iconButton} onClick={() => onHistory(u)} title="Manage project & career history" aria-label={`Career history of ${u.name}`}>
-              <Briefcase className="w-4 h-4" />
+              <Briefcase className="w-3.5 h-3.5" />
             </button>
           )}
           {onEdit && (
             <button type="button" className={iconButton} onClick={() => onEdit(u)} title="Edit profile" aria-label={`Edit ${u.name}`}>
-              <Edit3 className="w-4 h-4" />
+              <Edit3 className="w-3.5 h-3.5" />
             </button>
           )}
         </div>

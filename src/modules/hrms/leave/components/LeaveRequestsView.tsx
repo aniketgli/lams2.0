@@ -15,6 +15,7 @@ import { downloadCsvText, downloadTablePdf, printedAt, toCsvText } from '../../.
 import { ConfirmDialog, NoticeBar, useNotice } from '../../master/components/masterUi';
 import { JoiningItem, LeaveBalance, LeaveInput, LeaveList, LeavePreview, LeaveRequest, LeaveStatus, leaveApi } from '../leaveApi';
 import { JoiningDetails, JoiningStatusLine, useJoining } from './JoiningPanel';
+import { actionBtn } from '../../../../shared/components/actionStyles';
 
 /**
  * Leave requests. The server decides everything (days, balance, who may do what); this page only shows it.
@@ -347,7 +348,6 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
   const [viewing, setViewing] = useState<LeaveRequest | null>(null);
 
   // ---- Table ---------------------------------------------------------------------------------------------
-  const iconBtn = 'w-8 h-8 rounded-lg border flex items-center justify-center cursor-pointer shrink-0';
   const columns: ColumnDef<LeaveRequest>[] = [
     ...(teamView ? [{
       key: 'employee', header: 'Employee', width: '16%', sortValue: (r: LeaveRequest) => r.name,
@@ -404,27 +404,27 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
       render: (r: LeaveRequest) => (
         <div className="flex items-center justify-center gap-1">
           <button type="button" onClick={() => setViewing(r)} title="View" aria-label={`View leave of ${r.name}`}
-            className={`${iconBtn} border-slate-200 text-slate-600 hover:text-primary hover:bg-slate-50`}><Eye className="w-3.5 h-3.5" /></button>
+            className={actionBtn('neutral')}><Eye className="w-3.5 h-3.5" /></button>
           {joining.actions(joining.byRequest.get(r.id))}
           {r.canEdit && (
             <button type="button" onClick={() => openEdit(r)} title="Edit" aria-label={`Edit ${r.name}`}
-              className={`${iconBtn} border-slate-200 text-slate-600 hover:text-primary hover:bg-slate-50`}><Pencil className="w-3.5 h-3.5" /></button>
+              className={actionBtn('neutral')}><Pencil className="w-3.5 h-3.5" /></button>
           )}
           {r.canDelete && (
             <button type="button" onClick={() => { setDeleting(r); setDeleteError(null); }} title="Delete" aria-label={`Delete ${r.name}`}
-              className={`${iconBtn} border-slate-200 text-slate-600 hover:text-error hover:bg-error-subtle`}><Trash2 className="w-3.5 h-3.5" /></button>
+              className={actionBtn('danger')}><Trash2 className="w-3.5 h-3.5" /></button>
           )}
           {r.canDecide && (
             <>
               <button type="button" onClick={() => openDecide(r, 'approve')} title={r.decideStep === 'forward' ? 'Forward to HoD' : 'Approve'} aria-label={`${r.decideStep === 'forward' ? 'Forward' : 'Approve'} ${r.name}`}
-                className={`${iconBtn} border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100`}>{r.decideStep === 'forward' ? <ChevronsRight className="w-3.5 h-3.5" /> : <Check className="w-3.5 h-3.5" />}</button>
+                className={actionBtn('success')}>{r.decideStep === 'forward' ? <ChevronsRight className="w-3.5 h-3.5" /> : <Check className="w-3.5 h-3.5" />}</button>
               <button type="button" onClick={() => openDecide(r, 'reject')} title="Reject" aria-label={`Reject ${r.name}`}
-                className={`${iconBtn} border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100`}><X className="w-3.5 h-3.5" /></button>
+                className={actionBtn('danger')}><X className="w-3.5 h-3.5" /></button>
             </>
           )}
           {r.canUndo && (
             <button type="button" onClick={() => { setUndoing(r); setUndoError(null); }} title="Undo the last step" aria-label={`Undo the last step on ${r.name}`}
-              className={`${iconBtn} border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100`}><RotateCcw className="w-3.5 h-3.5" /></button>
+              className={actionBtn('warning')}><RotateCcw className="w-3.5 h-3.5" /></button>
           )}
         </div>
       ),

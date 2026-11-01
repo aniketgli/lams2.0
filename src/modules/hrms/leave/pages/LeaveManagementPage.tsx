@@ -75,7 +75,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ initia
 
       {balances ? <LeaveBalancesView importSignal={importSignal} /> : (
         <>
-          {viewTabs.length > 0 && (
+          {viewTabs.length > 1 && (
             <div role="tablist" aria-label="Leave views" className="inline-flex items-center gap-0.5 p-0.5 rounded-xl bg-slate-100 border border-slate-200">
               {viewTabs.map(([key, label]) => (
                 <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => setView(key)}
