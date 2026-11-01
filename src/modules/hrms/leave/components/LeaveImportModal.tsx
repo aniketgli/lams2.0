@@ -13,7 +13,6 @@ import { ImportReview, ImportRow, ImportStrategy, leaveApi } from '../leaveApi';
  * The template is made by the server from the database, so nothing here is hard-coded.
  */
 
-const MAX_BYTES = 1024 * 1024;
 const HEADERS = ['Biometric_ID', 'Leave_Year', 'Leave_Code', 'Total_Quota'];
 const TEMPLATES = [
   { cycle: 'CY' as const, label: 'Regular (CY)', tone: 'text-blue-700 border-blue-200 bg-blue-50' },
@@ -61,8 +60,6 @@ export const LeaveImportModal: React.FC<Props> = ({ open, year, onClose, onImpor
   const readFile = async (file: File | undefined) => {
     if (!file) return;
     setError(null);
-    if (!/\.(csv|tsv|txt)$/i.test(file.name)) { setError('Choose a .csv, .tsv or .txt file.'); return; }
-    if (file.size > MAX_BYTES) { setError('The file is larger than 1 MB.'); return; }
     setCsv(await file.text());
     setFileName(file.name);
   };

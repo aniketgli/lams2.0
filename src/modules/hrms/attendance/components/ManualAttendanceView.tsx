@@ -86,7 +86,6 @@ export const ManualAttendanceView: React.FC = () => {
   const [auditorView, setAuditorView] = useState<'records' | 'activity'>('records');
 
   const load = useCallback(async (silent = false) => {
-    if (from > to) { setData(null); setError('The From date must be on or before the To date.'); return; }
     if (!silent) setLoading(true);
     setError(null);
     try {

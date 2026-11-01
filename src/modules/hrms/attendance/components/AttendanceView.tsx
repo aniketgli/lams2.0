@@ -95,11 +95,6 @@ export const AttendanceView: React.FC = () => {
   const end = viewMode === 'month' ? (monthEnd < today ? monthEnd : today) : to || today;
 
   useEffect(() => {
-    if (start > end) {
-      setData(null);
-      setError(viewMode === 'month' ? null : 'The From date must be on or before the To date.');
-      return;
-    }
     let cancelled = false;
     setLoading(true);
     setError(null);

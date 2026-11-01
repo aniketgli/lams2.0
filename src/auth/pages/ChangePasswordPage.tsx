@@ -39,12 +39,7 @@ export const ChangePasswordPage: React.FC<{ forced: boolean }> = ({ forced }) =>
     if (saving) return;
     setError(null);
     setDone(null);
-    const local: FieldErrors = {};
-    if (!current) local.currentPassword = forced ? 'Enter the password you signed in with.' : 'Enter your current password.';
-    if (!next) local.newPassword = 'Enter a new password.';
-    else if (confirm !== next) local.confirmPassword = 'The two passwords do not match.';
-    setErrors(local);
-    if (Object.keys(local).length) return;
+    setErrors({});
 
     setSaving(true);
     try {

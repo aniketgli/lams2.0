@@ -7,7 +7,6 @@ import { ApiError } from '../../../../shared/services/api';
 import { OrganizationSettings, organizationApi } from '../masterApi';
 import { NoticeBar, PanelCard, formatDateTime, useNotice } from './masterUi';
 
-const MAX_LOGO_BYTES = 2 * 1024 * 1024;
 const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 
 type Form = Omit<OrganizationSettings, 'updatedAt'>;
@@ -58,10 +57,6 @@ export const OrganizationPanel: React.FC<{ readOnly: boolean }> = ({ readOnly })
 
   const pickLogo = (file?: File) => {
     if (!file) return;
-    if (!LOGO_TYPES.includes(file.type) || file.size > MAX_LOGO_BYTES) {
-      setErrors((e) => ({ ...e, logoData: 'Choose a PNG, JPG or WEBP image under 2 MB.' }));
-      return;
-    }
     const reader = new FileReader();
     reader.onload = () => {
       setForm((f) => ({ ...f, logoData: String(reader.result || '') }));
@@ -72,10 +67,6 @@ export const OrganizationPanel: React.FC<{ readOnly: boolean }> = ({ readOnly })
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.orgName.trim()) {
-      setErrors({ orgName: 'Organization name is required.' });
-      return;
-    }
     setSaving(true);
     setErrors({});
     try {

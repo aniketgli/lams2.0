@@ -1,14 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useSession } from '../SessionContext';
 import { WIILogo } from '../../shared/components/WIILogo';
 import { Button, Input, Alert } from '../../shared/components';
-import { ApiError, api } from '../../shared/services/api';
+import { ApiError } from '../../shared/services/api';
 import { formatOrgAddress } from '../../types';
 import { Lock, Mail, ArrowRight, MapPin } from 'lucide-react';
 
 /** Shown until the server's list arrives; the server's list is what is enforced. */
-const DEFAULT_DOMAINS = ['wii.gov.in', 'edu.wii.gov.in'];
 
 /**
  * Sign in with an institute email. The server decides everything (allowed
@@ -18,50 +17,25 @@ const DEFAULT_DOMAINS = ['wii.gov.in', 'edu.wii.gov.in'];
 export const LoginPage: React.FC = () => {
   const { orgBranding } = useApp();
   const { login, notice } = useSession();
-  const [domains, setDomains] = useState<string[]>(DEFAULT_DOMAINS);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(notice);
   const [emailError, setEmailError] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-    api<{ emailDomains?: string[] }>('/auth/config')
-      .then((config) => {
-        if (active && Array.isArray(config.emailDomains) && config.emailDomains.length > 0) setDomains(config.emailDomains);
-      })
-      .catch(() => { /* keep defaults */ });
-    return () => { active = false; };
-  }, []);
-
-  const domainText = domains.map((d) => `@${d}`).join(' or ');
-
-  const checkEmail = (value: string): string | undefined => {
-    const trimmed = value.trim().toLowerCase();
-    if (!trimmed) return 'Enter your institute email.';
-    const at = trimmed.lastIndexOf('@');
-    const domain = at > 0 ? trimmed.slice(at + 1) : '';
-    if (!domains.includes(domain)) return `Use your institute email (${domainText}).`;
-    return undefined;
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submitting) return;
     setError(null);
-    const problem = checkEmail(email);
-    setEmailError(problem);
-    if (problem) return;
-    if (!password) {
-      setError('Enter your password.');
-      return;
-    }
+    setEmailError(undefined);
     setSubmitting(true);
     try {
       await login(email.trim().toLowerCase(), password);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Unable to sign in right now. Please try again.');
+      const emailProblem = err instanceof ApiError ? err.details?.email : undefined;
+      if (emailProblem) setEmailError(emailProblem);
+      setError(err instanceof ApiError && !emailProblem ? err.message : emailProblem ? null : 'Unable to sign in right now. Please try again.');
       setPassword('');
     } finally {
       setSubmitting(false);
@@ -99,7 +73,6 @@ export const LoginPage: React.FC = () => {
                 setEmail(e.target.value);
                 if (emailError) setEmailError(undefined);
               }}
-              onBlur={() => email.trim() && setEmailError(checkEmail(email))}
               placeholder="Enter your email address"
               leftIcon={Mail}
               maxLength={254}
