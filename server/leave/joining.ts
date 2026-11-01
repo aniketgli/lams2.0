@@ -431,3 +431,21 @@ export async function fitnessOf(viewer: Viewer, requestIdRaw: unknown): Promise<
     throw error;
   }
 }
+
+/**
+ * The joining days of this employee's leaves that have no joining report yet, between `from` and `to`. The joining form
+ * needs a punch on that day, so the manual attendance form always offers such a day when the In punch is missing.
+ */
+export async function joiningDaysAwaiting(userId: number, from: string, to: string): Promise<Set<string>> {
+  const days = new Set<string>();
+  try {
+    const found = await rows(pool, `${SELECT} WHERE ${WHERE_LEAVE} AND m.user_id = ? AND j.id IS NULL AND m.end_date < ? ORDER BY m.end_date DESC LIMIT 40`, [userId, to]);
+    for (const row of found) {
+      const day = await joiningDateOf(pool, row);
+      if (day >= from && day <= to) days.add(day);
+    }
+  } catch (error) {
+    if ((error as { code?: string })?.code !== 'ER_NO_SUCH_TABLE') throw error;
+  }
+  return days;
+}
