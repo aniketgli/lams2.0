@@ -4,6 +4,8 @@ import { useApp } from '../../../../context/AppContext';
 import { DataTable, Modal, Select } from '../../../../shared/components';
 import type { ColumnDef } from '../../../../shared/components';
 import { Textarea } from '../../../../shared/components/forms/Textarea';
+import { Checkbox } from '../../../../shared/components/forms/Checkbox';
+import { Input } from '../../../../shared/components/forms/Input';
 import { AppDatePicker } from '../../../../shared/components/AppDatePicker';
 import { MultiSelectFilter, matchesMultiSelect } from '../../../../shared/components/MultiSelectFilter';
 import { FilterToolbar } from '../../../../shared/components/FilterToolbar';
@@ -515,7 +517,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
                   }}
                   options={(data?.types ?? []).map((t) => ({ label: `${t.name} (${t.code})`, value: t.id }))} />
                 {balanceBadge?.balance && (
-                  <span className="absolute right-0 top-0 inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">
+                  <span className={`absolute right-0 top-0 inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${balanceBadge.balance.available > 0 ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-rose-200 bg-rose-50 text-rose-700'}`}>
                     Balance: {balanceBadge.balance.available} {balanceBadge.balance.available === 1 ? 'Day' : 'Days'}
                   </span>
                 )}
@@ -561,15 +563,12 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
                   {([['Prefix', 'availPrefix', 'prefixFrom', 'prefixTo', preview.prefix], ['Suffix', 'availSuffix', 'suffixFrom', 'suffixTo', preview.suffix]] as const).map(([name, flag, fromKey, toKey, block]) => (
                     <div key={name} className={`rounded-xl border p-3 space-y-2 ${block ? 'border-slate-300 bg-white' : 'border-slate-100 bg-slate-50 opacity-70'}`}>
                       <div className="flex items-center justify-between gap-2">
-                        <label className={`flex items-center gap-2 text-xs font-bold ${block ? 'text-slate-700 cursor-pointer' : 'text-slate-400'}`}>
-                          <input type="checkbox" disabled={!block} checked={Boolean(block) && form[flag]} className="accent-primary w-4 h-4"
-                            onChange={(e) => {
-                              if (!block) return;
-                              const on = e.target.checked;
-                              setForm((f) => ({ ...f, [flag]: on, [fromKey]: on ? block.from : '', [toKey]: on ? block.to : '' }));
-                            }} />
-                          Avail {name.toLowerCase()}
-                        </label>
+                        <Checkbox label={`Avail ${name.toLowerCase()}`} disabled={!block} checked={Boolean(block) && form[flag]}
+                          onChange={(e) => {
+                            if (!block) return;
+                            const on = e.target.checked;
+                            setForm((f) => ({ ...f, [flag]: on, [fromKey]: on ? block.from : '', [toKey]: on ? block.to : '' }));
+                          }} />
                         <span className="text-[11px] font-semibold text-slate-500">{block ? `${block.days} ${block.days === 1 ? 'Day' : 'Days'}` : 'Not eligible'}</span>
                       </div>
                       {block && form[flag] && (
@@ -617,19 +616,11 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
                 </div>
                 {formErrors.ltcType && <p className="text-[11px] font-semibold text-rose-600 leading-tight mt-1.5">{formErrors.ltcType}</p>}
                 {form.ltcType === 'ltc' && (
-                  <div className="mt-3 rounded-xl border border-slate-300 bg-white p-3 space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
-                      <input type="checkbox" checked={form.encashLtc} className="accent-primary w-4 h-4" onChange={(e) => setField('encashLtc', e.target.checked)} />
-                      Avail leave encashment with LTC
-                    </label>
+                  <div className="mt-3 rounded-xl border border-slate-300 bg-white p-3 space-y-3">
+                    <Checkbox label="Avail leave encashment with LTC" checked={form.encashLtc} onChange={(e) => setField('encashLtc', e.target.checked)} />
                     {form.encashLtc && (
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-700 select-none mb-1.5" htmlFor="encash-days">Encashment days</label>
-                        <input id="encash-days" type="number" min={1} max={10} step={1} value={form.encashDays}
-                          onChange={(e) => setField('encashDays', Number(e.target.value))}
-                          className={`h-9 w-32 rounded-xl border px-3 text-xs font-medium text-slate-900 outline-none shadow-2xs focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 ${formErrors.encashDays ? 'border-rose-400 bg-rose-50/20' : 'border-slate-300 hover:border-slate-400 bg-white'}`} />
-                        {formErrors.encashDays && <p className="text-[11px] font-semibold text-rose-600 leading-tight mt-1.5">{formErrors.encashDays}</p>}
-                      </div>
+                      <Input label="Encashment days" type="number" min={1} max={10} step={1} value={String(form.encashDays)} error={formErrors.encashDays}
+                        placeholder="1 to 10" onChange={(e) => setField('encashDays', Number(e.target.value))} containerClassName="sm:w-1/2" />
                     )}
                   </div>
                 )}
