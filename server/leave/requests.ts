@@ -1113,13 +1113,20 @@ export function requestId(raw: unknown): number {
 }
 
 /** Active employees an administrator can apply for. */
-export async function applicableEmployees(viewer: Viewer): Promise<{ id: string; biometricId: string; name: string; designation: string }[]> {
+export async function applicableEmployees(viewer: Viewer): Promise<{ id: string; biometricId: string; name: string; designation: string; isPwd: boolean }[]> {
   if (viewer.role !== 'administrator') return [];
   const found = await rows(pool,
-    `SELECT u.id, u.biometric_id, u.name, p.designation FROM users u
+    `SELECT u.id, u.biometric_id, u.name, p.designation, p.profile_data FROM users u
        LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id
       WHERE LOWER(u.status) = 'active' ORDER BY u.name`);
-  return found.map((r) => ({ id: String(r.id), biometricId: String(r.biometric_id), name: String(r.name), designation: String(r.designation ?? '') }));
+  return found.map((r) => ({ id: String(r.id), biometricId: String(r.biometric_id), name: String(r.name), designation: String(r.designation ?? ''), isPwd: profileData(r.profile_data).isPwd === true || profileData(r.profile_data).isPwd === 'true' }));
+}
+
+/** Whether this user is a person with disability: only they are offered the PwD-only leave types (Special Casual Leave). */
+export async function isPwdUser(userId: number): Promise<boolean> {
+  const [row] = await rows(pool, `SELECT p.profile_data FROM users u LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE u.id = ? LIMIT 1`, [userId]);
+  const data = profileData(row?.profile_data);
+  return data.isPwd === true || data.isPwd === 'true';
 }
 
 // ---------------------------------------------------------------------------
