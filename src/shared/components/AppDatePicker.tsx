@@ -10,6 +10,8 @@ export interface AppDatePickerHoliday {
 
 export interface AppDatePickerProps {
   label?: string;
+  /** Shows the red required star after the label (the same star the other fields use). */
+  required?: boolean;
   value: string; // 'YYYY-MM-DD'
   minDate?: string;
   maxDate?: string;
@@ -31,6 +33,7 @@ const monthsList = [
 
 export const AppDatePicker: React.FC<AppDatePickerProps> = ({
   label,
+  required,
   value,
   minDate,
   maxDate,
@@ -228,7 +231,7 @@ export const AppDatePicker: React.FC<AppDatePickerProps> = ({
   return (
     <div className={`relative ${className}`}>
       {label && (
-        <label className="block font-bold text-slate-800 text-xs tracking-tight mb-1">{label}</label>
+        <label className="block font-bold text-slate-800 text-xs tracking-tight mb-1">{label}{required && <span className="text-rose-500 ml-0.5">*</span>}</label>
       )}
 
       <div className="relative">
