@@ -89,7 +89,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ initia
           {view === 'types' && (isAdmin || isAudit) ? <LeavePolicyMaster readOnly={!isAdmin} />
             : isAudit && view === 'activity' ? <ActivityLogPanel source={LEAVE_ACTIVITY} />
             : view === 'joining' ? <JoiningView />
-            : <LeaveRequestsView applySignal={applySignal} />}
+            : <LeaveRequestsView applySignal={applySignal} onOpenJoining={() => setView('joining')} />}
         </>
       )}
     </div>

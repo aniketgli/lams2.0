@@ -6,11 +6,11 @@ import { inTransaction } from '../lib/tx';
 import { Validator, todayInIndia } from '../lib/validate';
 import { changedFields, writeMasterAuditSql } from '../masters/audit';
 import { biometricDay } from '../attendance/store';
-import { datesBetween, weekdayOf } from '../attendance/compute';
 import { detectCertificateType, parseCertificate } from './certificates';
 import {
-  addDays, dayRule, isoDate, isoTime, loadEmployee, managersOf, missingTable, profileData, rows, type Viewer,
+  addDays, isoDate, isoTime, joiningDateOf, loadEmployee, managersOf, missingTable, rows, type Viewer,
 } from './requests';
+export { firstWorkingDayAfter } from './requests';
 
 /**
  * Joining report. Every 2-stage leave (leave type "Joining form needed") is followed by one, filled on the first working
@@ -110,7 +110,7 @@ const SELECT = `
          sb.name AS submitted_by_name, mg.name AS manager_name, rv.name AS reviewer_name, l1.name AS l1_name, ac.name AS action_by_name,
          (SELECT c.file_name FROM leave_joining_certificates c WHERE c.report_id = j.id) AS fitness_name
   ${FROM}`;
-const WHERE_LEAVE = "t.joining_required = 1 AND m.status <> 'rejected' AND m.linked_to IS NULL";
+const WHERE_LEAVE = "(t.joining_required = 1 OR t.approval_stages = 2) AND m.status <> 'rejected' AND m.linked_to IS NULL";
 
 const timeOf = (value: unknown): string | null => (value ? String(value).slice(0, 5) : null);
 
@@ -145,22 +145,6 @@ function canDecide(viewer: Viewer, row: RowDataPacket): boolean {
 // ---------------------------------------------------------------------------
 // The joining date
 // ---------------------------------------------------------------------------
-
-/** The first working day after `end`: not a weekly off of the shift and not a gazetted holiday. */
-export function firstWorkingDayAfter(end: string, workingDays: string[], gazetted: Set<string>): string {
-  for (const date of datesBetween(addDays(end, 1), addDays(end, 60))) {
-    if (workingDays.includes(weekdayOf(date)) && !gazetted.has(date)) return date;
-  }
-  return addDays(end, 1);
-}
-
-async function joiningDateOf(q: { query: typeof pool.query }, row: RowDataPacket): Promise<string> {
-  const emp = await loadEmployee(q, Number(row.user_id));
-  const end = isoDate(row.end_date);
-  // Only the shift's working days and the gazetted holidays matter here.
-  const rule = await dayRule(q, emp, { sandwich: 'excluded', offDaysOnly: false } as never, addDays(end, 1), addDays(end, 60));
-  return firstWorkingDayAfter(end, rule.workingDays, rule.gazetted);
-}
 
 // ---------------------------------------------------------------------------
 // Rows -> items
