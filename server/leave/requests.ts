@@ -754,6 +754,65 @@ export async function balancePreview(
   }
 }
 
+/**
+ * Dates the apply form's calendar blocks for an employee: days already inside a leave application
+ * (or its prefix / suffix), and, for the chosen leave type, the days straight next to a leave of the other
+ * stage count (weekly offs / holidays in between and the next working day), which cannot be joined.
+ */
+export async function occupiedDates(
+  viewer: Viewer, query: Record<string, unknown>, today = todayInIndia(),
+): Promise<{ days: { date: string; status: 'pending' | 'approved' | 'rejected' }[]; joined: string[] }> {
+  const empty = { days: [], joined: [] };
+  if (viewer.role !== 'administrator' && viewer.role !== 'general_staff') return empty;
+  const target = viewer.role === 'administrator' ? Number(query.userId ?? 0) : viewer.id;
+  if (!target) return empty;
+  const exceptId = /^\d{1,20}$/.test(String(query.exceptId ?? '')) ? Number(query.exceptId) : 0;
+  const from = addDays(today, -60);
+  const to = addDays(today, 400);
+  let found: RowDataPacket[];
+  try {
+    found = await rows(pool,
+      `SELECT r.start_date, r.end_date, r.status, r.prefix_from, r.prefix_to, r.suffix_from, r.suffix_to, t.approval_stages
+         FROM leave_requests r JOIN leave_types t ON t.id = r.leave_type_id
+        WHERE r.user_id = ? AND r.id <> ? AND r.end_date >= ? AND r.start_date <= ?`,
+      [target, exceptId, from, to]);
+  } catch (error) {
+    missingTable(error);
+    throw error;
+  }
+  const days = new Map<string, 'pending' | 'approved' | 'rejected'>();
+  const rank = { rejected: 0, pending: 1, approved: 2 } as const;
+  const put = (a: string, b: string, status: 'pending' | 'approved' | 'rejected') => {
+    for (const d of datesBetween(a < from ? from : a, b > to ? to : b)) if (!days.has(d) || rank[days.get(d)!] < rank[status]) days.set(d, status);
+  };
+  for (const r of found) {
+    const status = r.status === 'approved' ? 'approved' : r.status === 'rejected' ? 'rejected' : 'pending';
+    put(isoDate(r.start_date), isoDate(r.end_date), status);
+    if (r.prefix_from) put(isoDate(r.prefix_from), isoDate(r.prefix_to), status);
+    if (r.suffix_from) put(isoDate(r.suffix_from), isoDate(r.suffix_to), status);
+  }
+  const joined = new Set<string>();
+  const typeId = String(query.leaveTypeId ?? '');
+  if (/^\d{1,20}$/.test(typeId)) {
+    const emp = await loadEmployee(pool, target);
+    const policy = await loadPolicy(pool, Number(typeId));
+    if (policy) {
+      const rule = await dayRule(pool, emp, policy, from, to);
+      const off = (d: string) => !rule.workingDays.includes(weekdayOf(d)) || rule.gazetted.has(d);
+      for (const r of found) {
+        if (r.status === 'rejected' || (Number(r.approval_stages) === 2 ? 2 : 1) === policy.stages) continue;
+        for (const [start, step] of [[addDays(isoDate(r.end_date), 1), 1], [addDays(isoDate(r.start_date), -1), -1]] as const) {
+          for (let d = start, i = 0; i < 45 && d >= from && d <= to; i++, d = addDays(d, step)) {
+            joined.add(d);
+            if (!off(d)) break; // the next working day is the last one blocked
+          }
+        }
+      }
+    }
+  }
+  return { days: [...days.entries()].map(([date, status]) => ({ date, status })).sort((a, b) => a.date.localeCompare(b.date)), joined: [...joined].filter((d) => !days.has(d) || days.get(d) === 'rejected').sort() };
+}
+
 // ---------------------------------------------------------------------------
 // Writes
 // ---------------------------------------------------------------------------

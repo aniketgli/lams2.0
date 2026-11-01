@@ -165,6 +165,26 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
 
   const type = data?.types.find((t) => t.id === form.leaveTypeId) ?? null;
 
+  // Days of the calendar that already hold a leave (and days that cannot be joined with one), coloured and blocked in the pickers.
+  const [occupied, setOccupied] = useState<{ days: { date: string; status: 'pending' | 'approved' | 'rejected' }[]; joined: string[] } | null>(null);
+  useEffect(() => {
+    if (!formOpen || (isAdmin && !form.userId)) { setOccupied(null); return; }
+    let cancelled = false;
+    leaveApi.occupied({ userId: form.userId, leaveTypeId: form.leaveTypeId, exceptId: editing?.id ?? '' })
+      .then((o) => { if (!cancelled) setOccupied(o); }).catch(() => { if (!cancelled) setOccupied(null); });
+    return () => { cancelled = true; };
+  }, [formOpen, isAdmin, form.userId, form.leaveTypeId, editing]);
+  const marks = useMemo(() => {
+    const out: Record<string, { tone: 'yellow' | 'green' | 'red' | 'blue'; blocked: boolean; label: string }> = {};
+    for (const d of occupied?.joined ?? []) out[d] = { tone: 'blue', blocked: true, label: 'Cannot be joined with a leave of the other kind' };
+    for (const { date, status } of occupied?.days ?? []) {
+      out[date] = status === 'approved' ? { tone: 'green', blocked: true, label: 'Approved leave' }
+        : status === 'pending' ? { tone: 'yellow', blocked: true, label: 'Pending leave' }
+        : { tone: 'red', blocked: false, label: 'Rejected leave' };
+    }
+    return out;
+  }, [occupied]);
+
   // The balance of the chosen leave type, shown as soon as it is chosen (and for the leave year of the start date).
   const [balanceBadge, setBalanceBadge] = useState<{ balance: LeaveBalance | null; cycle: string } | null>(null);
   useEffect(() => {
@@ -529,11 +549,11 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
                 )}
               </div>
               <div>
-                <AppDatePicker label="From date (start date)" required error={formErrors.startDate} value={form.startDate} placeholder="Select date" minDate={localDate(-15)}
+                <AppDatePicker label="From date (start date)" required error={formErrors.startDate} value={form.startDate} placeholder="Select date" minDate={localDate(-15)} marks={marks}
                   onChange={(v) => { setField('startDate', v); if (!form.endDate || form.endDate < v) setField('endDate', v); }} className="w-full" />
               </div>
               <div>
-                <AppDatePicker label="To date (end date)" required error={formErrors.endDate} value={form.endDate} placeholder="Select date" minDate={form.startDate || undefined}
+                <AppDatePicker label="To date (end date)" required error={formErrors.endDate} value={form.endDate} placeholder="Select date" minDate={form.startDate || undefined} marks={marks}
                   onChange={(v) => setField('endDate', v)} className="w-full" />
               </div>
               {type?.halfDayAllowed && (

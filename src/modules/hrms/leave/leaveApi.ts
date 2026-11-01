@@ -241,6 +241,10 @@ export const leaveApi = {
     return api<LeavePreview>(`${base}/preview?${q.toString()}`);
   },
   downloadCertificate: (id: string) => downloadCsv(`${one(id)}/certificate`, 'medical-certificate'),
+  occupied: (input: { userId: string; leaveTypeId: string; exceptId: string }) => {
+    const q = new URLSearchParams(Object.entries(input).filter(([, v]) => v) as [string, string][]);
+    return api<{ days: { date: string; status: 'pending' | 'approved' | 'rejected' }[]; joined: string[] }>(`${base}/occupied?${q.toString()}`);
+  },
   balancePreview: (input: { userId: string; leaveTypeId: string; date: string }) => {
     const q = new URLSearchParams(Object.entries(input).filter(([, v]) => v) as [string, string][]);
     return api<{ cycle: string; balance: LeaveBalance | null }>(`${base}/balance-preview?${q.toString()}`);
