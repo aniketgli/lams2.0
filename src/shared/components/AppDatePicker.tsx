@@ -18,6 +18,8 @@ export interface AppDatePickerProps {
   onChange: (dateStr: string) => void;
   isOpen?: boolean;
   onToggle?: () => void;
+  /** Days to colour (and, when `blocked`, to refuse): pending / approved / rejected leaves, joins that are not allowed. */
+  marks?: Record<string, { tone: 'yellow' | 'green' | 'red' | 'blue'; blocked: boolean; label: string }>;
   restrictToStationLeave?: boolean; // Default false. If true, restricts to weekends & GH
   holidays?: AppDatePickerHoliday[];
   placeholder?: string;
@@ -27,6 +29,13 @@ export interface AppDatePickerProps {
   error?: string;
   size?: 'sm' | 'md';
 }
+
+const MARK_TONES = {
+  yellow: 'bg-amber-100 text-amber-900 border-amber-300',
+  green: 'bg-emerald-100 text-emerald-900 border-emerald-300',
+  red: 'bg-rose-100 text-rose-900 border-rose-300',
+  blue: 'bg-sky-100 text-sky-900 border-sky-300',
+} as const;
 
 const monthsList = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -44,6 +53,7 @@ export const AppDatePicker: React.FC<AppDatePickerProps> = ({
   onToggle,
   restrictToStationLeave = false,
   holidays = [],
+  marks = {},
   placeholder = 'Select Date',
   className = '',
   error,
@@ -208,7 +218,8 @@ export const AppDatePicker: React.FC<AppDatePickerProps> = ({
     const isBeforeMin = minDate ? dateStr < minDate : false;
     const isAfterMax = maxDate ? dateStr > maxDate : false;
 
-    let isEligible = !isBeforeMin && !isAfterMax;
+    const mark = marks[dateStr];
+    let isEligible = !isBeforeMin && !isAfterMax && !mark?.blocked;
     if (restrictToStationLeave) {
       isEligible = isEligible && (isWeekend || !!ghMatch);
     }
@@ -221,6 +232,7 @@ export const AppDatePicker: React.FC<AppDatePickerProps> = ({
       reason: isWeekend ? (dayOfWeek === 0 ? 'Sunday' : 'Saturday') : ghMatch?.name,
       ghName: ghMatch?.name,
       isWeekend,
+      mark,
     });
   }
 
@@ -447,8 +459,10 @@ export const AppDatePicker: React.FC<AppDatePickerProps> = ({
                       return (
                         <div
                           key={cell.dateStr}
-                          title="Date Restricted"
-                          className="h-6.5 rounded-md flex items-center justify-center text-[10.5px] text-slate-300 bg-transparent cursor-not-allowed select-none font-normal"
+                          title={cell.mark?.label ?? 'Date Restricted'}
+                          className={`h-6.5 rounded-md flex items-center justify-center text-[10.5px] cursor-not-allowed select-none ${
+                            cell.mark ? `font-bold border ${MARK_TONES[cell.mark.tone]}` : 'text-slate-300 bg-transparent font-normal'
+                          }`}
                         >
                           {cell.dayNum}
                         </div>
@@ -470,13 +484,15 @@ export const AppDatePicker: React.FC<AppDatePickerProps> = ({
                         className={`h-6.5 rounded-md flex flex-col items-center justify-center text-[10.5px] font-bold transition-all cursor-pointer relative ${
                           isSelected
                             ? 'bg-indigo-600 text-white font-black shadow-xs scale-105 z-10 border-indigo-600'
+                            : cell.mark
+                            ? `border ${MARK_TONES[cell.mark.tone]}`
                             : cell.ghName
                             ? 'bg-emerald-50 text-emerald-950 border border-emerald-300 hover:bg-emerald-600 hover:text-white shadow-2xs'
                             : cell.isWeekend
                             ? 'bg-indigo-50/80 text-indigo-900 border border-indigo-200/70 hover:bg-indigo-600 hover:text-white shadow-2xs'
                             : 'bg-slate-50 text-slate-800 border border-slate-200/60 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 shadow-2xs'
                         }`}
-                        title={cell.ghName ? `Gazetted Holiday: ${cell.ghName}` : cell.reason ? `Weekend (${cell.reason})` : `Selectable Date`}
+                        title={cell.mark ? cell.mark.label : cell.ghName ? `Gazetted Holiday: ${cell.ghName}` : cell.reason ? `Weekend (${cell.reason})` : `Selectable Date`}
                       >
                         <span>{cell.dayNum}</span>
                         {cell.ghName && !isSelected && (
