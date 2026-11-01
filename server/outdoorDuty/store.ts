@@ -7,6 +7,7 @@ import { PATTERNS, TOO_OLD_MESSAGE, Validator, isValidIsoDate, oldestApplication
 import { changedFields, writeMasterAuditSql } from '../masters/audit';
 import type { RoleId } from '../lib/roles';
 import type { ActivityScope } from '../employees/activity';
+import { notifyOd } from '../notifications/events';
 
 /**
  * Outdoor duty (OD): official work away from the institute for one or more days.
@@ -325,7 +326,7 @@ export async function createRequest(req: Request, viewer: Viewer, body: unknown)
   const target = await loadTarget(pool, targetId);
   checkDates(viewer, input, target.joining);
   try {
-    return await inTransaction(async (conn) => {
+    const done = await inTransaction(async (conn) => {
       const clash = await overlaps(conn, target.id, input, 0);
       if (clash) throw overlapError(clash);
       const [result] = await conn.query(
@@ -340,6 +341,8 @@ export async function createRequest(req: Request, viewer: Viewer, body: unknown)
       await writeMasterAuditSql(conn, req, { masterKey: AUDIT_KEY, recordId: id, recordLabel: label(created), action: 'CREATE', after: auditView(created) });
       return created;
     });
+    notifyOd('applied', done);
+    return done;
   } catch (error) {
     missingTable(error);
     throw error;
@@ -384,7 +387,7 @@ export async function decideRequest(req: Request, viewer: Viewer, id: number, bo
   if (action === 'reject' && (!comment || comment.length < 3)) v.errors.comment ||= 'Say why the request is rejected.';
   v.assert();
   try {
-    return await inTransaction(async (conn) => {
+    const done = await inTransaction(async (conn) => {
       const row = await fetchOne(conn, id, true);
       if (!row || !canSee(viewer, row)) throw notFound('Request not found.');
       const before = toRequest(viewer, row);
@@ -399,6 +402,8 @@ export async function decideRequest(req: Request, viewer: Viewer, id: number, bo
       await writeMasterAuditSql(conn, req, { masterKey: AUDIT_KEY, recordId: id, recordLabel: label(after), action: 'STATUS', before: auditView(before), after: auditView(after), reason: comment });
       return after;
     });
+    notifyOd(done.status === 'approved' ? 'approved' : 'rejected', done, comment);
+    return done;
   } catch (error) {
     missingTable(error);
     throw error;
@@ -408,7 +413,7 @@ export async function decideRequest(req: Request, viewer: Viewer, id: number, bo
 /** Takes an approval / rejection back: the request is pending again, with the decision kept in the audit log. */
 export async function undoDecision(req: Request, viewer: Viewer, id: number, reason: string | null): Promise<OdRequest> {
   try {
-    return await inTransaction(async (conn) => {
+    const done = await inTransaction(async (conn) => {
       const row = await fetchOne(conn, id, true);
       if (!row || !canSee(viewer, row)) throw notFound('Request not found.');
       const before = toRequest(viewer, row);
@@ -424,6 +429,8 @@ export async function undoDecision(req: Request, viewer: Viewer, id: number, rea
       });
       return after;
     });
+    notifyOd('undone', { ...done, actionByName: null }, reason);
+    return done;
   } catch (error) {
     missingTable(error);
     throw error;

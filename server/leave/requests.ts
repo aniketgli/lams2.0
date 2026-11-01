@@ -12,6 +12,7 @@ import { WEEK_DAYS, datesBetween, weekdayOf } from '../attendance/compute';
 import { groupLeaveTypeIds, groupLeaveTypeMap } from './groups';
 import { LOOK_DAYS, type Combine, type Neighbour, combineProblem, toCombine } from './combine';
 import { SESSIONS_END, SESSIONS_START, countLeaveDays, cycleYearOf } from './days';
+import { notifyLeave } from '../notifications/events';
 
 /**
  * Leave requests and balances. Every rule is checked here, never in the browser.
@@ -947,7 +948,7 @@ export async function createRequest(req: Request, viewer: Viewer, body: unknown)
     throw forbidden('Your current role cannot apply for leave.');
   }
   try {
-    return await inTransaction(async (conn) => {
+    const done = await inTransaction(async (conn) => {
       // Serialise one employee's applications so two requests cannot both pass the balance check.
       await rows(conn, 'SELECT id FROM users WHERE id = ? FOR UPDATE', [targetId]);
       const c = await checkLeave(conn, viewer, input, targetId, 0);
@@ -967,6 +968,8 @@ export async function createRequest(req: Request, viewer: Viewer, body: unknown)
       await writeMasterAuditSql(conn, req, { masterKey: AUDIT_KEY, recordId: id, recordLabel: label(created), action: 'CREATE', after: auditView(created) });
       return created;
     });
+    notifyLeave('applied', done);
+    return done;
   } catch (error) {
     missingTable(error);
     throw error;
@@ -1017,7 +1020,7 @@ export async function decideRequest(req: Request, viewer: Viewer, id: number, bo
   if (action === 'reject' && (!comment || comment.length < 3)) v.errors.comment ||= 'Say why the request is rejected.';
   v.assert();
   try {
-    return await inTransaction(async (conn) => {
+    const done = await inTransaction(async (conn) => {
       const row = await fetchOne(conn, id, true);
       if (!row || !canSee(viewer, row)) throw notFound('Request not found.');
       const before = toRequest(viewer, row);
@@ -1046,6 +1049,8 @@ export async function decideRequest(req: Request, viewer: Viewer, id: number, bo
       });
       return { request: after, outcome };
     });
+    notifyLeave(done.outcome, done.request.status === 'pending_l2' ? { ...done.request, actionByName: done.request.forwardedByName } : done.request, comment);
+    return done;
   } catch (error) {
     missingTable(error);
     throw error;
@@ -1055,7 +1060,7 @@ export async function decideRequest(req: Request, viewer: Viewer, id: number, bo
 /** Takes a step back: a decision returns to the stage it was taken at; a forward returns to the reporting manager. */
 export async function undoDecision(req: Request, viewer: Viewer, id: number, reason: string | null): Promise<LeaveRequest> {
   try {
-    return await inTransaction(async (conn) => {
+    const done = await inTransaction(async (conn) => {
       const row = await fetchOne(conn, id, true);
       if (!row || !canSee(viewer, row)) throw notFound('Request not found.');
       const before = toRequest(viewer, row);
@@ -1078,6 +1083,8 @@ export async function undoDecision(req: Request, viewer: Viewer, id: number, rea
       });
       return after;
     });
+    notifyLeave('undone', { ...done, actionByName: null }, reason);
+    return done;
   } catch (error) {
     missingTable(error);
     throw error;

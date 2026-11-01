@@ -6,6 +6,7 @@ import { db } from '../../src/db';
 import { user_project_histories, users } from '../../src/db/schema';
 import { isAdmin, isAuthenticated, requireActiveRole, requireAuth } from '../middleware/auth.middleware';
 import { EmailService } from '../integrations/email/email.service';
+import { notifyAccountStatus, notifyWelcome } from '../notifications/events';
 import { HttpError, asyncHandler, badRequest, notFound } from '../lib/http';
 import { passwordProblem } from '../lib/passwordPolicy';
 import { defaultPasswordHash } from '../masters/accountSettings';
@@ -137,6 +138,7 @@ router.get('/employees/:userId', isAuthenticated, asyncHandler(async (req, res) 
 
 router.post('/employees', isAdmin, asyncHandler(async (req, res) => {
   const employee = await createEmployee(req, req.body);
+  notifyWelcome(employee);
   res.status(201).json({
     employee,
     message: `Employee ${employee.name} saved with the HRMS User role and the default password. They must choose their own password at first sign-in.`,
@@ -158,6 +160,7 @@ router.patch('/employees/:userId/status', isAdmin, asyncHandler(async (req, res)
   const employee = await setEmployeeStatus(req, id, { status, reason, effectiveDate });
   // A deactivated user is signed out everywhere at once.
   if (status === 'inactive') await destroyUserSessions(id);
+  notifyAccountStatus(status, employee);
   res.json({ success: true, status, effectiveDate, employee, message: status === 'inactive' ? 'Account deactivated.' : 'Account reactivated.' });
 }));
 

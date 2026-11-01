@@ -10,6 +10,7 @@ import type { ActivityScope } from '../employees/activity';
 import { biometricDay, outdoorDutyDates, punchGaps, type PunchDay } from '../attendance/store';
 import { leaveDates } from '../leave/requests';
 import { joiningDaysAwaiting } from '../leave/joining';
+import { notifyManual } from '../notifications/events';
 
 /**
  * Manual attendance: a request to correct a missed or wrong punch (table
@@ -320,7 +321,7 @@ export async function createRequest(req: Request, viewer: Viewer, body: unknown)
   checkAgainstPunches(input, original);
 
   try {
-    return await inTransaction(async (conn) => {
+    const done = await inTransaction(async (conn) => {
       if (await hasOpenRequest(conn, target.id, input.date, 0)) throw duplicate(input.date);
       const [result] = await conn.query(
         `INSERT INTO manual_attendance_requests
@@ -333,6 +334,8 @@ export async function createRequest(req: Request, viewer: Viewer, body: unknown)
       await writeMasterAuditSql(conn, req, { masterKey: AUDIT_KEY, recordId: id, recordLabel: label(created), action: 'CREATE', after: auditView(created) });
       return created;
     });
+    notifyManual('applied', done);
+    return done;
   } catch (error) {
     missingTable(error);
     throw error;
@@ -383,7 +386,7 @@ export async function decideRequest(req: Request, viewer: Viewer, id: number, bo
   v.assert();
 
   try {
-    return await inTransaction(async (conn) => {
+    const done = await inTransaction(async (conn) => {
       const row = await fetchOne(viewer, conn, id, true);
       if (!row || !canSee(viewer, row)) throw notFound('Request not found.');
       const before = toRequest(viewer, row);
@@ -403,6 +406,8 @@ export async function decideRequest(req: Request, viewer: Viewer, id: number, bo
       });
       return after;
     });
+    notifyManual(done.status === 'approved' ? 'approved' : 'rejected', done, comment);
+    return done;
   } catch (error) {
     missingTable(error);
     throw error;
@@ -412,7 +417,7 @@ export async function decideRequest(req: Request, viewer: Viewer, id: number, bo
 /** Takes an approval / rejection back: the request is pending again, with the decision kept in the audit log. */
 export async function undoDecision(req: Request, viewer: Viewer, id: number, reason: string | null): Promise<ManualRequest> {
   try {
-    return await inTransaction(async (conn) => {
+    const done = await inTransaction(async (conn) => {
       const row = await fetchOne(viewer, conn, id, true);
       if (!row || !canSee(viewer, row)) throw notFound('Request not found.');
       const before = toRequest(viewer, row);
@@ -432,6 +437,8 @@ export async function undoDecision(req: Request, viewer: Viewer, id: number, rea
       });
       return after;
     });
+    notifyManual('undone', { ...done, actionByName: null }, reason);
+    return done;
   } catch (error) {
     missingTable(error);
     throw error;
