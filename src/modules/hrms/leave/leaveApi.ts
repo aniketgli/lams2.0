@@ -302,7 +302,7 @@ export const leaveApi = {
     api<{ request: LeaveRequest; outcome: 'approved' | 'forwarded' | 'rejected'; message: string }>(`${one(id)}/decision`, { method: 'POST', body: { action, comment: comment || undefined } }),
   undo: (id: string, reason?: string) => api<{ request: LeaveRequest; message: string }>(`${one(id)}/undo`, { method: 'POST', body: { reason: reason || undefined } }),
   remove: (id: string, reason?: string) => api<{ message: string }>(one(id), { method: 'DELETE', body: { reason: reason || undefined } }),
-  preview: (input: Pick<LeaveInput, 'userId' | 'leaveTypeId' | 'startDate' | 'endDate' | 'startSession' | 'endSession'>) => {
+  preview: (input: Pick<LeaveInput, 'userId' | 'leaveTypeId' | 'startDate' | 'endDate' | 'startSession' | 'endSession'> & { exceptId?: string }) => {
     const q = new URLSearchParams(Object.entries(input).filter(([, v]) => v) as [string, string][]);
     return api<LeavePreview>(`${base}/preview?${q.toString()}`);
   },

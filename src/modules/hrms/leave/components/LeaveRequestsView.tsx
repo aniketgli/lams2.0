@@ -211,10 +211,10 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
     if (!formOpen || !form.leaveTypeId || !form.startDate || !form.endDate || (isAdmin && !form.userId)) { setPreview(null); return; }
     let cancelled = false;
     const timer = setTimeout(() => {
-      leaveApi.preview(form).then((p) => { if (!cancelled) setPreview(p); }).catch(() => { if (!cancelled) setPreview(null); });
+      leaveApi.preview({ ...form, exceptId: editing?.id }).then((p) => { if (!cancelled) setPreview(p); }).catch(() => { if (!cancelled) setPreview(null); });
     }, 300);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [formOpen, isAdmin, form.userId, form.leaveTypeId, form.startDate, form.endDate, form.startSession, form.endSession]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [formOpen, isAdmin, editing?.id, form.userId, form.leaveTypeId, form.startDate, form.endDate, form.startSession, form.endSession]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The server moves the dates off weekly offs / holidays at the start or end of the leave; those days become the prefix / suffix.
   useEffect(() => {

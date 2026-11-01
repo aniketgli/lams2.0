@@ -194,8 +194,10 @@ function canDecide(viewer: Viewer, row: RowDataPacket): boolean {
   return viewer.role === 'reviewing_manager' && m.reviewing === String(viewer.id);
 }
 
-function canModify(viewer: Viewer, row: RowDataPacket): boolean {
-  if (String(row.status) !== 'pending_l1' || row.linked_to) return false; // a linked station leave follows its leave request
+/** Edit / delete are open up to the start date; once it has passed (always so for a leave applied after its date) the leave is locked for everyone. */
+export const DATE_PASSED_MESSAGE = 'The leave date has passed, so it can no longer be edited or deleted.';
+function canModify(viewer: Viewer, row: RowDataPacket, today = todayInIndia()): boolean {
+  if (String(row.status) !== 'pending_l1' || row.linked_to || isoDate(row.start_date) < today) return false; // a linked station leave follows its leave request
   if (viewer.role === 'administrator') return true;
   return viewer.role === 'general_staff' && Number(row.user_id) === viewer.id;
 }
@@ -512,8 +514,8 @@ async function joinProblem(q: { query: typeof pool.query }, emp: Employee, polic
   const found = await rows(q,
     `SELECT r.leave_type_id, r.start_date, r.end_date, t.name, t.approval_stages, t.combine_with FROM leave_requests r
        JOIN leave_types t ON t.id = r.leave_type_id
-      WHERE r.user_id = ? AND r.status <> 'rejected' AND r.id <> ? AND r.end_date >= ? AND r.start_date <= ?`,
-    [targetId, exceptId, from, to]);
+      WHERE r.user_id = ? AND r.status <> 'rejected' AND r.id <> ? AND r.end_date >= ? AND r.start_date <= ? AND (r.linked_to IS NULL OR r.linked_to <> ?)`,
+    [targetId, exceptId, from, to, exceptId]);
   if (!found.length) return null;
   const others: Neighbour[] = found.map((r) => ({
     id: Number(r.leave_type_id), name: String(r.name), stages: Number(r.approval_stages) === 2 ? 2 : 1, combineWith: toCombine(r.combine_with), start: isoDate(r.start_date), end: isoDate(r.end_date),
@@ -624,8 +626,8 @@ async function checkLeave(
   const around = await rows(q,
     `SELECT r.id, r.leave_type_id, r.start_date, r.end_date, r.days_count, t.name, t.approval_stages, t.max_consecutive_days, t.off_days_only
        FROM leave_requests r JOIN leave_types t ON t.id = r.leave_type_id
-      WHERE r.user_id = ? AND r.status <> 'rejected' AND r.id <> ? AND r.end_date >= ? AND r.start_date <= ? ORDER BY r.start_date`,
-    [targetId, exceptId, addDays(input.startDate, -46), addDays(input.endDate, 46)]);
+      WHERE r.user_id = ? AND r.status <> 'rejected' AND r.id <> ? AND r.end_date >= ? AND r.start_date <= ? AND (r.linked_to IS NULL OR r.linked_to <> ?) ORDER BY r.start_date`,
+    [targetId, exceptId, addDays(input.startDate, -46), addDays(input.endDate, 46), exceptId]);
   const reach = (from: string, step: 1 | -1) => {
     const gap: string[] = [];
     for (let i = 0, d = from; i < 45; i++, d = addDays(d, step)) {
@@ -683,8 +685,8 @@ async function checkLeave(
   if (Object.keys(errors).length) throw badRequest('Please correct the highlighted fields.', errors);
 
   const [clash] = await rows(q,
-    "SELECT id, start_date, end_date FROM leave_requests WHERE user_id = ? AND status <> 'rejected' AND id <> ? AND start_date <= ? AND end_date >= ? LIMIT 1",
-    [targetId, exceptId, input.endDate, input.startDate]);
+    "SELECT id, start_date, end_date FROM leave_requests WHERE user_id = ? AND status <> 'rejected' AND id <> ? AND start_date <= ? AND end_date >= ? AND (linked_to IS NULL OR linked_to <> ?) LIMIT 1",
+    [targetId, exceptId, input.endDate, input.startDate, exceptId]);
   if (clash) throw new HttpError(409, 'This employee already has a leave on these dates.', 'DUPLICATE', { startDate: `Overlaps a pending or approved leave (${isoDate(clash.start_date)} to ${isoDate(clash.end_date)}).` });
 
   const joined = policy.offDaysOnly ? null : await joinProblem(q, emp, policy, input, targetId, exceptId);
@@ -747,7 +749,8 @@ export async function previewLeave(viewer: Viewer, query: Record<string, unknown
   const none = { startDate: String(query.startDate ?? ''), endDate: String(query.endDate ?? ''), requestedStart: String(query.startDate ?? ''), requestedEnd: String(query.endDate ?? '') };
   if (!input || !target) return { days: 0, cycleYear: 0, cycle: '', balance: null, error: null, prefix: null, suffix: null, stationOk: false, ...none };
   try {
-    const c = await checkLeave(pool, viewer, input, target, 0, undefined, true);
+    const exceptId = /^\d{1,20}$/.test(String(query.exceptId ?? '')) ? Number(query.exceptId) : 0; // the leave being edited
+    const c = await checkLeave(pool, viewer, input, target, exceptId, undefined, true);
     return { days: c.days, cycleYear: c.cycleYear, cycle: cycleLabel(c.cycleYear, c.emp.basis), balance: c.balance, error: null, prefix: c.prefix, suffix: c.suffix, stationOk: c.stationOk, startDate: input.startDate, endDate: input.endDate, requestedStart: c.requested.startDate, requestedEnd: c.requested.endDate };
   } catch (error) {
     if (error instanceof HttpError) return { days: 0, cycleYear: 0, cycle: '', balance: null, error: Object.values(error.details ?? {})[0] ?? error.message, prefix: null, suffix: null, stationOk: false, ...none };
@@ -800,8 +803,8 @@ export async function occupiedDates(
     found = await rows(pool,
       `SELECT r.start_date, r.end_date, r.status, r.prefix_from, r.prefix_to, r.suffix_from, r.suffix_to, t.approval_stages, t.off_days_only
          FROM leave_requests r JOIN leave_types t ON t.id = r.leave_type_id
-        WHERE r.user_id = ? AND r.id <> ? AND r.end_date >= ? AND r.start_date <= ?`,
-      [target, exceptId, from, to]);
+        WHERE r.user_id = ? AND r.id <> ? AND r.end_date >= ? AND r.start_date <= ? AND (r.linked_to IS NULL OR r.linked_to <> ?)`,
+      [target, exceptId, from, to, exceptId]);
   } catch (error) {
     missingTable(error);
     throw error;
@@ -961,6 +964,7 @@ export async function updateRequest(req: Request, viewer: Viewer, id: number, bo
       if (row.linked_to) throw new HttpError(409, 'This station leave follows its leave request. Change that leave request instead.', 'LINKED');
       const before = toRequest(viewer, row);
       if (before.status !== 'pending_l1') throw new HttpError(409, 'Only a leave that has not been looked at yet can be edited. Ask for the step to be undone first.', 'NOT_PENDING');
+      if (!canModify(viewer, row)) throw new HttpError(409, DATE_PASSED_MESSAGE, 'DATE_PASSED');
       if (input.userId && input.userId !== String(row.user_id)) throw badRequest('Please correct the highlighted fields.', { userId: 'The employee of a request cannot be changed.' });
       // A certificate already on file stays unless a new one is uploaded.
       input.certificate = Boolean(input.file) || Boolean(row.certificate);
@@ -1070,6 +1074,7 @@ export async function deleteRequest(req: Request, viewer: Viewer, id: number, re
       if (row.linked_to) throw new HttpError(409, 'This station leave follows its leave request. Delete that leave request instead.', 'LINKED');
       const target = toRequest(viewer, row);
       if (target.status !== 'pending_l1') throw new HttpError(409, 'Only a leave that has not been looked at yet can be deleted. Ask for the step to be undone first.', 'NOT_PENDING');
+      if (!canModify(viewer, row)) throw new HttpError(409, DATE_PASSED_MESSAGE, 'DATE_PASSED');
       await writeMasterAuditSql(conn, req, { masterKey: AUDIT_KEY, recordId: id, recordLabel: label(target), action: 'DELETE', before: auditView(target), reason });
       await dropLinkedStation(conn, req, viewer, id);
       await conn.query('DELETE FROM leave_certificates WHERE request_id = ?', [id]);
