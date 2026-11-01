@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Building2, CalendarDays, ClipboardCheck, MapPin, Send, Check, Paperclip, CheckCircle2, ChevronsRight, Clock, Eye, FileText, Pencil, RotateCcw, Trash2, X, XCircle } from 'lucide-react';
+import { Building2, CalendarDays, MapPin, Send, Check, Paperclip, CheckCircle2, ChevronsRight, Clock, Eye, FileText, Pencil, RotateCcw, Trash2, X, XCircle } from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
 import { DataTable, Modal, Select } from '../../../../shared/components';
 import type { ColumnDef } from '../../../../shared/components';
@@ -13,7 +13,8 @@ import { UserAvatar } from '../../../../shared/components/UserAvatar';
 import { ApiError } from '../../../../shared/services/api';
 import { downloadCsvText, downloadTablePdf, printedAt, toCsvText } from '../../../../shared/services/printTable';
 import { ConfirmDialog, NoticeBar, useNotice } from '../../master/components/masterUi';
-import { LeaveBalance, LeaveInput, LeaveList, LeavePreview, LeaveRequest, LeaveStatus, leaveApi } from '../leaveApi';
+import { JoiningItem, LeaveBalance, LeaveInput, LeaveList, LeavePreview, LeaveRequest, LeaveStatus, leaveApi } from '../leaveApi';
+import { JoiningDetails, JoiningStatusLine, useJoining } from './JoiningPanel';
 
 /**
  * Leave requests. The server decides everything (days, balance, who may do what); this page only shows it.
@@ -62,7 +63,7 @@ const EMPTY_FORM: LeaveInput = { userId: '', leaveTypeId: '', startDate: '', end
 
 const shiftDate = (iso: string, days: number) => { const d = new Date(`${iso}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
 
-export const LeaveRequestsView: React.FC<{ applySignal: number; onOpenJoining?: () => void }> = ({ applySignal, onOpenJoining }) => {
+export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySignal }) => {
   const { currentUser, users } = useApp();
   const role = currentUser.role;
   const isAdmin = role === 'administrator';
@@ -81,6 +82,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; onOpenJoining?: 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, showNotice, clearNotice] = useNotice();
+  const joining = useJoining((message) => { showNotice('success', message); void load(true); });
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -393,6 +395,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; onOpenJoining?: 
         <div className="leading-tight space-y-1">
           <StatusPill status={r.status} />
           <div className="text-[11px] text-slate-500 truncate" title={statusBy(r)}>{statusBy(r)}</div>
+          <JoiningStatusLine item={joining.byRequest.get(r.id)} />
         </div>
       ),
     },
@@ -402,10 +405,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; onOpenJoining?: 
         <div className="flex items-center justify-center gap-1">
           <button type="button" onClick={() => setViewing(r)} title="View" aria-label={`View leave of ${r.name}`}
             className={`${iconBtn} border-slate-200 text-slate-600 hover:text-primary hover:bg-slate-50`}><Eye className="w-3.5 h-3.5" /></button>
-          {r.joiningState === 'due' && onOpenJoining && (isAdmin || r.userId === String(currentUser.id)) && (
-            <button type="button" onClick={onOpenJoining} title="Joining form is due" aria-label={`Fill joining form of ${r.name}`}
-              className={`${iconBtn} border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100`}><ClipboardCheck className="w-3.5 h-3.5" /></button>
-          )}
+          {joining.actions(joining.byRequest.get(r.id))}
           {r.canEdit && (
             <button type="button" onClick={() => openEdit(r)} title="Edit" aria-label={`Edit ${r.name}`}
               className={`${iconBtn} border-slate-200 text-slate-600 hover:text-primary hover:bg-slate-50`}><Pencil className="w-3.5 h-3.5" /></button>
@@ -809,9 +809,11 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; onOpenJoining?: 
                 {viewing.comment && <div className="text-slate-600">“{viewing.comment}”</div>}
               </dd>
             </div>
+            {joining.byRequest.get(viewing.id) && <JoiningDetails item={joining.byRequest.get(viewing.id) as JoiningItem} />}
           </dl>
         )}
       </Modal>
+      {joining.modals}
 
       <ConfirmDialog
         open={Boolean(undoing)}
