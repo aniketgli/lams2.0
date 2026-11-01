@@ -268,7 +268,7 @@ export const ManualAttendanceView: React.FC = () => {
   };
 
   const iconBtn = 'w-8 h-8 rounded-lg border flex items-center justify-center cursor-pointer shrink-0';
-  const statusBy = (r: ManualRequest) => (r.status === 'pending' ? `by ${r.managerName ?? 'Administrator'}` : `by ${r.actionByName ?? '—'}`);
+  const statusBy = (r: ManualRequest) => (r.status === 'pending' ? `by ${r.managerName ?? 'Administrator'} (${r.managerName ? 'R.M.' : 'Admin'})` : `by ${r.actionByName ?? '—'}${r.actionByRole ? ` (${r.actionByRole})` : ''}`);
   // Who sees which columns: the employee column for everyone who sees other people's requests.
   const columns: ColumnDef<ManualRequest>[] = [
     ...(teamView ? [{

@@ -53,9 +53,9 @@ const StatusPill: React.FC<{ status: LeaveStatus }> = ({ status }) => (
 
 /** Who the status line names: the person it waits for, or who decided. */
 const statusBy = (r: LeaveRequest) =>
-  r.status === 'pending_l1' ? `with ${r.managerName ?? 'Administrator'}`
-    : r.status === 'pending_l2' ? `with ${r.reviewerName ?? 'HoD'}`
-    : `by ${r.actionByName ?? '—'}`;
+  r.status === 'pending_l1' ? `by ${r.managerName ?? 'Administrator'} (${r.managerName ? 'R.M.' : 'Admin'})`
+    : r.status === 'pending_l2' ? `by ${r.reviewerName ?? 'HoD'} (HoD)`
+    : `by ${r.actionByName ?? '—'}${r.actionByRole ? ` (${r.actionByRole})` : ''}`;
 
 const EMPTY_FORM: LeaveInput = { userId: '', leaveTypeId: '', startDate: '', endDate: '', startSession: 'full', endSession: 'full', reason: '', stationLeave: false,
   ltcType: 'none', encashLtc: false, encashDays: 10, contactAddress: '', availPrefix: false, prefixFrom: '', prefixTo: '', availSuffix: false, suffixFrom: '', suffixTo: '', certificateFile: null };
@@ -430,7 +430,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
   const exportRows = () => sorted.map((r) => [
     ...(teamView ? [r.biometricId, r.name, r.department] : []),
     `${r.leaveTypeName} (${r.leaveTypeCode})`, formatDate(r.startDate), formatDate(r.endDate), r.daysCount, r.reason, formatDate(r.appliedAt.slice(0, 10)),
-    STATUS_META[r.status].label, statusBy(r).replace(/^(by|with) /, ''), r.comment ?? '',
+    STATUS_META[r.status].label, statusBy(r).replace(/^by /, ''), r.comment ?? '',
   ]);
   const fileName = `WII_Leave_${from}_to_${to}`;
   const downloadCsv = () => downloadCsvText(toCsvText(exportHeaders, exportRows()), fileName);
@@ -657,9 +657,9 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
               </div>
             )}
 
-            {type && (
+            {type && (type.needsContact || type.offDaysOnly || form.availPrefix || form.availSuffix) && (
               <div>
-                <Textarea label={`Contact address during ${type.code} with mobile number`} required={Boolean(type.needsContact || type.offDaysOnly || form.availPrefix || form.availSuffix)} rows={2} maxLength={300} placeholder={`Enter contact address & mobile number during ${type.code}...`}
+                <Textarea label={`Contact address during ${type.code} with mobile number`} required rows={2} maxLength={300} placeholder={`Enter contact address & mobile number during ${type.code}...`}
                   value={form.contactAddress} error={formErrors.contactAddress} onChange={(e) => setField('contactAddress', e.target.value)} />
               </div>
             )}

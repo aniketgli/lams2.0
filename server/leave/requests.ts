@@ -92,6 +92,8 @@ export interface LeaveRequest {
   forwardedAt: string | null;
   forwardComment: string | null;
   actionByName: string | null;
+  /** What the person who decided was for this request: R.M., HoD or Admin. */
+  actionByRole: 'R.M.' | 'HoD' | 'Admin' | null;
   actionAt: string | null;
   comment: string | null;
   /** Who the request waits for while pending: 'Reporting Manager' / 'HoD'. */
@@ -253,6 +255,7 @@ function toRequest(viewer: Viewer, row: RowDataPacket): LeaveRequest {
     forwardedAt: isoTime(row.l1_at),
     forwardComment: row.l1_comment ? String(row.l1_comment) : null,
     actionByName: row.action_by_name ? String(row.action_by_name) : null,
+    actionByRole: !row.action_by ? null : Number(row.action_by) === Number(row.reviewer_id) && Number(row.decided_stage) === 2 ? 'HoD' : Number(row.action_by) === Number(row.manager_id) ? 'R.M.' : Number(row.action_by) === Number(row.reviewer_id) ? 'HoD' : 'Admin',
     actionAt: isoTime(row.action_at),
     comment: row.manager_comment ? String(row.manager_comment) : null,
     waitingFor: status === 'pending_l1' ? 'Reporting Manager' : status === 'pending_l2' ? 'HoD' : null,

@@ -25,6 +25,7 @@ export interface ManualRequest {
   managerId: string | null;
   managerName: string | null;
   actionByName: string | null;
+  actionByRole: 'R.M.' | 'Admin' | null;
   actionAt: string | null;
   comment: string | null;
   canDecide: boolean;
