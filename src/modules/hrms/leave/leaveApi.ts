@@ -243,7 +243,7 @@ export interface JoiningReport {
   id: string;
   status: JoiningStatus;
   punchIn: string | null;
-  punchOut: string | null;
+  session: 'AM' | 'PM' | null;
   submittedAt: string;
   submittedByName: string;
   managerName: string | null;
@@ -326,7 +326,7 @@ export const leaveApi = {
   setBalance: (input: { userId: string; leaveTypeId: string; year: number; total: number; carryForward: number; reason?: string }) =>
     api<{ balance: LeaveBalance; message: string }>(`${base}/balances`, { method: 'PUT', body: { ...input, reason: input.reason || undefined } }),
   joining: () => api<{ today: string; items: JoiningItem[] }>(`${base}/joining`),
-  joiningPrepare: (requestId: string) => api<{ item: JoiningItem; punch: { in: string | null; out: string | null } }>(`${base}/joining/prepare?requestId=${encodeURIComponent(requestId)}`),
+  joiningPrepare: (requestId: string) => api<{ item: JoiningItem; punch: { in: string | null; session: 'AM' | 'PM' | null } }>(`${base}/joining/prepare?requestId=${encodeURIComponent(requestId)}`),
   joiningSubmit: (requestId: string, certificate: JoiningFile | null) =>
     api<{ item: JoiningItem; message: string }>(`${base}/joining`, { method: 'POST', body: { requestId, certificate: certificate || undefined } }),
   joiningCorrect: (requestId: string, certificate: JoiningFile | null, removeCertificate = false) =>

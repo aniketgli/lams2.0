@@ -34,7 +34,8 @@ export interface JoiningReport {
   id: string;
   status: JoiningStatus;
   punchIn: string | null;
-  punchOut: string | null;
+  /** AM when the joining punch is before noon, else PM; worked out from the punch, never typed. */
+  session: 'AM' | 'PM' | null;
   submittedAt: string;
   submittedByName: string;
   managerName: string | null;
@@ -85,7 +86,9 @@ export interface JoiningItem {
 }
 
 export interface JoiningList { today: string; items: JoiningItem[] }
-export interface JoiningPrepared { item: JoiningItem; punch: { in: string | null; out: string | null } }
+export interface JoiningPrepared { item: JoiningItem; punch: { in: string | null; session: 'AM' | 'PM' | null } }
+
+export const sessionOf = (time: string | null): 'AM' | 'PM' | null => (time ? (Number(time.slice(0, 2)) < 12 ? 'AM' : 'PM') : null);
 
 const isAdmin = (viewer: Viewer) => viewer.role === 'administrator';
 
@@ -103,7 +106,7 @@ const FROM = `
 const SELECT = `
   SELECT m.id AS request_id, m.user_id, m.leave_type_id, m.start_date, m.end_date, m.start_session, m.end_session, m.days_count, m.reason, m.contact_address, m.station_leave,
          m.ltc_type, m.status AS leave_status, m.prefix_from, m.prefix_to, m.suffix_from, m.suffix_to, m.manager_id AS leave_manager_id, m.reviewer_id AS leave_reviewer_id,
-         t.name AS type_name, t.code AS type_code, t.fitness_certificate, t.approval_stages,
+         t.name AS type_name, t.code AS type_code, (t.fitness_certificate = 1 OR t.debit_from_type_id IS NOT NULL) AS fitness_certificate, t.approval_stages,
          u.biometric_id, u.name AS user_name, p.designation, p.department, p.profile_data,
          j.id AS report_id, j.joining_date, j.punch_in, j.punch_out, j.status AS report_status, j.manager_id AS j_manager_id, j.reviewer_id AS j_reviewer_id,
          j.submitted_at, j.l1_by, j.l1_at, j.l1_comment, j.decided_stage, j.action_by, j.action_at, j.manager_comment,
@@ -167,7 +170,7 @@ function toItem(viewer: Viewer, row: RowDataPacket, joiningDate: string, today: 
     id: String(row.report_id),
     status,
     punchIn: timeOf(row.punch_in),
-    punchOut: timeOf(row.punch_out),
+    session: sessionOf(timeOf(row.punch_in)),
     submittedAt: isoTime(row.submitted_at) ?? '',
     submittedByName: String(row.submitted_by_name ?? ''),
     managerName: row.manager_name ? String(row.manager_name) : null,
@@ -240,7 +243,7 @@ export async function prepareJoining(viewer: Viewer, requestIdRaw: unknown): Pro
     const joiningDate = row.joining_date ? isoDate(row.joining_date) : await joiningDateOf(pool, row);
     const emp = await loadEmployee(pool, Number(row.user_id));
     const day = await biometricDay(emp.biometricId, emp.shiftId, joiningDate <= today ? joiningDate : today);
-    return { item: toItem(viewer, row, joiningDate, today), punch: joiningDate <= today ? { in: day.in, out: day.out } : { in: null, out: null } };
+    return { item: toItem(viewer, row, joiningDate, today), punch: joiningDate <= today ? { in: day.in, session: sessionOf(day.in) } : { in: null, session: null } };
   } catch (error) {
     missingTable(error);
     throw error;
@@ -255,7 +258,7 @@ function auditView(item: JoiningItem): Record<string, unknown> {
   const r = item.report;
   return {
     employee: `${item.name} (${item.biometricId})`, leave: `${item.leaveTypeCode} ${item.startDate} to ${item.endDate}`, joiningDate: item.joiningDate,
-    punchIn: r?.punchIn ?? null, punchOut: r?.punchOut ?? null, fitnessCertificate: r?.fitnessName ?? null, status: r?.status ?? null,
+    punchIn: r?.punchIn ?? null, joiningSession: r?.session ?? null, fitnessCertificate: r?.fitnessName ?? null, status: r?.status ?? null,
   };
 }
 const label = (item: JoiningItem) => `${item.name} (${item.biometricId}) · joining after ${item.leaveTypeCode} ${item.startDate}${item.endDate !== item.startDate ? ` to ${item.endDate}` : ''}`;
@@ -282,9 +285,9 @@ async function saveFitness(conn: { query: typeof pool.query }, reportId: number,
 async function joiningPunch(q: { query: typeof pool.query }, row: RowDataPacket, joiningDate: string) {
   const emp = await loadEmployee(q, Number(row.user_id));
   const day = await biometricDay(emp.biometricId, emp.shiftId, joiningDate);
-  if (!day.in && !day.out) {
+  if (!day.in) {
     throw badRequest('Please correct the highlighted fields.', {
-      requestId: `No biometric punch is recorded for ${joiningDate}. Joining needs a punch on the joining day. If the machine missed it, apply for manual attendance first.`,
+      requestId: `No biometric In punch is recorded for ${joiningDate}. Joining needs the In punch of the joining day. If the machine missed it, apply for manual attendance first.`,
     });
   }
   return { emp, day };
@@ -310,7 +313,7 @@ export async function submitJoining(req: Request, viewer: Viewer, body: unknown)
       const [result] = await conn.query(
         `INSERT INTO leave_joining_reports (request_id, user_id, joining_date, punch_in, punch_out, status, manager_id, reviewer_id, submitted_by)
          VALUES (?, ?, ?, ?, ?, 'pending_l1', ?, ?, ?)`,
-        [row.request_id, row.user_id, joiningDate, day.in, day.out, emp.reportingManagerId, emp.reviewingManagerId, viewer.id],
+        [row.request_id, row.user_id, joiningDate, day.in, null, emp.reportingManagerId, emp.reviewingManagerId, viewer.id],
       );
       const reportId = Number((result as { insertId: number }).insertId);
       if (file) await saveFitness(conn, reportId, file, viewer.id);
@@ -344,7 +347,7 @@ export async function correctJoining(req: Request, viewer: Viewer, requestIdRaw:
       await conn.query(
         `UPDATE leave_joining_reports SET punch_in = ?, punch_out = ?, status = 'pending_l1', manager_id = ?, reviewer_id = ?, submitted_by = ?, submitted_at = NOW(3),
            l1_by = NULL, l1_at = NULL, l1_comment = NULL, decided_stage = NULL, action_by = NULL, action_at = NULL, manager_comment = NULL WHERE id = ?`,
-        [day.in, day.out, emp.reportingManagerId, emp.reviewingManagerId, viewer.id, row.report_id],
+        [day.in, null, emp.reportingManagerId, emp.reviewingManagerId, viewer.id, row.report_id],
       );
       if (file) await saveFitness(conn, Number(row.report_id), file, viewer.id);
       else if (raw.removeCertificate === true) await conn.query('DELETE FROM leave_joining_certificates WHERE report_id = ?', [row.report_id]);

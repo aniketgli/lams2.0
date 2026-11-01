@@ -16,11 +16,11 @@ import { actionBtn } from '../../../../shared/components/actionStyles';
 
 type Shown = 'due' | 'pending_l1' | 'pending_l2' | 'approved' | 'rejected';
 const META: Record<Shown, { label: string; text: string }> = {
-  due: { label: 'Joining form due', text: 'text-violet-700' },
-  pending_l1: { label: 'Joining pending', text: 'text-amber-700' },
+  due: { label: 'Joining form due', text: 'text-primary' },
+  pending_l1: { label: 'Joining pending', text: 'text-warning' },
   pending_l2: { label: 'Joining with HoD', text: 'text-sky-700' },
-  approved: { label: 'Joining approved', text: 'text-emerald-700' },
-  rejected: { label: 'Joining rejected', text: 'text-rose-700' },
+  approved: { label: 'Joining approved', text: 'text-success' },
+  rejected: { label: 'Joining rejected', text: 'text-error' },
 };
 const shown = (i: JoiningItem): Shown => i.report?.status ?? 'due';
 
@@ -31,7 +31,7 @@ function formatDate(date: string): string {
 const formatStamp = (iso: string | null) => (iso ? new Date(iso).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '');
 const duration = (i: JoiningItem) => (i.startDate === i.endDate ? formatDate(i.startDate) : `${formatDate(i.startDate)} – ${formatDate(i.endDate)}`);
 const daysText = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`;
-const punchText = (inn: string | null, out: string | null) => (inn || out ? `In ${inn ?? '—'} · Out ${out ?? '—'}` : 'No punch');
+const punchText = (inn: string | null, session: string | null) => (inn ? `In ${inn} · Joining at ${session ?? '—'}` : 'No punch');
 
 /** Who the joining status line names: the person it waits for, or who decided. */
 const statusBy = (i: JoiningItem) => {
@@ -62,10 +62,10 @@ export const JoiningDetails: React.FC<{ item: JoiningItem }> = ({ item }) => {
   const [fileError, setFileError] = useState<string | null>(null);
   const r = item.report;
   return (
-    <div className="sm:col-span-2 rounded-xl border border-violet-100 bg-violet-50/40 p-3 space-y-1.5">
-      <dt className="font-semibold text-violet-800">Joining report</dt>
+    <div className="sm:col-span-2 rounded-xl border border-primary-border bg-primary-subtle/50 p-3 space-y-1.5">
+      <dt className="font-semibold text-primary">Joining report</dt>
       <dd className="space-y-1 text-slate-700">
-        <div>Joining date: <strong className="text-slate-900">{formatDate(item.joiningDate)}</strong>{r ? ` · ${punchText(r.punchIn, r.punchOut)}` : ''}</div>
+        <div>Joining date: <strong className="text-slate-900">{formatDate(item.joiningDate)}</strong>{r ? ` · ${punchText(r.punchIn, r.session)}` : ''}</div>
         <div className={`font-semibold ${META[shown(item)].text}`}>{META[shown(item)].label} <span className="font-normal text-slate-500">{statusBy(item)}</span></div>
         {r?.submittedAt && <div>Submitted by {r.submittedByName} · {formatStamp(r.submittedAt)}</div>}
         {r?.forwardedByName && <div>Forwarded by {r.forwardedByName} · {formatStamp(r.forwardedAt)}{r.forwardComment ? ` · “${r.forwardComment}”` : ''}</div>}
@@ -102,7 +102,7 @@ export function useJoining(onDone: (message: string) => void) {
 
   // ---- The form: details from the application, the punch from the biometric log -----------------
   const [filling, setFilling] = useState<JoiningItem | null>(null);
-  const [punch, setPunch] = useState<{ in: string | null; out: string | null } | null>(null);
+  const [punch, setPunch] = useState<{ in: string | null; session: 'AM' | 'PM' | null } | null>(null);
   const [fitness, setFitness] = useState<JoiningFile | null>(null);
   const [removeFitness, setRemoveFitness] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -202,7 +202,7 @@ export function useJoining(onDone: (message: string) => void) {
         footer={(
           <div className="flex justify-end gap-2">
             <button type="button" onClick={() => setFilling(null)} className={cancelBtn}>Cancel</button>
-            <button type="button" onClick={() => void submit()} disabled={saving || !filling || !punch}
+            <button type="button" onClick={() => void submit()} disabled={saving || !filling || !punch?.in}
               className="h-9 px-4 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary/90 cursor-pointer disabled:opacity-60">
               {saving ? 'Saving…' : <span className="inline-flex items-center gap-1.5"><Send className="w-3.5 h-3.5" />{filling?.report ? 'Submit again' : 'Submit'}</span>}
             </button>
@@ -228,14 +228,14 @@ export function useJoining(onDone: (message: string) => void) {
             </dl>
 
             <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 mb-2"><Fingerprint className="w-4 h-4 text-slate-500" />Joining on {formatDate(filling.joiningDate)} · biometric punch</div>
+              <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 mb-2"><Fingerprint className="w-4 h-4 text-slate-500" />Joining on {formatDate(filling.joiningDate)} · biometric In punch</div>
               {punch === null && !formError ? <p className="text-xs text-slate-500">Checking the biometric log…</p> : punch && (
                 <div className="grid grid-cols-2 gap-3 text-xs">
                   <div className="rounded-lg bg-slate-50 border border-slate-100 px-3 py-2"><p className="text-[11px] font-semibold text-slate-500">In</p><p className="font-extrabold text-slate-900">{punch.in ?? '—'}</p></div>
-                  <div className="rounded-lg bg-slate-50 border border-slate-100 px-3 py-2"><p className="text-[11px] font-semibold text-slate-500">Out</p><p className="font-extrabold text-slate-900">{punch.out ?? '—'}</p></div>
+                  <div className="rounded-lg bg-slate-50 border border-slate-100 px-3 py-2"><p className="text-[11px] font-semibold text-slate-500">Joining at</p><p className="font-extrabold text-slate-900">{punch.session ?? '—'}</p></div>
                 </div>
               )}
-              {punch && !punch.in && !punch.out && <p className="text-xs font-semibold text-rose-600 mt-2">No punch is recorded for the joining day. Apply for manual attendance first.</p>}
+              {punch && !punch.in && <p className="text-xs font-semibold text-rose-600 mt-2">No In punch is recorded for the joining day. Apply for manual attendance first.</p>}
             </div>
 
             {filling.fitnessAllowed && (
