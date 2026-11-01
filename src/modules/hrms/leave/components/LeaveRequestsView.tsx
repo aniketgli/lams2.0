@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarDays, Send, Check, Paperclip, CheckCircle2, ChevronsRight, Clock, Eye, FileText, Pencil, RotateCcw, Trash2, X, XCircle } from 'lucide-react';
+import { Building2, CalendarDays, MapPin, Send, Check, Paperclip, CheckCircle2, ChevronsRight, Clock, Eye, FileText, Pencil, RotateCcw, Trash2, X, XCircle } from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
 import { DataTable, Modal, Select } from '../../../../shared/components';
 import type { ColumnDef } from '../../../../shared/components';
@@ -216,6 +216,18 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
     return () => { cancelled = true; clearTimeout(timer); };
   }, [formOpen, isAdmin, form.userId, form.leaveTypeId, form.startDate, form.endDate, form.startSession, form.endSession]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The server moves the dates off weekly offs / holidays at the start or end of the leave; those days become the prefix / suffix.
+  useEffect(() => {
+    if (!preview || preview.requestedStart !== form.startDate || preview.requestedEnd !== form.endDate) return;
+    if (preview.startDate === form.startDate && preview.endDate === form.endDate) return;
+    setForm((f) => ({
+      ...f, startDate: preview.startDate, endDate: preview.endDate,
+      startSession: preview.startDate !== f.startDate ? 'full' : f.startSession, endSession: preview.endDate !== f.endDate ? 'full' : f.endSession,
+      ...(preview.startDate !== f.startDate ? { availPrefix: true, prefixFrom: f.startDate, prefixTo: shiftDate(preview.startDate, -1), stationLeave: true } : {}),
+      ...(preview.endDate !== f.endDate ? { availSuffix: true, suffixFrom: shiftDate(preview.endDate, 1), suffixTo: f.endDate, stationLeave: true } : {}),
+    }));
+  }, [preview]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // A prefix / suffix that no longer exists for the chosen dates is dropped.
   useEffect(() => {
     if (!preview) return;
@@ -225,6 +237,11 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
       if (!dropPrefix && !dropSuffix) return f;
       return { ...f, ...(dropPrefix ? { availPrefix: false, prefixFrom: '', prefixTo: '' } : {}), ...(dropSuffix ? { availSuffix: false, suffixFrom: '', suffixTo: '' } : {}) };
     });
+  }, [preview]);
+
+  // Station permission is only for a leave that is continuous with a weekend or holiday.
+  useEffect(() => {
+    if (preview && !preview.stationOk) setForm((f) => (f.stationLeave ? { ...f, stationLeave: false } : f));
   }, [preview]);
 
   const encashing = form.ltcType === 'ltc' && form.encashLtc && Number.isInteger(form.encashDays) && form.encashDays > 0 ? form.encashDays : 0;
@@ -543,7 +560,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
               <div className="sm:col-span-2 relative">
                 <Select label="Leave type" required value={baseType?.id ?? ''} searchable placeholder="Select leave type" error={formErrors.leaveTypeId}
                   onChange={(v: string) => {
-                    setForm((f) => ({ ...f, leaveTypeId: v, ltcType: 'none', encashLtc: false, availPrefix: false, availSuffix: false }));
+                    setForm((f) => ({ ...f, leaveTypeId: v, ltcType: 'none', encashLtc: false, availPrefix: false, availSuffix: false, stationLeave: false }));
                     setFormErrors({});
                     setFormMessage(null);
                   }}
@@ -597,7 +614,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
                           onChange={(e) => {
                             if (!block) return;
                             const on = e.target.checked;
-                            setForm((f) => ({ ...f, [flag]: on, [fromKey]: on ? block.from : '', [toKey]: on ? block.to : '' }));
+                            setForm((f) => ({ ...f, [flag]: on, [fromKey]: on ? block.from : '', [toKey]: on ? block.to : '', ...(on ? { stationLeave: true } : {}) }));
                           }} />
                         <span className="text-[11px] font-semibold text-slate-500">{block ? `${block.days} ${block.days === 1 ? 'Day' : 'Days'}` : 'Not eligible'}</span>
                       </div>
@@ -614,6 +631,23 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {type && !type.offDaysOnly && (
+              <div>
+                <div className="text-xs font-semibold text-slate-700 select-none mb-1.5">Headquarter (HQ) / Station permission<span className="text-rose-500 ml-0.5">*</span></div>
+                <div className="grid grid-cols-2 gap-3" role="radiogroup" aria-label="Headquarter / Station permission">
+                  {([[false, 'Not required (HQ)', Building2], [true, 'Station leave', MapPin]] as const).map(([value, label, Icon]) => (
+                    <button key={label} type="button" role="radio" aria-checked={form.stationLeave === value} disabled={value ? Boolean(preview) && !preview?.stationOk : form.availPrefix || form.availSuffix} onClick={() => setField('stationLeave', value)}
+                      className={`h-9 rounded-xl border text-xs font-semibold inline-flex items-center justify-center gap-2 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                        form.stationLeave === value ? 'bg-primary text-white border-primary' : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
+                      }`}>
+                      <Icon className="w-4 h-4" />{label}
+                    </button>
+                  ))}
+                </div>
+                {formErrors.stationLeave && <p className="text-[11px] font-semibold text-rose-600 leading-tight mt-1.5">{formErrors.stationLeave}</p>}
               </div>
             )}
 
@@ -657,7 +691,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
               </div>
             )}
 
-            {type && (type.needsContact || type.offDaysOnly || form.availPrefix || form.availSuffix) && (
+            {type && (type.needsContact || type.offDaysOnly || form.stationLeave) && (
               <div>
                 <Textarea label={`Contact address during ${type.code} with mobile number`} required rows={2} maxLength={300} placeholder={`Enter contact address & mobile number during ${type.code}...`}
                   value={form.contactAddress} error={formErrors.contactAddress} onChange={(e) => setField('contactAddress', e.target.value)} />

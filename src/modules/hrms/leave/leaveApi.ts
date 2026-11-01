@@ -194,6 +194,11 @@ export interface LeavePreview {
   suffix: HolidayBlock | null;
   /** Station permission can be asked for only when the leave is continuous with a weekend or holiday. */
   stationOk: boolean;
+  /** The dates after the server moved them off leading / trailing weekly offs and holidays, and the dates that were asked for. */
+  startDate: string;
+  endDate: string;
+  requestedStart: string;
+  requestedEnd: string;
 }
 
 export interface HolidayBlock { from: string; to: string; days: number }
