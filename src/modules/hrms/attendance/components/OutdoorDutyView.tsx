@@ -251,7 +251,7 @@ export const OutdoorDutyView: React.FC = () => {
 
   // ---- Table ---------------------------------------------------------------------------------
   const iconBtn = 'w-8 h-8 rounded-lg border flex items-center justify-center cursor-pointer shrink-0';
-  const statusBy = (r: OdRequest) => (r.status === 'pending' ? `by ${r.managerName ?? 'Administrator'}` : `by ${r.actionByName ?? '—'}`);
+  const statusBy = (r: OdRequest) => (r.status === 'pending' ? `by ${r.managerName ?? 'Administrator'} (${r.managerName ? 'R.M.' : 'Admin'})` : `by ${r.actionByName ?? '—'}${r.actionByRole ? ` (${r.actionByRole})` : ''}`);
   const columns: ColumnDef<OdRequest>[] = [
     ...(teamView ? [{
       key: 'employee', header: 'Employee', width: '15%', sortValue: (r: OdRequest) => r.name,

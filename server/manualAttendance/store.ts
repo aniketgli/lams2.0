@@ -63,6 +63,8 @@ export interface ManualRequest {
   managerId: string | null;
   managerName: string | null;
   actionByName: string | null;
+  /** What the person who decided was for this request: R.M. or Admin. */
+  actionByRole: 'R.M.' | 'Admin' | null;
   actionAt: string | null;
   comment: string | null;
   /** What this viewer may do with the request right now. */
@@ -174,6 +176,7 @@ function toRequest(viewer: Viewer, row: RowDataPacket): ManualRequest {
     managerId: row.manager_id ? String(row.manager_id) : null,
     managerName: row.manager_name ? String(row.manager_name) : null,
     actionByName: row.action_by_name ? String(row.action_by_name) : null,
+    actionByRole: !row.action_by ? null : Number(row.action_by) === Number(row.manager_id) ? 'R.M.' : 'Admin',
     actionAt: isoTime(row.action_at),
     comment: row.manager_comment ? String(row.manager_comment) : null,
     canDecide: canDecide(viewer, row),

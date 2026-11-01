@@ -137,6 +137,7 @@ export interface LeaveRequest {
   forwardedAt: string | null;
   forwardComment: string | null;
   actionByName: string | null;
+  actionByRole: 'R.M.' | 'HoD' | 'Admin' | null;
   actionAt: string | null;
   comment: string | null;
   waitingFor: string | null;
