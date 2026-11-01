@@ -140,25 +140,27 @@ function canSee(viewer: Viewer, row: RowDataPacket): boolean {
   return m.reporting === String(viewer.id) || m.reviewing === String(viewer.id);
 }
 
-/** Managers and employees act up to the start date (inclusive); an administrator any time. */
+/** Edit / delete are open up to the start date (inclusive); after it the request is locked for everyone. */
 const notStarted = (row: RowDataPacket, today: string) => today <= isoDate(row.start_date);
 
-function canDecide(viewer: Viewer, row: RowDataPacket, today = todayInIndia()): boolean {
+/** Only the reporting manager decides; an administrator does only when the employee has no reporting manager. */
+const noManager = (row: RowDataPacket) => !row.manager_id;
+
+function canDecide(viewer: Viewer, row: RowDataPacket): boolean {
   if (String(row.status) !== 'pending') return false;
-  if (viewer.role === 'administrator') return true;
+  if (viewer.role === 'administrator') return noManager(row);
   if (Number(row.user_id) === viewer.id) return false;
-  return viewer.role === 'reporting_manager' && managersOf(row).reporting === String(viewer.id) && notStarted(row, today);
+  return viewer.role === 'reporting_manager' && managersOf(row).reporting === String(viewer.id);
 }
 
 function canModify(viewer: Viewer, row: RowDataPacket, today = todayInIndia()): boolean {
-  if (String(row.status) !== 'pending') return false;
-  if (viewer.role === 'administrator') return true;
-  return viewer.role === 'general_staff' && Number(row.user_id) === viewer.id && notStarted(row, today);
+  if (String(row.status) !== 'pending' || !notStarted(row, today)) return false;
+  return viewer.role === 'administrator' || (viewer.role === 'general_staff' && Number(row.user_id) === viewer.id);
 }
 
 function canUndo(viewer: Viewer, row: RowDataPacket): boolean {
   if (String(row.status) === 'pending') return false;
-  if (viewer.role === 'administrator') return true;
+  if (viewer.role === 'administrator') return noManager(row);
   return viewer.role === 'reporting_manager' && managersOf(row).reporting === String(viewer.id)
     && Number(row.action_by) === viewer.id && Number(row.undo_count ?? 0) < 1;
 }
@@ -388,9 +390,8 @@ export async function decideRequest(req: Request, viewer: Viewer, id: number, bo
       const before = toRequest(viewer, row);
       if (before.status !== 'pending') throw new HttpError(409, `This request is already ${before.status}.`, 'NOT_PENDING');
       if (!canDecide(viewer, row)) {
-        throw forbidden(Number(row.user_id) === viewer.id ? 'You cannot approve or reject your own request. Ask your reporting manager or an administrator.'
-          : viewer.role === 'reporting_manager' && managersOf(row).reporting === String(viewer.id) ? 'The start date has passed. Ask an administrator to decide this request.'
-          : 'Only the reporting manager or an administrator can approve or reject this request.');
+        throw forbidden(Number(row.user_id) === viewer.id ? 'You cannot approve or reject your own request. Ask your reporting manager.'
+          : 'Only the reporting manager can approve or reject this request.');
       }
       const status: OdStatus = action === 'approve' ? 'approved' : 'rejected';
       await conn.query('UPDATE outdoor_duty_requests SET status = ?, action_by = ?, action_at = NOW(3), manager_comment = ? WHERE id = ?', [status, viewer.id, comment, id]);

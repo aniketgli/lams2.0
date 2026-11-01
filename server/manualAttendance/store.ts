@@ -134,22 +134,28 @@ function canSee(viewer: Viewer, row: RowDataPacket): boolean {
   return m.reporting === String(viewer.id) || m.reviewing === String(viewer.id);
 }
 
+/** Only the reporting manager decides; an administrator does only when the employee has no reporting manager. */
+const noManager = (row: RowDataPacket) => !row.manager_id;
+
 function canDecide(viewer: Viewer, row: RowDataPacket): boolean {
   if (String(row.status) !== 'pending') return false;
-  if (viewer.role === 'administrator') return true; // the audit log records who decided what
+  if (viewer.role === 'administrator') return noManager(row); // the audit log records who decided what
   if (Number(row.user_id) === viewer.id) return false; // a manager never approves their own request
   return viewer.role === 'reporting_manager' && managersOf(row).reporting === String(viewer.id);
 }
 
-/** Edit / delete: only before a decision, by the employee (own request) or an administrator. */
-function canModify(viewer: Viewer, row: RowDataPacket): boolean {
-  if (String(row.status) !== 'pending') return false;
+/**
+ * Edit / delete: only before a decision, up to the date of the request, by the employee (own request) or an administrator.
+ * Once that date has passed (always so for a request made after the date), it is locked for everyone.
+ */
+function canModify(viewer: Viewer, row: RowDataPacket, today = todayInIndia()): boolean {
+  if (String(row.status) !== 'pending' || isoDate(row.att_date) < today) return false;
   return viewer.role === 'administrator' || (viewer.role === 'general_staff' && Number(row.user_id) === viewer.id);
 }
 
 function canUndo(viewer: Viewer, row: RowDataPacket): boolean {
   if (String(row.status) === 'pending') return false;
-  if (viewer.role === 'administrator') return true;
+  if (viewer.role === 'administrator') return noManager(row);
   return viewer.role === 'reporting_manager' && managersOf(row).reporting === String(viewer.id)
     && Number(row.action_by) === viewer.id && Number(row.undo_count ?? 0) < 1;
 }
@@ -342,6 +348,7 @@ export async function updateRequest(req: Request, viewer: Viewer, id: number, bo
       if (viewer.role !== 'administrator' && Number(row.user_id) !== viewer.id) throw notFound('Request not found.');
       const before = toRequest(viewer, row);
       if (before.status !== 'pending') throw new HttpError(409, 'Only a request that is not yet approved or rejected can be edited.', 'NOT_PENDING');
+      if (!canModify(viewer, row)) throw new HttpError(409, 'The date of this request has passed, so it can no longer be edited.', 'DATE_PASSED');
       if (input.userId && viewer.role !== 'administrator' && Number(input.userId) !== viewer.id) throw forbidden('You can only edit your own request.');
       if (input.userId && viewer.role === 'administrator' && input.userId !== String(row.user_id)) throw badRequest('Please correct the highlighted fields.', { userId: 'The employee of a request cannot be changed.' });
       const target = await loadTarget(conn, Number(row.user_id));
@@ -381,7 +388,7 @@ export async function decideRequest(req: Request, viewer: Viewer, id: number, bo
       const before = toRequest(viewer, row);
       if (before.status !== 'pending') throw new HttpError(409, `This request is already ${before.status}.`, 'NOT_PENDING');
       if (!canDecide(viewer, row)) {
-        throw forbidden(Number(row.user_id) === viewer.id ? 'You cannot approve or reject your own request. Ask your reporting manager or an administrator.' : 'Only the reporting manager or an administrator can approve or reject this request.');
+        throw forbidden(Number(row.user_id) === viewer.id ? 'You cannot approve or reject your own request. Ask your reporting manager.' : 'Only the reporting manager can approve or reject this request.');
       }
       const status: RequestStatus = action === 'approve' ? 'approved' : 'rejected';
       await conn.query(
@@ -439,6 +446,7 @@ export async function deleteRequest(req: Request, viewer: Viewer, id: number, re
       if (viewer.role !== 'administrator' && Number(row.user_id) !== viewer.id) throw notFound('Request not found.');
       const target = toRequest(viewer, row);
       if (target.status !== 'pending') throw new HttpError(409, `This request is already ${target.status}. Undo the decision first.`, 'NOT_PENDING');
+      if (!canModify(viewer, row)) throw new HttpError(409, 'The date of this request has passed, so it can no longer be deleted.', 'DATE_PASSED');
       await writeMasterAuditSql(conn, req, { masterKey: AUDIT_KEY, recordId: id, recordLabel: label(target), action: 'DELETE', before: auditView(target), reason });
       await conn.query('DELETE FROM manual_attendance_requests WHERE id = ?', [id]);
       return target;
