@@ -197,6 +197,11 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
   }, [preview]);
 
   const encashing = form.ltcType === 'ltc' && form.encashLtc && Number.isInteger(form.encashDays) && form.encashDays > 0 ? form.encashDays : 0;
+  // Station permission is only for a leave that is continuous with a weekend or holiday.
+  useEffect(() => {
+    if (preview && !preview.stationOk) setForm((f) => (f.stationLeave ? { ...f, stationLeave: false } : f));
+  }, [preview]);
+
   const needsCertificate = Boolean(type && type.medicalCertDays > 0 && preview && preview.days > type.medicalCertDays);
   const certInput = React.useRef<HTMLInputElement>(null);
   const pickCertificate = (file: File | undefined) => {
@@ -590,8 +595,8 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
               <div className="text-xs font-semibold text-slate-700 select-none mb-1.5">Headquarter (HQ) / Station permission<span className="text-rose-500 ml-0.5">*</span></div>
               <div className="grid grid-cols-2 gap-3" role="radiogroup" aria-label="Headquarter / Station permission">
                 {([[false, 'Not required (HQ)', Building2], [true, 'Station leave', MapPin]] as const).map(([value, label, Icon]) => (
-                  <button key={label} type="button" role="radio" aria-checked={form.stationLeave === value} onClick={() => setField('stationLeave', value)}
-                    className={`h-9 rounded-xl border text-xs font-semibold inline-flex items-center justify-center gap-2 cursor-pointer transition-colors ${
+                  <button key={label} type="button" role="radio" aria-checked={form.stationLeave === value} disabled={value && Boolean(preview) && !preview?.stationOk} onClick={() => setField('stationLeave', value)}
+                    className={`h-9 rounded-xl border text-xs font-semibold inline-flex items-center justify-center gap-2 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                       form.stationLeave === value ? 'bg-primary text-white border-primary' : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
                     }`}>
                     <Icon className="w-4 h-4" />{label}

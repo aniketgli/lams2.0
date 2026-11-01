@@ -352,7 +352,7 @@ function toPolicy(r: RowDataPacket): Policy {
   return {
     id: Number(r.id), code: String(r.code), name: String(r.name), quota: Number(r.default_quota), pwdQuota: r.pwd_quota === null || r.pwd_quota === undefined ? null : Number(r.pwd_quota), pwdOnly: Boolean(r.pwd_only), stages: Number(r.approval_stages) === 2 ? 2 : 1,
     minNotice: Number(r.min_notice_days), halfDay: Boolean(r.half_day_allowed), certDays: Number(r.medical_cert_days),
-    sandwich: String(r.sandwich_rule) === 'included' ? 'included' : 'excluded',
+    sandwich: Number(r.approval_stages) === 2 ? 'included' : 'excluded',
     employeeTypes: String(r.employee_types || '').split(',').map((s) => s.trim()).filter(Boolean), gender: String(r.gender),
     minServiceMonths: Number(r.min_service_months), maxConsecutive: Number(r.max_consecutive_days), debited: Boolean(r.is_debited),
     status: String(r.status), combineWith: toCombine(r.combine_with), maxAccumulation: Number(r.max_accumulation), afterExhaustedId: Number(r.after_exhausted_type_id ?? 0), accrual: String(r.accrual ?? 'yearly'),
@@ -520,7 +520,7 @@ async function joinProblem(q: { query: typeof pool.query }, emp: Employee, polic
 }
 
 export interface HolidayBlock { from: string; to: string; days: number }
-export interface Checked { days: number; cycleYear: number; policy: Policy; emp: Employee; balance: Balance; stages: 1 | 2; prefix: HolidayBlock | null; suffix: HolidayBlock | null }
+export interface Checked { days: number; cycleYear: number; policy: Policy; emp: Employee; balance: Balance; stages: 1 | 2; prefix: HolidayBlock | null; suffix: HolidayBlock | null; stationOk: boolean }
 
 /** Every rule of a leave application. Throws a field-level 400 / 409 when one fails. */
 async function checkLeave(
@@ -595,6 +595,9 @@ async function checkLeave(
   let sf = addDays(input.endDate, 1);
   while (sf <= addDays(input.endDate, 31) && off(sf)) sf = addDays(sf, 1);
   const suffix = block(addDays(input.endDate, 1), addDays(sf, -1));
+  // Station permission goes only with a leave that is continuous with weekly offs / gazetted holidays.
+  const stationOk = Boolean(prefix) || Boolean(suffix) || datesBetween(input.startDate, input.endDate).some(off);
+  if (input.stationLeave && !stationOk) errors.stationLeave = 'Station leave can be taken only in one continuous stretch with a weekend or holiday.';
   {
     if (input.prefix) {
       const { from, to } = input.prefix;
@@ -637,7 +640,7 @@ async function checkLeave(
       if (need > left.available && !soft) {
         throw new HttpError(409, 'Not enough leave balance.', 'NO_BALANCE', { endDate: `${policy.name} uses ${policy.debitFactor} day(s) of ${base.name} for each day: ${need} needed, ${Math.max(0, left.available)} available for ${cycleLabel(cycleYear, emp.basis)}.` });
       }
-      return { days, cycleYear, policy, emp, balance: left, stages, prefix, suffix };
+      return { days, cycleYear, policy, emp, balance: left, stages, prefix, suffix, stationOk };
     }
   }
   if (policy.debited && days + extra > balance.available && !soft) {
@@ -645,13 +648,13 @@ async function checkLeave(
     const hint = next ? ` After it is used up, ${next.name} can be applied for.` : '';
     throw new HttpError(409, 'Not enough leave balance.', 'NO_BALANCE', { endDate: `${policy.name}: ${days} days asked${extra ? ` + ${extra} days encashment` : ''}, ${Math.max(0, balance.available)} available for ${cycleLabel(cycleYear, emp.basis)}.${hint}` });
   }
-  return { days, cycleYear, policy, emp, balance, stages, prefix, suffix };
+  return { days, cycleYear, policy, emp, balance, stages, prefix, suffix, stationOk };
 }
 
 export const cycleLabel = (year: number, basis: 'CY' | 'FY') => (basis === 'FY' ? `FY ${year}-${String(year + 1).slice(2)}` : `${year}`);
 
 /** What the apply form shows while it is filled: the days and balance the server will use. Never writes. */
-export async function previewLeave(viewer: Viewer, query: Record<string, unknown>): Promise<{ days: number; cycleYear: number; cycle: string; balance: Balance | null; error: string | null; prefix: HolidayBlock | null; suffix: HolidayBlock | null }> {
+export async function previewLeave(viewer: Viewer, query: Record<string, unknown>): Promise<{ days: number; cycleYear: number; cycle: string; balance: Balance | null; error: string | null; prefix: HolidayBlock | null; suffix: HolidayBlock | null; stationOk: boolean }> {
   const input = (() => {
     try {
       const encash = Number(query.encashDays);
@@ -662,12 +665,12 @@ export async function previewLeave(viewer: Viewer, query: Record<string, unknown
     }
   })();
   const target = viewer.role === 'administrator' ? Number(input?.userId ?? 0) : viewer.id;
-  if (!input || !target) return { days: 0, cycleYear: 0, cycle: '', balance: null, error: null, prefix: null, suffix: null };
+  if (!input || !target) return { days: 0, cycleYear: 0, cycle: '', balance: null, error: null, prefix: null, suffix: null, stationOk: false };
   try {
     const c = await checkLeave(pool, viewer, input, target, 0, undefined, true);
-    return { days: c.days, cycleYear: c.cycleYear, cycle: cycleLabel(c.cycleYear, c.emp.basis), balance: c.balance, error: null, prefix: c.prefix, suffix: c.suffix };
+    return { days: c.days, cycleYear: c.cycleYear, cycle: cycleLabel(c.cycleYear, c.emp.basis), balance: c.balance, error: null, prefix: c.prefix, suffix: c.suffix, stationOk: c.stationOk };
   } catch (error) {
-    if (error instanceof HttpError) return { days: 0, cycleYear: 0, cycle: '', balance: null, error: Object.values(error.details ?? {})[0] ?? error.message, prefix: null, suffix: null };
+    if (error instanceof HttpError) return { days: 0, cycleYear: 0, cycle: '', balance: null, error: Object.values(error.details ?? {})[0] ?? error.message, prefix: null, suffix: null, stationOk: false };
     throw error;
   }
 }

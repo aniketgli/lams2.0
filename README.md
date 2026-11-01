@@ -42,6 +42,7 @@ mysql lams_db < migrations/20261108_leave_type_names.sql   # leave type names wi
 mysql lams_db < migrations/20261109_leave_station.sql   # headquarters / station permission on a leave request
 mysql lams_db < migrations/20261110_leave_el_fields.sql   # contact address, LTC / Ex-India, prefix / suffix holidays, HoD above N days
 mysql lams_db < migrations/20261111_el_form_flags.sql   # Earned Leave: LTC / Ex-India option and contact address on
+mysql lams_db < migrations/20261112_sandwich_by_stages.sql   # holidays inside a leave: counted for 2-stage, not counted for 1-stage leaves
 mysql lams_db < migrations/20261031_leave_requests.sql
 npm run dev                   # http://localhost:3000
 npm run lint                  # type-check

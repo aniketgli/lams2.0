@@ -161,7 +161,8 @@ export async function parseLeaveTypeInput(body: unknown, selfId = 0): Promise<Le
   const minNoticeDays = v.int('minNoticeDays', { min: 0, max: 365 });
   const halfDayAllowed = v.bool('halfDayAllowed');
   const medicalCertDays = v.int('medicalCertDays', { min: 0, max: 365 });
-  const sandwichRule = v.oneOf('sandwichRule', SANDWICH);
+  // Holidays and weekly offs inside a leave count for a 2-stage leave and do not count for a 1-stage leave.
+  const sandwichRule: (typeof SANDWICH)[number] = stages === 2 ? 'included' : 'excluded';
   const gender = v.oneOf('gender', GENDERS);
   const combineWith = v.oneOf('combineWith', COMBINES);
   const minServiceMonths = v.int('minServiceMonths', { min: 0, max: 600 });
@@ -241,7 +242,7 @@ export async function parseLeaveTypeInput(body: unknown, selfId = 0): Promise<Le
   return {
     code, name, description: description ?? '', defaultQuota: quota, pwdQuota, pwdOnly, accrual: accrual!, maxAccumulation: maxAccumulation!, carryForward,
     maxCarryForward: carryForward ? cf : 0, encashmentAllowed, approvalStages: stages as 1 | 2, minNoticeDays: minNoticeDays!, halfDayAllowed,
-    medicalCertDays: medicalCertDays!, sandwichRule: sandwichRule!, combineWith: combineWith!, employeeTypes, gender: gender!, minServiceMonths: minServiceMonths!,
+    medicalCertDays: medicalCertDays!, sandwichRule, combineWith: combineWith!, employeeTypes, gender: gender!, minServiceMonths: minServiceMonths!,
     maxConsecutiveDays: maxConsecutiveDays!, isDebited, isPaid, joiningRequired, afterExhaustedTypeId, debitFromTypeId, debitFactor, lifetimeMax, maxSpellsPerYear: maxSpellsPerYear!, minDaysPerApplication, maxSpellsPerMonth: maxSpellsPerMonth!, maxSpellsLifetime: maxSpellsLifetime!, needsContact, ltcAllowed, prefixSuffix, hodAfterDays, quotas, status: status!,
   };
 }
