@@ -39,6 +39,7 @@ mysql lams_db < migrations/20261105_leave_balance_cycle.sql   # leave balances r
 mysql lams_db < migrations/20261106_leave_certificates.sql   # medical certificate upload of a leave request
 mysql lams_db < migrations/20261107_leave_types_list.sql   # the 17 leave types (name + code); rules are set in Leave > Leave Types
 mysql lams_db < migrations/20261108_leave_type_names.sql   # leave type names without the code (the code is shown next to the name)
+mysql lams_db < migrations/20261109_leave_station.sql   # headquarters / station permission on a leave request
 mysql lams_db < migrations/20261031_leave_requests.sql
 npm run dev                   # http://localhost:3000
 npm run lint                  # type-check
