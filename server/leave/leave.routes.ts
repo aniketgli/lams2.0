@@ -11,6 +11,7 @@ import {
 import {
   LEAVE_GROUP_SCOPE, createLeaveGroup, deleteLeaveGroup, groupLeaveTypeIdsOfUser, listLeaveGroups, updateLeaveGroup,
 } from './groups';
+import { correctJoining, decideJoining, fitnessOf, listJoining, prepareJoining, submitJoining } from './joining';
 import {
   LEAVE_SCOPE, applicableEmployees, certificateOf, createRequest, decideRequest, deleteRequest, leaveHistory, listBalancesPage, listRequests, previewLeave, balancePreview, occupiedDates, requestId, setBalance,
   undoDecision, updateRequest,
@@ -159,6 +160,34 @@ router.get('/leave/activity.csv', ...isAuditor, asyncHandler(async (req, res) =>
 router.get('/leave/activity/export-pdf', ...isAuditor, asyncHandler(async (req, res) => {
   const table = await activityTable(req, parseActivityFilter(req.query as Record<string, unknown>, LEAVE_SCOPE), 'pdf', LEAVE_SCOPE);
   res.json({ generatedAt: new Date().toISOString(), ...table });
+}));
+
+// ---- Joining reports (after a 2-stage leave) -------------------------------------------------------
+router.get('/leave/joining', requireAuth, asyncHandler(async (req, res) => {
+  res.json(await listJoining(viewerOf(req)));
+}));
+router.get('/leave/joining/prepare', requireAuth, asyncHandler(async (req, res) => {
+  res.json(await prepareJoining(viewerOf(req), (req.query as Record<string, unknown>).requestId));
+}));
+router.post('/leave/joining', requireAuth, asyncHandler(async (req, res) => {
+  const item = await submitJoining(req, viewerOf(req), req.body);
+  res.status(201).json({ item, message: 'Joining report submitted.' });
+}));
+router.put('/leave/joining/:requestId', requireAuth, asyncHandler(async (req, res) => {
+  const item = await correctJoining(req, viewerOf(req), req.params.requestId, req.body);
+  res.json({ item, message: 'Joining report submitted again.' });
+}));
+router.get('/leave/joining/:requestId/fitness', requireAuth, asyncHandler(async (req, res) => {
+  const file = await fitnessOf(viewerOf(req), req.params.requestId);
+  res.setHeader('Content-Type', file.mime);
+  res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.send(file.data);
+}));
+router.post('/leave/joining/:requestId/decision', requireAuth, asyncHandler(async (req, res) => {
+  const { item, outcome } = await decideJoining(req, viewerOf(req), req.params.requestId, req.body);
+  res.json({ item, outcome, message: outcome === 'approved' ? 'Joining report approved.' : outcome === 'forwarded' ? 'Joining report forwarded to the HoD.' : 'Joining report rejected.' });
 }));
 
 router.post('/leave/requests', requireAuth, asyncHandler(async (req, res) => {

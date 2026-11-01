@@ -42,8 +42,8 @@ export const LTC_ENCASH_MIN_BALANCE = 30;
 export const MAX_RANGE_DAYS = 400;
 
 export const LEAVE_SCOPE: ActivityScope = {
-  keys: ['leave_request', 'leave_balance', 'leave_export'],
-  areaLabels: { leave_request: 'Leave request', leave_balance: 'Leave balance', leave_export: 'Log download' },
+  keys: ['leave_request', 'leave_balance', 'leave_joining', 'leave_export'],
+  areaLabels: { leave_request: 'Leave request', leave_balance: 'Leave balance', leave_joining: 'Joining report', leave_export: 'Log download' },
   actionLabels: { CREATE: 'Applied / set', UPDATE: 'Edited', STATUS: 'Approved / forwarded / rejected', DELETE: 'Deleted' },
   exportKey: 'leave_export',
   title: 'Leave activity log',
@@ -127,12 +127,12 @@ export interface LeaveInput {
   file: CertificateFile | null;
 }
 
-async function rows(q: { query: typeof pool.query }, sql: string, params: unknown[] = []): Promise<RowDataPacket[]> {
+export async function rows(q: { query: typeof pool.query }, sql: string, params: unknown[] = []): Promise<RowDataPacket[]> {
   const [result] = await q.query<RowDataPacket[]>(sql, params);
   return result;
 }
 
-function profileData(raw: unknown): Record<string, unknown> {
+export function profileData(raw: unknown): Record<string, unknown> {
   if (raw && typeof raw === 'object') return raw as Record<string, unknown>;
   try {
     const parsed = JSON.parse(String(raw || '{}'));
@@ -141,12 +141,12 @@ function profileData(raw: unknown): Record<string, unknown> {
     return {};
   }
 }
-const isoDate = (value: unknown): string => {
+export const isoDate = (value: unknown): string => {
   if (value instanceof Date) return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
   return String(value).slice(0, 10);
 };
-const isoTime = (value: unknown): string | null => (value ? new Date(value as string | number | Date).toISOString() : null);
-const addDays = (date: string, n: number): string => {
+export const isoTime = (value: unknown): string | null => (value ? new Date(value as string | number | Date).toISOString() : null);
+export const addDays = (date: string, n: number): string => {
   const d = new Date(`${date}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
@@ -169,7 +169,7 @@ const SELECT = `
     LEFT JOIN users ac ON ac.id = m.action_by`;
 
 /** The employee's reporting manager and HoD today (the profile may have changed since the request was made). */
-function managersOf(row: RowDataPacket): { reporting: string; reviewing: string } {
+export function managersOf(row: RowDataPacket): { reporting: string; reviewing: string } {
   const data = profileData(row.profile_data);
   return { reporting: String(data.reportingManagerId ?? ''), reviewing: String(data.reviewingManagerId ?? '') };
 }
@@ -446,7 +446,7 @@ export async function balanceOf(
 }
 
 /** Working weekdays of the employee's shift and the gazetted holidays in a range, for counting leave days. */
-async function dayRule(q: { query: typeof pool.query }, emp: Employee, policy: Policy, from: string, to: string) {
+export async function dayRule(q: { query: typeof pool.query }, emp: Employee, policy: Policy, from: string, to: string) {
   let workingDays: string[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
   try {
     const found = emp.shiftId

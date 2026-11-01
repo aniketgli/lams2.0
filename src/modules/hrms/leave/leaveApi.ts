@@ -47,6 +47,7 @@ export interface LeaveTypeRecord {
   certificateRequired: boolean;
   /** Only weekly offs and gazetted holidays can be chosen (station leave). */
   offDaysOnly: boolean;
+  fitnessCertificate: boolean;
   quotas: Array<{ employeeType: string; quota: number }>;
   status: 'active' | 'inactive';
   updatedAt: string | null;
@@ -236,6 +237,59 @@ export interface ImportReview {
   rows: ImportRow[];
 }
 
+export type JoiningStatus = 'pending_l1' | 'pending_l2' | 'approved' | 'rejected';
+export interface JoiningReport {
+  id: string;
+  status: JoiningStatus;
+  punchIn: string | null;
+  punchOut: string | null;
+  submittedAt: string;
+  submittedByName: string;
+  managerName: string | null;
+  reviewerName: string | null;
+  forwardedByName: string | null;
+  forwardedAt: string | null;
+  forwardComment: string | null;
+  actionByName: string | null;
+  actionByRole: 'R.M.' | 'HoD' | 'Admin' | null;
+  actionAt: string | null;
+  comment: string | null;
+  fitnessName: string | null;
+  waitingFor: string | null;
+}
+export interface JoiningItem {
+  requestId: string;
+  userId: string;
+  biometricId: string;
+  name: string;
+  designation: string;
+  department: string;
+  leaveTypeCode: string;
+  leaveTypeName: string;
+  startDate: string;
+  endDate: string;
+  startSession: string;
+  endSession: string;
+  days: number;
+  reason: string;
+  contactAddress: string;
+  stationLeave: boolean;
+  ltcType: string;
+  prefixFrom: string | null;
+  prefixTo: string | null;
+  suffixFrom: string | null;
+  suffixTo: string | null;
+  leaveStatus: string;
+  fitnessAllowed: boolean;
+  joiningDate: string;
+  report: JoiningReport | null;
+  canSubmit: boolean;
+  canEdit: boolean;
+  canDecide: boolean;
+  decideStep: 'approve' | 'forward';
+}
+export interface JoiningFile { name: string; data: string }
+
 const base = '/hrms/leave';
 const one = (id: string) => `${base}/requests/${encodeURIComponent(id)}`;
 const body = (i: LeaveInput) => ({ ...i, userId: i.userId || undefined, certificateFile: i.certificateFile || undefined });
@@ -270,4 +324,13 @@ export const leaveApi = {
     api<ImportReview & { message: string }>(`${base}/balances/import`, { method: 'POST', body: input }),
   setBalance: (input: { userId: string; leaveTypeId: string; year: number; total: number; carryForward: number; reason?: string }) =>
     api<{ balance: LeaveBalance; message: string }>(`${base}/balances`, { method: 'PUT', body: { ...input, reason: input.reason || undefined } }),
+  joining: () => api<{ today: string; items: JoiningItem[] }>(`${base}/joining`),
+  joiningPrepare: (requestId: string) => api<{ item: JoiningItem; punch: { in: string | null; out: string | null } }>(`${base}/joining/prepare?requestId=${encodeURIComponent(requestId)}`),
+  joiningSubmit: (requestId: string, certificate: JoiningFile | null) =>
+    api<{ item: JoiningItem; message: string }>(`${base}/joining`, { method: 'POST', body: { requestId, certificate: certificate || undefined } }),
+  joiningCorrect: (requestId: string, certificate: JoiningFile | null, removeCertificate = false) =>
+    api<{ item: JoiningItem; message: string }>(`${base}/joining/${encodeURIComponent(requestId)}`, { method: 'PUT', body: { certificate: certificate || undefined, removeCertificate: removeCertificate || undefined } }),
+  joiningDecide: (requestId: string, action: 'approve' | 'reject', comment: string) =>
+    api<{ item: JoiningItem; outcome: 'approved' | 'forwarded' | 'rejected'; message: string }>(`${base}/joining/${encodeURIComponent(requestId)}/decision`, { method: 'POST', body: { action, comment: comment || undefined } }),
+  downloadFitness: (requestId: string) => downloadCsv(`${base}/joining/${encodeURIComponent(requestId)}/fitness`, 'fitness-certificate'),
 };
