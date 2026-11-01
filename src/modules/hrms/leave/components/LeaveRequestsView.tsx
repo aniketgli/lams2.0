@@ -548,7 +548,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
                     setFormMessage(null);
                   }}
                   options={(data?.types ?? []).filter((t) => !t.debitFromTypeId).map((t) => ({ label: `${t.name} (${t.code})`, value: t.id }))} />
-                {balanceBadge?.balance && (
+                {balanceBadge?.balance && !type?.offDaysOnly && (
                   <span className={`absolute right-0 top-0 inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${balanceBadge.balance.available > 0 ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-rose-200 bg-rose-50 text-rose-700'}`}>
                     Balance: {balanceBadge.balance.available} {balanceBadge.balance.available === 1 ? 'Day' : 'Days'}
                   </span>
@@ -586,7 +586,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
               </div>
             )}
 
-            {preview && !preview.error && (
+            {preview && !preview.error && !type?.offDaysOnly && (
               <div>
                 <div className="text-xs font-semibold text-slate-700 select-none mb-1.5">Prefix &amp; Suffix holidays</div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

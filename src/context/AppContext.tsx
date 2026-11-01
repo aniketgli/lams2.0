@@ -4735,6 +4735,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   );
 };
 
+/** The holiday calendar from the database, or an empty list outside the provider (shared pickers use it). */
+export const useCalendarHolidays = (): HolidayItem[] => useContext(AppContext)?.holidays ?? [];
+
 export const useApp = () => {
   const ctx = useContext(AppContext);
   if (!ctx) throw new Error('useApp must be used within AppProvider');
