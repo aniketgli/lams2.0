@@ -58,7 +58,7 @@ const AppContent: React.FC = () => {
   if (screen.kind === 'changePassword') {
     return (
       <>
-        <ChangePasswordPage forced={screen.forced} />
+        <ChangePasswordPage first={screen.first} />
         <SessionTimeoutGuard />
       </>
     );

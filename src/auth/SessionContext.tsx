@@ -45,6 +45,8 @@ interface SessionContextValue {
   refresh: () => Promise<void>;
   /** Sets the user's own password; the server checks every rule. Throws ApiError with field details. */
   changePassword: (currentPassword: string, newPassword: string, confirmPassword: string) => Promise<void>;
+  /** Dismiss the one-time offer to change the default password. */
+  skipPasswordChange: () => Promise<void>;
   /** Last user activity in any tab (epoch ms). */
   getLastActivity: () => number;
   /** Milliseconds of inactivity after which this browser signs out. */
@@ -240,6 +242,11 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     tell({ type: 'session-changed' });
   }, [applySession, tell]);
 
+  const skipPasswordChange = useCallback(async () => {
+    applySession(await api<SessionPayload>('/auth/skip-password-change', { method: 'POST' }));
+    tell({ type: 'session-changed' });
+  }, [applySession, tell]);
+
   const stayActive = useCallback(async () => {
     lastActivityRef.current = Date.now();
     tell({ type: 'activity', at: lastActivityRef.current });
@@ -251,10 +258,10 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const value = useMemo<SessionContextValue>(
     () => ({
-      status, session, notice, login, logout, enterModule, switchRole, exitModule, refresh, changePassword,
+      status, session, notice, login, logout, enterModule, switchRole, exitModule, refresh, changePassword, skipPasswordChange,
       getLastActivity, idleLimitMs, stayActive,
     }),
-    [status, session, notice, login, logout, enterModule, switchRole, exitModule, refresh, changePassword, getLastActivity, idleLimitMs, stayActive],
+    [status, session, notice, login, logout, enterModule, switchRole, exitModule, refresh, changePassword, skipPasswordChange, getLastActivity, idleLimitMs, stayActive],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

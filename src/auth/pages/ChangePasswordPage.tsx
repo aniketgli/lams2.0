@@ -6,7 +6,7 @@ import { Alert, Button, Input } from '../../shared/components';
 import { ApiError } from '../../shared/services/api';
 import { navigate } from '../../shared/router';
 import { formatOrgAddress } from '../../types';
-import { ArrowLeft, Check, KeyRound, Lock, LogOut, MapPin, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, KeyRound, Lock, MapPin, ShieldCheck } from 'lucide-react';
 
 /** Same rules the server applies; shown here only as a checklist while typing. */
 const RULES: { label: string; test: (pw: string) => boolean }[] = [
@@ -19,13 +19,13 @@ type FieldErrors = Partial<Record<'currentPassword' | 'newPassword' | 'confirmPa
 
 /**
  * Set your own password.
- *   forced  (new account or administrator reset): the only screen available;
- *           the server refuses everything else until this is done.
- *   !forced (from the lobby): optional, with a way back.
+ *   first   (new or reactivated account, signed in with the default password): shown once before the lobby. It can be
+ *           skipped, and the password changed later from the lobby.
+ *   !first  (from the lobby): the same page, with a way back.
  */
-export const ChangePasswordPage: React.FC<{ forced: boolean }> = ({ forced }) => {
+export const ChangePasswordPage: React.FC<{ first: boolean }> = ({ first }) => {
   const { orgBranding } = useApp();
-  const { session, changePassword, logout } = useSession();
+  const { session, changePassword, skipPasswordChange } = useSession();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -47,8 +47,8 @@ export const ChangePasswordPage: React.FC<{ forced: boolean }> = ({ forced }) =>
       setCurrent('');
       setNext('');
       setConfirm('');
-      // A forced change unlocks the portal: the session now opens the lobby by itself.
-      if (!forced) setDone('Your password has been changed. You were signed out on other devices.');
+      if (first) navigate('/lobby', { replace: true });
+      else setDone('Your password has been changed. You were signed out on other devices.');
     } catch (err) {
       if (err instanceof ApiError) {
         setErrors((err.details ?? {}) as FieldErrors);
@@ -56,6 +56,19 @@ export const ChangePasswordPage: React.FC<{ forced: boolean }> = ({ forced }) =>
       } else {
         setError('Unable to change the password right now. Please try again.');
       }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const skip = async () => {
+    if (saving) return;
+    setSaving(true); setError(null);
+    try {
+      await skipPasswordChange();
+      navigate('/lobby', { replace: true });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Unable to continue right now. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -75,7 +88,7 @@ export const ChangePasswordPage: React.FC<{ forced: boolean }> = ({ forced }) =>
             </span>
             <div className="min-w-0">
               <h1 className="text-base font-bold text-slate-900 tracking-tight">
-                {forced ? 'Set your own password' : 'Change password'}
+                {first ? 'Set your own password' : 'Change password'}
               </h1>
               <p className="text-xs text-slate-500 mt-0.5 truncate">
                 {session?.user.name} · {session?.user.email}
@@ -83,9 +96,9 @@ export const ChangePasswordPage: React.FC<{ forced: boolean }> = ({ forced }) =>
             </div>
           </div>
 
-          {forced && (
+          {first && (
             <Alert variant="info">
-              You signed in with a default or temporary password. Choose your own password to continue.
+              You signed in with the default password. You can choose your own password now, or skip and change it later from the lobby.
             </Alert>
           )}
           {error && <Alert variant="error" onDismiss={() => setError(null)}>{error}</Alert>}
@@ -94,7 +107,7 @@ export const ChangePasswordPage: React.FC<{ forced: boolean }> = ({ forced }) =>
           <form onSubmit={submit} className="space-y-4" noValidate>
             <input type="text" name="username" autoComplete="username" value={session?.user.email ?? ''} readOnly hidden />
             <Input
-              label={forced ? 'Default / temporary password' : 'Current password'}
+              label={first ? 'Default password' : 'Current password'}
               type="password"
               name="current-password"
               autoComplete="current-password"
@@ -144,18 +157,19 @@ export const ChangePasswordPage: React.FC<{ forced: boolean }> = ({ forced }) =>
             />
 
             <Button type="submit" variant="primary" size="md" fullWidth loading={saving} loadingText="Saving…">
-              {forced ? 'Save password and continue' : 'Change password'}
+              {first ? 'Save password and continue' : 'Change password'}
             </Button>
           </form>
 
           <div className="pt-1 flex justify-center">
-            {forced ? (
+            {first ? (
               <button
                 type="button"
-                onClick={() => void logout()}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-brand cursor-pointer"
+                onClick={() => void skip()}
+                disabled={saving}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-primary cursor-pointer disabled:opacity-60"
               >
-                <LogOut className="w-3.5 h-3.5" aria-hidden="true" /> Sign out
+                Skip for now <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
               </button>
             ) : (
               <button

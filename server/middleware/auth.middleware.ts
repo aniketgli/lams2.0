@@ -9,12 +9,10 @@ import { accountBlockReason, findAccountById, hasGrant, loadActiveGrants } from 
  *   1. the session is within its idle limit and its maximum lifetime,
  *   2. the account still exists, is active and within its validity date,
  *   3. the session's active module/role is still an ACTIVE grant,
- *   4. no password change is pending (new account or administrator reset).
  * A deactivated account, expired session or revoked role therefore takes
  * effect on the very next request, on every device.
  */
-/** The only API paths usable while a password change is pending. */
-const PASSWORD_CHANGE_ALLOWED = new Set(['/api/auth/me', '/api/auth/change-password', '/api/auth/logout']);
+
 const requestPath = (req: Request) => (req.originalUrl || req.url || '').split('?')[0].replace(/\/+$/, '');
 
 export const requireAuth: RequestHandler = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
@@ -51,13 +49,6 @@ export const requireAuth: RequestHandler = asyncHandler(async (req: Request, res
 
   const blocked = accountBlockReason(account!);
   if (blocked) await endSession(403, blocked, 'ACCOUNT_BLOCKED');
-
-  // --- Password -------------------------------------------------------------
-  // A new account (default password) or one reset by an administrator can only
-  // see who it is and set a new password; everything else waits until then.
-  if (account!.mustChangePassword && !PASSWORD_CHANGE_ALLOWED.has(requestPath(req))) {
-    throw new HttpError(403, 'Set a new password before continuing.', 'PASSWORD_CHANGE_REQUIRED');
-  }
 
   // --- Active module / role -------------------------------------------------
   const grants = await loadActiveGrants(account!.biometricId);
