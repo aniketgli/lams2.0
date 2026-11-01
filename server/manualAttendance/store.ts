@@ -9,6 +9,7 @@ import type { RoleId } from '../lib/roles';
 import type { ActivityScope } from '../employees/activity';
 import { biometricDay, outdoorDutyDates, punchGaps, type PunchDay } from '../attendance/store';
 import { leaveDates } from '../leave/requests';
+import { joiningDaysAwaiting } from '../leave/joining';
 
 /**
  * Manual attendance: a request to correct a missed or wrong punch (table
@@ -506,5 +507,13 @@ export async function missingPunchDates(viewer: Viewer, userIdRaw: unknown): Pro
   const taken = new Set(open.map((r) => String(r.d)));
   const onDuty = await outdoorDutyDates(String(target.id), from.toISOString().slice(0, 10), to.toISOString().slice(0, 10));
   const onLeave = await leaveDates(String(target.id), from.toISOString().slice(0, 10), to.toISOString().slice(0, 10));
-  return gaps.filter((g) => !taken.has(g.date) && !onDuty.has(g.date) && !onLeave.has(g.date));
+  // The joining day after a leave is always offered when its In punch is missing, so the joining form can be completed.
+  const joining = await joiningDaysAwaiting(target.id, from.toISOString().slice(0, 10), to.toISOString().slice(0, 10));
+  const shown = gaps.filter((g) => !taken.has(g.date) && !onDuty.has(g.date) && (!onLeave.has(g.date) || joining.has(g.date)));
+  for (const date of joining) {
+    if (taken.has(date) || shown.some((g) => g.date === date)) continue;
+    const day = await biometricDay(target.biometricId, target.shiftId, date);
+    if (!day.in) shown.push({ date, in: day.in, out: day.out });
+  }
+  return shown.sort((a, b) => b.date.localeCompare(a.date));
 }
