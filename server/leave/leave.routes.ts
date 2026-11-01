@@ -12,7 +12,7 @@ import {
   LEAVE_GROUP_SCOPE, createLeaveGroup, deleteLeaveGroup, groupLeaveTypeIdsOfUser, listLeaveGroups, updateLeaveGroup,
 } from './groups';
 import {
-  LEAVE_SCOPE, applicableEmployees, certificateOf, createRequest, decideRequest, deleteRequest, leaveHistory, listBalancesPage, listRequests, previewLeave, requestId, setBalance,
+  LEAVE_SCOPE, applicableEmployees, certificateOf, createRequest, decideRequest, deleteRequest, leaveHistory, listBalancesPage, listRequests, previewLeave, balancePreview, requestId, setBalance,
   undoDecision, updateRequest,
 } from './requests';
 
@@ -108,6 +108,10 @@ router.get('/leave/requests', requireAuth, asyncHandler(async (req, res) => {
   // A staff member applies only for the leave types of their own leave group.
   const own = viewer.role === 'general_staff' ? await groupLeaveTypeIdsOfUser(pool, viewer.id) : null;
   res.json({ ...list, employees, types: types.filter((t) => t.status === 'active' && (!own || own.has(Number(t.id)))) });
+}));
+
+router.get('/leave/balance-preview', requireAuth, asyncHandler(async (req, res) => {
+  res.json(await balancePreview(viewerOf(req), req.query as Record<string, unknown>));
 }));
 
 router.get('/leave/preview', requireAuth, asyncHandler(async (req, res) => {

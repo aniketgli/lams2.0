@@ -131,6 +131,20 @@ export function isValidIsoDate(value: string): boolean {
 }
 
 /** Today's date in India (YYYY-MM-DD), independent of the server's timezone. */
+/**
+ * No application (manual attendance, leave, outdoor duty) can be made for a date older than this many days, for any role.
+ */
+export const MAX_BACKDATE_DAYS = 15;
+
+/** The oldest date an application may be made for, counted from `today` (YYYY-MM-DD). */
+export function oldestApplicationDate(today: string): string {
+  const d = new Date(`${today}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - MAX_BACKDATE_DAYS);
+  return d.toISOString().slice(0, 10);
+}
+
+export const TOO_OLD_MESSAGE = `An application older than ${MAX_BACKDATE_DAYS} days cannot be made.`;
+
 export function todayInIndia(): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',

@@ -11,7 +11,7 @@ import { UserAvatar } from '../../../../shared/components/UserAvatar';
 import { ApiError } from '../../../../shared/services/api';
 import { downloadCsvText, downloadTablePdf, printedAt, toCsvText } from '../../../../shared/services/printTable';
 import { ConfirmDialog, NoticeBar, useNotice } from '../../master/components/masterUi';
-import { LeaveInput, LeaveList, LeavePreview, LeaveRequest, LeaveStatus, leaveApi } from '../leaveApi';
+import { LeaveBalance, LeaveInput, LeaveList, LeavePreview, LeaveRequest, LeaveStatus, leaveApi } from '../leaveApi';
 
 /**
  * Leave requests. The server decides everything (days, balance, who may do what); this page only shows it.
@@ -55,7 +55,10 @@ const statusBy = (r: LeaveRequest) =>
     : r.status === 'pending_l2' ? `with ${r.reviewerName ?? 'HoD'}`
     : `by ${r.actionByName ?? '—'}`;
 
-const EMPTY_FORM: LeaveInput = { userId: '', leaveTypeId: '', startDate: '', endDate: '', startSession: 'full', endSession: 'full', reason: '', stationLeave: false, certificateFile: null };
+const EMPTY_FORM: LeaveInput = { userId: '', leaveTypeId: '', startDate: '', endDate: '', startSession: 'full', endSession: 'full', reason: '', stationLeave: false,
+  ltcType: 'none', encashLtc: false, encashDays: 10, contactAddress: '', availPrefix: false, prefixFrom: '', prefixTo: '', availSuffix: false, suffixFrom: '', suffixTo: '', certificateFile: null };
+
+const shiftDate = (iso: string, days: number) => { const d = new Date(`${iso}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
 
 export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySignal }) => {
   const { currentUser, users } = useApp();
@@ -153,11 +156,23 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
   useEffect(() => { if (applySignal > 0 && canApply) openApply(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [applySignal]);
   const openEdit = (r: LeaveRequest) => {
     setEditing(r);
-    setForm({ userId: r.userId, leaveTypeId: r.leaveTypeId, startDate: r.startDate, endDate: r.endDate, startSession: r.startSession, endSession: r.endSession, reason: r.reason, stationLeave: r.stationLeave, certificateFile: null });
+    setForm({ userId: r.userId, leaveTypeId: r.leaveTypeId, startDate: r.startDate, endDate: r.endDate, startSession: r.startSession, endSession: r.endSession, reason: r.reason, stationLeave: r.stationLeave,
+      ltcType: r.ltcType, encashLtc: r.encashDays > 0, encashDays: r.encashDays || 10, contactAddress: r.contactAddress,
+      availPrefix: Boolean(r.prefixFrom), prefixFrom: r.prefixFrom ?? '', prefixTo: r.prefixTo ?? '', availSuffix: Boolean(r.suffixFrom), suffixFrom: r.suffixFrom ?? '', suffixTo: r.suffixTo ?? '', certificateFile: null });
     setFormErrors({}); setFormMessage(null); setPreview(null); setFormOpen(true);
   };
 
   const type = data?.types.find((t) => t.id === form.leaveTypeId) ?? null;
+
+  // The balance of the chosen leave type, shown as soon as it is chosen (and for the leave year of the start date).
+  const [balanceBadge, setBalanceBadge] = useState<{ balance: LeaveBalance | null; cycle: string } | null>(null);
+  useEffect(() => {
+    if (!formOpen || !form.leaveTypeId || (isAdmin && !form.userId)) { setBalanceBadge(null); return; }
+    let cancelled = false;
+    leaveApi.balancePreview({ userId: form.userId, leaveTypeId: form.leaveTypeId, date: form.startDate })
+      .then((b) => { if (!cancelled) setBalanceBadge(b); }).catch(() => { if (!cancelled) setBalanceBadge(null); });
+    return () => { cancelled = true; };
+  }, [formOpen, isAdmin, form.userId, form.leaveTypeId, form.startDate]);
 
   // The server works out the days and the balance while the form is filled.
   useEffect(() => {
@@ -482,14 +497,22 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
                     options={(data?.employees ?? []).map((e) => ({ label: `${e.name} (${e.biometricId})${e.designation ? ` · ${e.designation}` : ''}`, value: e.id }))} />
                 </div>
               )}
-              <div className="sm:col-span-2" title={formErrors.leaveTypeId || undefined}>
+              <div className="sm:col-span-2 relative" title={formErrors.leaveTypeId || undefined}>
                 <Select label="Leave type" required value={form.leaveTypeId} searchable placeholder="Select leave type" error={Boolean(formErrors.leaveTypeId)}
-                  onChange={(v: string) => setField('leaveTypeId', v)}
+                  onChange={(v: string) => {
+                    setForm((f) => ({ ...f, leaveTypeId: v, ltcType: 'none', encashLtc: false, availPrefix: false, availSuffix: false }));
+                    setFormErrors((e) => ({ ...e, leaveTypeId: '' }));
+                  }}
                   options={(data?.types ?? []).map((t) => ({ label: `${t.name} (${t.code})`, value: t.id }))} />
+                {balanceBadge?.balance && (
+                  <span className="absolute right-0 top-0 inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">
+                    Balance: {balanceBadge.balance.available} {balanceBadge.balance.available === 1 ? 'Day' : 'Days'}
+                  </span>
+                )}
                 {formErrors.leaveTypeId && <p className="text-xs text-error mt-1">{formErrors.leaveTypeId}</p>}
               </div>
               <div className={formErrors.startDate ? 'rounded-xl ring-2 ring-rose-400' : ''} title={formErrors.startDate || undefined}>
-                <AppDatePicker label="From date (start date)" required value={form.startDate} placeholder="Select date" minDate={isAdmin ? localDate(-60) : localDate(-7)}
+                <AppDatePicker label="From date (start date)" required value={form.startDate} placeholder="Select date" minDate={isAdmin ? localDate(-15) : localDate(-7)}
                   onChange={(v) => { setField('startDate', v); if (!form.endDate || form.endDate < v) setField('endDate', v); }} className="w-full" />
               </div>
               <div className={formErrors.endDate ? 'rounded-xl ring-2 ring-rose-400' : ''} title={formErrors.endDate || undefined}>
@@ -508,7 +531,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
               <div className="rounded-xl border border-error-border bg-error-subtle px-3 py-2 text-xs text-error">{preview.error}</div>
             ) : preview && (
               <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                <div><p className="text-[11px] font-semibold text-slate-500">Leave days</p><p className="font-extrabold text-slate-900">{daysText(preview.days)}</p></div>
+                <div><p className="text-[11px] font-semibold text-slate-500">Total duration</p><p className="font-extrabold text-slate-900">{daysText(preview.days)}</p></div>
                 <div><p className="text-[11px] font-semibold text-slate-500">Leave year</p><p className="font-extrabold text-slate-900">{preview.cycle}</p></div>
                 {preview.balance && type?.isDebited && (
                   <>
@@ -521,6 +544,42 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
                 )}
               </div>
             ))}
+
+            {type?.prefixSuffix && (
+              <div>
+                <div className="text-xs font-bold text-slate-800 tracking-tight mb-1">Prefix &amp; Suffix holidays</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {([['Prefix', 'availPrefix', 'prefixFrom', 'prefixTo'], ['Suffix', 'availSuffix', 'suffixFrom', 'suffixTo']] as const).map(([name, flag, fromKey, toKey]) => (
+                    <div key={name} className="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
+                      <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                        <input type="checkbox" checked={form[flag]} className="accent-primary w-4 h-4"
+                          onChange={(e) => {
+                            const on = e.target.checked;
+                            setForm((f) => ({
+                              ...f, [flag]: on,
+                              ...(name === 'Prefix'
+                                ? { prefixFrom: on ? f.prefixFrom : '', prefixTo: on && f.startDate ? shiftDate(f.startDate, -1) : '' }
+                                : { suffixFrom: on && f.endDate ? shiftDate(f.endDate, 1) : '', suffixTo: on ? f.suffixTo : '' }),
+                            }));
+                          }} />
+                        Avail {name.toLowerCase()}
+                      </label>
+                      {form[flag] && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className={formErrors[fromKey] ? 'rounded-xl ring-2 ring-rose-400' : ''} title={formErrors[fromKey] || undefined}>
+                            <AppDatePicker label={`${name} from`} value={form[fromKey]} placeholder="Select date" onChange={(v) => setField(fromKey, v)} className="w-full" />
+                          </div>
+                          <div className={formErrors[toKey] ? 'rounded-xl ring-2 ring-rose-400' : ''} title={formErrors[toKey] || undefined}>
+                            <AppDatePicker label={`${name} to`} value={form[toKey]} placeholder="Select date" onChange={(v) => setField(toKey, v)} className="w-full" />
+                          </div>
+                        </div>
+                      )}
+                      {form[flag] && (formErrors[fromKey] || formErrors[toKey]) && <p className="text-xs text-error">{formErrors[fromKey] || formErrors[toKey]}</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div>
               <div className="text-xs font-bold text-slate-800 tracking-tight mb-1">Headquarter (HQ) / Station permission<span className="text-rose-500 ml-0.5">*</span></div>
@@ -536,6 +595,47 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
               </div>
               {formErrors.stationLeave && <p className="text-xs text-error mt-1">{formErrors.stationLeave}</p>}
             </div>
+
+            {type?.ltcAllowed && (
+              <div>
+                <div className="text-xs font-bold text-slate-800 tracking-tight mb-1">LTC / Ex-India option<span className="text-rose-500 ml-0.5">*</span></div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" role="radiogroup" aria-label="LTC / Ex-India option">
+                  {([['none', `Regular ${type.code}`], ['ltc', 'Availing LTC'], ['ex_india', 'Ex-India']] as const).map(([value, label]) => (
+                    <button key={value} type="button" role="radio" aria-checked={form.ltcType === value}
+                      onClick={() => { setField('ltcType', value); if (value !== 'ltc') setField('encashLtc', false); }}
+                      className={`h-10 rounded-xl border text-xs font-bold cursor-pointer transition-colors ${form.ltcType === value ? 'bg-primary text-white border-primary' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {formErrors.ltcType && <p className="text-xs text-error mt-1">{formErrors.ltcType}</p>}
+                {form.ltcType === 'ltc' && (
+                  <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3 space-y-2">
+                    <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                      <input type="checkbox" checked={form.encashLtc} className="accent-primary w-4 h-4" onChange={(e) => setField('encashLtc', e.target.checked)} />
+                      Avail leave encashment with LTC
+                    </label>
+                    {form.encashLtc && (
+                      <div>
+                        <label className="block text-xs font-bold text-slate-800 tracking-tight mb-1" htmlFor="encash-days">Encashment days</label>
+                        <input id="encash-days" type="number" min={1} max={10} step={1} value={form.encashDays}
+                          onChange={(e) => setField('encashDays', Number(e.target.value))}
+                          className={`h-10 w-32 rounded-xl border px-3 text-sm ${formErrors.encashDays ? 'border-error-border bg-error-subtle' : 'border-slate-200 bg-white'}`} />
+                        {formErrors.encashDays && <p className="text-xs text-error mt-1">{formErrors.encashDays}</p>}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {type?.needsContact && (
+              <div>
+                <Textarea label={`Contact address during ${type.code} with mobile number`} required rows={2} maxLength={300} placeholder="Address and mobile number where you can be reached"
+                  value={form.contactAddress} error={Boolean(formErrors.contactAddress)} onChange={(e) => setField('contactAddress', e.target.value)} />
+                {formErrors.contactAddress && <p className="text-xs text-error mt-1">{formErrors.contactAddress}</p>}
+              </div>
+            )}
 
             {(needsCertificate || form.certificateFile || editing?.certificateName) && (
               <div>
@@ -617,6 +717,10 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
             ))}
             <div className="sm:col-span-2"><dt className="font-semibold text-slate-500">Reason</dt><dd className="text-slate-900 font-medium whitespace-pre-wrap">{viewing.reason}</dd></div>
             <div><dt className="font-semibold text-slate-500">Station permission</dt><dd className="text-slate-900 font-medium">{viewing.stationLeave ? 'Station leave' : 'Not required (HQ)'}</dd></div>
+            {viewing.ltcType !== 'none' && <div><dt className="font-semibold text-slate-500">LTC / Ex-India</dt><dd className="text-slate-900 font-medium">{viewing.ltcType === 'ltc' ? `Availing LTC${viewing.encashDays ? ` · encashment ${viewing.encashDays} days` : ''}` : 'Ex-India'}</dd></div>}
+            {viewing.prefixFrom && <div><dt className="font-semibold text-slate-500">Prefix holidays</dt><dd className="text-slate-900 font-medium">{formatDate(viewing.prefixFrom)} to {formatDate(viewing.prefixTo ?? viewing.prefixFrom)}</dd></div>}
+            {viewing.suffixFrom && <div><dt className="font-semibold text-slate-500">Suffix holidays</dt><dd className="text-slate-900 font-medium">{formatDate(viewing.suffixFrom)} to {formatDate(viewing.suffixTo ?? viewing.suffixFrom)}</dd></div>}
+            {viewing.contactAddress && <div className="sm:col-span-2"><dt className="font-semibold text-slate-500">Contact address</dt><dd className="text-slate-900 font-medium whitespace-pre-wrap">{viewing.contactAddress}</dd></div>}
             {viewing.certificateName && (
               <div className="sm:col-span-2">
                 <dt className="font-semibold text-slate-500">Medical certificate</dt>
