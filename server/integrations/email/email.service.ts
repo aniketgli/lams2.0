@@ -50,7 +50,7 @@ export class EmailService {
     warning?: string;
     log?: ServerEmailLog;
   }> {
-    const { to, toName, cc, subject, html, text, category, eventType, referenceId } = payload;
+    const { to, toName, cc, subject, html, text, category, eventType, referenceId, attachments } = payload;
     const config = await resolveEmailTransport();
 
     // Organization-wide CC / BCC (never added to SECURITY emails such as password resets).
@@ -88,6 +88,7 @@ export class EmailService {
         subject,
         text: text || undefined,
         html: html || undefined,
+        attachments: attachments?.length ? attachments : undefined,
       });
       logEntry.status = 'delivered';
       logEntry.messageId = info.messageId;

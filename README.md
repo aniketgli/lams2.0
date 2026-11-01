@@ -51,6 +51,7 @@ mysql lams_db < migrations/20261117_one_stage_more_types.sql   # CL20 / CL30 / U
 mysql lams_db < migrations/20261118_leave_joining_reports.sql   # Joining reports after 2-stage leave (+ fitness certificate for HPL / Commuted)
 mysql lams_db < migrations/20261119_scl_like_cl.sql   # SCL takes the leave form rules of CL; only PwD can take it
 mysql lams_db < migrations/20261120_bootstrap_users.sql   # accounts erp@wii.gov.in (Administrator) and erpauditor@wii.gov.in (Auditor), password 123456, change at first sign-in
+mysql lams_db < migrations/20261121_report_schedules.sql   # scheduled report emails
 mysql lams_db < migrations/20261031_leave_requests.sql
 npm run dev                   # http://localhost:3000
 npm run lint                  # type-check

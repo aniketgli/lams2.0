@@ -37,7 +37,8 @@ export function pdfText(value: unknown): string {
     .trim() || '—';
 }
 
-export function downloadTablePdf({ title, subtitle = [], headers, rows, fileName, landscape = true, columnWidths }: PdfTableOptions): void {
+/** The themed PDF itself (no DOM needed, so the server can build the same file for scheduled emails). */
+export function buildTablePdf({ title, subtitle = [], headers, rows, landscape = true, columnWidths }: Omit<PdfTableOptions, 'fileName'>): jsPDF {
   const doc = new jsPDF({ orientation: landscape ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -93,7 +94,11 @@ export function downloadTablePdf({ title, subtitle = [], headers, rows, fileName
     doc.text(`Page ${i} of ${pages}`, pageWidth - margin, pageHeight - 7, { align: 'right' });
   }
 
-  doc.save(`${fileName.replace(/[^\w.-]+/g, '_')}.pdf`);
+  return doc;
+}
+
+export function downloadTablePdf(options: PdfTableOptions): void {
+  buildTablePdf(options).save(`${options.fileName.replace(/[^\w.-]+/g, '_')}.pdf`);
 }
 
 /** "30 Oct 2026, 11:05" in the viewer's locale. */
