@@ -196,6 +196,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
     });
   }, [preview]);
 
+  const encashing = form.ltcType === 'ltc' && form.encashLtc && Number.isInteger(form.encashDays) && form.encashDays > 0 ? form.encashDays : 0;
   const needsCertificate = Boolean(type && type.medicalCertDays > 0 && preview && preview.days > type.medicalCertDays);
   const certInput = React.useRef<HTMLInputElement>(null);
   const pickCertificate = (file: File | undefined) => {
@@ -538,9 +539,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
               )}
             </div>
 
-            {(preview || formErrors.endDate || formErrors.startDate) && (preview?.error ? (
-              <div className="rounded-xl border border-error-border bg-error-subtle px-3 py-2 text-xs text-error">{preview.error}</div>
-            ) : preview && (
+            {preview && !preview.error && (
               <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                 <div><p className="text-[11px] font-semibold text-slate-500">Total duration</p><p className="font-extrabold text-slate-900">{daysText(preview.days)}</p></div>
                 <div><p className="text-[11px] font-semibold text-slate-500">Leave year</p><p className="font-extrabold text-slate-900">{preview.cycle}</p></div>
@@ -549,12 +548,12 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
                     <div><p className="text-[11px] font-semibold text-slate-500">Available</p><p className="font-extrabold text-slate-900">{preview.balance.available}</p></div>
                     <div>
                       <p className="text-[11px] font-semibold text-slate-500">After this leave</p>
-                      <p className={`font-extrabold ${preview.balance.available - preview.days < 0 ? 'text-rose-600' : 'text-slate-900'}`}>{Math.round((preview.balance.available - preview.days) * 10) / 10}</p>
+                      <p className={`font-extrabold ${preview.balance.available - preview.days - encashing < 0 ? 'text-rose-600' : 'text-slate-900'}`}>{Math.round((preview.balance.available - preview.days - encashing) * 10) / 10}</p>
                     </div>
                   </>
                 )}
               </div>
-            ))}
+            )}
 
             {preview && !preview.error && (
               <div>
