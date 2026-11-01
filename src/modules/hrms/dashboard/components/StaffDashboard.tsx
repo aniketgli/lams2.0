@@ -4,16 +4,17 @@ import { useSession } from '../../../../auth/SessionContext';
 import { UserAvatar } from '../../../../shared/components/UserAvatar';
 import type { BalanceLine, DashboardData } from '../dashboardApi';
 import { QueueTable } from './QueueCard';
+import { TONE } from './StatCards';
 
 const days = (n: number) => `${Math.round(n * 10) / 10} ${n === 1 ? 'day' : 'days'}`;
 const left = (n: number) => `${Math.round(n * 10) / 10} ${n === 1 ? 'Day' : 'Days'} Left`;
 const badge = (b: BalanceLine) => (b.available <= 0 ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200');
 
 const SHORTCUTS = [
-  { label: 'Manual', page: 'manual_attendance', icon: Clock, tone: 'bg-indigo-50 border-indigo-200 text-indigo-700' },
-  { label: 'OD', page: 'od', icon: MapPin, tone: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
-  { label: 'Leave', page: 'leave', icon: CalendarDays, tone: 'bg-sky-50 border-sky-200 text-sky-700' },
-  { label: 'Calendar', page: 'holiday_calendar', icon: Calendar, tone: 'bg-purple-50 border-purple-200 text-purple-700' },
+  { label: 'Manual', page: 'manual_attendance', icon: Clock, tone: TONE.indigo },
+  { label: 'OD', page: 'od', icon: MapPin, tone: TONE.emerald },
+  { label: 'Leave', page: 'leave', icon: CalendarDays, tone: TONE.blue },
+  { label: 'Calendar', page: 'holiday_calendar', icon: Calendar, tone: TONE.amber },
 ];
 
 const BalanceTable: React.FC<{ rows: BalanceLine[] }> = ({ rows }) => (
@@ -95,14 +96,15 @@ export const StaffDashboard: React.FC<{ data: DashboardData; onNavigate: (tab: s
         </div>
       </section>
 
-      <section className="bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 shadow-xs grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {SHORTCUTS.map(({ label, page, icon: Icon, tone }) => (
           <button key={page} type="button" onClick={() => onNavigate(page)}
-            className={`rounded-xl border py-4 flex flex-col items-center gap-2 text-xs font-bold cursor-pointer hover:shadow-xs transition-shadow ${tone}`}>
-            <Icon className="w-5 h-5" />{label}
+            className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex items-center gap-3 min-w-0 cursor-pointer hover:border-primary/40 transition-colors">
+            <span className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${tone}`}><Icon className="w-4 h-4" /></span>
+            <span className="text-xs font-bold text-slate-900 truncate">{label}</span>
           </button>
         ))}
-      </section>
+      </div>
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
