@@ -502,13 +502,13 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {isAdmin && (
                 <div className="sm:col-span-2">
-                  <Select label="Employee" required value={form.userId} disabled={Boolean(editing)} searchable placeholder="Select employee" error={Boolean(formErrors.userId)}
+                  <Select label="Employee" required value={form.userId} disabled={Boolean(editing)} searchable placeholder="Select employee" error={formErrors.userId}
                     onChange={(v: string) => setField('userId', v)}
                     options={(data?.employees ?? []).map((e) => ({ label: `${e.name} (${e.biometricId})${e.designation ? ` · ${e.designation}` : ''}`, value: e.id }))} />
                 </div>
               )}
-              <div className="sm:col-span-2 relative" title={formErrors.leaveTypeId || undefined}>
-                <Select label="Leave type" required value={form.leaveTypeId} searchable placeholder="Select leave type" error={Boolean(formErrors.leaveTypeId)}
+              <div className="sm:col-span-2 relative">
+                <Select label="Leave type" required value={form.leaveTypeId} searchable placeholder="Select leave type" error={formErrors.leaveTypeId}
                   onChange={(v: string) => {
                     setForm((f) => ({ ...f, leaveTypeId: v, ltcType: 'none', encashLtc: false, availPrefix: false, availSuffix: false }));
                     setFormErrors((e) => ({ ...e, leaveTypeId: '' }));
@@ -519,14 +519,13 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
                     Balance: {balanceBadge.balance.available} {balanceBadge.balance.available === 1 ? 'Day' : 'Days'}
                   </span>
                 )}
-                {formErrors.leaveTypeId && <p className="text-xs text-error mt-1">{formErrors.leaveTypeId}</p>}
               </div>
-              <div className={formErrors.startDate ? 'rounded-xl ring-2 ring-rose-400' : ''} title={formErrors.startDate || undefined}>
-                <AppDatePicker label="From date (start date)" required value={form.startDate} placeholder="Select date" minDate={localDate(-15)}
+              <div>
+                <AppDatePicker label="From date (start date)" required error={formErrors.startDate} value={form.startDate} placeholder="Select date" minDate={localDate(-15)}
                   onChange={(v) => { setField('startDate', v); if (!form.endDate || form.endDate < v) setField('endDate', v); }} className="w-full" />
               </div>
-              <div className={formErrors.endDate ? 'rounded-xl ring-2 ring-rose-400' : ''} title={formErrors.endDate || undefined}>
-                <AppDatePicker label="To date (end date)" required value={form.endDate} placeholder="Select date" minDate={form.startDate || undefined}
+              <div>
+                <AppDatePicker label="To date (end date)" required error={formErrors.endDate} value={form.endDate} placeholder="Select date" minDate={form.startDate || undefined}
                   onChange={(v) => setField('endDate', v)} className="w-full" />
               </div>
               {type?.halfDayAllowed && (
@@ -557,10 +556,10 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
 
             {preview && !preview.error && (
               <div>
-                <div className="text-xs font-bold text-slate-800 tracking-tight mb-1">Prefix &amp; Suffix holidays</div>
+                <div className="text-xs font-semibold text-slate-700 select-none mb-1.5">Prefix &amp; Suffix holidays</div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {([['Prefix', 'availPrefix', 'prefixFrom', 'prefixTo', preview.prefix], ['Suffix', 'availSuffix', 'suffixFrom', 'suffixTo', preview.suffix]] as const).map(([name, flag, fromKey, toKey, block]) => (
-                    <div key={name} className={`rounded-xl border p-3 space-y-2 ${block ? 'border-slate-200 bg-white' : 'border-slate-100 bg-slate-50 opacity-70'}`}>
+                    <div key={name} className={`rounded-xl border p-3 space-y-2 ${block ? 'border-slate-300 bg-white' : 'border-slate-100 bg-slate-50 opacity-70'}`}>
                       <div className="flex items-center justify-between gap-2">
                         <label className={`flex items-center gap-2 text-xs font-bold ${block ? 'text-slate-700 cursor-pointer' : 'text-slate-400'}`}>
                           <input type="checkbox" disabled={!block} checked={Boolean(block) && form[flag]} className="accent-primary w-4 h-4"
@@ -575,15 +574,14 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
                       </div>
                       {block && form[flag] && (
                         <div className="grid grid-cols-2 gap-2">
-                          <div className={formErrors[fromKey] ? 'rounded-xl ring-2 ring-rose-400' : ''} title={formErrors[fromKey] || undefined}>
-                            <AppDatePicker label={`${name} from`} value={form[fromKey]} placeholder="Select date" minDate={block.from} maxDate={block.to} onChange={(v) => setField(fromKey, v)} className="w-full" />
+                          <div>
+                            <AppDatePicker label={`${name} from`} error={formErrors[fromKey]} value={form[fromKey]} placeholder="Select date" minDate={block.from} maxDate={block.to} onChange={(v) => setField(fromKey, v)} className="w-full" />
                           </div>
-                          <div className={formErrors[toKey] ? 'rounded-xl ring-2 ring-rose-400' : ''} title={formErrors[toKey] || undefined}>
-                            <AppDatePicker label={`${name} to`} value={form[toKey]} placeholder="Select date" minDate={block.from} maxDate={block.to} onChange={(v) => setField(toKey, v)} className="w-full" />
+                          <div>
+                            <AppDatePicker label={`${name} to`} error={formErrors[toKey]} value={form[toKey]} placeholder="Select date" minDate={block.from} maxDate={block.to} onChange={(v) => setField(toKey, v)} className="w-full" />
                           </div>
                         </div>
                       )}
-                      {block && form[flag] && (formErrors[fromKey] || formErrors[toKey]) && <p className="text-xs text-error">{formErrors[fromKey] || formErrors[toKey]}</p>}
                     </div>
                   ))}
                 </div>
@@ -591,46 +589,46 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
             )}
 
             <div>
-              <div className="text-xs font-bold text-slate-800 tracking-tight mb-1">Headquarter (HQ) / Station permission<span className="text-rose-500 ml-0.5">*</span></div>
+              <div className="text-xs font-semibold text-slate-700 select-none mb-1.5">Headquarter (HQ) / Station permission<span className="text-rose-500 ml-0.5">*</span></div>
               <div className="grid grid-cols-2 gap-3" role="radiogroup" aria-label="Headquarter / Station permission">
                 {([[false, 'Not required (HQ)', Building2], [true, 'Station leave', MapPin]] as const).map(([value, label, Icon]) => (
                   <button key={label} type="button" role="radio" aria-checked={form.stationLeave === value} onClick={() => setField('stationLeave', value)}
-                    className={`h-10 rounded-xl border text-xs font-bold inline-flex items-center justify-center gap-2 cursor-pointer transition-colors ${
-                      form.stationLeave === value ? 'bg-primary text-white border-primary' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                    className={`h-9 rounded-xl border text-xs font-semibold inline-flex items-center justify-center gap-2 cursor-pointer transition-colors ${
+                      form.stationLeave === value ? 'bg-primary text-white border-primary' : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
                     }`}>
                     <Icon className="w-4 h-4" />{label}
                   </button>
                 ))}
               </div>
-              {formErrors.stationLeave && <p className="text-xs text-error mt-1">{formErrors.stationLeave}</p>}
+              {formErrors.stationLeave && <p className="text-[11px] font-semibold text-rose-600 leading-tight mt-1.5">{formErrors.stationLeave}</p>}
             </div>
 
             {type?.ltcAllowed && (
               <div>
-                <div className="text-xs font-bold text-slate-800 tracking-tight mb-1">LTC / Ex-India option<span className="text-rose-500 ml-0.5">*</span></div>
+                <div className="text-xs font-semibold text-slate-700 select-none mb-1.5">LTC / Ex-India option<span className="text-rose-500 ml-0.5">*</span></div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" role="radiogroup" aria-label="LTC / Ex-India option">
                   {([['none', `Regular ${type.code}`], ['ltc', 'Availing LTC'], ['ex_india', 'Ex-India']] as const).map(([value, label]) => (
                     <button key={value} type="button" role="radio" aria-checked={form.ltcType === value}
                       onClick={() => { setField('ltcType', value); if (value !== 'ltc') setField('encashLtc', false); }}
-                      className={`h-10 rounded-xl border text-xs font-bold cursor-pointer transition-colors ${form.ltcType === value ? 'bg-primary text-white border-primary' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}>
+                      className={`h-9 rounded-xl border text-xs font-semibold cursor-pointer transition-colors ${form.ltcType === value ? 'bg-primary text-white border-primary' : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'}`}>
                       {label}
                     </button>
                   ))}
                 </div>
-                {formErrors.ltcType && <p className="text-xs text-error mt-1">{formErrors.ltcType}</p>}
+                {formErrors.ltcType && <p className="text-[11px] font-semibold text-rose-600 leading-tight mt-1.5">{formErrors.ltcType}</p>}
                 {form.ltcType === 'ltc' && (
-                  <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3 space-y-2">
+                  <div className="mt-3 rounded-xl border border-slate-300 bg-white p-3 space-y-2">
                     <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
                       <input type="checkbox" checked={form.encashLtc} className="accent-primary w-4 h-4" onChange={(e) => setField('encashLtc', e.target.checked)} />
                       Avail leave encashment with LTC
                     </label>
                     {form.encashLtc && (
                       <div>
-                        <label className="block text-xs font-bold text-slate-800 tracking-tight mb-1" htmlFor="encash-days">Encashment days</label>
+                        <label className="block text-xs font-semibold text-slate-700 select-none mb-1.5" htmlFor="encash-days">Encashment days</label>
                         <input id="encash-days" type="number" min={1} max={10} step={1} value={form.encashDays}
                           onChange={(e) => setField('encashDays', Number(e.target.value))}
-                          className={`h-10 w-32 rounded-xl border px-3 text-sm ${formErrors.encashDays ? 'border-error-border bg-error-subtle' : 'border-slate-200 bg-white'}`} />
-                        {formErrors.encashDays && <p className="text-xs text-error mt-1">{formErrors.encashDays}</p>}
+                          className={`h-9 w-32 rounded-xl border px-3 text-xs font-medium text-slate-900 outline-none shadow-2xs focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 ${formErrors.encashDays ? 'border-rose-400 bg-rose-50/20' : 'border-slate-300 hover:border-slate-400 bg-white'}`} />
+                        {formErrors.encashDays && <p className="text-[11px] font-semibold text-rose-600 leading-tight mt-1.5">{formErrors.encashDays}</p>}
                       </div>
                     )}
                   </div>
@@ -641,17 +639,16 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
             {type?.needsContact && (
               <div>
                 <Textarea label={`Contact address during ${type.code} with mobile number`} required rows={2} maxLength={300} placeholder={`Enter contact address & mobile number during ${type.code}...`}
-                  value={form.contactAddress} error={Boolean(formErrors.contactAddress)} onChange={(e) => setField('contactAddress', e.target.value)} />
-                {formErrors.contactAddress && <p className="text-xs text-error mt-1">{formErrors.contactAddress}</p>}
+                  value={form.contactAddress} error={formErrors.contactAddress} onChange={(e) => setField('contactAddress', e.target.value)} />
               </div>
             )}
 
             {(needsCertificate || form.certificateFile || editing?.certificateName) && (
               <div>
-                <div className="text-xs font-bold text-slate-800 tracking-tight mb-1">Medical certificate{needsCertificate && <span className="text-rose-500 ml-0.5">*</span>}</div>
+                <div className="text-xs font-semibold text-slate-700 select-none mb-1.5">Medical certificate{needsCertificate && <span className="text-rose-500 ml-0.5">*</span>}</div>
                 <input ref={certInput} type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" className="hidden"
                   onChange={(e) => { pickCertificate(e.target.files?.[0]); e.target.value = ''; }} />
-                <div className={`flex items-center gap-2 rounded-xl border px-3 h-10 text-xs ${formErrors.certificate ? 'border-error-border bg-error-subtle' : 'border-slate-200 bg-white'}`}>
+                <div className={`flex items-center gap-2 rounded-xl border px-3 h-9 text-xs ${formErrors.certificate ? 'border-rose-400 bg-rose-50/20' : 'border-slate-300 bg-white'}`}>
                   <Paperclip className="w-4 h-4 text-slate-400 shrink-0" />
                   <span className="flex-1 min-w-0 truncate text-slate-700">{form.certificateFile?.name ?? editing?.certificateName ?? 'No file chosen'}</span>
                   {form.certificateFile && <button type="button" onClick={() => setField('certificateFile', null)} className="text-slate-500 hover:text-error font-semibold cursor-pointer">Remove</button>}
@@ -659,14 +656,13 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
                     {form.certificateFile || editing?.certificateName ? 'Replace' : 'Choose file'}
                   </button>
                 </div>
-                {formErrors.certificate ? <div className="text-error text-[11px] mt-1">{formErrors.certificate}</div> : null}
+                {formErrors.certificate ? <div className="text-[11px] font-semibold text-rose-600 leading-tight mt-1.5">{formErrors.certificate}</div> : null}
               </div>
             )}
 
             <div>
-              <Textarea label="Reason for leave" required rows={3} maxLength={1000} placeholder="State the reason for your leave application..." value={form.reason} error={Boolean(formErrors.reason)}
+              <Textarea label="Reason for leave" required rows={3} maxLength={1000} placeholder="State the reason for your leave application..." value={form.reason} error={formErrors.reason}
                 onChange={(e) => setField('reason', e.target.value)} />
-              {formErrors.reason && <p className="text-xs text-error mt-1">{formErrors.reason}</p>}
             </div>
           </form>
         </Modal>
