@@ -230,7 +230,7 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
                 options={[{ label: 'Active', value: 'active' }, { label: 'Inactive', value: 'inactive' }]} />
             </FormSection>
 
-            <FormSection step={2} title="Rules for taking leave" errorCount={countErrors(['approvalStages', 'combineWith', 'sandwichRule', 'halfDayAllowed', 'minDaysPerApplication', 'maxConsecutiveDays', 'gender', 'pwdOnly', 'maxSpellsPerMonth', 'maxSpellsLifetime', 'joiningRequired', 'isPaid', 'isDebited', 'needsContact', 'ltcAllowed', 'prefixSuffix', 'hodAfterDays'])}>
+            <FormSection step={2} title="Rules for taking leave" errorCount={countErrors(['approvalStages', 'combineWith', 'sandwichRule', 'halfDayAllowed', 'minDaysPerApplication', 'maxConsecutiveDays', 'gender', 'pwdOnly', 'maxSpellsPerMonth', 'maxSpellsLifetime', 'joiningRequired', 'isPaid', 'isDebited', 'needsContact', 'ltcAllowed', 'hodAfterDays'])}>
               <Select label="Approval stages" required value={String(form.approvalStages)} searchable={false} error={Boolean(errors.approvalStages)}
                 onChange={(v: string) => { set('approvalStages', Number(v) as 1 | 2); if (v === '1') set('hodAfterDays', 0); }}
                 options={[{ label: '1 stage · Reporting Manager', value: '1' }, { label: '2 stages · Reporting Manager, HoD', value: '2' }]} />
@@ -257,7 +257,6 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
 
               <Select label="Contact address needed" value={flag(form.needsContact)} searchable={false} error={Boolean(errors.needsContact)} onChange={(v: string) => set('needsContact', v === 'yes')} options={yesNo} />
               <Select label="LTC / Ex-India option" value={flag(form.ltcAllowed)} searchable={false} error={Boolean(errors.ltcAllowed)} onChange={(v: string) => set('ltcAllowed', v === 'yes')} options={yesNo} />
-              <Select label="Prefix / suffix holidays" value={flag(form.prefixSuffix)} searchable={false} error={Boolean(errors.prefixSuffix)} onChange={(v: string) => set('prefixSuffix', v === 'yes')} options={yesNo} />
               {form.approvalStages === 2 && (
                 <Input label="HoD approval above (days, 0 = always)" type="number" min={0} max={730} step="0.5" value={String(form.hodAfterDays)} error={errors.hodAfterDays} onChange={num('hodAfterDays')} />
               )}

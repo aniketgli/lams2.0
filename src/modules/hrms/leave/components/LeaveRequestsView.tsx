@@ -184,6 +184,17 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
     return () => { cancelled = true; clearTimeout(timer); };
   }, [formOpen, isAdmin, form.userId, form.leaveTypeId, form.startDate, form.endDate, form.startSession, form.endSession]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // A prefix / suffix that no longer exists for the chosen dates is dropped.
+  useEffect(() => {
+    if (!preview) return;
+    setForm((f) => {
+      const dropPrefix = f.availPrefix && (!preview.prefix || f.prefixFrom < preview.prefix.from || f.prefixTo > preview.prefix.to);
+      const dropSuffix = f.availSuffix && (!preview.suffix || f.suffixFrom < preview.suffix.from || f.suffixTo > preview.suffix.to);
+      if (!dropPrefix && !dropSuffix) return f;
+      return { ...f, ...(dropPrefix ? { availPrefix: false, prefixFrom: '', prefixTo: '' } : {}), ...(dropSuffix ? { availSuffix: false, suffixFrom: '', suffixTo: '' } : {}) };
+    });
+  }, [preview]);
+
   const needsCertificate = Boolean(type && type.medicalCertDays > 0 && preview && preview.days > type.medicalCertDays);
   const certInput = React.useRef<HTMLInputElement>(null);
   const pickCertificate = (file: File | undefined) => {
@@ -512,7 +523,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
                 {formErrors.leaveTypeId && <p className="text-xs text-error mt-1">{formErrors.leaveTypeId}</p>}
               </div>
               <div className={formErrors.startDate ? 'rounded-xl ring-2 ring-rose-400' : ''} title={formErrors.startDate || undefined}>
-                <AppDatePicker label="From date (start date)" required value={form.startDate} placeholder="Select date" minDate={isAdmin ? localDate(-15) : localDate(-7)}
+                <AppDatePicker label="From date (start date)" required value={form.startDate} placeholder="Select date" minDate={localDate(-15)}
                   onChange={(v) => { setField('startDate', v); if (!form.endDate || form.endDate < v) setField('endDate', v); }} className="w-full" />
               </div>
               <div className={formErrors.endDate ? 'rounded-xl ring-2 ring-rose-400' : ''} title={formErrors.endDate || undefined}>
@@ -545,36 +556,35 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
               </div>
             ))}
 
-            {type?.prefixSuffix && (
+            {preview && !preview.error && (
               <div>
                 <div className="text-xs font-bold text-slate-800 tracking-tight mb-1">Prefix &amp; Suffix holidays</div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {([['Prefix', 'availPrefix', 'prefixFrom', 'prefixTo'], ['Suffix', 'availSuffix', 'suffixFrom', 'suffixTo']] as const).map(([name, flag, fromKey, toKey]) => (
-                    <div key={name} className="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
-                      <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
-                        <input type="checkbox" checked={form[flag]} className="accent-primary w-4 h-4"
-                          onChange={(e) => {
-                            const on = e.target.checked;
-                            setForm((f) => ({
-                              ...f, [flag]: on,
-                              ...(name === 'Prefix'
-                                ? { prefixFrom: on ? f.prefixFrom : '', prefixTo: on && f.startDate ? shiftDate(f.startDate, -1) : '' }
-                                : { suffixFrom: on && f.endDate ? shiftDate(f.endDate, 1) : '', suffixTo: on ? f.suffixTo : '' }),
-                            }));
-                          }} />
-                        Avail {name.toLowerCase()}
-                      </label>
-                      {form[flag] && (
+                  {([['Prefix', 'availPrefix', 'prefixFrom', 'prefixTo', preview.prefix], ['Suffix', 'availSuffix', 'suffixFrom', 'suffixTo', preview.suffix]] as const).map(([name, flag, fromKey, toKey, block]) => (
+                    <div key={name} className={`rounded-xl border p-3 space-y-2 ${block ? 'border-slate-200 bg-white' : 'border-slate-100 bg-slate-50 opacity-70'}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <label className={`flex items-center gap-2 text-xs font-bold ${block ? 'text-slate-700 cursor-pointer' : 'text-slate-400'}`}>
+                          <input type="checkbox" disabled={!block} checked={Boolean(block) && form[flag]} className="accent-primary w-4 h-4"
+                            onChange={(e) => {
+                              if (!block) return;
+                              const on = e.target.checked;
+                              setForm((f) => ({ ...f, [flag]: on, [fromKey]: on ? block.from : '', [toKey]: on ? block.to : '' }));
+                            }} />
+                          Avail {name.toLowerCase()}
+                        </label>
+                        <span className="text-[11px] font-semibold text-slate-500">{block ? `${block.days} ${block.days === 1 ? 'Day' : 'Days'}` : 'Not eligible'}</span>
+                      </div>
+                      {block && form[flag] && (
                         <div className="grid grid-cols-2 gap-2">
                           <div className={formErrors[fromKey] ? 'rounded-xl ring-2 ring-rose-400' : ''} title={formErrors[fromKey] || undefined}>
-                            <AppDatePicker label={`${name} from`} value={form[fromKey]} placeholder="Select date" onChange={(v) => setField(fromKey, v)} className="w-full" />
+                            <AppDatePicker label={`${name} from`} value={form[fromKey]} placeholder="Select date" minDate={block.from} maxDate={block.to} onChange={(v) => setField(fromKey, v)} className="w-full" />
                           </div>
                           <div className={formErrors[toKey] ? 'rounded-xl ring-2 ring-rose-400' : ''} title={formErrors[toKey] || undefined}>
-                            <AppDatePicker label={`${name} to`} value={form[toKey]} placeholder="Select date" onChange={(v) => setField(toKey, v)} className="w-full" />
+                            <AppDatePicker label={`${name} to`} value={form[toKey]} placeholder="Select date" minDate={block.from} maxDate={block.to} onChange={(v) => setField(toKey, v)} className="w-full" />
                           </div>
                         </div>
                       )}
-                      {form[flag] && (formErrors[fromKey] || formErrors[toKey]) && <p className="text-xs text-error">{formErrors[fromKey] || formErrors[toKey]}</p>}
+                      {block && form[flag] && (formErrors[fromKey] || formErrors[toKey]) && <p className="text-xs text-error">{formErrors[fromKey] || formErrors[toKey]}</p>}
                     </div>
                   ))}
                 </div>

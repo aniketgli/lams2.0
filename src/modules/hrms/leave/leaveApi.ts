@@ -182,7 +182,12 @@ export interface LeavePreview {
   cycle: string;
   balance: LeaveBalance | null;
   error: string | null;
+  /** Weekly offs / gazetted holidays just before and after the leave that can be added to it. */
+  prefix: HolidayBlock | null;
+  suffix: HolidayBlock | null;
 }
+
+export interface HolidayBlock { from: string; to: string; days: number }
 
 export interface BalanceRow {
   userId: string;

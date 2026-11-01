@@ -277,11 +277,11 @@ async function loadTarget(q: { query: typeof pool.query }, userId: number): Prom
   return { id: Number(row.id), joining: row.joining_date ? isoDate(row.joining_date) : null, reportingManagerId: /^\d+$/.test(manager) ? manager : null };
 }
 
-/** Dates rule: employees apply from today; administrators may enter dates up to MAX_BACKDATE_DAYS back. */
+/** Dates rule: everyone may enter dates up to MAX_BACKDATE_DAYS back, no older. */
 function checkDates(viewer: Viewer, input: OdInput, joining: string | null, today = todayInIndia()): void {
-  const earliest = viewer.role === 'administrator' ? oldestApplicationDate(today) : today;
+  const earliest = oldestApplicationDate(today);
   const errors: Record<string, string> = {};
-  if (input.startDate < earliest) errors.startDate = viewer.role === 'administrator' ? TOO_OLD_MESSAGE : 'The start date cannot be in the past.';
+  if (input.startDate < earliest) errors.startDate = TOO_OLD_MESSAGE;
   else if (joining && input.startDate < joining) errors.startDate = `This is before the employee joined (${joining}).`;
   else if (input.startDate > addDays(today, 365)) errors.startDate = 'The start date is more than a year away.';
   if (Object.keys(errors).length) throw badRequest('Please correct the highlighted fields.', errors);

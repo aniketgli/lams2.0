@@ -4,7 +4,7 @@ import { pool } from '../../src/db';
 import { loadCertificate, parseCertificate, saveCertificate, type CertificateFile } from './certificates';
 import { HttpError, badRequest, forbidden, notFound } from '../lib/http';
 import { inTransaction } from '../lib/tx';
-import { TOO_OLD_MESSAGE, Validator, isValidIsoDate, oldestApplicationDate, todayInIndia } from '../lib/validate';
+import { MAX_BACKDATE_DAYS, TOO_OLD_MESSAGE, Validator, isValidIsoDate, oldestApplicationDate, todayInIndia } from '../lib/validate';
 import { changedFields, writeMasterAuditSql } from '../masters/audit';
 import type { RoleId } from '../lib/roles';
 import type { ActivityScope } from '../employees/activity';
@@ -34,7 +34,7 @@ export type LeaveStatus = (typeof STATUSES)[number];
 export const AUDIT_KEY = 'leave_request';
 export const BALANCE_KEY = 'leave_balance';
 /** An employee may apply this many days back when the leave type needs no notice (e.g. sick leave). */
-export const EMPLOYEE_BACKDATE_DAYS = 7;
+export const EMPLOYEE_BACKDATE_DAYS = MAX_BACKDATE_DAYS;
 /** Most days of leave encashment that can be taken with one LTC. */
 export const LTC_ENCASH_MAX = 10;
 export const MAX_RANGE_DAYS = 400;
@@ -517,7 +517,8 @@ async function joinProblem(q: { query: typeof pool.query }, emp: Employee, polic
   return combineProblem({ id: policy.id, name: policy.name, stages: policy.stages, combineWith: policy.combineWith }, input.startDate, input.endDate, others, rule.workingDays, rule.gazetted, worked);
 }
 
-export interface Checked { days: number; cycleYear: number; policy: Policy; emp: Employee; balance: Balance; stages: 1 | 2 }
+export interface HolidayBlock { from: string; to: string; days: number }
+export interface Checked { days: number; cycleYear: number; policy: Policy; emp: Employee; balance: Balance; stages: 1 | 2; prefix: HolidayBlock | null; suffix: HolidayBlock | null }
 
 /** Every rule of a leave application. Throws a field-level 400 / 409 when one fails. */
 async function checkLeave(
@@ -582,10 +583,17 @@ async function checkLeave(
   if (stages === 2 && !emp.reviewingManagerId) errors.leaveTypeId = 'This employee has no HoD set, which this leave type needs. Ask the administrator.';
   if (policy.needsContact && !input.contactAddress) errors.contactAddress = 'Enter the address and mobile number to reach you during the leave.';
   if (input.ltcType !== 'none' && !policy.ltcAllowed) errors.ltcType = `LTC and Ex-India are not available with ${policy.name}.`;
-  if ((input.prefix || input.suffix) && !policy.prefixSuffix) errors.prefixFrom = `Prefix and suffix holidays are not available with ${policy.name}.`;
-  if (policy.prefixSuffix && (input.prefix || input.suffix)) {
-    const wide = await dayRule(q, emp, policy, addDays(input.startDate, -45), addDays(input.endDate, 45));
-    const off = (d: string) => !wide.workingDays.includes(weekdayOf(d)) || wide.gazetted.has(d);
+  // Weekly offs and gazetted holidays touching the leave can be added to it as a prefix / suffix, for every leave type.
+  const wide = await dayRule(q, emp, policy, addDays(input.startDate, -45), addDays(input.endDate, 45));
+  const off = (d: string) => !wide.workingDays.includes(weekdayOf(d)) || wide.gazetted.has(d);
+  const block = (from: string, to: string): HolidayBlock | null => (from <= to ? { from, to, days: datesBetween(from, to).length } : null);
+  let pf = addDays(input.startDate, -1);
+  while (pf >= oldestApplicationDate(today) && pf >= addDays(input.startDate, -31) && off(pf)) pf = addDays(pf, -1);
+  const prefix = block(addDays(pf, 1), addDays(input.startDate, -1));
+  let sf = addDays(input.endDate, 1);
+  while (sf <= addDays(input.endDate, 31) && off(sf)) sf = addDays(sf, 1);
+  const suffix = block(addDays(input.endDate, 1), addDays(sf, -1));
+  {
     if (input.prefix) {
       const { from, to } = input.prefix;
       if (to >= input.startDate) errors.prefixTo = 'The prefix must end before the leave starts.';
@@ -619,7 +627,7 @@ async function checkLeave(
       if (need > left.available) {
         throw new HttpError(409, 'Not enough leave balance.', 'NO_BALANCE', { endDate: `${policy.name} uses ${policy.debitFactor} day(s) of ${base.name} for each day: ${need} needed, ${Math.max(0, left.available)} available for ${cycleLabel(cycleYear, emp.basis)}.` });
       }
-      return { days, cycleYear, policy, emp, balance: left, stages };
+      return { days, cycleYear, policy, emp, balance: left, stages, prefix, suffix };
     }
   }
   if (policy.debited && days > balance.available) {
@@ -627,13 +635,13 @@ async function checkLeave(
     const hint = next ? ` After it is used up, ${next.name} can be applied for.` : '';
     throw new HttpError(409, 'Not enough leave balance.', 'NO_BALANCE', { endDate: `${policy.name}: ${days} days asked, ${Math.max(0, balance.available)} available for ${cycleLabel(cycleYear, emp.basis)}.${hint}` });
   }
-  return { days, cycleYear, policy, emp, balance, stages };
+  return { days, cycleYear, policy, emp, balance, stages, prefix, suffix };
 }
 
 export const cycleLabel = (year: number, basis: 'CY' | 'FY') => (basis === 'FY' ? `FY ${year}-${String(year + 1).slice(2)}` : `${year}`);
 
 /** What the apply form shows while it is filled: the days and balance the server will use. Never writes. */
-export async function previewLeave(viewer: Viewer, query: Record<string, unknown>): Promise<{ days: number; cycleYear: number; cycle: string; balance: Balance | null; error: string | null }> {
+export async function previewLeave(viewer: Viewer, query: Record<string, unknown>): Promise<{ days: number; cycleYear: number; cycle: string; balance: Balance | null; error: string | null; prefix: HolidayBlock | null; suffix: HolidayBlock | null }> {
   const input = (() => {
     try {
       return { ...parseLeaveInput({ ...query, reason: 'preview', stationLeave: false, ltcType: 'none', availPrefix: false, availSuffix: false }), certificate: true };
@@ -642,12 +650,12 @@ export async function previewLeave(viewer: Viewer, query: Record<string, unknown
     }
   })();
   const target = viewer.role === 'administrator' ? Number(input?.userId ?? 0) : viewer.id;
-  if (!input || !target) return { days: 0, cycleYear: 0, cycle: '', balance: null, error: null };
+  if (!input || !target) return { days: 0, cycleYear: 0, cycle: '', balance: null, error: null, prefix: null, suffix: null };
   try {
     const c = await checkLeave(pool, viewer, input, target, 0);
-    return { days: c.days, cycleYear: c.cycleYear, cycle: cycleLabel(c.cycleYear, c.emp.basis), balance: c.balance, error: null };
+    return { days: c.days, cycleYear: c.cycleYear, cycle: cycleLabel(c.cycleYear, c.emp.basis), balance: c.balance, error: null, prefix: c.prefix, suffix: c.suffix };
   } catch (error) {
-    if (error instanceof HttpError) return { days: 0, cycleYear: 0, cycle: '', balance: null, error: Object.values(error.details ?? {})[0] ?? error.message };
+    if (error instanceof HttpError) return { days: 0, cycleYear: 0, cycle: '', balance: null, error: Object.values(error.details ?? {})[0] ?? error.message, prefix: null, suffix: null };
     throw error;
   }
 }
