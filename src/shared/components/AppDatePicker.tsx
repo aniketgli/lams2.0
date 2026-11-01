@@ -19,7 +19,7 @@ export interface AppDatePickerProps {
   isOpen?: boolean;
   onToggle?: () => void;
   /** Days to colour (and, when `blocked`, to refuse): pending / approved / rejected leaves, joins that are not allowed. */
-  marks?: Record<string, { tone: 'yellow' | 'green' | 'red' | 'blue'; blocked: boolean; label: string }>;
+  marks?: Record<string, { tone: 'yellow' | 'green' | 'red' | 'blue' | 'slate'; blocked: boolean; label: string }>;
   restrictToStationLeave?: boolean; // Default false. If true, restricts to weekends & GH
   holidays?: AppDatePickerHoliday[];
   placeholder?: string;
@@ -35,6 +35,7 @@ const MARK_TONES = {
   green: 'bg-emerald-100 text-emerald-900 border-emerald-300',
   red: 'bg-rose-100 text-rose-900 border-rose-300',
   blue: 'bg-sky-100 text-sky-900 border-sky-300',
+  slate: 'bg-slate-100 text-slate-400 border-slate-200 font-normal',
 } as const;
 
 const monthsList = [

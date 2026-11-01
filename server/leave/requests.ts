@@ -73,6 +73,8 @@ export interface LeaveRequest {
   certificateName: string | null;
   /** The employee will leave the headquarters during this leave (station permission). */
   stationLeave: boolean;
+  /** Set on a station leave that was applied automatically for the prefix / suffix of another leave request. */
+  linkedTo: string | null;
   ltcType: 'none' | 'ltc' | 'ex_india';
   encashDays: number;
   contactAddress: string;
@@ -191,7 +193,7 @@ function canDecide(viewer: Viewer, row: RowDataPacket): boolean {
 }
 
 function canModify(viewer: Viewer, row: RowDataPacket): boolean {
-  if (String(row.status) !== 'pending_l1') return false;
+  if (String(row.status) !== 'pending_l1' || row.linked_to) return false; // a linked station leave follows its leave request
   if (viewer.role === 'administrator') return true;
   return viewer.role === 'general_staff' && Number(row.user_id) === viewer.id;
 }
@@ -233,6 +235,7 @@ function toRequest(viewer: Viewer, row: RowDataPacket): LeaveRequest {
     certificate: Boolean(row.certificate),
     certificateName: row.certificate_name ? String(row.certificate_name) : null,
     stationLeave: Boolean(row.station_leave),
+    linkedTo: row.linked_to ? String(row.linked_to) : null,
     ltcType: row.ltc_type === 'ltc' ? 'ltc' : row.ltc_type === 'ex_india' ? 'ex_india' : 'none',
     encashDays: Number(row.encash_days ?? 0),
     contactAddress: row.contact_address ? String(row.contact_address) : '',
@@ -345,7 +348,7 @@ export interface Policy {
   id: number; code: string; name: string; quota: number; pwdQuota: number | null; pwdOnly: boolean; stages: 1 | 2; minNotice: number; halfDay: boolean; certDays: number;
   sandwich: 'included' | 'excluded'; employeeTypes: string[]; gender: string; minServiceMonths: number; maxConsecutive: number; debited: boolean;
   status: string; combineWith: Combine; maxAccumulation: number; afterExhaustedId: number; accrual: string; debitFromId: number; debitFactor: number; lifetimeMax: number; maxSpells: number; minDays: number; maxSpellsMonth: number; maxSpellsLifetime: number; quotas: Record<string, number>;
-  needsContact: boolean; ltcAllowed: boolean; prefixSuffix: boolean; hodAfterDays: number; certificateRequired: boolean;
+  needsContact: boolean; ltcAllowed: boolean; prefixSuffix: boolean; hodAfterDays: number; certificateRequired: boolean; offDaysOnly: boolean;
 }
 
 function toPolicy(r: RowDataPacket): Policy {
@@ -358,7 +361,7 @@ function toPolicy(r: RowDataPacket): Policy {
     status: String(r.status), combineWith: toCombine(r.combine_with), maxAccumulation: Number(r.max_accumulation), afterExhaustedId: Number(r.after_exhausted_type_id ?? 0), accrual: String(r.accrual ?? 'yearly'),
     debitFromId: Number(r.debit_from_type_id ?? 0), debitFactor: Number(r.debit_factor ?? 1),
     lifetimeMax: Number(r.lifetime_max ?? 0), maxSpells: Number(r.max_spells_per_year ?? 0), minDays: Number(r.min_days_per_application ?? 0), maxSpellsMonth: Number(r.max_spells_per_month ?? 0), maxSpellsLifetime: Number(r.max_spells_lifetime ?? 0), quotas: {},
-    needsContact: Boolean(r.needs_contact), ltcAllowed: Boolean(r.ltc_allowed), prefixSuffix: Boolean(r.prefix_suffix), hodAfterDays: Number(r.hod_after_days ?? 0), certificateRequired: Boolean(r.certificate_required),
+    needsContact: Boolean(r.needs_contact), ltcAllowed: Boolean(r.ltc_allowed), prefixSuffix: Boolean(r.prefix_suffix), hodAfterDays: Number(r.hod_after_days ?? 0), certificateRequired: Boolean(r.certificate_required), offDaysOnly: Boolean(r.off_days_only),
   };
 }
 
@@ -460,7 +463,7 @@ async function dayRule(q: { query: typeof pool.query }, emp: Employee, policy: P
   } catch (error) {
     if ((error as { code?: string })?.code !== 'ER_NO_SUCH_TABLE') throw error;
   }
-  return { sandwich: policy.sandwich, workingDays, gazetted };
+  return { sandwich: policy.sandwich === 'included' || policy.offDaysOnly ? 'included' as const : 'excluded' as const, workingDays, gazetted };
 }
 
 // ---------------------------------------------------------------------------
@@ -478,8 +481,6 @@ export function parseLeaveInput(body: unknown): LeaveInput {
   const reason = v.string('reason', { min: 5, max: 1000 });
   if (startDate && endDate && startDate > endDate) v.errors.endDate ||= 'End date cannot be before the start date.';
   v.assert();
-  const station = (body as Record<string, unknown> | null)?.stationLeave;
-  if (typeof station !== 'boolean') throw badRequest('Please correct the highlighted fields.', { stationLeave: 'Choose whether station permission is required.' });
   const raw = (body ?? {}) as Record<string, unknown>;
   const ltcType = v.oneOf('ltcType', ['none', 'ltc', 'ex_india'] as const, false) ?? 'none';
   let encashDays = 0;
@@ -498,7 +499,7 @@ export function parseLeaveInput(body: unknown): LeaveInput {
   const suffix = raw.availSuffix === true ? range('suffixFrom', 'suffixTo', 'Suffix') : null;
   if (Object.keys(v.errors).length) v.assert();
   const file = parseCertificate((body as Record<string, unknown> | null)?.certificateFile);
-  return { userId, leaveTypeId, startDate: startDate!, endDate: endDate!, startSession, endSession, reason: reason.replace(/\s+/g, ' '), certificate: Boolean(file), stationLeave: station, ltcType, encashDays, contactAddress, prefix, suffix, file };
+  return { userId, leaveTypeId, startDate: startDate!, endDate: endDate!, startSession, endSession, reason: reason.replace(/\s+/g, ' '), certificate: Boolean(file), stationLeave: false, ltcType, encashDays, contactAddress, prefix, suffix, file };
 }
 
 /** Looks at the employee's other leaves around the new one: see ./combine. */
@@ -531,8 +532,8 @@ async function checkLeave(
   const emp = await loadEmployee(q, targetId);
   const policy = await loadPolicy(q, Number(input.leaveTypeId));
   const errors: Record<string, string> = {};
-  // Availing a prefix or suffix means leaving the station for those days: the station permission is filled in for the employee.
-  if (input.prefix || input.suffix) input.stationLeave = true;
+  // Station permission is not asked: it goes with a prefix / suffix, and a station leave is always one.
+  input.stationLeave = Boolean(input.prefix || input.suffix) || Boolean(policy?.offDaysOnly);
   if (!policy || policy.status !== 'active') throw badRequest('Please correct the highlighted fields.', { leaveTypeId: 'Choose a leave type from the list.' });
 
   const problem = eligibilityProblem(policy, emp, input.startDate);
@@ -588,7 +589,7 @@ async function checkLeave(
   // A leave type with two steps may need the HoD only for longer leaves (e.g. EL above 2 days).
   const stages: 1 | 2 = policy.stages === 2 && (policy.hodAfterDays <= 0 || days > policy.hodAfterDays) ? 2 : 1;
   if (stages === 2 && !emp.reviewingManagerId) errors.leaveTypeId = 'This employee has no HoD set, which this leave type needs. Ask the administrator.';
-  if ((policy.needsContact || input.stationLeave) && !input.contactAddress) errors.contactAddress = input.stationLeave ? 'Enter the outstation location and contact address.' : 'Enter the address and mobile number to reach you during the leave.';
+  if ((policy.needsContact || input.stationLeave) && !input.contactAddress) errors.contactAddress = 'Enter the address and mobile number to reach you during the leave.';
   if (input.ltcType !== 'none' && !policy.ltcAllowed) errors.ltcType = `LTC and Ex-India are not available with ${policy.name}.`;
   // Weekly offs and gazetted holidays touching the leave can be added to it as a prefix / suffix, for every leave type.
   const wide = await dayRule(q, emp, policy, addDays(input.startDate, -45), addDays(input.endDate, 45));
@@ -603,7 +604,7 @@ async function checkLeave(
 
   // The employee's own leaves straight before / after this one (only weekly offs and holidays in between).
   const around = await rows(q,
-    `SELECT r.id, r.leave_type_id, r.start_date, r.end_date, r.days_count, t.name, t.approval_stages, t.max_consecutive_days
+    `SELECT r.id, r.leave_type_id, r.start_date, r.end_date, r.days_count, t.name, t.approval_stages, t.max_consecutive_days, t.off_days_only
        FROM leave_requests r JOIN leave_types t ON t.id = r.leave_type_id
       WHERE r.user_id = ? AND r.status <> 'rejected' AND r.id <> ? AND r.end_date >= ? AND r.start_date <= ? ORDER BY r.start_date`,
     [targetId, exceptId, addDays(input.startDate, -46), addDays(input.endDate, 46)]);
@@ -611,14 +612,15 @@ async function checkLeave(
     const gap: string[] = [];
     for (let i = 0, d = from; i < 45; i++, d = addDays(d, step)) {
       const hit = around.find((n) => isoDate(n.start_date) <= d && d <= isoDate(n.end_date));
-      if (hit) return { hit, gap: gap.sort() };
-      if (!off(d)) return null;
+      if (hit && !hit.off_days_only) return { hit, gap: gap.sort() };
+      if (!off(d)) return null; // (a station leave is only weekly offs / holidays: they stay part of the gap)
       gap.push(d);
     }
     return null;
   };
   const joins: JoinedGap[] = [];
-  for (const [side, found] of [['after', reach(addDays(input.startDate, -1), -1)], ['before', reach(addDays(input.endDate, 1), 1)]] as const) {
+  const sides = (policy.offDaysOnly ? [] : [['after', reach(addDays(input.startDate, -1), -1)], ['before', reach(addDays(input.endDate, 1), 1)]]) as ['after' | 'before', ReturnType<typeof reach>][];
+  for (const [side, found] of sides) {
     if (!found) continue;
     const other = found.hit;
     const otherStages = Number(other.approval_stages) === 2 ? 2 : 1;
@@ -638,9 +640,9 @@ async function checkLeave(
       throw new HttpError(409, 'This leave cannot be joined with the leave next to it.', 'COMBINE', { startDate: `Joining it with ${other.name} (${range}) would take that leave beyond ${cap} days.` });
     }
   }
-  // Station permission goes only with a leave that is continuous with weekly offs / gazetted holidays.
+  // A station leave covers weekly offs and gazetted holidays only; all days between the two dates are off, so they are one stretch.
   const stationOk = Boolean(prefix) || Boolean(suffix) || datesBetween(input.startDate, input.endDate).some(off);
-  if (input.stationLeave && !stationOk) errors.stationLeave = 'Station leave can be taken only in one continuous stretch with a weekend or holiday.';
+  if (policy.offDaysOnly && !datesBetween(input.startDate, input.endDate).every(off)) errors.startDate = `${policy.name} can be taken only on weekly offs and holidays, in one continuous stretch.`;
   {
     if (input.prefix) {
       const { from, to } = input.prefix;
@@ -665,7 +667,7 @@ async function checkLeave(
     [targetId, exceptId, input.endDate, input.startDate]);
   if (clash) throw new HttpError(409, 'This employee already has a leave on these dates.', 'DUPLICATE', { startDate: `Overlaps a pending or approved leave (${isoDate(clash.start_date)} to ${isoDate(clash.end_date)}).` });
 
-  const joined = await joinProblem(q, emp, policy, input, targetId, exceptId);
+  const joined = policy.offDaysOnly ? null : await joinProblem(q, emp, policy, input, targetId, exceptId);
   if (joined) throw new HttpError(409, 'This leave cannot be joined with the leave next to it.', 'COMBINE', { startDate: joined });
 
   const balance = await balanceOf(q, targetId, { id: policy.id, quota: creditedQuota(policy, emp.employmentType, cycleYear, emp.basis, input.startDate, emp.isPwd) }, cycleYear, exceptId);
@@ -764,8 +766,8 @@ export async function balancePreview(
  */
 export async function occupiedDates(
   viewer: Viewer, query: Record<string, unknown>, today = todayInIndia(),
-): Promise<{ days: { date: string; status: 'pending' | 'approved' | 'rejected' }[]; joined: string[] }> {
-  const empty = { days: [], joined: [] };
+): Promise<{ days: { date: string; status: 'pending' | 'approved' | 'rejected' }[]; joined: string[]; workdays: string[] }> {
+  const empty = { days: [], joined: [], workdays: [] };
   if (viewer.role !== 'administrator' && viewer.role !== 'general_staff') return empty;
   const target = viewer.role === 'administrator' ? Number(query.userId ?? 0) : viewer.id;
   if (!target) return empty;
@@ -775,7 +777,7 @@ export async function occupiedDates(
   let found: RowDataPacket[];
   try {
     found = await rows(pool,
-      `SELECT r.start_date, r.end_date, r.status, r.prefix_from, r.prefix_to, r.suffix_from, r.suffix_to, t.approval_stages
+      `SELECT r.start_date, r.end_date, r.status, r.prefix_from, r.prefix_to, r.suffix_from, r.suffix_to, t.approval_stages, t.off_days_only
          FROM leave_requests r JOIN leave_types t ON t.id = r.leave_type_id
         WHERE r.user_id = ? AND r.id <> ? AND r.end_date >= ? AND r.start_date <= ?`,
       [target, exceptId, from, to]);
@@ -795,6 +797,7 @@ export async function occupiedDates(
     if (r.suffix_from) put(isoDate(r.suffix_from), isoDate(r.suffix_to), status);
   }
   const joined = new Set<string>();
+  const workdays: string[] = [];
   const typeId = String(query.leaveTypeId ?? '');
   if (/^\d{1,20}$/.test(typeId)) {
     const emp = await loadEmployee(pool, target);
@@ -802,8 +805,10 @@ export async function occupiedDates(
     if (policy) {
       const rule = await dayRule(pool, emp, policy, from, to);
       const off = (d: string) => !rule.workingDays.includes(weekdayOf(d)) || rule.gazetted.has(d);
+      // A station leave can be chosen on weekly offs and holidays only: the working days are blocked.
+      if (policy.offDaysOnly) for (const d of datesBetween(from, to)) if (!off(d)) workdays.push(d);
       for (const r of found) {
-        if (r.status === 'rejected' || (Number(r.approval_stages) === 2 ? 2 : 1) === policy.stages) continue;
+        if (policy.offDaysOnly || r.off_days_only || r.status === 'rejected' || (Number(r.approval_stages) === 2 ? 2 : 1) === policy.stages) continue;
         for (const [start, step] of [[addDays(isoDate(r.end_date), 1), 1], [addDays(isoDate(r.start_date), -1), -1]] as const) {
           for (let d = start, i = 0; i < 45 && d >= from && d <= to; i++, d = addDays(d, step)) {
             joined.add(d);
@@ -813,7 +818,7 @@ export async function occupiedDates(
       }
     }
   }
-  return { days: [...days.entries()].map(([date, status]) => ({ date, status })).sort((a, b) => a.date.localeCompare(b.date)), joined: [...joined].filter((d) => !days.has(d) || days.get(d) === 'rejected').sort() };
+  return { days: [...days.entries()].map(([date, status]) => ({ date, status })).sort((a, b) => a.date.localeCompare(b.date)), joined: [...joined].filter((d) => !days.has(d) || days.get(d) === 'rejected').sort(), workdays };
 }
 
 // ---------------------------------------------------------------------------
@@ -839,11 +844,50 @@ async function applyJoins(conn: { query: typeof pool.query }, req: Request, view
     } else {
       await conn.query('UPDATE leave_requests SET start_date = ?, days_count = days_count + ?, prefix_from = NULL, prefix_to = NULL WHERE id = ?', [j.from, j.days, j.requestId]);
     }
+    // The station leave that was applied for these days is no longer needed: they are leave days now.
+    const stale = await rows(conn, `${SELECT} WHERE m.linked_to = ? AND m.start_date >= ? AND m.end_date <= ?`, [j.requestId, j.from, j.to]);
+    for (const s of stale) {
+      const gone = toRequest(viewer, s);
+      await writeMasterAuditSql(conn, req, { masterKey: AUDIT_KEY, recordId: gone.id, recordLabel: label(gone), action: 'DELETE', before: auditView(gone), reason: 'Counted as leave days of the leave next to it' });
+      await conn.query('DELETE FROM leave_requests WHERE id = ?', [Number(gone.id)]);
+    }
     const after = toRequest(viewer, (await fetchOne(conn, j.requestId))!);
     await writeMasterAuditSql(conn, req, {
       masterKey: AUDIT_KEY, recordId: j.requestId, recordLabel: label(after), action: 'UPDATE', before: auditView(before), after: auditView(after),
       reason: `Holidays ${j.from} to ${j.to} now count as leave: another ${j.typeName} follows straight on`,
     });
+  }
+}
+
+/** The station leave of a leave's prefix / suffix: applied for the employee with the same details, linked to the leave. */
+async function createLinkedStation(conn: { query: typeof pool.query }, req: Request, viewer: Viewer, parentId: number, targetId: number, input: LeaveInput, c: Checked): Promise<void> {
+  const blocks = [input.prefix, input.suffix].filter(Boolean) as { from: string; to: string }[];
+  if (!blocks.length) return;
+  const [station] = await rows(conn, "SELECT id, approval_stages FROM leave_types WHERE off_days_only = 1 AND status = 'active' ORDER BY id LIMIT 1");
+  if (!station) return; // no station leave type is set up
+  for (const b of blocks) {
+    const [result] = await conn.query(
+      `INSERT INTO leave_requests
+         (user_id, leave_type_id, start_date, end_date, start_session, end_session, days_count, cycle_year, reason, certificate, station_leave, contact_address, linked_to, stages, status, applied_by, manager_id, reviewer_id)
+       VALUES (?, ?, ?, ?, 'full', 'full', ?, ?, ?, 0, 1, ?, ?, ?, 'pending_l1', ?, ?, ?)`,
+      [targetId, Number(station.id), b.from, b.to, datesBetween(b.from, b.to).length, c.cycleYear, input.reason, input.contactAddress || null, parentId,
+        Number(station.approval_stages) === 2 ? 2 : 1, viewer.id, c.emp.reportingManagerId, c.emp.reviewingManagerId]);
+    const id = Number((result as { insertId: number }).insertId);
+    const made = toRequest(viewer, (await fetchOne(conn, id))!);
+    await writeMasterAuditSql(conn, req, { masterKey: AUDIT_KEY, recordId: id, recordLabel: label(made), action: 'CREATE', after: auditView(made), reason: `Station leave for the prefix / suffix of leave request ${parentId}` });
+  }
+}
+
+/** Removes the linked station leaves of a leave request (it was edited or deleted). A decided one stops the change. */
+async function dropLinkedStation(conn: { query: typeof pool.query }, req: Request, viewer: Viewer, parentId: number): Promise<void> {
+  const linked = await rows(conn, `${SELECT} WHERE m.linked_to = ? FOR UPDATE`, [parentId]);
+  if (linked.some((r) => String(r.status) !== 'pending_l1')) {
+    throw new HttpError(409, 'The station leave of its prefix / suffix has already been looked at. Ask for that step to be undone first.', 'NOT_PENDING');
+  }
+  for (const r of linked) {
+    const gone = toRequest(viewer, r);
+    await writeMasterAuditSql(conn, req, { masterKey: AUDIT_KEY, recordId: gone.id, recordLabel: label(gone), action: 'DELETE', before: auditView(gone), reason: `Leave request ${parentId} was changed or deleted` });
+    await conn.query('DELETE FROM leave_requests WHERE id = ?', [Number(gone.id)]);
   }
 }
 
@@ -875,6 +919,7 @@ export async function createRequest(req: Request, viewer: Viewer, body: unknown)
       const id = Number((result as { insertId: number }).insertId);
       if (input.file) await saveCertificate(conn, id, input.file, viewer.id);
       await applyJoins(conn, req, viewer, c.joins);
+      await createLinkedStation(conn, req, viewer, id, targetId, input, c);
       const created = toRequest(viewer, (await fetchOne(conn, id))!);
       await writeMasterAuditSql(conn, req, { masterKey: AUDIT_KEY, recordId: id, recordLabel: label(created), action: 'CREATE', after: auditView(created) });
       return created;
@@ -892,11 +937,13 @@ export async function updateRequest(req: Request, viewer: Viewer, id: number, bo
     return await inTransaction(async (conn) => {
       const row = await fetchOne(conn, id, true);
       if (!row || (viewer.role !== 'administrator' && Number(row.user_id) !== viewer.id)) throw notFound('Request not found.');
+      if (row.linked_to) throw new HttpError(409, 'This station leave follows its leave request. Change that leave request instead.', 'LINKED');
       const before = toRequest(viewer, row);
       if (before.status !== 'pending_l1') throw new HttpError(409, 'Only a leave that has not been looked at yet can be edited. Ask for the step to be undone first.', 'NOT_PENDING');
       if (input.userId && input.userId !== String(row.user_id)) throw badRequest('Please correct the highlighted fields.', { userId: 'The employee of a request cannot be changed.' });
       // A certificate already on file stays unless a new one is uploaded.
       input.certificate = Boolean(input.file) || Boolean(row.certificate);
+      await dropLinkedStation(conn, req, viewer, id);
       const c = await checkLeave(conn, viewer, input, Number(row.user_id), id);
       await conn.query(
         `UPDATE leave_requests SET leave_type_id = ?, start_date = ?, end_date = ?, start_session = ?, end_session = ?, days_count = ?, cycle_year = ?,
@@ -907,6 +954,7 @@ export async function updateRequest(req: Request, viewer: Viewer, id: number, bo
       );
       if (input.file) await saveCertificate(conn, id, input.file, viewer.id);
       await applyJoins(conn, req, viewer, c.joins);
+      await createLinkedStation(conn, req, viewer, id, Number(row.user_id), input, c);
       const after = toRequest(viewer, (await fetchOne(conn, id))!);
       const changed = changedFields(auditView(before), auditView(after));
       if (changed.length) await writeMasterAuditSql(conn, req, { masterKey: AUDIT_KEY, recordId: id, recordLabel: label(after), action: 'UPDATE', before: auditView(before), after: auditView(after) });
@@ -998,9 +1046,11 @@ export async function deleteRequest(req: Request, viewer: Viewer, id: number, re
     return await inTransaction(async (conn) => {
       const row = await fetchOne(conn, id, true);
       if (!row || (viewer.role !== 'administrator' && Number(row.user_id) !== viewer.id)) throw notFound('Request not found.');
+      if (row.linked_to) throw new HttpError(409, 'This station leave follows its leave request. Delete that leave request instead.', 'LINKED');
       const target = toRequest(viewer, row);
       if (target.status !== 'pending_l1') throw new HttpError(409, 'Only a leave that has not been looked at yet can be deleted. Ask for the step to be undone first.', 'NOT_PENDING');
       await writeMasterAuditSql(conn, req, { masterKey: AUDIT_KEY, recordId: id, recordLabel: label(target), action: 'DELETE', before: auditView(target), reason });
+      await dropLinkedStation(conn, req, viewer, id);
       await conn.query('DELETE FROM leave_certificates WHERE request_id = ?', [id]);
       await conn.query('DELETE FROM leave_requests WHERE id = ?', [id]);
       return target;

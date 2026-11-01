@@ -45,6 +45,8 @@ export interface LeaveTypeRecord {
   hodAfterDays: number;
   /** A medical certificate is needed for every application. */
   certificateRequired: boolean;
+  /** Only weekly offs and gazetted holidays can be chosen (station leave). */
+  offDaysOnly: boolean;
   quotas: Array<{ employeeType: string; quota: number }>;
   status: 'active' | 'inactive';
   updatedAt: string | null;
@@ -116,6 +118,8 @@ export interface LeaveRequest {
   certificate: boolean;
   certificateName: string | null;
   stationLeave: boolean;
+  /** Set on a station leave applied automatically for the prefix / suffix of another leave request. */
+  linkedTo: string | null;
   ltcType: 'none' | 'ltc' | 'ex_india';
   encashDays: number;
   contactAddress: string;
@@ -245,7 +249,7 @@ export const leaveApi = {
   downloadCertificate: (id: string) => downloadCsv(`${one(id)}/certificate`, 'medical-certificate'),
   occupied: (input: { userId: string; leaveTypeId: string; exceptId: string }) => {
     const q = new URLSearchParams(Object.entries(input).filter(([, v]) => v) as [string, string][]);
-    return api<{ days: { date: string; status: 'pending' | 'approved' | 'rejected' }[]; joined: string[] }>(`${base}/occupied?${q.toString()}`);
+    return api<{ days: { date: string; status: 'pending' | 'approved' | 'rejected' }[]; joined: string[]; workdays: string[] }>(`${base}/occupied?${q.toString()}`);
   },
   balancePreview: (input: { userId: string; leaveTypeId: string; date: string }) => {
     const q = new URLSearchParams(Object.entries(input).filter(([, v]) => v) as [string, string][]);
