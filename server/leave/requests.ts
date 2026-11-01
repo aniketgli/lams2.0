@@ -68,6 +68,8 @@ export interface LeaveRequest {
   reason: string;
   certificate: boolean;
   certificateName: string | null;
+  /** The employee will leave the headquarters during this leave (station permission). */
+  stationLeave: boolean;
   stages: 1 | 2;
   status: LeaveStatus;
   appliedAt: string;
@@ -100,6 +102,7 @@ export interface LeaveInput {
   reason: string;
   /** Whether a medical certificate is on file (set by the server from the upload, never from the request body). */
   certificate: boolean;
+  stationLeave: boolean;
   /** A certificate uploaded with this application. */
   file: CertificateFile | null;
 }
@@ -213,6 +216,7 @@ function toRequest(viewer: Viewer, row: RowDataPacket): LeaveRequest {
     reason: String(row.reason),
     certificate: Boolean(row.certificate),
     certificateName: row.certificate_name ? String(row.certificate_name) : null,
+    stationLeave: Boolean(row.station_leave),
     stages: Number(row.stages) === 2 ? 2 : 1,
     status,
     appliedAt: isoTime(row.created_at) ?? '',
@@ -237,7 +241,7 @@ function toRequest(viewer: Viewer, row: RowDataPacket): LeaveRequest {
 function auditView(r: LeaveRequest): Record<string, unknown> {
   return {
     employee: `${r.name} (${r.biometricId})`, leaveType: `${r.leaveTypeName} (${r.leaveTypeCode})`, startDate: r.startDate, endDate: r.endDate,
-    startSession: r.startSession, endSession: r.endSession, days: r.daysCount, reason: r.reason, certificate: r.certificateName ?? (r.certificate ? 'Yes' : 'No'), status: r.status,
+    startSession: r.startSession, endSession: r.endSession, days: r.daysCount, reason: r.reason, certificate: r.certificateName ?? (r.certificate ? 'Yes' : 'No'), stationPermission: r.stationLeave ? 'Required' : 'Not required', status: r.status,
     forwardedBy: r.forwardedByName, comment: r.comment,
   };
 }
@@ -449,8 +453,10 @@ export function parseLeaveInput(body: unknown): LeaveInput {
   const reason = v.string('reason', { min: 5, max: 1000 });
   if (startDate && endDate && startDate > endDate) v.errors.endDate ||= 'End date cannot be before the start date.';
   v.assert();
+  const station = (body as Record<string, unknown> | null)?.stationLeave;
+  if (typeof station !== 'boolean') throw badRequest('Please correct the highlighted fields.', { stationLeave: 'Choose whether station permission is required.' });
   const file = parseCertificate((body as Record<string, unknown> | null)?.certificateFile);
-  return { userId, leaveTypeId, startDate: startDate!, endDate: endDate!, startSession, endSession, reason: reason.replace(/\s+/g, ' '), certificate: Boolean(file), file };
+  return { userId, leaveTypeId, startDate: startDate!, endDate: endDate!, startSession, endSession, reason: reason.replace(/\s+/g, ' '), certificate: Boolean(file), stationLeave: station, file };
 }
 
 /** Looks at the employee's other leaves around the new one: see ./combine. */
@@ -567,7 +573,7 @@ export const cycleLabel = (year: number, basis: 'CY' | 'FY') => (basis === 'FY' 
 export async function previewLeave(viewer: Viewer, query: Record<string, unknown>): Promise<{ days: number; cycleYear: number; cycle: string; balance: Balance | null; error: string | null }> {
   const input = (() => {
     try {
-      return { ...parseLeaveInput({ ...query, reason: 'preview' }), certificate: true };
+      return { ...parseLeaveInput({ ...query, reason: 'preview', stationLeave: false }), certificate: true };
     } catch {
       return null;
     }
@@ -611,9 +617,9 @@ export async function createRequest(req: Request, viewer: Viewer, body: unknown)
       const c = await checkLeave(conn, viewer, input, targetId, 0);
       const [result] = await conn.query(
         `INSERT INTO leave_requests
-           (user_id, leave_type_id, start_date, end_date, start_session, end_session, days_count, cycle_year, reason, certificate, stages, status, applied_by, manager_id, reviewer_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_l1', ?, ?, ?)`,
-        [targetId, c.policy.id, input.startDate, input.endDate, input.startSession, input.endSession, c.days, c.cycleYear, input.reason, input.certificate ? 1 : 0,
+           (user_id, leave_type_id, start_date, end_date, start_session, end_session, days_count, cycle_year, reason, certificate, station_leave, stages, status, applied_by, manager_id, reviewer_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_l1', ?, ?, ?)`,
+        [targetId, c.policy.id, input.startDate, input.endDate, input.startSession, input.endSession, c.days, c.cycleYear, input.reason, input.certificate ? 1 : 0, input.stationLeave ? 1 : 0,
           c.policy.stages, viewer.id, c.emp.reportingManagerId, c.emp.reviewingManagerId],
       );
       const id = Number((result as { insertId: number }).insertId);
@@ -643,8 +649,8 @@ export async function updateRequest(req: Request, viewer: Viewer, id: number, bo
       const c = await checkLeave(conn, viewer, input, Number(row.user_id), id);
       await conn.query(
         `UPDATE leave_requests SET leave_type_id = ?, start_date = ?, end_date = ?, start_session = ?, end_session = ?, days_count = ?, cycle_year = ?,
-           reason = ?, certificate = ?, stages = ?, manager_id = ?, reviewer_id = ? WHERE id = ?`,
-        [c.policy.id, input.startDate, input.endDate, input.startSession, input.endSession, c.days, c.cycleYear, input.reason, input.certificate ? 1 : 0,
+           reason = ?, certificate = ?, station_leave = ?, stages = ?, manager_id = ?, reviewer_id = ? WHERE id = ?`,
+        [c.policy.id, input.startDate, input.endDate, input.startSession, input.endSession, c.days, c.cycleYear, input.reason, input.certificate ? 1 : 0, input.stationLeave ? 1 : 0,
           c.policy.stages, c.emp.reportingManagerId, c.emp.reviewingManagerId, id],
       );
       if (input.file) await saveCertificate(conn, id, input.file, viewer.id);

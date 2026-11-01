@@ -108,6 +108,7 @@ export interface LeaveRequest {
   reason: string;
   certificate: boolean;
   certificateName: string | null;
+  stationLeave: boolean;
   stages: 1 | 2;
   status: LeaveStatus;
   appliedAt: string;
@@ -145,6 +146,8 @@ export interface LeaveInput {
   startSession: 'full' | 'second_half';
   endSession: 'full' | 'first_half';
   reason: string;
+  /** Station (headquarters) permission: true when the employee will leave the station. */
+  stationLeave: boolean;
   /** Medical certificate chosen in the form (a data URL); the server checks the real file type and size. */
   certificateFile?: { name: string; data: string } | null;
 }

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarDays, Check, Paperclip, CheckCircle2, ChevronsRight, Clock, Eye, FileText, Pencil, RotateCcw, Trash2, X, XCircle } from 'lucide-react';
+import { CalendarDays, Building2, MapPin, Send, Check, Paperclip, CheckCircle2, ChevronsRight, Clock, Eye, FileText, Pencil, RotateCcw, Trash2, X, XCircle } from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
 import { DataTable, Modal, Select } from '../../../../shared/components';
 import type { ColumnDef } from '../../../../shared/components';
@@ -55,18 +55,7 @@ const statusBy = (r: LeaveRequest) =>
     : r.status === 'pending_l2' ? `with ${r.reviewerName ?? 'HoD'}`
     : `by ${r.actionByName ?? '—'}`;
 
-const FormSection: React.FC<{ step: number; title: string; errorCount: number; children: React.ReactNode }> = ({ step, title, errorCount, children }) => (
-  <section className="rounded-xl border border-slate-200">
-    <header className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-200 bg-slate-50 rounded-t-xl">
-      <span className="w-5 h-5 rounded-full bg-primary text-white text-[11px] font-bold flex items-center justify-center">{step}</span>
-      <h3 className="text-sm font-bold text-slate-800">{title}</h3>
-      {errorCount > 0 && <span className="ml-auto text-[11px] font-semibold text-error">{errorCount} to fix</span>}
-    </header>
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4">{children}</div>
-  </section>
-);
-
-const EMPTY_FORM: LeaveInput = { userId: '', leaveTypeId: '', startDate: '', endDate: '', startSession: 'full', endSession: 'full', reason: '', certificateFile: null };
+const EMPTY_FORM: LeaveInput = { userId: '', leaveTypeId: '', startDate: '', endDate: '', startSession: 'full', endSession: 'full', reason: '', stationLeave: false, certificateFile: null };
 
 export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySignal }) => {
   const { currentUser, users } = useApp();
@@ -164,7 +153,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
   useEffect(() => { if (applySignal > 0 && canApply) openApply(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [applySignal]);
   const openEdit = (r: LeaveRequest) => {
     setEditing(r);
-    setForm({ userId: r.userId, leaveTypeId: r.leaveTypeId, startDate: r.startDate, endDate: r.endDate, startSession: r.startSession, endSession: r.endSession, reason: r.reason, certificateFile: null });
+    setForm({ userId: r.userId, leaveTypeId: r.leaveTypeId, startDate: r.startDate, endDate: r.endDate, startSession: r.startSession, endSession: r.endSession, reason: r.reason, stationLeave: r.stationLeave, certificateFile: null });
     setFormErrors({}); setFormMessage(null); setPreview(null); setFormOpen(true);
   };
 
@@ -470,13 +459,14 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
           isOpen={formOpen}
           onClose={() => setFormOpen(false)}
           size="lg"
-          title={editing ? 'Edit leave' : 'Apply for leave'}
+          icon={<CalendarDays className="w-5 h-5 text-blue-300" />}
+          title={editing ? 'Edit Leave' : 'Apply for Leave'}
           subtitle={editing ? `${editing.name} · ${duration(editing)}` : undefined}
           footer={(
             <div className="flex justify-end gap-2">
               <button type="button" onClick={() => setFormOpen(false)} className="h-9 px-4 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer">Cancel</button>
               <button type="submit" form="leave-form" disabled={saving} className="h-9 px-4 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary/90 cursor-pointer disabled:opacity-60">
-                {saving ? 'Saving…' : editing ? 'Save changes' : 'Submit'}
+                {saving ? 'Saving…' : editing ? 'Save changes' : <span className="inline-flex items-center gap-1.5"><Send className="w-3.5 h-3.5" />Submit</span>}
               </button>
             </div>
           )}
@@ -484,7 +474,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
           <form id="leave-form" onSubmit={save} noValidate className="space-y-4">
             {formMessage && <NoticeBar notice={{ kind: 'error', text: formMessage }} onClose={() => setFormMessage(null)} />}
 
-            <FormSection step={1} title="Leave details" errorCount={['userId', 'leaveTypeId'].filter((k) => formErrors[k]).length}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {isAdmin && (
                 <div className="sm:col-span-2">
                   <Select label="Employee" required value={form.userId} disabled={Boolean(editing)} searchable placeholder="Select employee" error={Boolean(formErrors.userId)}
@@ -498,15 +488,12 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
                   options={(data?.types ?? []).map((t) => ({ label: `${t.name} (${t.code})`, value: t.id }))} />
                 {formErrors.leaveTypeId && <p className="text-xs text-error mt-1">{formErrors.leaveTypeId}</p>}
               </div>
-            </FormSection>
-
-            <FormSection step={2} title="Duration" errorCount={['startDate', 'endDate'].filter((k) => formErrors[k]).length}>
               <div className={formErrors.startDate ? 'rounded-xl ring-2 ring-rose-400' : ''} title={formErrors.startDate || undefined}>
-                <AppDatePicker label="Start date" required value={form.startDate} placeholder="Select date" minDate={isAdmin ? localDate(-60) : localDate(-7)}
+                <AppDatePicker label="From date (start date)" required value={form.startDate} placeholder="Select date" minDate={isAdmin ? localDate(-60) : localDate(-7)}
                   onChange={(v) => { setField('startDate', v); if (!form.endDate || form.endDate < v) setField('endDate', v); }} className="w-full" />
               </div>
               <div className={formErrors.endDate ? 'rounded-xl ring-2 ring-rose-400' : ''} title={formErrors.endDate || undefined}>
-                <AppDatePicker label="End date" required value={form.endDate} placeholder="Select date" minDate={form.startDate || undefined}
+                <AppDatePicker label="To date (end date)" required value={form.endDate} placeholder="Select date" minDate={form.startDate || undefined}
                   onChange={(v) => setField('endDate', v)} className="w-full" />
               </div>
               {type?.halfDayAllowed && (
@@ -515,52 +502,63 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
                   <Select label="End day" value={form.endSession} searchable={false} onChange={(v: string) => setField('endSession', v as LeaveInput['endSession'])} options={sessionOptions.end} />
                 </>
               )}
-              {(preview || formErrors.endDate || formErrors.startDate) && (
-                <div className="sm:col-span-2">
-                  {preview?.error ? (
-                    <div className="rounded-xl border border-error-border bg-error-subtle px-3 py-2 text-xs text-error">{preview.error}</div>
-                  ) : preview && (
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                      <div><p className="text-[11px] font-semibold text-slate-500">Leave days</p><p className="font-extrabold text-slate-900">{daysText(preview.days)}</p></div>
-                      <div><p className="text-[11px] font-semibold text-slate-500">Leave year</p><p className="font-extrabold text-slate-900">{preview.cycle}</p></div>
-                      {preview.balance && type?.isDebited && (
-                        <>
-                          <div><p className="text-[11px] font-semibold text-slate-500">Available</p><p className="font-extrabold text-slate-900">{preview.balance.available}</p></div>
-                          <div>
-                            <p className="text-[11px] font-semibold text-slate-500">After this leave</p>
-                            <p className={`font-extrabold ${preview.balance.available - preview.days < 0 ? 'text-rose-600' : 'text-slate-900'}`}>{Math.round((preview.balance.available - preview.days) * 10) / 10}</p>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </FormSection>
+            </div>
 
-            <FormSection step={3} title="Reason" errorCount={['reason', 'certificate'].filter((k) => formErrors[k]).length}>
-              {(needsCertificate || form.certificateFile || editing?.certificateName) && (
-                <div className="sm:col-span-2">
-                  <div className="text-xs font-bold text-slate-800 tracking-tight mb-1">Medical certificate{needsCertificate && <span className="text-rose-500 ml-0.5">*</span>}</div>
-                  <input ref={certInput} type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" className="hidden"
-                    onChange={(e) => { pickCertificate(e.target.files?.[0]); e.target.value = ''; }} />
-                  <div className={`flex items-center gap-2 rounded-xl border px-3 h-10 text-xs ${formErrors.certificate ? 'border-error-border bg-error-subtle' : 'border-slate-200 bg-white'}`}>
-                    <Paperclip className="w-4 h-4 text-slate-400 shrink-0" />
-                    <span className="flex-1 min-w-0 truncate text-slate-700">{form.certificateFile?.name ?? editing?.certificateName ?? 'No file chosen'}</span>
-                    {form.certificateFile && <button type="button" onClick={() => setField('certificateFile', null)} className="text-slate-500 hover:text-error font-semibold cursor-pointer">Remove</button>}
-                    <button type="button" onClick={() => certInput.current?.click()} className="text-primary font-bold cursor-pointer">
-                      {form.certificateFile || editing?.certificateName ? 'Replace' : 'Choose file'}
-                    </button>
-                  </div>
-                  {formErrors.certificate ? <div className="text-error text-[11px] mt-1">{formErrors.certificate}</div> : null}
-                </div>
-              )}
-              <div className="sm:col-span-2">
-                <Textarea label="Reason" required rows={3} maxLength={1000} placeholder="e.g. Family function out of town" value={form.reason} error={Boolean(formErrors.reason)}
-                  onChange={(e) => setField('reason', e.target.value)} />
-                {formErrors.reason && <p className="text-xs text-error mt-1">{formErrors.reason}</p>}
+            {(preview || formErrors.endDate || formErrors.startDate) && (preview?.error ? (
+              <div className="rounded-xl border border-error-border bg-error-subtle px-3 py-2 text-xs text-error">{preview.error}</div>
+            ) : preview && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div><p className="text-[11px] font-semibold text-slate-500">Leave days</p><p className="font-extrabold text-slate-900">{daysText(preview.days)}</p></div>
+                <div><p className="text-[11px] font-semibold text-slate-500">Leave year</p><p className="font-extrabold text-slate-900">{preview.cycle}</p></div>
+                {preview.balance && type?.isDebited && (
+                  <>
+                    <div><p className="text-[11px] font-semibold text-slate-500">Available</p><p className="font-extrabold text-slate-900">{preview.balance.available}</p></div>
+                    <div>
+                      <p className="text-[11px] font-semibold text-slate-500">After this leave</p>
+                      <p className={`font-extrabold ${preview.balance.available - preview.days < 0 ? 'text-rose-600' : 'text-slate-900'}`}>{Math.round((preview.balance.available - preview.days) * 10) / 10}</p>
+                    </div>
+                  </>
+                )}
               </div>
-            </FormSection>
+            ))}
+
+            <div>
+              <div className="text-xs font-bold text-slate-800 tracking-tight mb-1">Headquarter (HQ) / Station permission<span className="text-rose-500 ml-0.5">*</span></div>
+              <div className="grid grid-cols-2 gap-3" role="radiogroup" aria-label="Headquarter / Station permission">
+                {([[false, 'Not required (HQ)', Building2], [true, 'Station leave', MapPin]] as const).map(([value, label, Icon]) => (
+                  <button key={label} type="button" role="radio" aria-checked={form.stationLeave === value} onClick={() => setField('stationLeave', value)}
+                    className={`h-10 rounded-xl border text-xs font-bold inline-flex items-center justify-center gap-2 cursor-pointer transition-colors ${
+                      form.stationLeave === value ? 'bg-primary text-white border-primary' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                    }`}>
+                    <Icon className="w-4 h-4" />{label}
+                  </button>
+                ))}
+              </div>
+              {formErrors.stationLeave && <p className="text-xs text-error mt-1">{formErrors.stationLeave}</p>}
+            </div>
+
+            {(needsCertificate || form.certificateFile || editing?.certificateName) && (
+              <div>
+                <div className="text-xs font-bold text-slate-800 tracking-tight mb-1">Medical certificate{needsCertificate && <span className="text-rose-500 ml-0.5">*</span>}</div>
+                <input ref={certInput} type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" className="hidden"
+                  onChange={(e) => { pickCertificate(e.target.files?.[0]); e.target.value = ''; }} />
+                <div className={`flex items-center gap-2 rounded-xl border px-3 h-10 text-xs ${formErrors.certificate ? 'border-error-border bg-error-subtle' : 'border-slate-200 bg-white'}`}>
+                  <Paperclip className="w-4 h-4 text-slate-400 shrink-0" />
+                  <span className="flex-1 min-w-0 truncate text-slate-700">{form.certificateFile?.name ?? editing?.certificateName ?? 'No file chosen'}</span>
+                  {form.certificateFile && <button type="button" onClick={() => setField('certificateFile', null)} className="text-slate-500 hover:text-error font-semibold cursor-pointer">Remove</button>}
+                  <button type="button" onClick={() => certInput.current?.click()} className="text-primary font-bold cursor-pointer">
+                    {form.certificateFile || editing?.certificateName ? 'Replace' : 'Choose file'}
+                  </button>
+                </div>
+                {formErrors.certificate ? <div className="text-error text-[11px] mt-1">{formErrors.certificate}</div> : null}
+              </div>
+            )}
+
+            <div>
+              <Textarea label="Reason for leave" required rows={3} maxLength={1000} placeholder="State the reason for your leave application..." value={form.reason} error={Boolean(formErrors.reason)}
+                onChange={(e) => setField('reason', e.target.value)} />
+              {formErrors.reason && <p className="text-xs text-error mt-1">{formErrors.reason}</p>}
+            </div>
           </form>
         </Modal>
       )}
@@ -618,6 +616,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
               <div key={k}><dt className="font-semibold text-slate-500">{k}</dt><dd className="text-slate-900 font-medium">{v}</dd></div>
             ))}
             <div className="sm:col-span-2"><dt className="font-semibold text-slate-500">Reason</dt><dd className="text-slate-900 font-medium whitespace-pre-wrap">{viewing.reason}</dd></div>
+            <div><dt className="font-semibold text-slate-500">Station permission</dt><dd className="text-slate-900 font-medium">{viewing.stationLeave ? 'Station leave' : 'Not required (HQ)'}</dd></div>
             {viewing.certificateName && (
               <div className="sm:col-span-2">
                 <dt className="font-semibold text-slate-500">Medical certificate</dt>
