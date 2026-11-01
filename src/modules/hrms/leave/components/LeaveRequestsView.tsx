@@ -164,6 +164,10 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
   };
 
   const type = data?.types.find((t) => t.id === form.leaveTypeId) ?? null;
+  // A leave type that takes its days from another type (Commuted from Half Pay) is a conversion option of that type.
+  const baseType = type?.debitFromTypeId ? data?.types.find((t) => t.id === type.debitFromTypeId) ?? type : type;
+  const variants = baseType ? (data?.types ?? []).filter((t) => t.debitFromTypeId === baseType.id) : [];
+  const charge = type?.debitFromTypeId ? type.debitFactor : 1;
 
   // Days of the calendar that already hold a leave (and days that cannot be joined with one), coloured and blocked in the pickers.
   const [occupied, setOccupied] = useState<{ days: { date: string; status: 'pending' | 'approved' | 'rejected' }[]; joined: string[] } | null>(null);
@@ -222,7 +226,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
     if (preview && !preview.stationOk) setForm((f) => (f.stationLeave ? { ...f, stationLeave: false } : f));
   }, [preview]);
 
-  const needsCertificate = Boolean(type && type.medicalCertDays > 0 && preview && preview.days > type.medicalCertDays);
+  const needsCertificate = Boolean(type && (type.certificateRequired || (type.medicalCertDays > 0 && preview && preview.days > type.medicalCertDays)));
   const certInput = React.useRef<HTMLInputElement>(null);
   const pickCertificate = (file: File | undefined) => {
     if (!file) return;
@@ -251,8 +255,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
     } catch (error) {
       if (error instanceof ApiError) {
         setFormErrors(error.details ?? {});
-        const first = Object.values(error.details ?? {}).find(Boolean);
-        setFormMessage(first ? `${error.message} ${first}` : error.message);
+        setFormMessage(error.message); // the details are shown under their own fields
       } else {
         setFormMessage('The request could not be saved.');
       }
@@ -536,12 +539,13 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
                 </div>
               )}
               <div className="sm:col-span-2 relative">
-                <Select label="Leave type" required value={form.leaveTypeId} searchable placeholder="Select leave type" error={formErrors.leaveTypeId}
+                <Select label="Leave type" required value={baseType?.id ?? ''} searchable placeholder="Select leave type" error={formErrors.leaveTypeId}
                   onChange={(v: string) => {
                     setForm((f) => ({ ...f, leaveTypeId: v, ltcType: 'none', encashLtc: false, availPrefix: false, availSuffix: false }));
-                    setFormErrors((e) => ({ ...e, leaveTypeId: '' }));
+                    setFormErrors({});
+                    setFormMessage(null);
                   }}
-                  options={(data?.types ?? []).map((t) => ({ label: `${t.name} (${t.code})`, value: t.id }))} />
+                  options={(data?.types ?? []).filter((t) => !t.debitFromTypeId).map((t) => ({ label: `${t.name} (${t.code})`, value: t.id }))} />
                 {balanceBadge?.balance && (
                   <span className={`absolute right-0 top-0 inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${balanceBadge.balance.available > 0 ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-rose-200 bg-rose-50 text-rose-700'}`}>
                     Balance: {balanceBadge.balance.available} {balanceBadge.balance.available === 1 ? 'Day' : 'Days'}
@@ -558,22 +562,22 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
               </div>
               {type?.halfDayAllowed && (
                 <>
-                  <Select label="Start day" value={form.startSession} searchable={false} onChange={(v: string) => setField('startSession', v as LeaveInput['startSession'])} options={sessionOptions.start} />
-                  <Select label="End day" value={form.endSession} searchable={false} onChange={(v: string) => setField('endSession', v as LeaveInput['endSession'])} options={sessionOptions.end} />
+                  <Select label="Start day" error={formErrors.startSession} value={form.startSession} searchable={false} onChange={(v: string) => setField('startSession', v as LeaveInput['startSession'])} options={sessionOptions.start} />
+                  <Select label="End day" error={formErrors.endSession} value={form.endSession} searchable={false} onChange={(v: string) => setField('endSession', v as LeaveInput['endSession'])} options={sessionOptions.end} />
                 </>
               )}
             </div>
 
             {preview && !preview.error && (
               <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                <div><p className="text-[11px] font-semibold text-slate-500">Total duration</p><p className="font-extrabold text-slate-900">{daysText(preview.days)}</p></div>
+                <div><p className="text-[11px] font-semibold text-slate-500">Total duration</p><p className="font-extrabold text-slate-900">{daysText(preview.days)}{charge !== 1 ? ` (uses ${daysText(preview.days * charge)})` : ''}</p></div>
                 <div><p className="text-[11px] font-semibold text-slate-500">Leave year</p><p className="font-extrabold text-slate-900">{preview.cycle}</p></div>
                 {preview.balance && type?.isDebited && (
                   <>
                     <div><p className="text-[11px] font-semibold text-slate-500">Available</p><p className="font-extrabold text-slate-900">{preview.balance.available}</p></div>
                     <div>
                       <p className="text-[11px] font-semibold text-slate-500">After this leave</p>
-                      <p className={`font-extrabold ${preview.balance.available - preview.days - encashing < 0 ? 'text-rose-600' : 'text-slate-900'}`}>{Math.round((preview.balance.available - preview.days - encashing) * 10) / 10}</p>
+                      <p className={`font-extrabold ${preview.balance.available - preview.days * charge - encashing < 0 ? 'text-rose-600' : 'text-slate-900'}`}>{Math.round((preview.balance.available - preview.days * charge - encashing) * 10) / 10}</p>
                     </div>
                   </>
                 )}
@@ -591,7 +595,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
                           onChange={(e) => {
                             if (!block) return;
                             const on = e.target.checked;
-                            setForm((f) => ({ ...f, [flag]: on, [fromKey]: on ? block.from : '', [toKey]: on ? block.to : '' }));
+                            setForm((f) => ({ ...f, [flag]: on, [fromKey]: on ? block.from : '', [toKey]: on ? block.to : '', ...(on ? { stationLeave: true } : {}) }));
                           }} />
                         <span className="text-[11px] font-semibold text-slate-500">{block ? `${block.days} ${block.days === 1 ? 'Day' : 'Days'}` : 'Not eligible'}</span>
                       </div>
@@ -615,7 +619,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
               <div className="text-xs font-semibold text-slate-700 select-none mb-1.5">Headquarter (HQ) / Station permission<span className="text-rose-500 ml-0.5">*</span></div>
               <div className="grid grid-cols-2 gap-3" role="radiogroup" aria-label="Headquarter / Station permission">
                 {([[false, 'Not required (HQ)', Building2], [true, 'Station leave', MapPin]] as const).map(([value, label, Icon]) => (
-                  <button key={label} type="button" role="radio" aria-checked={form.stationLeave === value} disabled={value && Boolean(preview) && !preview?.stationOk} onClick={() => setField('stationLeave', value)}
+                  <button key={label} type="button" role="radio" aria-checked={form.stationLeave === value} disabled={value ? Boolean(preview) && !preview?.stationOk : form.availPrefix || form.availSuffix} onClick={() => setField('stationLeave', value)}
                     className={`h-9 rounded-xl border text-xs font-semibold inline-flex items-center justify-center gap-2 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                       form.stationLeave === value ? 'bg-primary text-white border-primary' : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
                     }`}>
@@ -625,6 +629,21 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
               </div>
               {formErrors.stationLeave && <p className="text-[11px] font-semibold text-rose-600 leading-tight mt-1.5">{formErrors.stationLeave}</p>}
             </div>
+
+            {variants.length > 0 && baseType && (
+              <div>
+                <div className="text-xs font-semibold text-slate-700 select-none mb-1.5">Leave conversion option<span className="text-rose-500 ml-0.5">*</span></div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" role="radiogroup" aria-label="Leave conversion option">
+                  {[{ id: baseType.id, label: `Normal ${baseType.code}` }, ...variants.map((v) => ({ id: v.id, label: v.name }))].map((o) => (
+                    <button key={o.id} type="button" role="radio" aria-checked={form.leaveTypeId === o.id}
+                      onClick={() => { setForm((f) => ({ ...f, leaveTypeId: o.id, startSession: 'full', endSession: 'full' })); setFormErrors({}); setFormMessage(null); }}
+                      className={`h-9 rounded-xl border text-xs font-semibold cursor-pointer transition-colors ${form.leaveTypeId === o.id ? 'bg-primary text-white border-primary' : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'}`}>
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {type?.ltcAllowed && (
               <div>
@@ -651,9 +670,9 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
               </div>
             )}
 
-            {type?.needsContact && (
+            {(type?.needsContact || form.stationLeave) && (
               <div>
-                <Textarea label={`Contact address during ${type.code} with mobile number`} required rows={2} maxLength={300} placeholder={`Enter contact address & mobile number during ${type.code}...`}
+                <Textarea label={type?.needsContact ? `Contact address during ${type.code} with mobile number` : 'Outstation location / contact address'} required rows={2} maxLength={300} placeholder={type?.needsContact ? `Enter contact address & mobile number during ${type.code}...` : 'Enter outstation city / address during the leave...'}
                   value={form.contactAddress} error={formErrors.contactAddress} onChange={(e) => setField('contactAddress', e.target.value)} />
               </div>
             )}
