@@ -3,7 +3,7 @@ import type { RowDataPacket } from 'mysql2/promise';
 import { pool } from '../../src/db';
 import { HttpError, badRequest, forbidden, notFound } from '../lib/http';
 import { inTransaction } from '../lib/tx';
-import { PATTERNS, Validator, isValidIsoDate, todayInIndia } from '../lib/validate';
+import { PATTERNS, TOO_OLD_MESSAGE, Validator, isValidIsoDate, oldestApplicationDate, todayInIndia } from '../lib/validate';
 import { changedFields, writeMasterAuditSql } from '../masters/audit';
 import type { RoleId } from '../lib/roles';
 import type { ActivityScope } from '../employees/activity';
@@ -30,7 +30,6 @@ export type OdStatus = (typeof STATUSES)[number];
 const AUDIT_KEY = 'outdoor_duty';
 export const MAX_OD_DAYS = 60;
 /** How far back an administrator may enter an OD. */
-export const ADMIN_BACKDATE_DAYS = 60;
 export const MAX_RANGE_DAYS = 400;
 
 export const OD_SCOPE: ActivityScope = {
@@ -278,11 +277,11 @@ async function loadTarget(q: { query: typeof pool.query }, userId: number): Prom
   return { id: Number(row.id), joining: row.joining_date ? isoDate(row.joining_date) : null, reportingManagerId: /^\d+$/.test(manager) ? manager : null };
 }
 
-/** Dates rule: employees apply from today; administrators may enter up to ADMIN_BACKDATE_DAYS back. */
+/** Dates rule: employees apply from today; administrators may enter dates up to MAX_BACKDATE_DAYS back. */
 function checkDates(viewer: Viewer, input: OdInput, joining: string | null, today = todayInIndia()): void {
-  const earliest = viewer.role === 'administrator' ? addDays(today, -ADMIN_BACKDATE_DAYS) : today;
+  const earliest = viewer.role === 'administrator' ? oldestApplicationDate(today) : today;
   const errors: Record<string, string> = {};
-  if (input.startDate < earliest) errors.startDate = viewer.role === 'administrator' ? `Dates more than ${ADMIN_BACKDATE_DAYS} days back cannot be entered.` : 'The start date cannot be in the past.';
+  if (input.startDate < earliest) errors.startDate = viewer.role === 'administrator' ? TOO_OLD_MESSAGE : 'The start date cannot be in the past.';
   else if (joining && input.startDate < joining) errors.startDate = `This is before the employee joined (${joining}).`;
   else if (input.startDate > addDays(today, 365)) errors.startDate = 'The start date is more than a year away.';
   if (Object.keys(errors).length) throw badRequest('Please correct the highlighted fields.', errors);

@@ -503,7 +503,7 @@ export const OutdoorDutyView: React.FC = () => {
                 </div>
               )}
               <div className={formErrors.startDate ? 'rounded-xl ring-2 ring-rose-400' : ''} title={formErrors.startDate || undefined}>
-                <AppDatePicker label="Start Date *" value={form.startDate} placeholder="Select date" minDate={isAdmin ? localDate(-60) : today}
+                <AppDatePicker label="Start Date *" value={form.startDate} placeholder="Select date" minDate={isAdmin ? localDate(-15) : today}
                   onChange={(v) => { setField('startDate', v); if (!form.endDate || form.endDate < v) setField('endDate', v); }} className="w-full" />
               </div>
               <div className={formErrors.endDate ? 'rounded-xl ring-2 ring-rose-400' : ''} title={formErrors.endDate || undefined}>

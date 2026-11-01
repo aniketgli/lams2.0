@@ -38,6 +38,11 @@ export interface LeaveTypeRecord {
   minDaysPerApplication: number;
   maxSpellsPerMonth: number;
   maxSpellsLifetime: number;
+  needsContact: boolean;
+  ltcAllowed: boolean;
+  prefixSuffix: boolean;
+  /** HoD approval is needed only above this many days (0 = always, when the type has two steps). */
+  hodAfterDays: number;
   quotas: Array<{ employeeType: string; quota: number }>;
   status: 'active' | 'inactive';
   updatedAt: string | null;
@@ -109,6 +114,13 @@ export interface LeaveRequest {
   certificate: boolean;
   certificateName: string | null;
   stationLeave: boolean;
+  ltcType: 'none' | 'ltc' | 'ex_india';
+  encashDays: number;
+  contactAddress: string;
+  prefixFrom: string | null;
+  prefixTo: string | null;
+  suffixFrom: string | null;
+  suffixTo: string | null;
   stages: 1 | 2;
   status: LeaveStatus;
   appliedAt: string;
@@ -148,6 +160,16 @@ export interface LeaveInput {
   reason: string;
   /** Station (headquarters) permission: true when the employee will leave the station. */
   stationLeave: boolean;
+  ltcType: 'none' | 'ltc' | 'ex_india';
+  encashLtc: boolean;
+  encashDays: number;
+  contactAddress: string;
+  availPrefix: boolean;
+  prefixFrom: string;
+  prefixTo: string;
+  availSuffix: boolean;
+  suffixFrom: string;
+  suffixTo: string;
   /** Medical certificate chosen in the form (a data URL); the server checks the real file type and size. */
   certificateFile?: { name: string; data: string } | null;
 }
@@ -212,6 +234,10 @@ export const leaveApi = {
     return api<LeavePreview>(`${base}/preview?${q.toString()}`);
   },
   downloadCertificate: (id: string) => downloadCsv(`${one(id)}/certificate`, 'medical-certificate'),
+  balancePreview: (input: { userId: string; leaveTypeId: string; date: string }) => {
+    const q = new URLSearchParams(Object.entries(input).filter(([, v]) => v) as [string, string][]);
+    return api<{ cycle: string; balance: LeaveBalance | null }>(`${base}/balance-preview?${q.toString()}`);
+  },
   balances: (year: number) => api<BalanceList>(`${base}/balances?year=${year}`),
   importTemplate: (year: number, cycle: 'CY' | 'FY') =>
     api<{ year: number; headers: string[]; rows: Array<Array<string | number>> }>(`${base}/balances/import/template?year=${year}&cycle=${cycle}`),

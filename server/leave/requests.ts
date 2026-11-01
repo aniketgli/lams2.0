@@ -4,11 +4,11 @@ import { pool } from '../../src/db';
 import { loadCertificate, parseCertificate, saveCertificate, type CertificateFile } from './certificates';
 import { HttpError, badRequest, forbidden, notFound } from '../lib/http';
 import { inTransaction } from '../lib/tx';
-import { Validator, isValidIsoDate, todayInIndia } from '../lib/validate';
+import { TOO_OLD_MESSAGE, Validator, isValidIsoDate, oldestApplicationDate, todayInIndia } from '../lib/validate';
 import { changedFields, writeMasterAuditSql } from '../masters/audit';
 import type { RoleId } from '../lib/roles';
 import type { ActivityScope } from '../employees/activity';
-import { WEEK_DAYS } from '../attendance/compute';
+import { WEEK_DAYS, datesBetween, weekdayOf } from '../attendance/compute';
 import { groupLeaveTypeIds, groupLeaveTypeMap } from './groups';
 import { LOOK_DAYS, type Combine, type Neighbour, combineProblem, toCombine } from './combine';
 import { SESSIONS_END, SESSIONS_START, countLeaveDays, cycleYearOf } from './days';
@@ -33,9 +33,10 @@ export type LeaveStatus = (typeof STATUSES)[number];
 
 export const AUDIT_KEY = 'leave_request';
 export const BALANCE_KEY = 'leave_balance';
-export const ADMIN_BACKDATE_DAYS = 60;
 /** An employee may apply this many days back when the leave type needs no notice (e.g. sick leave). */
 export const EMPLOYEE_BACKDATE_DAYS = 7;
+/** Most days of leave encashment that can be taken with one LTC. */
+export const LTC_ENCASH_MAX = 10;
 export const MAX_RANGE_DAYS = 400;
 
 export const LEAVE_SCOPE: ActivityScope = {
@@ -70,6 +71,13 @@ export interface LeaveRequest {
   certificateName: string | null;
   /** The employee will leave the headquarters during this leave (station permission). */
   stationLeave: boolean;
+  ltcType: 'none' | 'ltc' | 'ex_india';
+  encashDays: number;
+  contactAddress: string;
+  prefixFrom: string | null;
+  prefixTo: string | null;
+  suffixFrom: string | null;
+  suffixTo: string | null;
   stages: 1 | 2;
   status: LeaveStatus;
   appliedAt: string;
@@ -103,6 +111,12 @@ export interface LeaveInput {
   /** Whether a medical certificate is on file (set by the server from the upload, never from the request body). */
   certificate: boolean;
   stationLeave: boolean;
+  ltcType: 'none' | 'ltc' | 'ex_india';
+  /** Leave encashment days with LTC (0 = none). */
+  encashDays: number;
+  contactAddress: string;
+  prefix: { from: string; to: string } | null;
+  suffix: { from: string; to: string } | null;
   /** A certificate uploaded with this application. */
   file: CertificateFile | null;
 }
@@ -217,6 +231,13 @@ function toRequest(viewer: Viewer, row: RowDataPacket): LeaveRequest {
     certificate: Boolean(row.certificate),
     certificateName: row.certificate_name ? String(row.certificate_name) : null,
     stationLeave: Boolean(row.station_leave),
+    ltcType: row.ltc_type === 'ltc' ? 'ltc' : row.ltc_type === 'ex_india' ? 'ex_india' : 'none',
+    encashDays: Number(row.encash_days ?? 0),
+    contactAddress: row.contact_address ? String(row.contact_address) : '',
+    prefixFrom: row.prefix_from ? isoDate(row.prefix_from) : null,
+    prefixTo: row.prefix_to ? isoDate(row.prefix_to) : null,
+    suffixFrom: row.suffix_from ? isoDate(row.suffix_from) : null,
+    suffixTo: row.suffix_to ? isoDate(row.suffix_to) : null,
     stages: Number(row.stages) === 2 ? 2 : 1,
     status,
     appliedAt: isoTime(row.created_at) ?? '',
@@ -241,7 +262,7 @@ function toRequest(viewer: Viewer, row: RowDataPacket): LeaveRequest {
 function auditView(r: LeaveRequest): Record<string, unknown> {
   return {
     employee: `${r.name} (${r.biometricId})`, leaveType: `${r.leaveTypeName} (${r.leaveTypeCode})`, startDate: r.startDate, endDate: r.endDate,
-    startSession: r.startSession, endSession: r.endSession, days: r.daysCount, reason: r.reason, certificate: r.certificateName ?? (r.certificate ? 'Yes' : 'No'), stationPermission: r.stationLeave ? 'Required' : 'Not required', status: r.status,
+    startSession: r.startSession, endSession: r.endSession, days: r.daysCount, reason: r.reason, certificate: r.certificateName ?? (r.certificate ? 'Yes' : 'No'), stationPermission: r.stationLeave ? 'Required' : 'Not required', ltc: r.ltcType, encashDays: r.encashDays, contactAddress: r.contactAddress, prefix: r.prefixFrom ? `${r.prefixFrom} to ${r.prefixTo}` : null, suffix: r.suffixFrom ? `${r.suffixFrom} to ${r.suffixTo}` : null, status: r.status,
     forwardedBy: r.forwardedByName, comment: r.comment,
   };
 }
@@ -322,6 +343,7 @@ export interface Policy {
   id: number; code: string; name: string; quota: number; pwdQuota: number | null; pwdOnly: boolean; stages: 1 | 2; minNotice: number; halfDay: boolean; certDays: number;
   sandwich: 'included' | 'excluded'; employeeTypes: string[]; gender: string; minServiceMonths: number; maxConsecutive: number; debited: boolean;
   status: string; combineWith: Combine; maxAccumulation: number; afterExhaustedId: number; accrual: string; debitFromId: number; debitFactor: number; lifetimeMax: number; maxSpells: number; minDays: number; maxSpellsMonth: number; maxSpellsLifetime: number; quotas: Record<string, number>;
+  needsContact: boolean; ltcAllowed: boolean; prefixSuffix: boolean; hodAfterDays: number;
 }
 
 function toPolicy(r: RowDataPacket): Policy {
@@ -334,6 +356,7 @@ function toPolicy(r: RowDataPacket): Policy {
     status: String(r.status), combineWith: toCombine(r.combine_with), maxAccumulation: Number(r.max_accumulation), afterExhaustedId: Number(r.after_exhausted_type_id ?? 0), accrual: String(r.accrual ?? 'yearly'),
     debitFromId: Number(r.debit_from_type_id ?? 0), debitFactor: Number(r.debit_factor ?? 1),
     lifetimeMax: Number(r.lifetime_max ?? 0), maxSpells: Number(r.max_spells_per_year ?? 0), minDays: Number(r.min_days_per_application ?? 0), maxSpellsMonth: Number(r.max_spells_per_month ?? 0), maxSpellsLifetime: Number(r.max_spells_lifetime ?? 0), quotas: {},
+    needsContact: Boolean(r.needs_contact), ltcAllowed: Boolean(r.ltc_allowed), prefixSuffix: Boolean(r.prefix_suffix), hodAfterDays: Number(r.hod_after_days ?? 0),
   };
 }
 
@@ -455,8 +478,25 @@ export function parseLeaveInput(body: unknown): LeaveInput {
   v.assert();
   const station = (body as Record<string, unknown> | null)?.stationLeave;
   if (typeof station !== 'boolean') throw badRequest('Please correct the highlighted fields.', { stationLeave: 'Choose whether station permission is required.' });
+  const raw = (body ?? {}) as Record<string, unknown>;
+  const ltcType = v.oneOf('ltcType', ['none', 'ltc', 'ex_india'] as const, false) ?? 'none';
+  let encashDays = 0;
+  if (ltcType === 'ltc' && raw.encashLtc === true) {
+    encashDays = Number(raw.encashDays);
+    if (!Number.isInteger(encashDays) || encashDays < 1 || encashDays > LTC_ENCASH_MAX) v.errors.encashDays ||= `Enter whole days from 1 to ${LTC_ENCASH_MAX}.`;
+  }
+  const contactAddress = v.optionalString('contactAddress', { max: 300 })?.replace(/\s+/g, ' ') ?? '';
+  const range = (a: string, b: string, label: string): { from: string; to: string } | null => {
+    const from = v.date(a);
+    const to = v.date(b);
+    if (from && to && from > to) v.errors[b] ||= `${label} end cannot be before its start.`;
+    return from && to ? { from, to } : null;
+  };
+  const prefix = raw.availPrefix === true ? range('prefixFrom', 'prefixTo', 'Prefix') : null;
+  const suffix = raw.availSuffix === true ? range('suffixFrom', 'suffixTo', 'Suffix') : null;
+  if (Object.keys(v.errors).length) v.assert();
   const file = parseCertificate((body as Record<string, unknown> | null)?.certificateFile);
-  return { userId, leaveTypeId, startDate: startDate!, endDate: endDate!, startSession, endSession, reason: reason.replace(/\s+/g, ' '), certificate: Boolean(file), stationLeave: station, file };
+  return { userId, leaveTypeId, startDate: startDate!, endDate: endDate!, startSession, endSession, reason: reason.replace(/\s+/g, ' '), certificate: Boolean(file), stationLeave: station, ltcType, encashDays, contactAddress, prefix, suffix, file };
 }
 
 /** Looks at the employee's other leaves around the new one: see ./combine. */
@@ -477,7 +517,7 @@ async function joinProblem(q: { query: typeof pool.query }, emp: Employee, polic
   return combineProblem({ id: policy.id, name: policy.name, stages: policy.stages, combineWith: policy.combineWith }, input.startDate, input.endDate, others, rule.workingDays, rule.gazetted, worked);
 }
 
-export interface Checked { days: number; cycleYear: number; policy: Policy; emp: Employee; balance: Balance }
+export interface Checked { days: number; cycleYear: number; policy: Policy; emp: Employee; balance: Balance; stages: 1 | 2 }
 
 /** Every rule of a leave application. Throws a field-level 400 / 409 when one fails. */
 async function checkLeave(
@@ -492,10 +532,11 @@ async function checkLeave(
   if (problem) errors.leaveTypeId = problem;
 
   const isAdmin = viewer.role === 'administrator';
-  const earliest = isAdmin ? addDays(today, -ADMIN_BACKDATE_DAYS) : addDays(today, policy.minNotice === 0 ? -EMPLOYEE_BACKDATE_DAYS : 0);
-  if (input.startDate < earliest) {
-    errors.startDate = isAdmin ? `Dates more than ${ADMIN_BACKDATE_DAYS} days back cannot be entered.`
-      : policy.minNotice === 0 ? `Leave can be applied up to ${EMPLOYEE_BACKDATE_DAYS} days back.` : 'The start date cannot be in the past.';
+  const earliest = isAdmin ? oldestApplicationDate(today) : addDays(today, policy.minNotice === 0 ? -EMPLOYEE_BACKDATE_DAYS : 0);
+  if (input.startDate < oldestApplicationDate(today)) {
+    errors.startDate = TOO_OLD_MESSAGE;
+  } else if (input.startDate < earliest) {
+    errors.startDate = policy.minNotice === 0 ? `Leave can be applied up to ${EMPLOYEE_BACKDATE_DAYS} days back.` : 'The start date cannot be in the past.';
   } else if (emp.joining && input.startDate < emp.joining) errors.startDate = `This is before the employee joined (${emp.joining}).`;
   else if (input.startDate > addDays(today, 365)) errors.startDate = 'The start date is more than a year away.';
   else if (!isAdmin && policy.minNotice > 0 && daysBetween(today, input.startDate) - 1 < policy.minNotice) errors.startDate = `${policy.name} needs ${policy.minNotice} days notice.`;
@@ -536,7 +577,29 @@ async function checkLeave(
     const [spells] = await rows(q, "SELECT COUNT(*) AS n FROM leave_requests WHERE user_id = ? AND leave_type_id = ? AND cycle_year = ? AND status <> 'rejected' AND id <> ?", [targetId, policy.id, cycleYear, exceptId]);
     if (Number(spells?.n ?? 0) >= policy.maxSpells) errors.startDate = `${policy.name} can be applied for at most ${policy.maxSpells} times in a leave year.`;
   }
-  if (policy.stages === 2 && !emp.reviewingManagerId) errors.leaveTypeId = 'This employee has no HoD set, which this leave type needs. Ask the administrator.';
+  // A leave type with two steps may need the HoD only for longer leaves (e.g. EL above 2 days).
+  const stages: 1 | 2 = policy.stages === 2 && (policy.hodAfterDays <= 0 || days > policy.hodAfterDays) ? 2 : 1;
+  if (stages === 2 && !emp.reviewingManagerId) errors.leaveTypeId = 'This employee has no HoD set, which this leave type needs. Ask the administrator.';
+  if (policy.needsContact && !input.contactAddress) errors.contactAddress = 'Enter the address and mobile number to reach you during the leave.';
+  if (input.ltcType !== 'none' && !policy.ltcAllowed) errors.ltcType = `LTC and Ex-India are not available with ${policy.name}.`;
+  if ((input.prefix || input.suffix) && !policy.prefixSuffix) errors.prefixFrom = `Prefix and suffix holidays are not available with ${policy.name}.`;
+  if (policy.prefixSuffix && (input.prefix || input.suffix)) {
+    const wide = await dayRule(q, emp, policy, addDays(input.startDate, -45), addDays(input.endDate, 45));
+    const off = (d: string) => !wide.workingDays.includes(weekdayOf(d)) || wide.gazetted.has(d);
+    if (input.prefix) {
+      const { from, to } = input.prefix;
+      if (to >= input.startDate) errors.prefixTo = 'The prefix must end before the leave starts.';
+      else if (from < oldestApplicationDate(today)) errors.prefixFrom = TOO_OLD_MESSAGE;
+      else if (!datesBetween(from, addDays(input.startDate, -1)).every(off)) errors.prefixFrom = 'Prefix days must be unbroken holidays or weekly offs just before the leave.';
+      else if (to !== addDays(input.startDate, -1)) errors.prefixTo = 'The prefix must run up to the day before the leave starts.';
+    }
+    if (input.suffix) {
+      const { from, to } = input.suffix;
+      if (from <= input.endDate) errors.suffixFrom = 'The suffix must start after the leave ends.';
+      else if (!datesBetween(addDays(input.endDate, 1), to).every(off)) errors.suffixTo = 'Suffix days must be unbroken holidays or weekly offs just after the leave.';
+      else if (from !== addDays(input.endDate, 1)) errors.suffixFrom = 'The suffix must start the day after the leave ends.';
+    }
+  }
   if (Object.keys(errors).length) throw badRequest('Please correct the highlighted fields.', errors);
 
   const [clash] = await rows(q,
@@ -556,7 +619,7 @@ async function checkLeave(
       if (need > left.available) {
         throw new HttpError(409, 'Not enough leave balance.', 'NO_BALANCE', { endDate: `${policy.name} uses ${policy.debitFactor} day(s) of ${base.name} for each day: ${need} needed, ${Math.max(0, left.available)} available for ${cycleLabel(cycleYear, emp.basis)}.` });
       }
-      return { days, cycleYear, policy, emp, balance: left };
+      return { days, cycleYear, policy, emp, balance: left, stages };
     }
   }
   if (policy.debited && days > balance.available) {
@@ -564,7 +627,7 @@ async function checkLeave(
     const hint = next ? ` After it is used up, ${next.name} can be applied for.` : '';
     throw new HttpError(409, 'Not enough leave balance.', 'NO_BALANCE', { endDate: `${policy.name}: ${days} days asked, ${Math.max(0, balance.available)} available for ${cycleLabel(cycleYear, emp.basis)}.${hint}` });
   }
-  return { days, cycleYear, policy, emp, balance };
+  return { days, cycleYear, policy, emp, balance, stages };
 }
 
 export const cycleLabel = (year: number, basis: 'CY' | 'FY') => (basis === 'FY' ? `FY ${year}-${String(year + 1).slice(2)}` : `${year}`);
@@ -573,7 +636,7 @@ export const cycleLabel = (year: number, basis: 'CY' | 'FY') => (basis === 'FY' 
 export async function previewLeave(viewer: Viewer, query: Record<string, unknown>): Promise<{ days: number; cycleYear: number; cycle: string; balance: Balance | null; error: string | null }> {
   const input = (() => {
     try {
-      return { ...parseLeaveInput({ ...query, reason: 'preview', stationLeave: false }), certificate: true };
+      return { ...parseLeaveInput({ ...query, reason: 'preview', stationLeave: false, ltcType: 'none', availPrefix: false, availSuffix: false }), certificate: true };
     } catch {
       return null;
     }
@@ -585,6 +648,31 @@ export async function previewLeave(viewer: Viewer, query: Record<string, unknown
     return { days: c.days, cycleYear: c.cycleYear, cycle: cycleLabel(c.cycleYear, c.emp.basis), balance: c.balance, error: null };
   } catch (error) {
     if (error instanceof HttpError) return { days: 0, cycleYear: 0, cycle: '', balance: null, error: Object.values(error.details ?? {})[0] ?? error.message };
+    throw error;
+  }
+}
+
+/** The balance shown the moment a leave type is chosen: the employee's balance of that leave type for the leave year of `date` (today by default). */
+export async function balancePreview(
+  viewer: Viewer, query: Record<string, unknown>, today = todayInIndia(),
+): Promise<{ cycle: string; balance: Balance | null }> {
+  const typeId = String(query.leaveTypeId ?? '');
+  const target = viewer.role === 'administrator' ? Number(query.userId ?? 0) : viewer.id;
+  if (!/^\d{1,20}$/.test(typeId) || !target) return { cycle: '', balance: null };
+  const date = isValidIsoDate(String(query.date ?? '')) ? String(query.date) : today;
+  try {
+    const emp = await loadEmployee(pool, target);
+    const policy = await loadPolicy(pool, Number(typeId));
+    if (!policy || policy.status !== 'active') return { cycle: '', balance: null };
+    const cycleYear = cycleYearOf(date, emp.basis);
+    const cycle = cycleLabel(cycleYear, emp.basis);
+    // A leave debited from another type (commuted leave) shows the balance of that type.
+    const base = policy.debitFromId ? await loadPolicy(pool, policy.debitFromId) : null;
+    const shown = base ?? policy;
+    if (!shown.debited) return { cycle, balance: null };
+    return { cycle, balance: await balanceOf(pool, target, { id: shown.id, quota: creditedQuota(shown, emp.employmentType, cycleYear, emp.basis, date, emp.isPwd) }, cycleYear, 0) };
+  } catch (error) {
+    if (error instanceof HttpError) return { cycle: '', balance: null };
     throw error;
   }
 }
@@ -617,10 +705,11 @@ export async function createRequest(req: Request, viewer: Viewer, body: unknown)
       const c = await checkLeave(conn, viewer, input, targetId, 0);
       const [result] = await conn.query(
         `INSERT INTO leave_requests
-           (user_id, leave_type_id, start_date, end_date, start_session, end_session, days_count, cycle_year, reason, certificate, station_leave, stages, status, applied_by, manager_id, reviewer_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_l1', ?, ?, ?)`,
+           (user_id, leave_type_id, start_date, end_date, start_session, end_session, days_count, cycle_year, reason, certificate, station_leave, ltc_type, encash_days, contact_address, prefix_from, prefix_to, suffix_from, suffix_to, stages, status, applied_by, manager_id, reviewer_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_l1', ?, ?, ?)`,
         [targetId, c.policy.id, input.startDate, input.endDate, input.startSession, input.endSession, c.days, c.cycleYear, input.reason, input.certificate ? 1 : 0, input.stationLeave ? 1 : 0,
-          c.policy.stages, viewer.id, c.emp.reportingManagerId, c.emp.reviewingManagerId],
+          input.ltcType, input.encashDays, input.contactAddress || null, input.prefix?.from ?? null, input.prefix?.to ?? null, input.suffix?.from ?? null, input.suffix?.to ?? null,
+          c.stages, viewer.id, c.emp.reportingManagerId, c.emp.reviewingManagerId],
       );
       const id = Number((result as { insertId: number }).insertId);
       if (input.file) await saveCertificate(conn, id, input.file, viewer.id);
@@ -649,9 +738,10 @@ export async function updateRequest(req: Request, viewer: Viewer, id: number, bo
       const c = await checkLeave(conn, viewer, input, Number(row.user_id), id);
       await conn.query(
         `UPDATE leave_requests SET leave_type_id = ?, start_date = ?, end_date = ?, start_session = ?, end_session = ?, days_count = ?, cycle_year = ?,
-           reason = ?, certificate = ?, station_leave = ?, stages = ?, manager_id = ?, reviewer_id = ? WHERE id = ?`,
+           reason = ?, certificate = ?, station_leave = ?, ltc_type = ?, encash_days = ?, contact_address = ?, prefix_from = ?, prefix_to = ?, suffix_from = ?, suffix_to = ?, stages = ?, manager_id = ?, reviewer_id = ? WHERE id = ?`,
         [c.policy.id, input.startDate, input.endDate, input.startSession, input.endSession, c.days, c.cycleYear, input.reason, input.certificate ? 1 : 0, input.stationLeave ? 1 : 0,
-          c.policy.stages, c.emp.reportingManagerId, c.emp.reviewingManagerId, id],
+          input.ltcType, input.encashDays, input.contactAddress || null, input.prefix?.from ?? null, input.prefix?.to ?? null, input.suffix?.from ?? null, input.suffix?.to ?? null,
+          c.stages, c.emp.reportingManagerId, c.emp.reviewingManagerId, id],
       );
       if (input.file) await saveCertificate(conn, id, input.file, viewer.id);
       const after = toRequest(viewer, (await fetchOne(conn, id))!);

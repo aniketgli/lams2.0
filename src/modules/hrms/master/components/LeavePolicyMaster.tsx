@@ -21,7 +21,7 @@ const yesNo = [{ label: 'Yes', value: 'yes' }, { label: 'No', value: 'no' }];
 const blank = (): LeaveTypeInput => ({
   code: '', name: '', description: '', defaultQuota: 0, pwdQuota: null, pwdOnly: false, accrual: 'yearly', maxAccumulation: 0, carryForward: false, maxCarryForward: 0,
   encashmentAllowed: false, approvalStages: 1, minNoticeDays: 0, halfDayAllowed: false, medicalCertDays: 0, sandwichRule: 'excluded', combineWith: 'none',
-  employeeTypes: [], gender: 'all', minServiceMonths: 0, maxConsecutiveDays: 0, isDebited: true, isPaid: true, joiningRequired: false, afterExhaustedTypeId: '', debitFromTypeId: '', debitFactor: 1, lifetimeMax: 0, maxSpellsPerYear: 0, minDaysPerApplication: 0, maxSpellsPerMonth: 0, maxSpellsLifetime: 0, quotas: [], status: 'active',
+  employeeTypes: [], gender: 'all', minServiceMonths: 0, maxConsecutiveDays: 0, isDebited: true, isPaid: true, joiningRequired: false, afterExhaustedTypeId: '', debitFromTypeId: '', debitFactor: 1, lifetimeMax: 0, maxSpellsPerYear: 0, minDaysPerApplication: 0, maxSpellsPerMonth: 0, maxSpellsLifetime: 0, needsContact: false, ltcAllowed: false, prefixSuffix: false, hodAfterDays: 0, quotas: [], status: 'active',
 });
 
 const flag = (b: boolean) => (b ? 'yes' : 'no');
@@ -230,9 +230,9 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
                 options={[{ label: 'Active', value: 'active' }, { label: 'Inactive', value: 'inactive' }]} />
             </FormSection>
 
-            <FormSection step={2} title="Rules for taking leave" errorCount={countErrors(['approvalStages', 'combineWith', 'sandwichRule', 'halfDayAllowed', 'minDaysPerApplication', 'maxConsecutiveDays', 'gender', 'pwdOnly', 'maxSpellsPerMonth', 'maxSpellsLifetime', 'joiningRequired', 'isPaid', 'isDebited'])}>
+            <FormSection step={2} title="Rules for taking leave" errorCount={countErrors(['approvalStages', 'combineWith', 'sandwichRule', 'halfDayAllowed', 'minDaysPerApplication', 'maxConsecutiveDays', 'gender', 'pwdOnly', 'maxSpellsPerMonth', 'maxSpellsLifetime', 'joiningRequired', 'isPaid', 'isDebited', 'needsContact', 'ltcAllowed', 'prefixSuffix', 'hodAfterDays'])}>
               <Select label="Approval stages" required value={String(form.approvalStages)} searchable={false} error={Boolean(errors.approvalStages)}
-                onChange={(v: string) => set('approvalStages', Number(v) as 1 | 2)}
+                onChange={(v: string) => { set('approvalStages', Number(v) as 1 | 2); if (v === '1') set('hodAfterDays', 0); }}
                 options={[{ label: '1 stage · Reporting Manager', value: '1' }, { label: '2 stages · Reporting Manager, HoD', value: '2' }]} />
               <Select label="Can be combined with" required value={form.combineWith} searchable={false} error={Boolean(errors.combineWith)} onChange={(v: string) => set('combineWith', v as LeaveTypeInput['combineWith'])}
                 options={[{ label: 'Nothing', value: 'none' }, { label: '1-stage leaves', value: 'single' }, { label: '2-stage leaves', value: 'double' }, { label: 'Both 1-stage and 2-stage leaves', value: 'both' }]} />
@@ -254,6 +254,13 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
                 onChange={(v: string) => { set('isPaid', v === 'yes'); if (v === 'no') set('isDebited', false); }} options={yesNo} />
               <Select label="Debited from balance" value={flag(form.isDebited)} searchable={false} disabled={!form.isPaid} error={Boolean(errors.isDebited)}
                 onChange={(v: string) => set('isDebited', v === 'yes')} options={yesNo} />
+
+              <Select label="Contact address needed" value={flag(form.needsContact)} searchable={false} error={Boolean(errors.needsContact)} onChange={(v: string) => set('needsContact', v === 'yes')} options={yesNo} />
+              <Select label="LTC / Ex-India option" value={flag(form.ltcAllowed)} searchable={false} error={Boolean(errors.ltcAllowed)} onChange={(v: string) => set('ltcAllowed', v === 'yes')} options={yesNo} />
+              <Select label="Prefix / suffix holidays" value={flag(form.prefixSuffix)} searchable={false} error={Boolean(errors.prefixSuffix)} onChange={(v: string) => set('prefixSuffix', v === 'yes')} options={yesNo} />
+              {form.approvalStages === 2 && (
+                <Input label="HoD approval above (days, 0 = always)" type="number" min={0} max={730} step="0.5" value={String(form.hodAfterDays)} error={errors.hodAfterDays} onChange={num('hodAfterDays')} />
+              )}
             </FormSection>
           </form>
         )}

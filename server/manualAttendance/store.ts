@@ -3,7 +3,7 @@ import type { RowDataPacket } from 'mysql2/promise';
 import { pool } from '../../src/db';
 import { HttpError, badRequest, forbidden, notFound } from '../lib/http';
 import { inTransaction } from '../lib/tx';
-import { PATTERNS, Validator, isValidIsoDate, todayInIndia } from '../lib/validate';
+import { MAX_BACKDATE_DAYS, PATTERNS, TOO_OLD_MESSAGE, Validator, isValidIsoDate, oldestApplicationDate, todayInIndia } from '../lib/validate';
 import { changedFields, writeMasterAuditSql } from '../masters/audit';
 import type { RoleId } from '../lib/roles';
 import type { ActivityScope } from '../employees/activity';
@@ -243,6 +243,7 @@ export function parseManualInput(body: unknown): ManualInput {
 /** Date rules that depend on the employee and today's date. */
 function checkDate(input: ManualInput, joining: string | null, today = todayInIndia()): void {
   if (input.date >= today) throw badRequest('Please correct the highlighted fields.', { date: 'Manual attendance is only for past dates, up to yesterday.' });
+  if (input.date < oldestApplicationDate(today)) throw badRequest('Please correct the highlighted fields.', { date: TOO_OLD_MESSAGE });
   if (joining && input.date < joining) throw badRequest('Please correct the highlighted fields.', { date: `This is before the employee joined (${joining}).` });
 }
 
@@ -462,7 +463,7 @@ export async function applicableEmployees(viewer: Viewer): Promise<{ id: string;
 }
 
 /** How far back "dates with a missing punch" looks. */
-export const GAP_DAYS = 60;
+export const GAP_DAYS = MAX_BACKDATE_DAYS;
 
 /** Dates (latest first) on which this employee has no In and / or Out punch and no open request. */
 export async function missingPunchDates(viewer: Viewer, userIdRaw: unknown): Promise<PunchDay[]> {
