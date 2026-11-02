@@ -2,7 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '../../src/db';
 import { employee_profiles, user_module_roles, users } from '../../src/db/schema';
 import { ModuleId, RoleId, normalizeModule, normalizeRole } from '../lib/roles';
-import { todayInIndia } from '../lib/validate';
+import { accountBlockReason } from './accountBlock';
 import { TtlCache } from '../lib/ttlCache';
 
 export interface AccountRow {
@@ -55,20 +55,7 @@ export function clearAccessCache(): void {
   grantsCache.clear();
 }
 
-/**
- * Why an account may not use the portal, or null if it may.
- * An account must be `active` AND have a validity date that is today or later.
- * System accounts (the fixed Administrator and Auditor) have no validity date: they only need to be active.
- */
-export function accountBlockReason(account: Pick<AccountRow, 'status' | 'validUpto' | 'isSystem'>): string | null {
-  const status = String(account.status || '').toLowerCase();
-  if (status === 'expired') return 'Account validity has expired. Please contact the administrator.';
-  if (status !== 'active') return 'Account is inactive. Please contact the administrator.';
-  if (account.isSystem) return null;
-  if (!account.validUpto) return 'Account validity is not configured. Please contact the administrator.';
-  if (account.validUpto < todayInIndia()) return 'Account validity has expired. Please contact the administrator.';
-  return null;
-}
+export { accountBlockReason };
 
 /** Only grants with status = 'active' count. Inactive (revoked) grants are ignored everywhere. */
 export async function loadActiveGrants(biometricId: string): Promise<ModuleGrants> {
