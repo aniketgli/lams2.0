@@ -14,6 +14,7 @@ import { ActivityLogPanel, ActivitySource } from '../../../../shared/components/
 import { ApiError } from '../../../../shared/services/api';
 import { activityEndpoints } from '../../../../shared/services/activityApi';
 import { downloadCsvText, downloadTablePdf, printedAt, toCsvText } from '../../../../shared/services/printTable';
+import { logThenDownload } from '../../../../shared/services/downloadAudit';
 import { ConfirmDialog, NoticeBar, useNotice } from '../../master/components/masterUi';
 import { OdInput, OdList, OdRequest, OdStatus, OdType, odApi } from '../odApi';
 import { actionBtn } from '../../../../shared/components/actionStyles';
@@ -42,7 +43,7 @@ const OD_ACTIVITY: ActivitySource = {
   title: 'Outdoor duty activity log',
   recordLabel: 'Request',
   searchPlaceholder: 'Employee, location, done by, reason…',
-  areas: [{ value: 'outdoor_duty', label: 'Outdoor duty' }, { value: 'outdoor_duty_export', label: 'Log download' }],
+  areas: [{ value: 'outdoor_duty', label: 'Outdoor duty' }, { value: 'outdoor_duty_data_export', label: 'Data download' }, { value: 'outdoor_duty_export', label: 'Log download' }],
   actions: ['CREATE', 'UPDATE', 'STATUS', 'DELETE', 'EXPORT'],
   actionLabels: { CREATE: 'Applied', UPDATE: 'Edited', STATUS: 'Approved / rejected', DELETE: 'Deleted', EXPORT: 'Downloaded' },
   ...activityEndpoints('/hrms/outdoor-duty/activity', 'WII_Outdoor_Duty_Activity.csv'),
@@ -358,8 +359,9 @@ export const OutdoorDutyView: React.FC = () => {
     formatDate(r.appliedAt.slice(0, 10)), STATUS_META[r.status].label, statusBy(r).replace(/^by /, ''), r.comment ?? '',
   ]);
   const fileName = `WII_Outdoor_Duty_${from}_to_${to}`;
-  const downloadCsv = () => downloadCsvText(toCsvText(exportHeaders, exportRows()), fileName);
-  const downloadPdf = () => downloadTablePdf({
+  const downloadCsv = () => void logThenDownload('outdoor_duty', 'csv', sorted.length, range, () => downloadCsvText(toCsvText(exportHeaders, exportRows()), fileName), setError);
+  const downloadPdf = () => void logThenDownload('outdoor_duty', 'pdf', sorted.length, range, () => buildPdf(), setError);
+  const buildPdf = () => downloadTablePdf({
     title: 'Outdoor Duty',
     subtitle: [`${range} · Generated ${printedAt(new Date().toISOString())}`, teamView ? 'All requests shown' : currentUser.name],
     headers: exportHeaders,

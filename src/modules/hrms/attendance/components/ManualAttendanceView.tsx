@@ -14,6 +14,7 @@ import { ActivityLogPanel, ActivitySource } from '../../../../shared/components/
 import { ApiError } from '../../../../shared/services/api';
 import { activityEndpoints } from '../../../../shared/services/activityApi';
 import { downloadCsvText, downloadTablePdf, printedAt, toCsvText } from '../../../../shared/services/printTable';
+import { logThenDownload } from '../../../../shared/services/downloadAudit';
 import { ConfirmDialog, NoticeBar, useNotice } from '../../master/components/masterUi';
 import { ManualInput, ManualList, ManualRequest, ManualStatus, PunchGap, manualAttendanceApi } from '../manualAttendanceApi';
 import { actionBtn } from '../../../../shared/components/actionStyles';
@@ -41,7 +42,7 @@ const MANUAL_ACTIVITY: ActivitySource = {
   title: 'Manual attendance activity log',
   recordLabel: 'Request',
   searchPlaceholder: 'Employee, done by, reason…',
-  areas: [{ value: 'manual_attendance', label: 'Manual attendance' }, { value: 'manual_attendance_export', label: 'Log download' }],
+  areas: [{ value: 'manual_attendance', label: 'Manual attendance' }, { value: 'manual_attendance_data_export', label: 'Data download' }, { value: 'manual_attendance_export', label: 'Log download' }],
   actions: ['CREATE', 'UPDATE', 'STATUS', 'DELETE', 'EXPORT'],
   actionLabels: { CREATE: 'Applied', UPDATE: 'Edited', STATUS: 'Approved / rejected', DELETE: 'Deleted', EXPORT: 'Downloaded' },
   ...activityEndpoints('/hrms/manual-attendance/activity', 'WII_Manual_Attendance_Activity.csv'),
@@ -364,8 +365,9 @@ export const ManualAttendanceView: React.FC = () => {
     STATUS_META[r.status].label, r.actionByName ?? '', r.comment ?? '',
   ]);
   const fileName = `WII_Manual_Attendance_${from}_to_${to}`;
-  const downloadCsv = () => downloadCsvText(toCsvText(exportHeaders, exportRows()), fileName);
-  const downloadPdf = () => downloadTablePdf({
+  const downloadCsv = () => void logThenDownload('manual_attendance', 'csv', sorted.length, range, () => downloadCsvText(toCsvText(exportHeaders, exportRows()), fileName), setError);
+  const downloadPdf = () => void logThenDownload('manual_attendance', 'pdf', sorted.length, range, () => buildPdf(), setError);
+  const buildPdf = () => downloadTablePdf({
     title: 'Manual Attendance',
     subtitle: [`${range} · Generated ${printedAt(new Date().toISOString())}`, teamView ? 'All requests shown' : currentUser.name],
     headers: exportHeaders,

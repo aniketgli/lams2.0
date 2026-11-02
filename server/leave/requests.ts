@@ -44,8 +44,8 @@ export const LTC_ENCASH_MIN_BALANCE = 30;
 export const MAX_RANGE_DAYS = 400;
 
 export const LEAVE_SCOPE: ActivityScope = {
-  keys: ['leave_request', 'leave_balance', 'leave_joining', 'leave_export'],
-  areaLabels: { leave_request: 'Leave request', leave_balance: 'Leave balance', leave_joining: 'Joining report', leave_export: 'Log download' },
+  keys: ['leave_request', 'leave_balance', 'leave_joining', 'leave_export', 'leave_data_export'],
+  areaLabels: { leave_request: 'Leave request', leave_balance: 'Leave balance', leave_joining: 'Joining report', leave_export: 'Log download', leave_data_export: 'Data download' },
   actionLabels: { CREATE: 'Applied / set', UPDATE: 'Edited', STATUS: 'Approved / forwarded / rejected', DELETE: 'Deleted' },
   exportKey: 'leave_export',
   title: 'Leave activity log',

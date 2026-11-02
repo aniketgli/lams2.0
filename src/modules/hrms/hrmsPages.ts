@@ -31,7 +31,7 @@ export const HRMS_PAGES: HrmsPage[] = [
   { id: 'user_controls', slug: 'user-controls', roles: ['administrator', 'audit'] },
   { id: 'transfers', slug: 'employee-mapping', roles: ['administrator', 'audit'] },
   { id: 'master', slug: 'master-settings', roles: ['administrator', 'audit'] },
-  { id: 'reports', slug: 'reports', roles: ['administrator'] },
+  { id: 'reports', slug: 'reports', roles: ['administrator', 'audit'] },
 ];
 
 /** Older page IDs that point at the same screen. */

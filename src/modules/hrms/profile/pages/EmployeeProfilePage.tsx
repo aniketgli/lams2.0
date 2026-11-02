@@ -16,6 +16,7 @@ import { EmployeeProfileView, MyProfileView } from '../components/MyProfileView'
 import { EmployeeActivityLog } from '../components/EmployeeActivityLog';
 import { DirectoryTable } from '../components/DirectoryTable';
 import { MappingPanel } from '../components/MappingPanel';
+import { logThenDownload } from '../../../../shared/services/downloadAudit';
 import { auditorApi } from '../employeeApi';
 import { FilterToolbar } from '../../../../shared/components/FilterToolbar';
 import { downloadTablePdf, printedAt } from '../../../../shared/services/printTable';
@@ -1758,8 +1759,10 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       return;
     }
     const config = getUserControlsExportConfig();
-    exportHRMSToCSV(config);
-    showToast('User Access Matrix exported to CSV successfully!');
+    void logThenDownload('user_controls', 'csv', filteredUsersForControls.length, config.filters.map((f) => `${f.label}: ${f.value}`).join(' · '), () => {
+      exportHRMSToCSV(config);
+      showToast('User Access Matrix exported to CSV successfully!');
+    }, showToast);
   };
 
   const handleExportUserControlsPDF = () => {
@@ -1768,11 +1771,13 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       return;
     }
     const config = getUserControlsExportConfig();
-    exportHRMSToPDF({
-      ...config,
-      orientation: 'landscape'
-    });
-    showToast('User Access Matrix exported to PDF successfully!');
+    void logThenDownload('user_controls', 'pdf', filteredUsersForControls.length, config.filters.map((f) => `${f.label}: ${f.value}`).join(' · '), () => {
+      exportHRMSToPDF({
+        ...config,
+        orientation: 'landscape'
+      });
+      showToast('User Access Matrix exported to PDF successfully!');
+    }, showToast);
   };
 
   return (

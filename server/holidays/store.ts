@@ -22,8 +22,8 @@ const AUDIT_KEY = 'holiday';
 
 /** The auditor's holiday activity log: holiday changes and downloads of that log. */
 export const HOLIDAY_SCOPE: ActivityScope = {
-  keys: ['holiday', 'holiday_export'],
-  areaLabels: { holiday: 'Holiday', holiday_export: 'Log download' },
+  keys: ['holiday', 'holiday_export', 'holiday_data_export'],
+  areaLabels: { holiday: 'Holiday', holiday_export: 'Log download', holiday_data_export: 'Data download' },
   exportKey: 'holiday_export',
   title: 'Holiday activity log',
   filePrefix: 'WII_Holiday_Activity',

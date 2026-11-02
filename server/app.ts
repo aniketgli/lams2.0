@@ -10,6 +10,7 @@ import { slackRoutes } from './integrations/slack/slack.routes';
 import { authRoutes } from './routes/auth.routes';
 import accessRoutes from './routes/access.routes';
 import employeeRoutes from './employees/employees.routes';
+import downloadRoutes from './downloads/downloads.routes';
 import holidayRoutes from './holidays/holidays.routes';
 import attendanceRoutes from './attendance/attendance.routes';
 import manualAttendanceRoutes from './manualAttendance/manualAttendance.routes';
@@ -101,7 +102,8 @@ export async function createApp(httpServer?: HttpServer) {
   api.use('/hrms', outdoorDutyRoutes); // outdoor duty (OD) requests
   api.use('/hrms', dashboardRoutes); // role dashboards
   api.use('/hrms', leaveRoutes); // leave types (policy), balances and requests
-  api.use('/hrms', reportRoutes); // scheduled report emails (administrator)
+  api.use('/hrms', reportRoutes); // scheduled report emails (administrator; the auditor reads)
+  api.use('/hrms', downloadRoutes); // download log for screens that build their files in the browser
   api.use(apiNotFound);
   app.use('/api', api);
 

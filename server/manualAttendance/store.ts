@@ -33,8 +33,8 @@ const AUDIT_KEY = 'manual_attendance';
 
 /** The auditor's activity log: request changes and downloads of that log. */
 export const MANUAL_SCOPE: ActivityScope = {
-  keys: ['manual_attendance', 'manual_attendance_export'],
-  areaLabels: { manual_attendance: 'Manual attendance', manual_attendance_export: 'Log download' },
+  keys: ['manual_attendance', 'manual_attendance_export', 'manual_attendance_data_export'],
+  areaLabels: { manual_attendance: 'Manual attendance', manual_attendance_export: 'Log download', manual_attendance_data_export: 'Data download' },
   actionLabels: { CREATE: 'Applied', UPDATE: 'Edited', STATUS: 'Approved / rejected', DELETE: 'Deleted' },
   exportKey: 'manual_attendance_export',
   title: 'Manual attendance activity log',

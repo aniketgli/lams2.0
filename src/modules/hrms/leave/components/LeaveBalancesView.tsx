@@ -6,6 +6,7 @@ import { MultiSelectFilter, matchesMultiSelect } from '../../../../shared/compon
 import { FilterToolbar } from '../../../../shared/components/FilterToolbar';
 import { ApiError } from '../../../../shared/services/api';
 import { downloadCsvText, downloadTablePdf, printedAt, toCsvText } from '../../../../shared/services/printTable';
+import { logThenDownload } from '../../../../shared/services/downloadAudit';
 import { NoticeBar, useNotice } from '../../master/components/masterUi';
 import { BalanceList, BalanceRow, leaveApi } from '../leaveApi';
 import { LeaveImportModal } from './LeaveImportModal';
@@ -128,11 +129,11 @@ export const LeaveBalancesView: React.FC<{ importSignal?: number }> = ({ importS
           </div>
         )}
         exports={cards ? null : {
-          onCsv: () => downloadCsvText(toCsvText(exportHeaders, exportRows()), fileName),
-          onPdf: () => downloadTablePdf({
+          onCsv: () => void logThenDownload('leave_balances', 'csv', visible.length, `Leave year ${year}`, () => downloadCsvText(toCsvText(exportHeaders, exportRows()), fileName), setError),
+          onPdf: () => void logThenDownload('leave_balances', 'pdf', visible.length, `Leave year ${year}`, () => downloadTablePdf({
             title: `Leave balances ${year}`, subtitle: [`Generated ${printedAt(new Date().toISOString())}`], headers: exportHeaders, rows: exportRows(), fileName,
             columnWidths: [6, 12, 10, 6, ...types.flatMap(() => [4, 4, 4, 4])],
-          }),
+          }), setError),
           disabled: visible.length === 0,
           csvTitle: 'Download the balances shown below as CSV', pdfTitle: 'Download the balances shown below as PDF',
         }}

@@ -12,6 +12,7 @@ import { FilterToolbar } from '../../../../shared/components/FilterToolbar';
 import { UserAvatar } from '../../../../shared/components/UserAvatar';
 import { ApiError } from '../../../../shared/services/api';
 import { downloadCsvText, downloadTablePdf, printedAt, toCsvText } from '../../../../shared/services/printTable';
+import { logThenDownload } from '../../../../shared/services/downloadAudit';
 import { ConfirmDialog, NoticeBar, useNotice } from '../../master/components/masterUi';
 import { CompOffCredit, JoiningItem, LeaveBalance, LeaveInput, LeaveList, LeavePreview, LeaveRequest, LeaveStatus, leaveApi } from '../leaveApi';
 import { JoiningDetails, JoiningStatusLine, useJoining } from './JoiningPanel';
@@ -476,8 +477,9 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
     STATUS_META[r.status].label, statusBy(r).replace(/^by /, ''), r.comment ?? '',
   ]);
   const fileName = `WII_Leave_${from}_to_${to}`;
-  const downloadCsv = () => downloadCsvText(toCsvText(exportHeaders, exportRows()), fileName);
-  const downloadPdf = () => downloadTablePdf({
+  const downloadCsv = () => void logThenDownload('leave_requests', 'csv', sorted.length, range, () => downloadCsvText(toCsvText(exportHeaders, exportRows()), fileName), setError);
+  const downloadPdf = () => void logThenDownload('leave_requests', 'pdf', sorted.length, range, () => buildPdf(), setError);
+  const buildPdf = () => downloadTablePdf({
     title: 'Leave requests',
     subtitle: [`${range} · Generated ${printedAt(new Date().toISOString())}`, teamView ? 'All requests shown' : currentUser.name],
     headers: exportHeaders,
