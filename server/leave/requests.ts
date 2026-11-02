@@ -12,6 +12,7 @@ import { WEEK_DAYS, datesBetween, weekdayOf } from '../attendance/compute';
 import { groupLeaveTypeIds, groupLeaveTypeMap } from './groups';
 import { LOOK_DAYS, type Combine, type Neighbour, combineProblem, toCombine } from './combine';
 import { SESSIONS_END, SESSIONS_START, countLeaveDays, cycleYearOf } from './days';
+import { COMP_OFF_CODE, balanceFromCredits, creditProblem, creditsFor, personById } from './compOff';
 
 /**
  * Leave requests and balances. Every rule is checked here, never in the browser.
@@ -78,6 +79,8 @@ export interface LeaveRequest {
   ltcType: 'none' | 'ltc' | 'ex_india';
   encashDays: number;
   contactAddress: string;
+  /** Compensatory off: the worked weekly off / holiday it uses. */
+  compOffDate: string | null;
   prefixFrom: string | null;
   prefixTo: string | null;
   suffixFrom: string | null;
@@ -126,6 +129,8 @@ export interface LeaveInput {
   suffix: { from: string; to: string } | null;
   /** A certificate uploaded with this application. */
   file: CertificateFile | null;
+  /** Compensatory off only: the weekly off / holiday worked that this leave uses. */
+  compOffDate: string | null;
 }
 
 export async function rows(q: { query: typeof pool.query }, sql: string, params: unknown[] = []): Promise<RowDataPacket[]> {
@@ -244,6 +249,7 @@ function toRequest(viewer: Viewer, row: RowDataPacket): LeaveRequest {
     ltcType: row.ltc_type === 'ltc' ? 'ltc' : row.ltc_type === 'ex_india' ? 'ex_india' : 'none',
     encashDays: Number(row.encash_days ?? 0),
     contactAddress: row.contact_address ? String(row.contact_address) : '',
+    compOffDate: row.comp_off_date ? isoDate(row.comp_off_date) : null,
     prefixFrom: row.prefix_from ? isoDate(row.prefix_from) : null,
     prefixTo: row.prefix_to ? isoDate(row.prefix_to) : null,
     suffixFrom: row.suffix_from ? isoDate(row.suffix_from) : null,
@@ -273,7 +279,7 @@ function toRequest(viewer: Viewer, row: RowDataPacket): LeaveRequest {
 function auditView(r: LeaveRequest): Record<string, unknown> {
   return {
     employee: `${r.name} (${r.biometricId})`, leaveType: `${r.leaveTypeName} (${r.leaveTypeCode})`, startDate: r.startDate, endDate: r.endDate,
-    startSession: r.startSession, endSession: r.endSession, days: r.daysCount, reason: r.reason, certificate: r.certificateName ?? (r.certificate ? 'Yes' : 'No'), stationPermission: r.stationLeave ? 'Required' : 'Not required', ltc: r.ltcType, encashDays: r.encashDays, contactAddress: r.contactAddress, prefix: r.prefixFrom ? `${r.prefixFrom} to ${r.prefixTo}` : null, suffix: r.suffixFrom ? `${r.suffixFrom} to ${r.suffixTo}` : null, status: r.status,
+    startSession: r.startSession, endSession: r.endSession, days: r.daysCount, reason: r.reason, certificate: r.certificateName ?? (r.certificate ? 'Yes' : 'No'), stationPermission: r.stationLeave ? 'Required' : 'Not required', ltc: r.ltcType, encashDays: r.encashDays, contactAddress: r.contactAddress, compOffDay: r.compOffDate, prefix: r.prefixFrom ? `${r.prefixFrom} to ${r.prefixTo}` : null, suffix: r.suffixFrom ? `${r.suffixFrom} to ${r.suffixTo}` : null, status: r.status,
     forwardedBy: r.forwardedByName, comment: r.comment,
   };
 }
@@ -432,6 +438,13 @@ export interface Balance { total: number; carryForward: number; used: number; pe
 export async function balanceOf(
   q: { query: typeof pool.query }, userId: number, policy: Pick<Policy, 'id' | 'quota'>, cycleYear: number, exceptRequestId = 0,
 ): Promise<Balance> {
+  // Compensatory off: the days earned by working a weekly off / holiday and still valid, not a granted quota.
+  const [kind] = await rows(q, 'SELECT code FROM leave_types WHERE id = ? LIMIT 1', [policy.id]);
+  if (kind && String(kind.code) === COMP_OFF_CODE) {
+    const person = await personById(userId);
+    const credits = person ? (await creditsFor([person], todayInIndia(), exceptRequestId)).get(userId) ?? [] : [];
+    return balanceFromCredits(credits);
+  }
   const [grant] = await rows(q, 'SELECT total, carry_forward FROM leave_balances WHERE user_id = ? AND leave_type_id = ? AND cycle_year = ? LIMIT 1', [userId, policy.id, cycleYear]);
   const [sums] = await rows(q,
     `SELECT COALESCE(SUM(CASE WHEN status = 'approved' THEN days_count + encash_days ELSE 0 END), 0) AS used,
@@ -523,7 +536,9 @@ export function parseLeaveInput(body: unknown): LeaveInput {
   const suffix = raw.availSuffix === true ? range('suffixFrom', 'suffixTo', 'Suffix') : null;
   if (Object.keys(v.errors).length) v.assert();
   const file = parseCertificate((body as Record<string, unknown> | null)?.certificateFile);
-  return { userId, leaveTypeId, startDate: startDate!, endDate: endDate!, startSession, endSession, reason: reason.replace(/\s+/g, ' '), certificate: Boolean(file), stationLeave: raw.stationLeave === true, ltcType, encashDays, contactAddress, prefix, suffix, file };
+  const compOffDate = v.date('compOffDate', false) ?? null;
+  v.assert();
+  return { compOffDate, userId, leaveTypeId, startDate: startDate!, endDate: endDate!, startSession, endSession, reason: reason.replace(/\s+/g, ' '), certificate: Boolean(file), stationLeave: raw.stationLeave === true, ltcType, encashDays, contactAddress, prefix, suffix, file };
 }
 
 /** Looks at the employee's other leaves around the new one: see ./combine. */
@@ -606,6 +621,13 @@ async function checkLeave(
   if (days <= 0) throw badRequest('Please correct the highlighted fields.', { startDate: 'No working day falls in these dates.' });
   if (policy.minDays && days < policy.minDays) errors.endDate = `${policy.name} needs at least ${policy.minDays} days in one application.`;
   if (policy.maxConsecutive && days > policy.maxConsecutive) errors.endDate = `${policy.name} can be taken for at most ${policy.maxConsecutive} days at a time.`;
+  if (policy.code === COMP_OFF_CODE) {
+    // One day earned by working a weekly off / holiday (biometric punches only); the monthly limit is the type's "times a month" rule.
+    const person = await personById(targetId);
+    const credit = person ? (await creditsFor([person], today, exceptId)).get(targetId)?.find((c) => c.date === input.compOffDate) : undefined;
+    const bad = input.compOffDate ? creditProblem(credit, input.startDate, input.endDate, days) : 'Choose a day you worked on a weekly off or holiday.';
+    if (bad) errors.compOffDate = bad;
+  } else if (input.compOffDate) errors.compOffDate = `Only a compensatory off uses a worked day.`;
   if (policy.certificateRequired && !input.certificate) errors.certificate = `Upload a medical certificate: ${policy.name} needs one.`;
   else if (policy.certDays && days > policy.certDays && !input.certificate) errors.certificate = `Medical certificate needed above ${policy.certDays} days.`;
   if (policy.lifetimeMax) {
@@ -773,6 +795,22 @@ export async function previewLeave(viewer: Viewer, query: Record<string, unknown
     return { days: c.days, cycleYear: c.cycleYear, cycle: cycleLabel(c.cycleYear, c.emp.basis), balance: c.balance, error: null, prefix: c.prefix, suffix: c.suffix, stationOk: c.stationOk, startDate: input.startDate, endDate: input.endDate, requestedStart: c.requested.startDate, requestedEnd: c.requested.endDate };
   } catch (error) {
     if (error instanceof HttpError) return { days: 0, cycleYear: 0, cycle: '', balance: null, error: Object.values(error.details ?? {})[0] ?? error.message, prefix: null, suffix: null, stationOk: false, ...none };
+    throw error;
+  }
+}
+
+/** The worked weekly offs / holidays that can be taken as a compensatory off now: the dropdown of the apply form. */
+export async function compOffOptions(viewer: Viewer, query: Record<string, unknown>, exceptId = 0): Promise<{ credits: Array<{ date: string; in: string; out: string; hours: number; reason: string; validUntil: string }> }> {
+  const target = viewer.role === 'administrator' ? Number(query.userId ?? 0) : viewer.role === 'general_staff' ? viewer.id : 0;
+  if (!Number.isInteger(target) || target <= 0) return { credits: [] };
+  exceptId = /^\d{1,20}$/.test(String(query.exceptId ?? '')) ? Number(query.exceptId) : exceptId;
+  const person = await personById(target);
+  if (!person) return { credits: [] };
+  try {
+    const mine = (await creditsFor([person], todayInIndia(), exceptId)).get(target) ?? [];
+    return { credits: mine.filter((c) => c.usedBy === null).map(({ date, in: inTime, out, hours, reason, validUntil }) => ({ date, in: inTime, out, hours, reason, validUntil })) };
+  } catch (error) {
+    missingTable(error);
     throw error;
   }
 }
@@ -953,11 +991,11 @@ export async function createRequest(req: Request, viewer: Viewer, body: unknown)
       const c = await checkLeave(conn, viewer, input, targetId, 0);
       const [result] = await conn.query(
         `INSERT INTO leave_requests
-           (user_id, leave_type_id, start_date, end_date, start_session, end_session, days_count, cycle_year, reason, certificate, station_leave, ltc_type, encash_days, contact_address, prefix_from, prefix_to, suffix_from, suffix_to, stages, status, applied_by, manager_id, reviewer_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_l1', ?, ?, ?)`,
+           (user_id, leave_type_id, start_date, end_date, start_session, end_session, days_count, cycle_year, reason, certificate, station_leave, ltc_type, encash_days, contact_address, prefix_from, prefix_to, suffix_from, suffix_to, stages, status, applied_by, manager_id, reviewer_id, comp_off_date)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_l1', ?, ?, ?, ?)`,
         [targetId, c.policy.id, input.startDate, input.endDate, input.startSession, input.endSession, c.days, c.cycleYear, input.reason, input.certificate ? 1 : 0, input.stationLeave ? 1 : 0,
           input.ltcType, input.encashDays, input.contactAddress || null, input.prefix?.from ?? null, input.prefix?.to ?? null, input.suffix?.from ?? null, input.suffix?.to ?? null,
-          c.stages, viewer.id, c.emp.reportingManagerId, c.emp.reviewingManagerId],
+          c.stages, viewer.id, c.emp.reportingManagerId, c.emp.reviewingManagerId, input.compOffDate],
       );
       const id = Number((result as { insertId: number }).insertId);
       if (input.file) await saveCertificate(conn, id, input.file, viewer.id);
@@ -991,10 +1029,10 @@ export async function updateRequest(req: Request, viewer: Viewer, id: number, bo
       const c = await checkLeave(conn, viewer, input, Number(row.user_id), id);
       await conn.query(
         `UPDATE leave_requests SET leave_type_id = ?, start_date = ?, end_date = ?, start_session = ?, end_session = ?, days_count = ?, cycle_year = ?,
-           reason = ?, certificate = ?, station_leave = ?, ltc_type = ?, encash_days = ?, contact_address = ?, prefix_from = ?, prefix_to = ?, suffix_from = ?, suffix_to = ?, stages = ?, manager_id = ?, reviewer_id = ? WHERE id = ?`,
+           reason = ?, certificate = ?, station_leave = ?, ltc_type = ?, encash_days = ?, contact_address = ?, prefix_from = ?, prefix_to = ?, suffix_from = ?, suffix_to = ?, stages = ?, manager_id = ?, reviewer_id = ?, comp_off_date = ? WHERE id = ?`,
         [c.policy.id, input.startDate, input.endDate, input.startSession, input.endSession, c.days, c.cycleYear, input.reason, input.certificate ? 1 : 0, input.stationLeave ? 1 : 0,
           input.ltcType, input.encashDays, input.contactAddress || null, input.prefix?.from ?? null, input.prefix?.to ?? null, input.suffix?.from ?? null, input.suffix?.to ?? null,
-          c.stages, c.emp.reportingManagerId, c.emp.reviewingManagerId, id],
+          c.stages, c.emp.reportingManagerId, c.emp.reviewingManagerId, input.compOffDate, id],
       );
       if (input.file) await saveCertificate(conn, id, input.file, viewer.id);
       await applyJoins(conn, req, viewer, c.joins);
@@ -1152,9 +1190,13 @@ export async function listBalances(viewer: Viewer, yearRaw: unknown): Promise<{ 
     const typeRows = await rows(pool, "SELECT * FROM leave_types WHERE status = 'active' ORDER BY name");
     const policies = await attachQuotas(pool, typeRows.map(toPolicy));
     const people = await rows(pool,
-      `SELECT u.id, u.biometric_id, u.name, p.designation, p.department, p.employment_type, p.joining_date, p.profile_data
+      `SELECT u.id, u.biometric_id, u.name, p.designation, p.department, p.employment_type, p.joining_date, p.shift_id, p.profile_data
          FROM users u LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE LOWER(u.status) = 'active' AND u.is_system = 0 ORDER BY u.name`);
     const visible = people.filter((r) => canSee(viewer, { ...r, user_id: r.id }));
+    // Compensatory off is counted from the days worked on weekly offs / holidays that are still valid today.
+    const credits = policies.some((p) => p.code === COMP_OFF_CODE)
+      ? await creditsFor(visible.map((r) => ({ userId: Number(r.id), biometricId: String(r.biometric_id), shiftId: r.shift_id ? String(r.shift_id) : null, joining: r.joining_date ? isoDate(r.joining_date) : null })), todayInIndia())
+      : new Map();
     const grants = await rows(pool, 'SELECT user_id, leave_type_id, total, carry_forward FROM leave_balances WHERE cycle_year = ?', [year]);
     const sums = await rows(pool,
       `SELECT user_id, leave_type_id,
@@ -1182,6 +1224,7 @@ export async function listBalances(viewer: Viewer, yearRaw: unknown): Promise<{ 
         const eligible = eligibilityProblem(p, emp, `${year}-12-31`) === null;
         const g = grantOf.get(`${r.id}:${p.id}`), s = sumOf.get(`${r.id}:${p.id}`);
         if (!eligible && !g && !s) { balances[String(p.id)] = null; continue; }
+        if (p.code === COMP_OFF_CODE) { balances[String(p.id)] = { ...balanceFromCredits(credits.get(Number(r.id)) ?? []), eligible }; continue; }
         const asOf = balanceAsOn(year, basis, today);
         const total = g ? Number(g.total) : creditedQuota(p, emp.employmentType, year, basis, asOf, emp.isPwd), carryForward = g ? Number(g.carry_forward) : 0;
         const l = linkedOf.get(`${r.id}:${p.id}`);
