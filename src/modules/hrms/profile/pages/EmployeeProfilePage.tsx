@@ -16,6 +16,10 @@ import { EmployeeProfileView, MyProfileView } from '../components/MyProfileView'
 import { EmployeeActivityLog } from '../components/EmployeeActivityLog';
 import { DirectoryTable } from '../components/DirectoryTable';
 import { MappingPanel } from '../components/MappingPanel';
+import { Button } from '../../../../shared/components/Button';
+import { PageHeaderButton } from '../../../../shared/components/PageHeader';
+import { SegmentedControl } from '../../../../shared/components/SegmentedControl';
+import { PAGE_ICONS } from '../../hrmsPages';
 import { logThenDownload } from '../../../../shared/services/downloadAudit';
 import { auditorApi } from '../employeeApi';
 import { FilterToolbar } from '../../../../shared/components/FilterToolbar';
@@ -274,22 +278,16 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const canAccessAdminSubTabs = isAdmin || isAudit;
   const showMyProfile = !isAdmin && !isAudit && !isManager;
   const [auditorView, setAuditorView] = useState<'directory' | 'activity'>('directory');
+  /** The header's Employee transfer / Manager replacement buttons ask the mapping panel to open that order form. */
+  const [mappingOrder, setMappingOrder] = useState<{ kind: 'transfer' | 'replace'; n: number }>({ kind: 'transfer', n: 0 });
   /** Auditor: Directory / Activity logs switch, shown at the top-left of whichever panel is open. */
   const auditorSwitch = (
-    <div className="inline-flex p-1 bg-slate-100/90 border border-slate-200/90 rounded-xl gap-1" role="tablist" aria-label="Auditor view">
-      {([['directory', 'Employee directory'], ['activity', 'Activity logs']] as const).map(([key, label]) => (
-        <button
-          key={key}
-          type="button"
-          role="tab"
-          aria-selected={auditorView === key}
-          onClick={() => setAuditorView(key)}
-          className={`h-7 px-3.5 rounded-lg text-xs font-bold cursor-pointer transition-colors ${auditorView === key ? 'bg-white text-primary shadow-2xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'}`}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
+    <SegmentedControl
+      ariaLabel="Auditor view"
+      value={auditorView}
+      onChange={setAuditorView}
+      options={[{ value: 'directory', label: 'Employee directory' }, { value: 'activity', label: 'Activity log' }]}
+    />
   );
   const { refresh: refreshSession } = useSession();
 
@@ -1786,10 +1784,10 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       <PageHeader
         icon={
           activeTab === 'user_controls'
-            ? Shield
+            ? PAGE_ICONS.user_controls
             : activeTab === 'transfers'
-            ? ArrowLeftRight
-            : UserIcon
+            ? PAGE_ICONS.transfers
+            : PAGE_ICONS.profile
         }
         title={
           activeTab === 'user_controls'
@@ -1818,15 +1816,12 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
         rightAction={
           isAdmin && !isAudit ? (
             activeTab === 'profile' || !activeTab ? (
-              <button
-                type="button"
-                onClick={handleOpenCreateEmployeeModal}
-                className="bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs px-4 py-2 rounded-xl flex items-center space-x-1.5 transition-all shadow-2xs cursor-pointer active:scale-95"
-                title="New Employee"
-              >
-                <UserPlus className="w-4 h-4" />
-                <span>+ New Employee</span>
-              </button>
+              <PageHeaderButton icon={Plus} onClick={handleOpenCreateEmployeeModal}>New employee</PageHeaderButton>
+            ) : activeTab === 'transfers' ? (
+              <>
+                <PageHeaderButton icon={ArrowLeftRight} onClick={() => setMappingOrder((o) => ({ kind: 'transfer', n: o.n + 1 }))}>Employee transfer</PageHeaderButton>
+                <PageHeaderButton icon={RefreshCw} variant="secondary" onClick={() => setMappingOrder((o) => ({ kind: 'replace', n: o.n + 1 }))}>Manager replacement</PageHeaderButton>
+              </>
             ) : undefined
           ) : undefined
         }
@@ -1950,15 +1945,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                   <UserX className="w-10 h-10 text-slate-300 mx-auto" />
                   <h4 className="font-bold text-slate-800 text-sm">No profiles match the selected category & search criteria</h4>
                   
-                  <button
-                    onClick={() => {
-                      setSelectedCategoryFilter('all');
-                      setProfileSearchQuery('');
-                    }}
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-colors cursor-pointer inline-block"
-                  >
-                    Show All Profiles
-                  </button>
+                  <Button variant="primary" size="sm" onClick={() => { setSelectedCategoryFilter('all'); setProfileSearchQuery(''); }}>Show all profiles</Button>
                 </div>
               ) : directoryViewMode === 'table' ? (
                 <DirectoryTable
@@ -2451,7 +2438,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       {/* TAB 3: EMPLOYEES MAPPING (transfers, reporting manager / HoD changes) */}
       {/* ==================================================================== */}
       {activeTab === 'transfers' && (
-        <MappingPanel canChange={isAdmin && !isAudit} onChanged={() => void reloadEmployees()} notify={showToast} />
+        <MappingPanel order={mappingOrder} canChange={isAdmin && !isAudit} onChanged={() => void reloadEmployees()} notify={showToast} />
       )}
 
       {/* ==================================================================== */}
@@ -3668,21 +3655,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
               {/* Pinned Modal Card Footer */}
               <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-end space-x-3 shrink-0 rounded-b-xl">
-                <button
-                  type="button"
-                  onClick={closeEmployeeForm}
-                  className="px-4 py-2 border border-slate-300 text-slate-700 bg-white hover:bg-slate-100 font-semibold rounded-lg text-xs shadow-xs transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingProfile}
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-lg text-xs shadow-sm transition-all flex items-center space-x-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-wait"
-                >
-                  <UserPlus className="w-4 h-4" />
-                  <span>{savingProfile ? 'Saving…' : editingEmployeeId ? 'Save Changes' : 'New Employee'}</span>
-                </button>
+                <Button type="button" variant="outline" size="sm" onClick={closeEmployeeForm} disabled={savingProfile}>Cancel</Button>
+                <Button type="submit" variant="primary" size="sm" loading={savingProfile} loadingText="Saving…">{editingEmployeeId ? 'Save changes' : 'Add employee'}</Button>
               </div>
             </form>
           </div>
@@ -3850,20 +3824,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
               <div className="px-4 sm:px-5 py-2.5 border-t border-slate-200 flex items-center justify-between shrink-0 bg-slate-50 z-30">
                 <div className="text-[11px] text-slate-500 font-medium min-w-0">Configuring permissions for <strong className="text-slate-800">{userToEditRoles.name}</strong></div>
                 <div className="flex items-center space-x-2 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setUserToEditRoles(null)}
-                    className="bg-white hover:bg-slate-100 text-slate-700 font-bold px-3.5 py-1.5 rounded-lg text-xs border border-slate-200 cursor-pointer transition-colors shadow-2xs"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isRoleMatrixLoading}
-                    className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold px-5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer flex items-center space-x-1.5 shadow-2xs"
-                  >
-                    <span>Save</span>
-                  </button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setUserToEditRoles(null)}>Cancel</Button>
+                  <Button type="submit" variant="primary" size="sm" disabled={isRoleMatrixLoading}>Save</Button>
                 </div>
               </div>
             </form>
@@ -4035,20 +3997,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
               </div>
 
               <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => setUserToResetPasswordForm(null)}
-                  className="h-9 px-4 bg-white hover:bg-slate-100 text-slate-700 font-bold rounded-xl text-xs border border-slate-200/90 cursor-pointer transition-colors shadow-2xs"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="h-9 px-5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-xl text-xs transition-all cursor-pointer flex items-center space-x-1.5 shadow-2xs active:scale-95"
-                >
-                  <KeyRound className="w-3.5 h-3.5 text-blue-200" />
-                  <span>Confirm Reset Password</span>
-                </button>
+                <Button type="button" variant="outline" size="sm" onClick={() => setUserToResetPasswordForm(null)}>Cancel</Button>
+                <Button type="submit" variant="primary" size="sm" leftIcon={KeyRound}>Reset password</Button>
               </div>
             </form>
           </div>

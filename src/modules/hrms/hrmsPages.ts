@@ -1,3 +1,7 @@
+import type { LucideIcon } from 'lucide-react';
+import {
+  ArrowLeftRight, Calendar, CheckCircle2, Clock, FileBarChart, FileSpreadsheet, FileText, LayoutDashboard, MapPin, ShieldCheck, Sliders, User,
+} from 'lucide-react';
 import type { UserRole } from '../../types';
 
 /**
@@ -39,6 +43,25 @@ const ALIASES: Record<string, string> = {
   attendance_management: 'attendance',
   leave_matrix: 'leave_balance',
   roles: 'user_controls',
+};
+
+/**
+ * One icon per page. The sidebar and the page's header both read it, so a page never has two different icons.
+ * (Page ids as in HRMS_PAGES.)
+ */
+export const PAGE_ICONS: Record<string, LucideIcon> = {
+  dashboard: LayoutDashboard,
+  attendance: Clock,
+  manual_attendance: CheckCircle2,
+  od: MapPin,
+  leave: FileText,
+  leave_balance: FileSpreadsheet,
+  holiday_calendar: Calendar,
+  profile: User,
+  user_controls: ShieldCheck,
+  transfers: ArrowLeftRight,
+  master: Sliders,
+  reports: FileBarChart,
 };
 
 export const HRMS_HOME = 'dashboard';

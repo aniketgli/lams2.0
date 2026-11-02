@@ -10,6 +10,7 @@ export * from './Button';
 
 // 2. Layout & Headers
 export * from './PageHeader';
+export * from './SegmentedControl';
 export * from './WIILogo';
 
 // 3. Status & Badges

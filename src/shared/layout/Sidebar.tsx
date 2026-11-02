@@ -1,25 +1,19 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { WIILogo } from '../components/WIILogo';
-import { canOpenPage } from '../../modules/hrms/hrmsPages';
+import { PAGE_ICONS, canOpenPage } from '../../modules/hrms/hrmsPages';
 import {
-  FileBarChart,
-  LayoutDashboard,
-  Clock,
-  MapPin,
-  FileText,
-  ShieldCheck,
   ChevronDown,
   ChevronRight,
-  CheckCircle2,
-  X,
-  User,
   Users,
-  Calendar,
-  Sliders,
-  ArrowLeftRight,
-  FileSpreadsheet
+  X
 } from 'lucide-react';
+
+/** A page's icon, from the one registry the page headers use too. */
+const PageIcon: React.FC<{ id: string; className?: string }> = ({ id, className }) => {
+  const Icon = PAGE_ICONS[id];
+  return Icon ? <Icon className={className} /> : null;
+};
 
 interface SidebarProps {
   activeTab: string;
@@ -109,7 +103,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                   }`}
                 >
-                  <LayoutDashboard className={`w-4 h-4 shrink-0 ${activeTab === 'dashboard' ? 'text-primary' : 'text-slate-400'}`} />
+                  <PageIcon id="dashboard" className={`w-4 h-4 shrink-0 ${activeTab === 'dashboard' ? 'text-primary' : 'text-slate-400'}`} />
                   <span>Dashboard</span>
                 </button>
 
@@ -126,7 +120,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     }`}
                   >
                   <div className="flex items-center space-x-3 min-w-0">
-                      <Clock className={`w-4 h-4 shrink-0 ${isAttendanceActive ? 'text-primary' : 'text-slate-400'}`} />
+                      <PageIcon id="attendance" className={`w-4 h-4 shrink-0 ${isAttendanceActive ? 'text-primary' : 'text-slate-400'}`} />
                       <span className="block truncate">Attendance Management</span>
                     </div>
                     {expandedGroup === 'attendance' ? (
@@ -146,7 +140,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                         }`}
                       >
-                        <Clock className={`w-4 h-4 shrink-0 ${activeTab === 'attendance' ? 'text-primary' : 'text-slate-400'}`} />
+                        <PageIcon id="attendance" className={`w-4 h-4 shrink-0 ${activeTab === 'attendance' ? 'text-primary' : 'text-slate-400'}`} />
                         <span>Attendance</span>
                       </button>
 
@@ -158,7 +152,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                         }`}
                       >
-                        <CheckCircle2 className={`w-4 h-4 shrink-0 ${activeTab === 'manual_attendance' ? 'text-primary' : 'text-slate-400'}`} />
+                        <PageIcon id="manual_attendance" className={`w-4 h-4 shrink-0 ${activeTab === 'manual_attendance' ? 'text-primary' : 'text-slate-400'}`} />
                         <span>Manual Attendance</span>
                       </button>
 
@@ -170,7 +164,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                         }`}
                       >
-                        <MapPin className={`w-4 h-4 shrink-0 ${activeTab === 'od' ? 'text-primary' : 'text-slate-400'}`} />
+                        <PageIcon id="od" className={`w-4 h-4 shrink-0 ${activeTab === 'od' ? 'text-primary' : 'text-slate-400'}`} />
                         <span>Outdoor Duty</span>
                       </button>
                     </div>
@@ -190,7 +184,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     }`}
                   >
                     <div className="flex items-center space-x-3 min-w-0">
-                      <FileText className={`w-4 h-4 shrink-0 ${isLeaveActive ? 'text-primary' : 'text-slate-400'}`} />
+                      <PageIcon id="leave" className={`w-4 h-4 shrink-0 ${isLeaveActive ? 'text-primary' : 'text-slate-400'}`} />
                       <span className="block truncate">Leave &amp; Holidays</span>
                     </div>
                     {expandedGroup === 'leave' ? (
@@ -210,7 +204,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                         }`}
                       >
-                        <FileText className={`w-4 h-4 shrink-0 ${activeTab === 'leave' ? 'text-primary' : 'text-slate-400'}`} />
+                        <PageIcon id="leave" className={`w-4 h-4 shrink-0 ${activeTab === 'leave' ? 'text-primary' : 'text-slate-400'}`} />
                         <span>Leaves</span>
                       </button>
 
@@ -223,7 +217,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                               : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                           }`}
                         >
-                          <FileSpreadsheet className={`w-4 h-4 shrink-0 ${activeTab === 'leave_balance' || activeTab === 'leave_matrix' ? 'text-primary' : 'text-slate-400'}`} />
+                          <PageIcon id="leave_balance" className={`w-4 h-4 shrink-0 ${activeTab === 'leave_balance' || activeTab === 'leave_matrix' ? 'text-primary' : 'text-slate-400'}`} />
                           <span>Leave Balance</span>
                         </button>
                       )}
@@ -236,7 +230,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                         }`}
                       >
-                        <Calendar className={`w-4 h-4 shrink-0 ${activeTab === 'holiday_calendar' ? 'text-primary' : 'text-slate-400'}`} />
+                        <PageIcon id="holiday_calendar" className={`w-4 h-4 shrink-0 ${activeTab === 'holiday_calendar' ? 'text-primary' : 'text-slate-400'}`} />
                         <span>Holiday Calendar</span>
                       </button>
                     </div>
@@ -256,7 +250,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                     }`}
                   >
-                    <User className={`w-4 h-4 shrink-0 ${activeTab === 'profile' ? 'text-primary' : 'text-slate-400'}`} />
+                    <PageIcon id="profile" className={`w-4 h-4 shrink-0 ${activeTab === 'profile' ? 'text-primary' : 'text-slate-400'}`} />
                     <span>Profiles</span>
                   </button>
                 )}
@@ -293,7 +287,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                         }`}
                       >
-                        <User className={`w-4 h-4 shrink-0 ${activeTab === 'profile' ? 'text-primary' : 'text-slate-400'}`} />
+                        <PageIcon id="profile" className={`w-4 h-4 shrink-0 ${activeTab === 'profile' ? 'text-primary' : 'text-slate-400'}`} />
                         <span>Profiles</span>
                       </button>
 
@@ -307,7 +301,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                 : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                             }`}
                           >
-                            <ShieldCheck className={`w-4 h-4 shrink-0 ${activeTab === 'user_controls' || activeTab === 'roles' ? 'text-primary' : 'text-slate-400'}`} />
+                            <PageIcon id="user_controls" className={`w-4 h-4 shrink-0 ${activeTab === 'user_controls' || activeTab === 'roles' ? 'text-primary' : 'text-slate-400'}`} />
                             <span>User Controls &amp; Roles</span>
                           </button>
 
@@ -319,7 +313,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                 : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                             }`}
                           >
-                            <ArrowLeftRight className={`w-4 h-4 shrink-0 ${activeTab === 'transfers' ? 'text-primary' : 'text-slate-400'}`} />
+                            <PageIcon id="transfers" className={`w-4 h-4 shrink-0 ${activeTab === 'transfers' ? 'text-primary' : 'text-slate-400'}`} />
                             <span>Employees Mapping</span>
                           </button>
                         </>
@@ -342,7 +336,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                     }`}
                   >
-                    <Sliders className={`w-4 h-4 shrink-0 ${activeTab === 'master' ? 'text-primary' : 'text-slate-400'}`} />
+                    <PageIcon id="master" className={`w-4 h-4 shrink-0 ${activeTab === 'master' ? 'text-primary' : 'text-slate-400'}`} />
                     <span>Master Settings</span>
                   </button>
                 )}
@@ -360,7 +354,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                     }`}
                   >
-                    <FileBarChart className={`w-4 h-4 shrink-0 ${activeTab === 'reports' ? 'text-primary' : 'text-slate-400'}`} />
+                    <PageIcon id="reports" className={`w-4 h-4 shrink-0 ${activeTab === 'reports' ? 'text-primary' : 'text-slate-400'}`} />
                     <span>Reports</span>
                   </button>
                 )}

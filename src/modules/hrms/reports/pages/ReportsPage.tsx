@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Clock, FileBarChart, History, Mail, Pause, Pencil, Play, Plus, Send, Trash2, XCircle } from 'lucide-react';
-import { PageHeader } from '../../../../shared/components/PageHeader';
+import { CheckCircle2, Clock, FileBarChart, History, Pause, Pencil, Play, Plus, Send, Trash2, XCircle } from 'lucide-react';
+import { PageHeader, PageHeaderButton } from '../../../../shared/components/PageHeader';
+import { SegmentedControl } from '../../../../shared/components/SegmentedControl';
+import { PAGE_ICONS } from '../../hrmsPages';
 import { Button, DataTable, Input, Modal, Select } from '../../../../shared/components';
 import type { ColumnDef } from '../../../../shared/components';
 import { FilterToolbar } from '../../../../shared/components/FilterToolbar';
@@ -240,20 +242,13 @@ export const ReportsPage: React.FC = () => {
   const chosenReport = data.reports.find((r) => r.key === form?.reportKey);
 
   const viewSwitch = readOnly ? (
-    <div role="tablist" aria-label="Reports views" className="inline-flex items-center gap-0.5 p-0.5 rounded-xl bg-slate-100 border border-slate-200">
-      {([['schedules', 'Schedules'], ['activity', 'Activity log']] as const).map(([key, text]) => (
-        <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => setView(key)}
-          className={`h-7 px-3.5 rounded-lg text-xs font-bold cursor-pointer transition-colors ${view === key ? 'bg-white text-primary shadow-2xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'}`}>
-          {text}
-        </button>
-      ))}
-    </div>
+    <SegmentedControl ariaLabel="Reports views" value={view} onChange={setView} options={[{ value: 'schedules', label: 'Schedules' }, { value: 'activity', label: 'Activity log' }]} />
   ) : null;
 
   if (readOnly && view === 'activity') {
     return (
       <div className="space-y-5 pb-6">
-        <PageHeader icon={Mail} title="Reports" subtitle="The log of who changed, sent or downloaded the scheduled reports" />
+        <PageHeader icon={PAGE_ICONS.reports} title="Reports" subtitle="The log of who changed, sent or downloaded the scheduled reports" />
         <ActivityLogPanel source={REPORT_ACTIVITY} toolbarStart={viewSwitch} />
       </div>
     );
@@ -262,14 +257,11 @@ export const ReportsPage: React.FC = () => {
   return (
     <div className="space-y-5 pb-6">
       <PageHeader
-        icon={Mail}
+        icon={PAGE_ICONS.reports}
         title="Reports"
         subtitle={readOnly ? 'The report schedules, who receives them and when they were sent' : 'Choose which report is emailed to whom, how often and at what time'}
         rightAction={readOnly ? undefined : (
-          <button type="button" onClick={() => open(null)}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-xl inline-flex items-center gap-1.5 shadow-2xs cursor-pointer">
-            <Plus className="w-4 h-4" /> Add schedule
-          </button>
+          <PageHeaderButton icon={Plus} onClick={() => open(null)}>Add schedule</PageHeaderButton>
         )}
       />
       <NoticeBar notice={notice} onClose={clearNotice} />
