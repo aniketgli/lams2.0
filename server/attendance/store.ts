@@ -5,6 +5,7 @@ import { HttpError, badRequest } from '../lib/http';
 import { isValidIsoDate, todayInIndia } from '../lib/validate';
 import { cachedReference } from '../lib/referenceCache';
 import type { RoleId } from '../lib/roles';
+import { MAX_RANGE_DAYS_ONE, sizeProblem } from './limits';
 import { DayRecord, Punch, ShiftRule, buildDay, datesBetween, normalizeEmployeeCode, shiftRule, toMinutes, weekdayOf } from './compute';
 
 /**
@@ -33,9 +34,6 @@ export interface AttendanceResult {
   shifts: { code: string; name: string; startTime: string; endTime: string }[];
 }
 
-/** Longest range one request may ask for. */
-export const MAX_RANGE_DAYS = 93;
-
 async function rows(sql: string, params: unknown[] = []): Promise<RowDataPacket[]> {
   const [result] = await pool.query<RowDataPacket[]>(sql, params);
   return result;
@@ -51,16 +49,6 @@ const dateText = (value: unknown): string | null => {
   return isValidIsoDate(text) ? text : null;
 };
 
-function profileData(raw: unknown): Record<string, unknown> {
-  if (raw && typeof raw === 'object') return raw as Record<string, unknown>;
-  try {
-    const parsed = JSON.parse(String(raw || '{}'));
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
 function nowTimeInIndia(): string {
   return new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date());
 }
@@ -70,35 +58,48 @@ export function parseRange(query: { from?: unknown; to?: unknown }, today = toda
   const to = String(query.to ?? from);
   if (!isValidIsoDate(from) || !isValidIsoDate(to)) throw badRequest('Dates must be in YYYY-MM-DD format.');
   if (from > to) throw badRequest('The start date must be on or before the end date.');
-  if (datesBetween(from, to).length > MAX_RANGE_DAYS) throw badRequest(`Choose a range of at most ${MAX_RANGE_DAYS} days.`);
+  if (datesBetween(from, to).length > MAX_RANGE_DAYS_ONE) throw badRequest(`Choose a range of at most ${MAX_RANGE_DAYS_ONE} days.`);
   return { from, to };
 }
 
 interface ScopedEmployee { userId: string; biometricId: string; joining: string | null; validUpto: string | null; shiftId: string | null }
 
+/**
+ * The employees the viewer may see, chosen by MySQL (not by reading everyone and filtering here).
+ * A manager's team is found through the indexed `reporting_manager_id` / `reviewing_manager_id`
+ * columns of employee_profiles (migrations/20261129_scale_indexes.sql).
+ */
 async function employeesInScope(viewer: AttendanceViewer, onlyUserId: string | null): Promise<ScopedEmployee[]> {
-  const found = await rows(
-    `SELECT u.id, u.biometric_id, u.status, u.valid_upto, p.joining_date, p.shift_id, p.profile_data
-       FROM users u LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id
-      WHERE LOWER(u.status) = 'active' AND u.is_system = 0`,
-  );
   const all = viewer.role === 'administrator' || viewer.role === 'audit';
   const manager = viewer.role === 'reporting_manager' || viewer.role === 'reviewing_manager';
-  return found
-    .filter((r) => {
-      if (onlyUserId && String(r.id) !== onlyUserId) return false;
-      if (all || Number(r.id) === viewer.id) return true;
-      if (!manager) return false;
-      const data = profileData(r.profile_data);
-      return String(data.reportingManagerId ?? '') === String(viewer.id) || String(data.reviewingManagerId ?? '') === String(viewer.id);
-    })
-    .map((r) => ({
-      userId: String(r.id),
-      biometricId: normalizeEmployeeCode(r.biometric_id),
-      joining: dateText(r.joining_date),
-      validUpto: dateText(r.valid_upto),
-      shiftId: r.shift_id ? String(r.shift_id) : null,
-    }));
+  const where = ["u.status = 'active'", 'u.is_system = 0'];
+  const params: unknown[] = [];
+  if (onlyUserId) { where.push('u.id = ?'); params.push(onlyUserId); }
+  if (!all) {
+    if (manager) { where.push('(u.id = ? OR p.reporting_manager_id = ? OR p.reviewing_manager_id = ?)'); params.push(viewer.id, viewer.id, viewer.id); }
+    else { where.push('u.id = ?'); params.push(viewer.id); }
+  }
+  let found: RowDataPacket[];
+  try {
+    found = await rows(
+      `SELECT u.id, u.biometric_id, u.valid_upto, p.joining_date, p.shift_id
+         FROM users u LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id
+        WHERE ${where.join(' AND ')}`,
+      params,
+    );
+  } catch (error) {
+    if ((error as { code?: string })?.code === 'ER_BAD_FIELD_ERROR') {
+      throw new HttpError(503, 'The database needs an update. Ask the administrator to run migrations/20261129_scale_indexes.sql.', 'NOT_CONFIGURED');
+    }
+    throw error;
+  }
+  return found.map((r) => ({
+    userId: String(r.id),
+    biometricId: normalizeEmployeeCode(r.biometric_id),
+    joining: dateText(r.joining_date),
+    validUpto: dateText(r.valid_upto),
+    shiftId: r.shift_id ? String(r.shift_id) : null,
+  }));
 }
 
 function attendanceMachines(): Promise<Map<string, string>> {
@@ -163,8 +164,9 @@ async function loadPunches(from: string, to: string, machines: Map<string, strin
     found = await rows(
       `SELECT EmployeeCode, DATE_FORMAT(LogDate, '%Y-%m-%d') AS d, DATE_FORMAT(LogDateTime, '%H:%i:%s') AS t, DeviceSR
          FROM Attendance
-        WHERE LogDate BETWEEN ? AND ?${variants ? ` AND EmployeeCode IN (${variants.map(() => '?').join(', ')})` : ''}`,
-      [from, to, ...(variants ?? [])],
+        WHERE LogDate BETWEEN ? AND ?${variants ? ` AND EmployeeCode IN (${variants.map(() => '?').join(', ')})` : ''}
+          AND UPPER(TRIM(DeviceSR)) IN (${[...machines.keys()].map(() => '?').join(', ')})`,
+      [from, to, ...(variants ?? []), ...machines.keys()],
     );
   } catch (error) {
     if ((error as { code?: string })?.code === 'ER_NO_SUCH_TABLE') {
@@ -186,12 +188,13 @@ async function loadPunches(from: string, to: string, machines: Map<string, strin
 }
 
 /** Approved manual attendance: user id → date → requested In / Out. A missing table means none. */
-async function approvedManual(from: string, to: string): Promise<Map<string, Map<string, { inTime: string; outTime: string }>>> {
+async function approvedManual(from: string, to: string, userIds: string[] | null = null): Promise<Map<string, Map<string, { inTime: string; outTime: string }>>> {
   const out = new Map<string, Map<string, { inTime: string; outTime: string }>>();
   try {
     const found = await rows(
-      "SELECT user_id, DATE_FORMAT(att_date, '%Y-%m-%d') AS d, in_time, out_time FROM manual_attendance_requests WHERE status = 'approved' AND att_date BETWEEN ? AND ?",
-      [from, to],
+      `SELECT user_id, DATE_FORMAT(att_date, '%Y-%m-%d') AS d, in_time, out_time FROM manual_attendance_requests
+        WHERE status = 'approved' AND att_date BETWEEN ? AND ?${userIds ? ` AND user_id IN (${userIds.map(() => '?').join(', ')})` : ''}`,
+      [from, to, ...(userIds ?? [])],
     );
     for (const r of found) {
       const byDate = out.get(String(r.user_id)) ?? new Map();
@@ -205,13 +208,13 @@ async function approvedManual(from: string, to: string): Promise<Map<string, Map
 }
 
 /** Approved outdoor duty: user id → date → location, for every date in the range. A missing table means none. */
-async function approvedOutdoorDuty(from: string, to: string, onlyUserId: string | null = null): Promise<Map<string, Map<string, string>>> {
+async function approvedOutdoorDuty(from: string, to: string, userIds: string[] | null = null): Promise<Map<string, Map<string, string>>> {
   const out = new Map<string, Map<string, string>>();
   try {
     const found = await rows(
       `SELECT user_id, DATE_FORMAT(start_date, '%Y-%m-%d') AS s, DATE_FORMAT(end_date, '%Y-%m-%d') AS e, location FROM outdoor_duty_requests
-        WHERE status = 'approved' AND start_date <= ? AND end_date >= ?${onlyUserId ? ' AND user_id = ?' : ''}`,
-      [to, from, ...(onlyUserId ? [onlyUserId] : [])],
+        WHERE status = 'approved' AND start_date <= ? AND end_date >= ?${userIds ? ` AND user_id IN (${userIds.map(() => '?').join(', ')})` : ''}`,
+      [to, from, ...(userIds ?? [])],
     );
     for (const r of found) {
       const byDate = out.get(String(r.user_id)) ?? new Map<string, string>();
@@ -226,7 +229,7 @@ async function approvedOutdoorDuty(from: string, to: string, onlyUserId: string 
 
 /** Dates in the range on which the employee is on approved outdoor duty. */
 export async function outdoorDutyDates(userId: string, from: string, to: string): Promise<Set<string>> {
-  return new Set((await approvedOutdoorDuty(from, to, userId)).get(userId)?.keys() ?? []);
+  return new Set((await approvedOutdoorDuty(from, to, [userId])).get(userId)?.keys() ?? []);
 }
 
 /** What the biometric machines recorded for one day: the In and Out punch, each null when missing. */
@@ -301,15 +304,21 @@ export async function listAttendance(viewer: AttendanceViewer, query: { from?: u
   const onlyUserId = query.userId ? String(query.userId) : null;
   if (onlyUserId && !/^\d{1,20}$/.test(onlyUserId)) throw badRequest('Invalid employee.');
 
-  const [employees, machines, shifts, holidays, manual, od, leave] = await Promise.all([
-    employeesInScope(viewer, onlyUserId), attendanceMachines(), shiftRules(), gazettedHolidays(from, to), approvedManual(from, to), approvedOutdoorDuty(from, to),
-    approvedLeaveDays(from, to, onlyUserId),
+  // Who is shown comes first: the size check and the other lookups only need those people.
+  const employees = await employeesInScope(viewer, onlyUserId);
+  const dates = datesBetween(from, to);
+  const tooBig = sizeProblem(employees.length, dates.length);
+  if (tooBig) throw badRequest(tooBig);
+  // A small team is asked for by id; a big group reads the whole range (cheaper than a huge IN list).
+  const ids = employees.length > 0 && employees.length <= 500 ? employees.map((e) => e.userId) : null;
+  const [machines, shifts, holidays, manual, od, leave] = await Promise.all([
+    attendanceMachines(), shiftRules(), gazettedHolidays(from, to), approvedManual(from, to, ids), approvedOutdoorDuty(from, to, ids),
+    approvedLeaveDays(from, to, employees.length === 1 ? employees[0].userId : null),
   ]);
   const everyone = viewer.role === 'administrator' || viewer.role === 'audit';
   const punches = await loadPunches(from, to, machines, everyone && !onlyUserId ? null : employees.map((e) => e.biometricId));
 
   const nowTime = nowTimeInIndia();
-  const dates = datesBetween(from, to);
   const records: AttendanceRow[] = [];
   for (const emp of employees) {
     const shift = (emp.shiftId && shifts.byId.get(emp.shiftId)) || shifts.fallback;
