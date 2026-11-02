@@ -1,3 +1,4 @@
+import { UNDO_WINDOW_MINUTES, withinUndoWindow } from './undoWindow';
 import type { Request } from 'express';
 import type { RowDataPacket } from 'mysql2/promise';
 import { pool } from '../../src/db';
@@ -165,7 +166,8 @@ const SELECT = `
   SELECT m.*, u.biometric_id, u.name AS user_name, p.designation, p.department, p.profile_data,
          t.name AS type_name, t.code AS type_code, (SELECT c.file_name FROM leave_certificates c WHERE c.request_id = m.id) AS certificate_name,
          (SELECT GROUP_CONCAT(DATE_FORMAT(w.work_date, '%Y-%m-%d') ORDER BY w.work_date) FROM leave_comp_off_uses w WHERE w.request_id = m.id) AS comp_off_days,
-         ab.name AS applied_by_name, mg.name AS manager_name, rv.name AS reviewer_name, l1.name AS l1_name, ac.name AS action_by_name
+         ab.name AS applied_by_name, mg.name AS manager_name, rv.name AS reviewer_name, l1.name AS l1_name, ac.name AS action_by_name,
+         TIMESTAMPDIFF(SECOND, COALESCE(m.action_at, m.l1_at), NOW(3)) AS step_age_sec
     FROM leave_requests m
     JOIN users u ON u.id = m.user_id
     JOIN leave_types t ON t.id = m.leave_type_id
@@ -213,6 +215,7 @@ function canModify(viewer: Viewer, row: RowDataPacket, today = todayInIndia()): 
 function canUndo(viewer: Viewer, row: RowDataPacket): boolean {
   const status = String(row.status);
   if (status === 'pending_l1') return false;
+  if (!withinUndoWindow(row.step_age_sec)) return false; // the undo option goes away 10 minutes after the step, for everyone
   if (viewer.role === 'administrator') return true;
   const m = managersOf(row);
   if (viewer.role === 'reporting_manager' && m.reporting === String(viewer.id)) {
@@ -1142,6 +1145,7 @@ export async function undoDecision(req: Request, viewer: Viewer, id: number, rea
       if (!row || !canSee(viewer, row)) throw notFound('Request not found.');
       const before = toRequest(viewer, row);
       if (before.status === 'pending_l1') throw new HttpError(409, 'This request has nothing to undo.', 'NOT_DECIDED');
+      if (!withinUndoWindow(row.step_age_sec)) throw new HttpError(409, `A step can be undone only within ${UNDO_WINDOW_MINUTES} minutes of it being taken.`, 'UNDO_EXPIRED');
       if (!canUndo(viewer, row)) {
         const once = viewer.role === 'reporting_manager' ? Number(row.undo_count ?? 0) >= 1 : viewer.role === 'reviewing_manager' ? Number(row.undo2_count ?? 0) >= 1 : false;
         throw forbidden(once ? 'You have already undone a step on this request once.' : 'You cannot undo this step.');
