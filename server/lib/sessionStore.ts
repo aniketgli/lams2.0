@@ -59,11 +59,13 @@ export class MySqlSessionStore extends session.Store {
       .catch((error) => callback?.(error));
   }
 
-  touch(sid: string, sess: session.SessionData, callback?: (err?: unknown) => void): void {
-    pool
-      .query('UPDATE web_sessions SET expires_at = DATE_ADD(NOW(3), INTERVAL ? SECOND) WHERE sid = ?', [this.ttlSeconds(sess), sid])
-      .then(() => callback?.())
-      .catch((error) => callback?.(error));
+  /**
+   * express-session calls this on every request that did not change the session. The session
+   * lifetime is fixed from sign-in (the cookie is not rolling), so the stored expiry would be
+   * rewritten to the same value; skipping the UPDATE saves one query per request.
+   */
+  touch(_sid: string, _sess: session.SessionData, callback?: (err?: unknown) => void): void {
+    callback?.();
   }
 
   destroy(sid: string, callback?: (err?: unknown) => void): void {

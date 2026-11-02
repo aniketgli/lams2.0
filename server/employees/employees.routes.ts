@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../../src/db';
 import { user_project_histories, users } from '../../src/db/schema';
 import { isAdmin, isAuthenticated, requireActiveRole, requireAuth } from '../middleware/auth.middleware';
+import { clearAccessCache } from '../services/access.service';
 import { EmailService } from '../integrations/email/email.service';
 import { brandedMail } from '../notifications/notify';
 import { notifyAccountStatus, notifyEmployeeDeleted, notifyEmployeeUpdated, notifyMappingBatch, notifyWelcome } from '../notifications/events';
@@ -294,6 +295,7 @@ router.post('/employees/:biometricId/reset-password', isAdmin, asyncHandler(asyn
     passwordHash, mustChangePassword: true,
     lastUpdatedBy: req.auth!.account.biometricId, lastUpdatedAt: new Date(), lastUpdateSummary: 'Password reset by administrator',
   }).where(eq(users.id, target.id));
+  clearAccessCache();
   await destroyUserSessions(target.id);
 
   let emailStatus: 'delivered' | 'simulated' | 'not_required' = 'not_required';

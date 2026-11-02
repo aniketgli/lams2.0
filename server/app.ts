@@ -22,6 +22,7 @@ import mastersRoutes from './masters/masters.routes';
 import settingsRoutes from './masters/settings.routes';
 import { apiNotFound, errorHandler } from './middleware/errorHandler';
 import { csrfGuard, noStore, securityHeaders } from './middleware/security';
+import { compressJson } from './middleware/compress';
 import { MySqlSessionStore } from './lib/sessionStore';
 import { SESSION_COOKIE } from './lib/http';
 import { sessionConfig } from './config/session.config';
@@ -64,6 +65,7 @@ export async function createApp(httpServer?: HttpServer) {
   app.disable('x-powered-by');
   app.set('trust proxy', isProduction ? 1 : false);
   app.use(securityHeaders);
+  app.use(compressJson);
   app.use(express.json({ limit: '2mb' }));
 
   app.use(session({
@@ -88,6 +90,15 @@ export async function createApp(httpServer?: HttpServer) {
   api.use(noStore, csrfGuard, requireCurrentContext);
   api.get('/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+  // Readiness: also proves the database answers (for a load balancer / process manager).
+  api.get('/health/ready', async (_req, res) => {
+    try {
+      await pool.query('SELECT 1');
+      res.json({ status: 'ready', timestamp: new Date().toISOString() });
+    } catch {
+      res.status(503).json({ status: 'database unavailable' });
+    }
   });
   api.use('/auth', authRoutes);
   api.use('/access', accessRoutes);
