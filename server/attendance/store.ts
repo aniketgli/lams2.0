@@ -79,7 +79,7 @@ async function employeesInScope(viewer: AttendanceViewer, onlyUserId: string | n
   const found = await rows(
     `SELECT u.id, u.biometric_id, u.status, u.valid_upto, p.joining_date, p.shift_id, p.profile_data
        FROM users u LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id
-      WHERE LOWER(u.status) = 'active'`,
+      WHERE LOWER(u.status) = 'active' AND u.is_system = 0`,
   );
   const all = viewer.role === 'administrator' || viewer.role === 'audit';
   const manager = viewer.role === 'reporting_manager' || viewer.role === 'reviewing_manager';

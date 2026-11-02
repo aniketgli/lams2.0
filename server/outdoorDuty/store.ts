@@ -461,6 +461,6 @@ export async function applicableEmployees(viewer: Viewer): Promise<{ id: string;
   const found = await rows(pool,
     `SELECT u.id, u.biometric_id, u.name, p.designation FROM users u
        LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id
-      WHERE LOWER(u.status) = 'active' ORDER BY u.name`);
+      WHERE LOWER(u.status) = 'active' AND u.is_system = 0 ORDER BY u.name`);
   return found.map((r) => ({ id: String(r.id), biometricId: String(r.biometric_id), name: String(r.name), designation: String(r.designation ?? '') }));
 }

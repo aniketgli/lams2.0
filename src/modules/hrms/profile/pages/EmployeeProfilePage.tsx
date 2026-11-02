@@ -203,6 +203,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const {
     currentUser,
     users,
+    systemUsers,
     updateUserProfile,
     addUserProfile,
     updateUserRoleAndHierarchy,
@@ -413,7 +414,9 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
   // Category, Department, Status & Search Filtered Profiles
   const categoryFilteredProfiles = useMemo(() => {
-    return accessibleProfiles.filter((u) => {
+    // The system accounts show in this table only (administrator and auditor), after everyone else.
+    const rows = isAdmin || isAudit ? [...accessibleProfiles, ...systemUsers] : accessibleProfiles;
+    return rows.filter((u) => {
       // 1. Employee Filter Match
       if (!matchesMultiSelect(selectedEmployeeFilter, u.id)) return false;
 
@@ -453,6 +456,9 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     });
   }, [
     accessibleProfiles,
+    systemUsers,
+    isAdmin,
+    isAudit,
     selectedEmployeeFilter,
     selectedDesignationFilter,
     selectedDepartmentFilter,
@@ -2408,7 +2414,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             <span>View Full Profile</span>
                           </button>
 
-                          {isAdmin && (
+                          {isAdmin && !u.isSystem && (
                             <button
                               onClick={() => setHistoryUser(u)}
                               className={actionBtn('neutral')}
@@ -2418,7 +2424,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             </button>
                           )}
 
-                          {isAdmin && (
+                          {isAdmin && !u.isSystem && (
                             <button
                               onClick={() => {
                                 openEditEmployee(u);
@@ -2441,7 +2447,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
             <div>
               <EmployeeProfileView
                 userId={selectedUser.id}
-                canEditPhoto={isAdmin}
+                canEditPhoto={isAdmin && !selectedUser.isSystem}
                 onBack={(isAdmin || isAudit || isManager) ? () => setDirectoryViewMode(lastListMode) : undefined}
                 onPhotoChanged={async () => {
                   await Promise.all([reloadEmployees(), selectedUser.id === currentUser.id ? refreshSession() : Promise.resolve()]);
