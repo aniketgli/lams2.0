@@ -33,8 +33,8 @@ export const MAX_OD_DAYS = 60;
 export const MAX_RANGE_DAYS = 400;
 
 export const OD_SCOPE: ActivityScope = {
-  keys: ['outdoor_duty', 'outdoor_duty_export'],
-  areaLabels: { outdoor_duty: 'Outdoor duty', outdoor_duty_export: 'Log download' },
+  keys: ['outdoor_duty', 'outdoor_duty_export', 'outdoor_duty_data_export'],
+  areaLabels: { outdoor_duty: 'Outdoor duty', outdoor_duty_export: 'Log download', outdoor_duty_data_export: 'Data download' },
   actionLabels: { CREATE: 'Applied', UPDATE: 'Edited', STATUS: 'Approved / rejected', DELETE: 'Deleted' },
   exportKey: 'outdoor_duty_export',
   title: 'Outdoor duty activity log',

@@ -15,6 +15,7 @@ import { ActivityLogPanel, ActivitySource } from '../../../../shared/components/
 import { ApiError } from '../../../../shared/services/api';
 import { activityEndpoints } from '../../../../shared/services/activityApi';
 import { downloadCsvText, downloadTablePdf, printedAt, toCsvText } from '../../../../shared/services/printTable';
+import { logThenDownload } from '../../../../shared/services/downloadAudit';
 import { ConfirmDialog, NoticeBar, useNotice } from '../../master/components/masterUi';
 import { HolidayItem, MONTH_NAMES } from '../data/holidayData';
 import { HolidayInput, holidayApi } from '../holidayApi';
@@ -44,7 +45,7 @@ const HOLIDAY_ACTIVITY: ActivitySource = {
   title: 'Holiday activity log',
   recordLabel: 'Holiday',
   searchPlaceholder: 'Holiday, done by, reason…',
-  areas: [{ value: 'holiday', label: 'Holiday' }, { value: 'holiday_export', label: 'Log download' }],
+  areas: [{ value: 'holiday', label: 'Holiday' }, { value: 'holiday_data_export', label: 'Data download' }, { value: 'holiday_export', label: 'Log download' }],
   actions: ['CREATE', 'UPDATE', 'DELETE', 'EXPORT'],
   ...activityEndpoints('/hrms/holidays/activity', 'WII_Holiday_Activity.csv'),
 };
@@ -118,9 +119,12 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = () => {
     search.trim() ? `Search: “${search.trim()}”` : null,
   ].filter(Boolean).join(' · ');
 
-  const downloadCsv = () => downloadCsvText(toCsvText(exportHeaders, exportRows()), `WII_Holiday_Calendar_${year}`);
+  const filtersText = () => `Year ${year}${filterLine() ? ` · ${filterLine()}` : ''}`;
+  const onDownloadError = (message: string) => showNotice('error', message);
+  const downloadCsv = () => void logThenDownload('holidays', 'csv', visible.length, filtersText(), () => downloadCsvText(toCsvText(exportHeaders, exportRows()), `WII_Holiday_Calendar_${year}`), onDownloadError);
+  const downloadPdf = () => void logThenDownload('holidays', 'pdf', visible.length, filtersText(), () => buildPdf(), onDownloadError);
   // PDF fonts cannot draw Devanagari, so the Hindi name stays in the CSV only.
-  const downloadPdf = () => {
+  const buildPdf = () => {
     const hindi = exportHeaders.indexOf('Hindi name');
     downloadTablePdf({
       title: `Holiday Calendar ${year}`,

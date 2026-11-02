@@ -19,6 +19,7 @@ const EMPLOYEE_SOURCE: ActivitySource = {
     { value: 'employee_export', label: 'Data download' },
     { value: 'employee_mapping', label: 'Transfer / manager mapping' },
     { value: 'employee_mapping_export', label: 'Mapping register download' },
+    { value: 'employee_data_export', label: 'Permissions download' },
   ],
   list: auditorApi.activity,
   downloadCsv: auditorApi.downloadActivity,

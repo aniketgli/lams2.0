@@ -12,6 +12,9 @@ import { FilterToolbar } from '../../../../shared/components/FilterToolbar';
 import { UserAvatar } from '../../../../shared/components/UserAvatar';
 import { ApiError } from '../../../../shared/services/api';
 import { downloadCsvText, downloadTablePdf, printedAt, toCsvText } from '../../../../shared/services/printTable';
+import { logThenDownload } from '../../../../shared/services/downloadAudit';
+import { ActivityLogPanel, ActivitySource } from '../../../../shared/components/ActivityLogPanel';
+import { activityEndpoints } from '../../../../shared/services/activityApi';
 import { AttendanceDay, AttendanceResponse, attendanceApi } from '../attendanceApi';
 
 /**
@@ -67,10 +70,23 @@ const StatusPill: React.FC<{ status: AttendanceDay['status'] }> = ({ status }) =
 
 type Row = AttendanceDay & { name: string; department: string; designation: string; employmentType: string; reportingManagerId: string; avatar: string };
 
+/** Attendance comes from the biometric machines and is never edited here, so the auditor's log is the record of who downloaded it. */
+const ATTENDANCE_ACTIVITY: ActivitySource = {
+  title: 'Attendance activity log',
+  recordLabel: 'Download',
+  searchPlaceholder: 'Done by, filter…',
+  areas: [{ value: 'attendance_data_export', label: 'Data download' }, { value: 'attendance_export', label: 'Log download' }],
+  actions: ['EXPORT'],
+  actionLabels: { EXPORT: 'Downloaded' },
+  ...activityEndpoints('/hrms/attendance/activity', 'WII_Attendance_Activity.csv'),
+};
+
 export const AttendanceView: React.FC = () => {
   const { currentUser, users, masterOptions } = useApp();
   const role = currentUser.role;
+  const isAudit = role === 'audit';
   const isAdminOrAudit = role === 'administrator' || role === 'audit';
+  const [auditorView, setAuditorView] = useState<'records' | 'activity'>('records');
   const isManager = role === 'reporting_manager' || role === 'reviewing_manager';
   const teamView = isAdminOrAudit || isManager;
   const showManagerFilter = isAdminOrAudit || role === 'reviewing_manager';
@@ -256,8 +272,9 @@ export const AttendanceView: React.FC = () => {
     search.trim() ? `Search: “${search.trim()}”` : null,
   ].filter(Boolean).join(' · ');
   const fileName = `WII_Attendance_${start}_to_${end}`;
-  const downloadCsv = () => downloadCsvText(toCsvText(exportHeaders, exportRows()), fileName);
-  const downloadPdf = () => downloadTablePdf({
+  const downloadCsv = () => void logThenDownload('attendance', 'csv', sorted.length, `${range}${filterLine() ? ` · ${filterLine()}` : ''}`, () => downloadCsvText(toCsvText(exportHeaders, exportRows()), fileName), setError);
+  const downloadPdf = () => void logThenDownload('attendance', 'pdf', sorted.length, `${range}${filterLine() ? ` · ${filterLine()}` : ''}`, () => buildPdf(), setError);
+  const buildPdf = () => downloadTablePdf({
     title: 'Biometric Attendance',
     subtitle: [`${range} · Generated ${printedAt(new Date().toISOString())}`, filterLine() || (teamView ? 'All employees shown' : currentUser.name)],
     headers: exportHeaders,
@@ -317,6 +334,17 @@ export const AttendanceView: React.FC = () => {
   const employeeOptions = [...new Map(rows.map((r) => [r.userId, `${r.name} (${r.biometricId})`])).entries()]
     .sort((a, b) => a[1].localeCompare(b[1])).map(([value, label]) => ({ label, value }));
 
+  const auditorSwitch = isAudit ? (
+    <div role="tablist" aria-label="Auditor view" className="inline-flex items-center gap-0.5 p-0.5 rounded-xl bg-slate-100 border border-slate-200">
+      {([['records', 'Attendance'], ['activity', 'Activity log']] as const).map(([key, text]) => (
+        <button key={key} type="button" role="tab" aria-selected={auditorView === key} onClick={() => setAuditorView(key)}
+          className={`h-7 px-3.5 rounded-lg text-xs font-bold cursor-pointer transition-colors ${auditorView === key ? 'bg-white text-primary shadow-2xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'}`}>
+          {text}
+        </button>
+      ))}
+    </div>
+  ) : null;
+
   return (
     <div className="space-y-5 pb-6">
       <PageHeader
@@ -326,6 +354,11 @@ export const AttendanceView: React.FC = () => {
           : isManager ? 'Your attendance and your team’s, from the biometric machines' : 'Your daily attendance from the biometric machines'}
       />
 
+      {isAudit && auditorView === 'activity' ? (
+        <ActivityLogPanel source={ATTENDANCE_ACTIVITY} toolbarStart={auditorSwitch} />
+      ) : (
+      <>
+      {auditorSwitch}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {statCards.map(({ label, value, note, icon: Icon, tone }) => (
           <div key={label} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex items-start gap-3 min-w-0">
@@ -419,6 +452,8 @@ export const AttendanceView: React.FC = () => {
             ))}
           </div>
         </section>
+      )}
+      </>
       )}
     </div>
   );

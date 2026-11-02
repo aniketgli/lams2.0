@@ -18,7 +18,7 @@ const LEAVE_ACTIVITY: ActivitySource = {
   title: 'Leave activity log',
   recordLabel: 'Request / balance',
   searchPlaceholder: 'Employee, leave type, done by, reason…',
-  areas: [{ value: 'leave_request', label: 'Leave request' }, { value: 'leave_balance', label: 'Leave balance' }, { value: 'leave_joining', label: 'Joining report' }, { value: 'leave_export', label: 'Log download' }],
+  areas: [{ value: 'leave_request', label: 'Leave request' }, { value: 'leave_balance', label: 'Leave balance' }, { value: 'leave_joining', label: 'Joining report' }, { value: 'leave_data_export', label: 'Data download' }, { value: 'leave_export', label: 'Log download' }],
   actions: ['CREATE', 'UPDATE', 'STATUS', 'DELETE', 'EXPORT'],
   actionLabels: { CREATE: 'Applied / set', UPDATE: 'Edited', STATUS: 'Approved / forwarded / rejected', DELETE: 'Deleted', EXPORT: 'Downloaded' },
   ...activityEndpoints('/hrms/leave/activity', 'WII_Leave_Activity.csv'),
