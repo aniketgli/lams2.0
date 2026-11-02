@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { parseDownload } from './downloadAudit';
+import { parseDownload } from './downloadRules';
 
 const fields = (fn: () => unknown) => { try { fn(); return null; } catch (e) { return (e as { details?: Record<string, string> }).details ?? {}; } };
 
