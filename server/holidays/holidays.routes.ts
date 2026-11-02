@@ -1,3 +1,4 @@
+import { clearReferenceCacheAfterWrites } from '../lib/referenceCache';
 import { Router, type Response } from 'express';
 import { asyncHandler, badRequest } from '../lib/http';
 import { Validator } from '../lib/validate';
@@ -12,6 +13,8 @@ import { HOLIDAY_CATEGORIES, HOLIDAY_SCOPE, HOLIDAY_TYPES, createHoliday, delete
  *   logs:      auditor (active role), with CSV / PDF downloads that are logged too
  */
 const router = Router();
+// The attendance page reads gazetted holidays from a cache; any change here clears it.
+router.use('/holidays', clearReferenceCacheAfterWrites);
 const isAdmin = [requireAuth, requireActiveRole('hrms', 'administrator')];
 
 

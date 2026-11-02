@@ -62,8 +62,7 @@ import {
   buildManagerMigrationEmail,
   buildRelievingManagerNoticeEmail,
   buildReporteeManagerTransitionEmail,
-  buildPasswordResetEmail,
-  wrapOfficialEmailHtml
+  buildPasswordResetEmail
 } from '../shared/services/emailService';
 
 interface AppContextType {
@@ -300,10 +299,8 @@ interface AppContextType {
   emailLogs: EmailNotificationLog[];
   addEmailLog: (log: EmailNotificationLog) => void;
   clearEmailLogs: () => void;
-  resendEmail: (logId: string) => Promise<{ success: boolean; message: string }>;
   latestEmailToast: { id: string; to: string; subject: string; status: EmailDeliveryStatus } | null;
   dismissEmailToast: () => void;
-  sendCustomEmail: (to: string, toName: string, subject: string, message: string) => Promise<{ success: boolean; message: string }>;
   testSmtpConnection: (config: EmailConfig) => Promise<{ success: boolean; message: string }>;
 
   // Profile & Department Masters
@@ -1018,95 +1015,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Every notification email is sent by the server after the change is saved (server/notifications).
     // Sending from the browser as well gave people two or three copies of the same mail.
     void payload;
-  };
-
-  const resendEmail = async (logId: string): Promise<{ success: boolean; message: string }> => {
-    const target = emailLogs.find((l) => l.id === logId);
-    if (!target) return { success: false, message: 'Email log record not found.' };
-
-    try {
-      const res = await fetch('/api/email/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: target.to,
-          toName: target.toName,
-          subject: `[Resent] ${target.subject}`,
-          html: target.bodyHtml,
-          text: target.bodyText,
-          category: target.category,
-          eventType: `RESENT_${target.eventType}`,
-          referenceId: target.referenceId,
-          referenceType: target.referenceType,
-          smtpConfig: emailConfig.smtpHost ? emailConfig : undefined
-        })
-      });
-      const data = await res.json();
-      
-      const updatedLog: EmailNotificationLog = {
-        ...target,
-        id: `mail-resend-${Date.now()}`,
-        timestamp: new Date().toLocaleString(),
-        status: data.delivered ? 'delivered' : 'sent',
-        errorMessage: data.warning || undefined,
-        retryCount: (target.retryCount || 0) + 1
-      };
-      setEmailLogs((prev) => [updatedLog, ...prev]);
-
-      setLatestEmailToast({
-        id: `toast-resend-${Date.now()}`,
-        to: target.to,
-        subject: target.subject,
-        status: updatedLog.status
-      });
-
-      return {
-        success: true,
-        message: data.delivered ? `Email re-dispatched successfully to ${target.to}` : `Email queued in simulated mode (${data.warning || 'Logged in Outbox'})`
-      };
-    } catch (err: any) {
-      return { success: false, message: `Failed to re-send email: ${err.message}` };
-    }
-  };
-
-  const sendCustomEmail = async (to: string, toName: string, subject: string, message: string): Promise<{ success: boolean; message: string }> => {
-    if (!to || !to.includes('@')) {
-      return { success: false, message: 'Invalid recipient email address.' };
-    }
-
-    const htmlContent = wrapOfficialEmailHtml({
-      title: subject,
-      badgeText: 'Official Communication',
-      badgeBg: '#2563eb',
-      recipientName: toName || 'Colleague',
-      leadParagraph: message,
-      detailsTable: [
-        { label: 'Sender', value: `${currentUser.name} (${currentUser.designation})` },
-        { label: 'Dispatched At', value: new Date().toLocaleString() }
-      ],
-      remarksBox: {
-        title: 'Institutional Memorandum',
-        text: 'This is an official administrative transmission issued via WII ERP Suite.',
-        alertType: 'info'
-      }
-    });
-
-    try {
-      await triggerEmailDispatch({
-        to,
-        toName: toName || to,
-        toRole: 'Recipient',
-        cc: emailConfig.adminCcEmail ? [emailConfig.adminCcEmail] : undefined,
-        subject: subject || 'Notification from Wildlife Institute of India',
-        category: 'general_notice',
-        eventType: 'CUSTOM_EMAIL_DISPATCH',
-        bodyHtml: htmlContent,
-        bodyText: message
-      });
-      return { success: true, message: `Email dispatched to ${to}` };
-    } catch (err: any) {
-      return { success: false, message: `Error sending email: ${err.message}` };
-    }
   };
 
   const testSmtpConnection = async (testConfig: EmailConfig): Promise<{ success: boolean; message: string }> => {
@@ -4129,10 +4037,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         emailLogs,
         addEmailLog,
         clearEmailLogs,
-        resendEmail,
         latestEmailToast,
         dismissEmailToast,
-        sendCustomEmail,
         testSmtpConnection,
         departmentsMaster,
         designationsMaster,

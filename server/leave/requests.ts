@@ -1,3 +1,4 @@
+import { MAX_LIST_ROWS, listLimitProblem, visibilityClause } from '../lib/visibility';
 import { UNDO_WINDOW_MINUTES, withinUndoWindow } from './undoWindow';
 import type { Request } from 'express';
 import type { RowDataPacket } from 'mysql2/promise';
@@ -312,13 +313,17 @@ export async function listRequests(viewer: Viewer, query: { from?: unknown; to?:
   const { from, to } = parseRange(query);
   let found: RowDataPacket[];
   try {
-    found = await rows(pool, `${SELECT} WHERE m.start_date <= ? AND m.end_date >= ? ORDER BY m.start_date DESC, m.id DESC`, [to, from]);
+    const see = visibilityClause(viewer);
+    found = await rows(pool,
+      `${SELECT} WHERE m.start_date <= ? AND m.end_date >= ?${see ? ` AND ${see.sql}` : ''} ORDER BY m.start_date DESC, m.id DESC LIMIT ${MAX_LIST_ROWS + 1}`,
+      [to, from, ...(see?.params ?? [])]);
   } catch (error) {
     missingTable(error);
     throw error;
   }
-  const requests = found.filter((row) => canSee(viewer, row)).map((row) => toRequest(viewer, row));
-  return { from, to, requests };
+  const tooMany = listLimitProblem(found.length);
+  if (tooMany) throw badRequest(tooMany);
+  return { from, to, requests: found.map((row) => toRequest(viewer, row)) };
 }
 
 // ---------------------------------------------------------------------------

@@ -1,3 +1,5 @@
+import { clearOrganizationCache, getOrganization, organizationTag } from './organizationStore';
+import { clearReferenceCacheAfterWrites } from '../lib/referenceCache';
 import { Router } from 'express';
 import { and, eq, ne, sql } from 'drizzle-orm';
 import { isIP } from 'node:net';
@@ -22,6 +24,8 @@ import { ACCOUNT_SETTINGS_ID, defaultPasswordView } from './accountSettings';
  * Every change is written together with its audit entry in one transaction.
  */
 const router = Router();
+// Shifts and machines are cached for attendance; any change here clears that cache.
+router.use(['/shifts', '/biometric-machines'], clearReferenceCacheAfterWrites);
 
 const canView = [requireAuth, requireActiveRole('hrms', 'administrator', 'audit')];
 const canEdit = [requireAuth, requireActiveRole('hrms', 'administrator')];
@@ -322,10 +326,16 @@ function toOrganization(row: typeof organization_settings.$inferSelect | undefin
 }
 
 // Public: the login page needs the name, logo and address before sign-in.
-router.get('/organization', asyncHandler(async (_req, res) => {
-  const [row] = await db.select().from(organization_settings).where(eq(organization_settings.id, 'default'));
-  res.json(toOrganization(row));
-}));
+// The logo can be 2 MB, so the browser keeps its copy and only asks "has it changed?" (a tiny 304 answer).
+router.get('/organization', asyncHandler(async (req, res) => {
+  const org = await getOrganization();
+  if (!org) return res.json(null);
+  const tag = organizationTag(org);
+  res.setHeader('ETag', tag);
+  res.setHeader('Cache-Control', 'no-cache');
+  if (req.get('if-none-match') === tag) return res.status(304).end();
+  res.json(org);
+})); 
 
 router.put('/organization', ...canEdit, asyncHandler(async (req, res) => {
   const v = new Validator(req.body);
@@ -352,6 +362,7 @@ router.put('/organization', ...canEdit, asyncHandler(async (req, res) => {
     });
     return org;
   });
+  clearOrganizationCache();
   res.json(saved);
 }));
 

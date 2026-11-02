@@ -293,6 +293,7 @@ router.post('/employees/:biometricId/reset-password', isAdmin, asyncHandler(asyn
     passwordHash, mustChangePassword: true,
     lastUpdatedBy: req.auth!.account.biometricId, lastUpdatedAt: new Date(), lastUpdateSummary: 'Password reset by administrator',
   }).where(eq(users.id, target.id));
+  clearAccessCache();
   await destroyUserSessions(target.id);
 
   let emailStatus: 'delivered' | 'simulated' | 'not_required' = 'not_required';

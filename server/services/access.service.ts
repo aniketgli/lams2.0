@@ -3,6 +3,7 @@ import { db } from '../../src/db';
 import { employee_profiles, user_module_roles, users } from '../../src/db/schema';
 import { ModuleId, RoleId, normalizeModule, normalizeRole } from '../lib/roles';
 import { todayInIndia } from '../lib/validate';
+import { TtlCache } from '../lib/ttlCache';
 
 export interface AccountRow {
   id: number;
@@ -34,6 +35,24 @@ const accountColumns = {
 export async function findAccountById(id: number): Promise<AccountRow | null> {
   const [row] = await db.select(accountColumns).from(users).where(eq(users.id, id)).limit(1);
   return row ? { ...row, mustChangePassword: Boolean(row.mustChangePassword) } : null;
+}
+
+/**
+ * Every API request needs the account and its roles. Reading them from MySQL each time
+ * would be two queries per request for everyone; a short cache makes it one load per
+ * person per few seconds. Anything that changes an account, its status or its roles
+ * calls `clearAccessCache()`, so the change is seen at once by this process; another
+ * process sees it within `ACCESS_CACHE_MS`.
+ */
+export const ACCESS_CACHE_MS = 15_000;
+const accountCache = new TtlCache<AccountRow | null>(ACCESS_CACHE_MS);
+const grantsCache = new TtlCache<ModuleGrants>(ACCESS_CACHE_MS);
+
+export const cachedAccountById = (id: number) => accountCache.getOrLoad(String(id), () => findAccountById(id));
+export const cachedActiveGrants = (biometricId: string) => grantsCache.getOrLoad(biometricId, () => loadActiveGrants(biometricId));
+export function clearAccessCache(): void {
+  accountCache.clear();
+  grantsCache.clear();
 }
 
 /**
