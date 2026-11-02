@@ -78,6 +78,8 @@ router.get('/photos/:biometricId', isAuthenticated, asyncHandler(async (req, res
 // Auditor: directory download and employee activity log (read-only).
 // ---------------------------------------------------------------------------
 const isAuditor = [requireAuth, requireActiveRole('hrms', 'audit')];
+/** The mapping register is read by the administrator (who makes the orders) and the auditor. */
+const isAdminOrAuditor = [requireAuth, requireActiveRole('hrms', 'administrator', 'audit')];
 /** Directory downloads: everyone who has a directory (each gets only the people they may see). */
 const canExportDirectory = [requireAuth, requireActiveRole('hrms', 'administrator', 'audit', 'reporting_manager', 'reviewing_manager')];
 
@@ -111,19 +113,19 @@ router.get('/employees/activity.csv', ...isAuditor, asyncHandler(async (req, res
 // ---------------------------------------------------------------------------
 // Employees Mapping: transfers and manager / HoD changes. Read: administrator and auditor; change: administrator.
 // ---------------------------------------------------------------------------
-router.get('/mapping/data', ...isAuditor, asyncHandler(async (_req, res) => {
+router.get('/mapping/data', ...isAdminOrAuditor, asyncHandler(async (_req, res) => {
   res.json(await mappingData());
 }));
 
-router.get('/mapping/log', ...isAuditor, asyncHandler(async (req, res) => {
+router.get('/mapping/log', ...isAdminOrAuditor, asyncHandler(async (req, res) => {
   res.json(await listMappingLog(parseLogFilter(req.query as Record<string, unknown>)));
 }));
 
-router.get('/mapping/log.csv', ...isAuditor, asyncHandler(async (req, res) => {
+router.get('/mapping/log.csv', ...isAdminOrAuditor, asyncHandler(async (req, res) => {
   sendCsv(res, await mappingCsv(req, parseLogFilter(req.query as Record<string, unknown>)));
 }));
 
-router.get('/mapping/log/export-pdf', ...isAuditor, asyncHandler(async (req, res) => {
+router.get('/mapping/log/export-pdf', ...isAdminOrAuditor, asyncHandler(async (req, res) => {
   res.json({ generatedAt: new Date().toISOString(), ...(await mappingTable(req, parseLogFilter(req.query as Record<string, unknown>), 'pdf')) });
 }));
 
