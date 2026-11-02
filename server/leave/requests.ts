@@ -1,3 +1,4 @@
+import { isoDate, isoTime, profileData, rows } from '../lib/sql';
 import { MAX_LIST_ROWS, listLimitProblem, visibilityClause } from '../lib/visibility';
 import { UNDO_WINDOW_MINUTES, withinUndoWindow } from './undoWindow';
 import type { Request } from 'express';
@@ -137,25 +138,6 @@ export interface LeaveInput {
   compOffDates: string[];
 }
 
-export async function rows(q: { query: typeof pool.query }, sql: string, params: unknown[] = []): Promise<RowDataPacket[]> {
-  const [result] = await q.query<RowDataPacket[]>(sql, params);
-  return result;
-}
-
-export function profileData(raw: unknown): Record<string, unknown> {
-  if (raw && typeof raw === 'object') return raw as Record<string, unknown>;
-  try {
-    const parsed = JSON.parse(String(raw || '{}'));
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-export const isoDate = (value: unknown): string => {
-  if (value instanceof Date) return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
-  return String(value).slice(0, 10);
-};
-export const isoTime = (value: unknown): string | null => (value ? new Date(value as string | number | Date).toISOString() : null);
 export const addDays = (date: string, n: number): string => {
   const d = new Date(`${date}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);

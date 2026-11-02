@@ -9,8 +9,9 @@ import { biometricDay } from '../attendance/store';
 import { detectCertificateType, parseCertificate } from './certificates';
 import { notifyJoining } from '../notifications/events';
 import {
-  addDays, isoDate, isoTime, joiningDateOf, loadEmployee, managersOf, missingTable, rows, type Viewer,
+  addDays, joiningDateOf, loadEmployee, managersOf, missingTable, type Viewer,
 } from './requests';
+import { isoDate, isoTime, rows } from '../lib/sql';
 export { firstWorkingDayAfter } from './requests';
 
 /**
