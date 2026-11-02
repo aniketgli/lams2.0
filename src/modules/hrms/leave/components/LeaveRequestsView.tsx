@@ -603,8 +603,8 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
               </div>
               {isCompOff && (
                 <div className="sm:col-span-2">
-                  <Select label="Worked weekly off / holiday" required isMulti value={form.compOffDates} searchable={false} placeholder="Select the days you worked" error={formErrors.compOffDates}
-                    onChange={(v: string[]) => setField('compOffDates', v)}
+                  <Select label="Worked weekly off / holiday" required value={form.compOffDates[0] ?? ''} searchable={false} placeholder="Select the day you worked" error={formErrors.compOffDates}
+                    onChange={(v: string) => setField('compOffDates', v ? [v] : [])}
                     options={credits.map((c) => ({ value: c.date, label: `${c.reason} (${formatDate(c.date)})`, description: `Worked ${c.in} – ${c.out} (${c.hours}h) · valid up to ${formatDate(c.validUntil)}` }))} />
                 </div>
               )}
@@ -613,6 +613,11 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
                   <Select label="Restricted holiday" required value={form.startDate} placeholder="Select the restricted holiday" error={formErrors.startDate}
                     onChange={(v: string) => setForm((f) => ({ ...f, startDate: v, endDate: v }))}
                     options={rhList.map((h) => ({ value: h.date, label: `${h.name} (${formatDate(h.date)})` }))} />
+                </div>
+              ) : isCompOff ? (
+                <div className="sm:col-span-2">
+                  <AppDatePicker label="Date of compensatory off" required error={formErrors.startDate || formErrors.endDate} value={form.startDate} placeholder="Select date" minDate={localDate(-15)} marks={marks}
+                    onChange={(v) => setForm((f) => ({ ...f, startDate: v, endDate: v }))} className="w-full" />
                 </div>
               ) : (
                 <>
