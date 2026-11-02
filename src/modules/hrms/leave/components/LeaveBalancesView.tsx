@@ -122,11 +122,13 @@ export const LeaveBalancesView: React.FC<{ importSignal?: number; toolbarStart?:
       {error && <div role="alert" className="px-4 py-3 rounded-2xl border text-xs font-semibold bg-error-subtle border-error-border text-error">{error}</div>}
 
       <FilterToolbar
-        start={toolbarStart}
         start={(
-          <div className="w-44">
+          <div className="flex flex-wrap items-center gap-2">
+            {toolbarStart}
+            <div className="w-44">
             <Select value={String(year)} searchable={false} onChange={(v: string) => setYear(Number(v))}
               options={(data?.years ?? [year]).map((y) => ({ label: `CY ${y} · FY ${y}-${String(y + 1).slice(2)}`, value: String(y) }))} />
+            </div>
           </div>
         )}
         exports={cards ? null : {

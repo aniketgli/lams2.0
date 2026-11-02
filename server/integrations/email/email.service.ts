@@ -95,7 +95,11 @@ export class EmailService {
       this.remember(logEntry);
       return { success: true, status: 'delivered', messageId: info.messageId, message: `Email sent to ${to}.` };
     } catch (err) {
-      const reason = err instanceof Error ? err.message : 'SMTP dispatch failed';
+      const raw = err instanceof Error ? err.message : 'SMTP dispatch failed';
+      // 530 / 5.7.0: the server wants a sign-in that was not given (or was refused).
+      const reason = /\b530\b|5\.7\.0|authentication required/i.test(raw) && !config.user
+        ? `${raw}. The mail server requires sign-in: enter the Username and Password in Master Settings > Organization.`
+        : raw;
       console.error('[EMAIL FAILED]', reason);
       logEntry.status = 'failed';
       logEntry.error = reason;
