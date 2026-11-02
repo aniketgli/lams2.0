@@ -124,6 +124,8 @@ export interface LeaveRequest {
   ltcType: 'none' | 'ltc' | 'ex_india';
   encashDays: number;
   contactAddress: string;
+  /** Compensatory off: the worked weekly off / holiday it uses. */
+  compOffDate: string | null;
   prefixFrom: string | null;
   prefixTo: string | null;
   suffixFrom: string | null;
@@ -173,6 +175,8 @@ export interface LeaveInput {
   encashLtc: boolean;
   encashDays: number;
   contactAddress: string;
+  /** Compensatory off: the weekly off / holiday worked that this leave uses (YYYY-MM-DD). */
+  compOffDate: string;
   availPrefix: boolean;
   prefixFrom: string;
   prefixTo: string;
@@ -182,6 +186,8 @@ export interface LeaveInput {
   /** Medical certificate chosen in the form (a data URL); the server checks the real file type and size. */
   certificateFile?: { name: string; data: string } | null;
 }
+
+export interface CompOffCredit { date: string; in: string; out: string; hours: number; reason: string; validUntil: string }
 
 export interface LeaveBalance { total: number; carryForward: number; used: number; pending: number; available: number }
 
@@ -311,6 +317,11 @@ export const leaveApi = {
   occupied: (input: { userId: string; leaveTypeId: string; exceptId: string }) => {
     const q = new URLSearchParams(Object.entries(input).filter(([, v]) => v) as [string, string][]);
     return api<{ days: { date: string; status: 'pending' | 'approved' | 'rejected' }[]; joined: string[]; workdays: string[] }>(`${base}/occupied?${q.toString()}`);
+  },
+  /** Worked weekly offs / holidays that can be taken as a compensatory off now. */
+  compOff: (input: { userId: string; exceptId?: string }) => {
+    const q = new URLSearchParams(Object.entries(input).filter(([, v]) => v) as [string, string][]);
+    return api<{ credits: CompOffCredit[] }>(`${base}/comp-off?${q.toString()}`);
   },
   balancePreview: (input: { userId: string; leaveTypeId: string; date: string }) => {
     const q = new URLSearchParams(Object.entries(input).filter(([, v]) => v) as [string, string][]);

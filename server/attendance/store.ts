@@ -331,3 +331,41 @@ export async function listAttendance(viewer: AttendanceViewer, query: { from?: u
     shifts: [...usedShifts.values()].map((sh) => ({ code: sh.code, name: sh.name, startTime: sh.start, endTime: sh.end })),
   };
 }
+
+/** A weekly off or gazetted holiday on which the biometric machines recorded both an In and an Out punch. */
+export interface WorkedOffDay { date: string; in: string; out: string; hours: number; reason: string }
+
+/**
+ * Weekly offs / gazetted holidays worked, per employee code, between two dates (compensatory off credits).
+ * Only the biometric log counts: approved manual attendance is never used here. Days before joining are skipped.
+ */
+export async function workedOffDays(
+  emps: Array<{ biometricId: string; shiftId: string | null; joining: string | null }>, from: string, to: string,
+): Promise<Map<string, WorkedOffDay[]>> {
+  const out = new Map<string, WorkedOffDay[]>();
+  if (emps.length === 0 || from > to) return out;
+  const [machines, shifts, holidays] = await Promise.all([attendanceMachines(), shiftRules(), gazettedHolidays(from, to)]);
+  let punches: Map<string, Map<string, Punch[]>>;
+  try {
+    punches = await loadPunches(from, to, machines, emps.map((e) => normalizeEmployeeCode(e.biometricId)));
+  } catch (error) {
+    if (error instanceof HttpError) return out; // attendance not set up: no punch is known
+    throw error;
+  }
+  const dates = datesBetween(from, to);
+  for (const emp of emps) {
+    const shift = (emp.shiftId && shifts.byId.get(emp.shiftId)) || shifts.fallback;
+    const byDate = punches.get(normalizeEmployeeCode(emp.biometricId));
+    const found: WorkedOffDay[] = [];
+    for (const date of dates) {
+      if (emp.joining && date < emp.joining) continue;
+      const holiday = holidays.get(date);
+      if (!holiday && shift.workingDays.includes(weekdayOf(date))) continue;
+      const day = classifyPunches((byDate?.get(date) ?? []).map((p) => p.time), shift);
+      if (day.in === null || day.out === null) continue;
+      found.push({ date, in: day.in, out: day.out, hours: Math.round(((toMinutes(day.out) - toMinutes(day.in)) / 60) * 100) / 100, reason: holiday ?? 'Weekly off' });
+    }
+    out.set(emp.biometricId, found);
+  }
+  return out;
+}
