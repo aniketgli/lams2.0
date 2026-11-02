@@ -1,3 +1,4 @@
+import { notifyRolesChanged } from '../notifications/events';
 import type { Request } from 'express';
 import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
 import { pool } from '../../src/db';
@@ -533,7 +534,7 @@ export interface Grant { moduleId: ModuleId; roleId: string }
  */
 export async function replaceRoleGrants(req: Request, biometricId: string, wanted: Grant[]): Promise<void> {
   const actor = req.auth!.account.biometricId;
-  await inTransaction(async (conn) => {
+  const changed = await inTransaction(async (conn) => {
     const [user] = await rows(conn, 'SELECT id, name, is_system FROM users WHERE biometric_id = ? LIMIT 1', [biometricId]);
     if (!user) throw notFound('User account not found.');
     if (isSystemRow(user)) throw systemAccountError();
@@ -561,8 +562,11 @@ export async function replaceRoleGrants(req: Request, biometricId: string, wante
     const afterView = grantsView(wanted);
     if (beforeView.roles !== afterView.roles) {
       await writeMasterAuditSql(conn, req, { masterKey: AUDIT_ROLES, recordId: biometricId, recordLabel: String(user.name), action: 'UPDATE', before: beforeView, after: afterView });
+      return true;
     }
+    return false;
   });
+  if (changed) notifyRolesChanged(biometricId, wanted);
 }
 
 /** Records a password reset. Only how and why it was done is kept, never the password. */

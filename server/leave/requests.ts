@@ -13,6 +13,7 @@ import { WEEK_DAYS, datesBetween, weekdayOf } from '../attendance/compute';
 import { groupLeaveTypeIds, groupLeaveTypeMap } from './groups';
 import { LOOK_DAYS, type Combine, type Neighbour, combineProblem, toCombine } from './combine';
 import { SESSIONS_END, SESSIONS_START, countLeaveDays, cycleYearOf } from './days';
+import { notifyLeave } from '../notifications/events';
 import { COMP_OFF_CODE, RESTRICTED_CODE, balanceFromCredits, creditsFor, matchCredits, monthlyProblem, personById, takenByMonth } from './compOff';
 import type { Pair } from './compOffRules';
 
@@ -1030,7 +1031,7 @@ export async function createRequest(req: Request, viewer: Viewer, body: unknown)
     throw forbidden('Your current role cannot apply for leave.');
   }
   try {
-    return await inTransaction(async (conn) => {
+    const done = await inTransaction(async (conn) => {
       // Serialise one employee's applications so two requests cannot both pass the balance check.
       await rows(conn, 'SELECT id FROM users WHERE id = ? FOR UPDATE', [targetId]);
       const c = await checkLeave(conn, viewer, input, targetId, 0);
@@ -1051,6 +1052,8 @@ export async function createRequest(req: Request, viewer: Viewer, body: unknown)
       await writeMasterAuditSql(conn, req, { masterKey: AUDIT_KEY, recordId: id, recordLabel: label(created), action: 'CREATE', after: auditView(created) });
       return created;
     });
+    notifyLeave('applied', done);
+    return done;
   } catch (error) {
     missingTable(error);
     throw error;
@@ -1061,7 +1064,7 @@ export async function updateRequest(req: Request, viewer: Viewer, id: number, bo
   if (viewer.role !== 'administrator' && viewer.role !== 'general_staff') throw forbidden('Your current role cannot edit leave.');
   const input = parseLeaveInput(body);
   try {
-    return await inTransaction(async (conn) => {
+    const out = await inTransaction(async (conn) => {
       const row = await fetchOne(conn, id, true);
       if (!row || (viewer.role !== 'administrator' && Number(row.user_id) !== viewer.id)) throw notFound('Request not found.');
       if (row.linked_to) throw new HttpError(409, 'This station leave follows its leave request. Change that leave request instead.', 'LINKED');
@@ -1089,6 +1092,8 @@ export async function updateRequest(req: Request, viewer: Viewer, id: number, bo
       if (changed.length) await writeMasterAuditSql(conn, req, { masterKey: AUDIT_KEY, recordId: id, recordLabel: label(after), action: 'UPDATE', before: auditView(before), after: auditView(after) });
       return { request: after, changed };
     });
+    if (out.changed.length) notifyLeave('edited', out.request);
+    return out;
   } catch (error) {
     missingTable(error);
     throw error;
@@ -1102,7 +1107,7 @@ export async function decideRequest(req: Request, viewer: Viewer, id: number, bo
   if (action === 'reject' && (!comment || comment.length < 3)) v.errors.comment ||= 'Say why the request is rejected.';
   v.assert();
   try {
-    return await inTransaction(async (conn) => {
+    const done = await inTransaction(async (conn) => {
       const row = await fetchOne(conn, id, true);
       if (!row || !canSee(viewer, row)) throw notFound('Request not found.');
       const before = toRequest(viewer, row);
@@ -1131,6 +1136,8 @@ export async function decideRequest(req: Request, viewer: Viewer, id: number, bo
       });
       return { request: after, outcome };
     });
+    notifyLeave(done.outcome, done.request.status === 'pending_l2' ? { ...done.request, actionByName: done.request.forwardedByName } : done.request, comment);
+    return done;
   } catch (error) {
     missingTable(error);
     throw error;
@@ -1140,7 +1147,7 @@ export async function decideRequest(req: Request, viewer: Viewer, id: number, bo
 /** Takes a step back: a decision returns to the stage it was taken at; a forward returns to the reporting manager. */
 export async function undoDecision(req: Request, viewer: Viewer, id: number, reason: string | null): Promise<LeaveRequest> {
   try {
-    return await inTransaction(async (conn) => {
+    const done = await inTransaction(async (conn) => {
       const row = await fetchOne(conn, id, true);
       if (!row || !canSee(viewer, row)) throw notFound('Request not found.');
       const before = toRequest(viewer, row);
@@ -1164,6 +1171,8 @@ export async function undoDecision(req: Request, viewer: Viewer, id: number, rea
       });
       return after;
     });
+    notifyLeave('undone', { ...done, actionByName: null }, reason);
+    return done;
   } catch (error) {
     missingTable(error);
     throw error;
@@ -1172,8 +1181,9 @@ export async function undoDecision(req: Request, viewer: Viewer, id: number, rea
 
 export async function deleteRequest(req: Request, viewer: Viewer, id: number, reason: string | null): Promise<LeaveRequest> {
   if (viewer.role !== 'administrator' && viewer.role !== 'general_staff') throw forbidden('Your current role cannot delete leave.');
+  let managers: { managerId: string | number | null; reviewerId: string | number | null } | undefined;
   try {
-    return await inTransaction(async (conn) => {
+    const out = await inTransaction(async (conn) => {
       const row = await fetchOne(conn, id, true);
       if (!row || (viewer.role !== 'administrator' && Number(row.user_id) !== viewer.id)) throw notFound('Request not found.');
       if (row.linked_to) throw new HttpError(409, 'This station leave follows its leave request. Delete that leave request instead.', 'LINKED');
@@ -1185,8 +1195,11 @@ export async function deleteRequest(req: Request, viewer: Viewer, id: number, re
       await conn.query('DELETE FROM leave_certificates WHERE request_id = ?', [id]);
       await conn.query('DELETE FROM leave_comp_off_uses WHERE request_id = ?', [id]);
       await conn.query('DELETE FROM leave_requests WHERE id = ?', [id]);
+      managers = { managerId: row.manager_id ? Number(row.manager_id) : null, reviewerId: row.reviewer_id ? Number(row.reviewer_id) : null };
       return target;
     });
+    notifyLeave('deleted', { ...out, actionByName: null, ...managers! });
+    return out;
   } catch (error) {
     missingTable(error);
     throw error;

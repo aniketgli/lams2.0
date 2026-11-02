@@ -6,13 +6,15 @@ import { db } from '../../src/db';
 import { user_project_histories, users } from '../../src/db/schema';
 import { isAdmin, isAuthenticated, requireActiveRole, requireAuth } from '../middleware/auth.middleware';
 import { EmailService } from '../integrations/email/email.service';
+import { brandedMail } from '../notifications/notify';
+import { notifyAccountStatus, notifyEmployeeDeleted, notifyEmployeeUpdated, notifyMappingBatch, notifyWelcome } from '../notifications/events';
 import { systemAccountError } from '../lib/systemAccounts';
 import { HttpError, asyncHandler, badRequest, notFound } from '../lib/http';
 import { passwordProblem } from '../lib/passwordPolicy';
 import { defaultPasswordHash } from '../masters/accountSettings';
 import { normalizeModule } from '../lib/roles';
 import { destroyUserSessions } from '../lib/sessionStore';
-import { PATTERNS, Validator, escapeHtml, todayInIndia } from '../lib/validate';
+import { PATTERNS, Validator, todayInIndia } from '../lib/validate';
 import {
   Grant, Viewer, auditPasswordReset, createEmployee, deleteEmployee, getEmployee, listEmployees,
   replaceRoleGrants, setEmployeeStatus, updateEmployee,
@@ -126,11 +128,15 @@ router.get('/mapping/log/export-pdf', ...isAuditor, asyncHandler(async (req, res
 }));
 
 router.post('/mapping/transfer', isAdmin, asyncHandler(async (req, res) => {
-  res.status(201).json(await transferEmployees(req, req.body));
+  const result = await transferEmployees(req, req.body);
+  notifyMappingBatch(result.batchId);
+  res.status(201).json(result);
 }));
 
 router.post('/mapping/replace-manager', isAdmin, asyncHandler(async (req, res) => {
-  res.status(201).json(await replaceManager(req, req.body));
+  const result = await replaceManager(req, req.body);
+  notifyMappingBatch(result.batchId);
+  res.status(201).json(result);
 }));
 
 /** One employee's profile, laid out for their type. Allowed: self, admin, auditor, their manager / HoD. */
@@ -171,6 +177,7 @@ router.get('/employees/:userId', isAuthenticated, asyncHandler(async (req, res) 
 
 router.post('/employees', isAdmin, asyncHandler(async (req, res) => {
   const employee = await createEmployee(req, req.body);
+  notifyWelcome(employee);
   res.status(201).json({
     employee,
     message: `Employee ${employee.name} saved with the HRMS User role and the default password. They must choose their own password at first sign-in.`,
@@ -179,6 +186,7 @@ router.post('/employees', isAdmin, asyncHandler(async (req, res) => {
 
 router.put('/employees/:userId', isAdmin, asyncHandler(async (req, res) => {
   const { record, changed } = await updateEmployee(req, accountId(req.params.userId), req.body);
+  notifyEmployeeUpdated(record, changed);
   res.json({ employee: record, changed, message: changed.length ? 'Employee profile updated.' : 'No changes to save.' });
 }));
 
@@ -192,6 +200,7 @@ router.patch('/employees/:userId/status', isAdmin, asyncHandler(async (req, res)
   const employee = await setEmployeeStatus(req, id, { status, reason, effectiveDate });
   // A deactivated user is signed out everywhere at once.
   if (status === 'inactive') await destroyUserSessions(id);
+  notifyAccountStatus(status, employee);
   res.json({ success: true, status, effectiveDate, employee, message: status === 'inactive' ? 'Account deactivated.' : 'Account reactivated.' });
 }));
 
@@ -201,8 +210,9 @@ router.delete('/employees/:userId', isAdmin, asyncHandler(async (req, res) => {
   const reference = v.optionalString('reference', { max: 255 });
   v.assert('A deletion reason is required for the audit log.');
   const id = accountId(req.params.userId);
-  await deleteEmployee(req, id, reason, reference);
+  const removed = await deleteEmployee(req, id, reason, reference);
   await destroyUserSessions(id);
+  notifyEmployeeDeleted(removed, reason);
   res.json({ success: true, message: 'Employee account permanently deleted and audit log recorded.' });
 }));
 
@@ -287,12 +297,18 @@ router.post('/employees/:biometricId/reset-password', isAdmin, asyncHandler(asyn
   let emailStatus: 'delivered' | 'simulated' | 'not_required' = 'not_required';
   if (mode === 'auto') {
     const reference = reason || 'Official Reset Request';
+    const mail = await brandedMail({
+      title: 'Password reset', name: target.name,
+      intro: 'An administrator has reset your WII Portal password. You will be asked to choose a new password when you sign in. If you did not request this, contact the IT Cell.',
+      details: [['Temporary password', temporaryPassword], ['Reference', reference]],
+    });
     const emailResult = await EmailService.sendEmail({
       to: target.email,
       toName: target.name,
       subject: 'Your WII Portal temporary password',
-      text: `Dear ${target.name},\n\nAn administrator has reset your WII Portal password. Your temporary password is: ${temporaryPassword}\n\nYou will be asked to choose a new password when you sign in.\n\nReference: ${reference}\n\nIf you did not request this, contact the IT Cell.`,
-      html: `<p>Dear ${escapeHtml(target.name)},</p><p>An administrator has reset your WII Portal password.</p><p>Your temporary password is: <strong>${escapeHtml(temporaryPassword)}</strong></p><p>You will be asked to choose a new password when you sign in.</p><p>Reference: ${escapeHtml(reference)}</p><p>If you did not request this, contact the IT Cell.</p>`,
+      text: mail.text,
+      html: mail.html,
+      attachments: mail.logo,
       category: 'SECURITY',
       eventType: 'PASSWORD_RESET',
       referenceId: biometricId,

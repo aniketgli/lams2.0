@@ -23,6 +23,8 @@ export const envConfig = {
   // Bind to 0.0.0.0 to safely accept connections across local and containerized environments
   host: '0.0.0.0',
   isProduction: process.env.NODE_ENV === 'production',
+  /** Public address of the portal, used for the button in notification emails (no button when unset). */
+  appUrl: (process.env.APP_URL || '').trim().replace(/\/+$/, ''),
   smtpHost: process.env.SMTP_HOST,
   smtpPort: Number(process.env.SMTP_PORT || 587),
   smtpSecure: process.env.SMTP_SECURE === 'true',

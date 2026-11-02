@@ -7,6 +7,7 @@ import { Validator, todayInIndia } from '../lib/validate';
 import { changedFields, writeMasterAuditSql } from '../masters/audit';
 import { biometricDay } from '../attendance/store';
 import { detectCertificateType, parseCertificate } from './certificates';
+import { notifyJoining } from '../notifications/events';
 import {
   addDays, isoDate, isoTime, joiningDateOf, loadEmployee, managersOf, missingTable, rows, type Viewer,
 } from './requests';
@@ -300,7 +301,7 @@ export async function submitJoining(req: Request, viewer: Viewer, body: unknown)
   const raw = (body ?? {}) as Record<string, unknown>;
   const today = todayInIndia();
   try {
-    return await inTransaction(async (conn) => {
+    const done = await inTransaction(async (conn) => {
       const row = await fetchLeave(conn, Number(requestId), true);
       if (!row || !canSee(viewer, row)) throw notFound('Leave not found.');
       if (!mayFile(viewer, row)) throw forbidden('Only the employee, or an administrator, can submit the joining report.');
@@ -321,6 +322,8 @@ export async function submitJoining(req: Request, viewer: Viewer, body: unknown)
       await writeMasterAuditSql(conn, req, { masterKey: JOINING_KEY, recordId: reportId, recordLabel: label(item), action: 'CREATE', after: auditView(item) });
       return item;
     });
+    notifyJoining('applied', done);
+    return done;
   } catch (error) {
     missingTable(error);
     throw error;
@@ -334,7 +337,7 @@ export async function correctJoining(req: Request, viewer: Viewer, requestIdRaw:
   const raw = (body ?? {}) as Record<string, unknown>;
   const today = todayInIndia();
   try {
-    return await inTransaction(async (conn) => {
+    const done = await inTransaction(async (conn) => {
       const row = await fetchLeave(conn, id, true);
       if (!row || !row.report_id || !canSee(viewer, row)) throw notFound('Report not found.');
       if (!mayFile(viewer, row)) throw forbidden('Only the employee, or an administrator, can change the joining report.');
@@ -359,6 +362,8 @@ export async function correctJoining(req: Request, viewer: Viewer, requestIdRaw:
       });
       return after;
     });
+    notifyJoining('applied', done);
+    return done;
   } catch (error) {
     missingTable(error);
     throw error;
@@ -379,7 +384,7 @@ export async function decideJoining(req: Request, viewer: Viewer, requestIdRaw: 
   v.assert();
   const today = todayInIndia();
   try {
-    return await inTransaction(async (conn) => {
+    const done = await inTransaction(async (conn) => {
       const row = await fetchLeave(conn, id, true);
       if (!row || !row.report_id || !canSee(viewer, row)) throw notFound('Report not found.');
       const status = reportStatus(row)!;
@@ -408,6 +413,8 @@ export async function decideJoining(req: Request, viewer: Viewer, requestIdRaw: 
       });
       return { item: after, outcome };
     });
+    notifyJoining(done.outcome, done.item, (done.outcome === 'forwarded' ? done.item.report?.forwardedByName : done.item.report?.actionByName) ?? null, comment);
+    return done;
   } catch (error) {
     missingTable(error);
     throw error;
