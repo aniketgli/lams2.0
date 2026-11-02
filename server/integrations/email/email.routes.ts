@@ -8,6 +8,5 @@ const router = Router();
 router.use(isAuthenticated, isAdmin);
 router.get('/logs', EmailController.getLogs);
 router.post('/test-smtp', asyncHandler(EmailController.testSmtp));
-router.post('/send', asyncHandler(EmailController.send));
 
 export const emailRoutes = router;
