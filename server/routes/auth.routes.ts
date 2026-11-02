@@ -7,6 +7,7 @@ import {
   HttpError, asyncHandler, clearSessionCookie, destroySession, regenerateSession, saveSession, tooManyRequests,
 } from '../lib/http';
 import { AttemptLimiter } from '../lib/rateLimit';
+import { captchaEnabled, createCaptcha, verifyCaptcha } from '../lib/captcha';
 import { Validator } from '../lib/validate';
 import { accountBlockReason, clearAccessCache, findAccountById, loadActiveGrants } from '../services/access.service';
 import { buildSessionPayload } from '../services/session.service';
@@ -33,7 +34,25 @@ const INVALID_CREDENTIALS = 'Invalid email or password.';
 
 /** Public sign-in rules, so the login form can show the same rules the server applies. */
 router.get('/config', (_req, res) => {
-  res.json({ emailDomains: authConfig.loginEmailDomains });
+  res.json({ emailDomains: authConfig.loginEmailDomains, captchaRequired: captchaEnabled() });
+});
+
+// A new CAPTCHA picture: at most 60 per IP address every 15 minutes, so the endpoint cannot be used to flood the server.
+const captchaIssued = new AttemptLimiter(60, WINDOW_MS);
+
+/** A fresh CAPTCHA picture (SVG) and the signed token the sign-in form sends back with the typed characters. */
+router.get('/captcha', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  if (!captchaEnabled()) return res.json({ required: false });
+  const ip = req.ip || 'unknown';
+  const wait = captchaIssued.retryAfter(ip);
+  if (wait > 0) {
+    res.setHeader('Retry-After', String(wait));
+    throw tooManyRequests('Too many verification requests. Please wait a few minutes.');
+  }
+  captchaIssued.fail(ip); // counts every picture issued
+  const { token, svg } = createCaptcha();
+  res.json({ required: true, token, image: `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}` });
 });
 
 /**
@@ -53,6 +72,17 @@ router.post('/login', asyncHandler(async (req, res) => {
       : 'Enter your institute email.';
   }
   v.assert(v.errors.email ?? 'Enter your email and password.');
+
+  // The CAPTCHA is checked before the password, so a bot cannot use sign-in to test passwords or keep the server busy hashing.
+  if (captchaEnabled()) {
+    const typed = v.raw('captchaAnswer');
+    if (typeof typed !== 'string' || !typed.trim()) {
+      throw new HttpError(400, 'Enter the characters shown in the picture.', 'CAPTCHA_INVALID', { captcha: 'Enter the characters shown in the picture.' });
+    }
+    if (!verifyCaptcha(v.raw('captchaToken'), typed)) {
+      throw new HttpError(400, 'The characters did not match. Try the new picture.', 'CAPTCHA_INVALID', { captcha: 'The characters did not match. Try the new picture.' });
+    }
+  }
 
   const idKey = email!;
   const ipKey = req.ip || 'unknown';

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useSession } from '../SessionContext';
 import { WIILogo } from '../../shared/components/WIILogo';
@@ -6,6 +6,7 @@ import { Button, Input, Alert } from '../../shared/components';
 import { ApiError } from '../../shared/services/api';
 import { formatOrgAddress } from '../../types';
 import { Lock, Mail, ArrowRight, MapPin } from 'lucide-react';
+import { CaptchaField, type CaptchaHandle } from '../components/CaptchaField';
 
 /** Shown until the server's list arrives; the server's list is what is enforced. */
 
@@ -22,6 +23,9 @@ export const LoginPage: React.FC = () => {
   const [error, setError] = useState<string | null>(notice);
   const [emailError, setEmailError] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
+  const [captcha, setCaptcha] = useState({ token: '', answer: '' });
+  const [captchaError, setCaptchaError] = useState<string | undefined>();
+  const captchaRef = useRef<CaptchaHandle>(null);
 
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -29,14 +33,18 @@ export const LoginPage: React.FC = () => {
     if (submitting) return;
     setError(null);
     setEmailError(undefined);
+    setCaptchaError(undefined);
     setSubmitting(true);
     try {
-      await login(email.trim().toLowerCase(), password);
+      await login(email.trim().toLowerCase(), password, captcha.token ? captcha : undefined);
     } catch (err) {
       const emailProblem = err instanceof ApiError ? err.details?.email : undefined;
+      const captchaProblem = err instanceof ApiError ? err.details?.captcha : undefined;
       if (emailProblem) setEmailError(emailProblem);
-      setError(err instanceof ApiError && !emailProblem ? err.message : emailProblem ? null : 'Unable to sign in right now. Please try again.');
+      if (captchaProblem) setCaptchaError(captchaProblem);
+      setError(err instanceof ApiError && !emailProblem && !captchaProblem ? err.message : emailProblem || captchaProblem ? null : 'Unable to sign in right now. Please try again.');
       setPassword('');
+      captchaRef.current?.reload(); // a picture can be checked only once
     } finally {
       setSubmitting(false);
     }
@@ -92,6 +100,8 @@ export const LoginPage: React.FC = () => {
               maxLength={1024}
               required
             />
+
+            <CaptchaField ref={captchaRef} onChange={setCaptcha} error={captchaError} disabled={submitting} />
 
             <Button
               type="submit"
