@@ -1015,31 +1015,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     referenceType?: 'leave' | 'od' | 'manual_attendance' | 'user' | 'transfer';
     meta?: Record<string, any>;
   }) => {
-    if (!emailConfig.enableEmailNotifications) {
-      return;
-    }
-    try {
-      await dispatchSystemEmail(
-        payload,
-        emailConfig,
-        (newLog) => {
-          setEmailLogs((prev) => [newLog, ...prev]);
-        },
-        (toastInfo) => {
-          setLatestEmailToast({
-            id: `toast-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            to: toastInfo.to,
-            subject: toastInfo.subject,
-            status: toastInfo.status
-          });
-          setTimeout(() => {
-            setLatestEmailToast((curr) => (curr?.to === toastInfo.to ? null : curr));
-          }, 6000);
-        }
-      );
-    } catch (err) {
-      console.warn('System email notification trigger caught error:', err);
-    }
+    // Every notification email is sent by the server after the change is saved (server/notifications).
+    // Sending from the browser as well gave people two or three copies of the same mail.
+    void payload;
   };
 
   const resendEmail = async (logId: string): Promise<{ success: boolean; message: string }> => {
