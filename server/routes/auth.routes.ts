@@ -68,6 +68,7 @@ router.post('/login', asyncHandler(async (req, res) => {
     passwordHash: users.passwordHash,
     status: users.status,
     validUpto: users.validUpto,
+    isSystem: users.isSystem,
   }).from(users).where(eq(users.email, email!)).limit(1);
 
   const passwordOk = await bcrypt.compare(password, user?.passwordHash || DUMMY_HASH);
