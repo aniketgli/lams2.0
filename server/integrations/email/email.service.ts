@@ -9,6 +9,22 @@ import { EmailTransportConfig, resolveEmailTransport, transportOptions } from '.
  * longer pass their own SMTP server: an email always goes through the
  * institute's configured server.
  */
+/**
+ * One pooled SMTP transport is reused for every mail, so a burst (everyone's leave decided at
+ * once) shares a few open connections instead of opening a new TCP + TLS connection per mail.
+ * It is rebuilt when the sender / server settings change.
+ */
+let pooled: { key: string; transport: ReturnType<typeof nodemailer.createTransport> } | null = null;
+function transportFor(config: EmailTransportConfig) {
+  const options = { ...transportOptions(config), pool: true, maxConnections: 3, maxMessages: 100 };
+  const key = JSON.stringify(options);
+  if (pooled?.key !== key) {
+    pooled?.transport.close();
+    pooled = { key, transport: nodemailer.createTransport(options) };
+  }
+  return pooled.transport;
+}
+
 export class EmailService {
   private static emailLogs: ServerEmailLog[] = [];
   private static readonly MAX_LOGS = 500;
@@ -79,7 +95,7 @@ export class EmailService {
     }
 
     try {
-      const info = await nodemailer.createTransport(transportOptions(config)).sendMail({
+      const info = await transportFor(config).sendMail({
         from: { name: config.fromName, address: config.fromEmail },
         to: toName ? { name: toName, address: to } : to,
         cc: copies.cc.length ? copies.cc : undefined,

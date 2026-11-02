@@ -2,6 +2,7 @@ import type { RowDataPacket } from 'mysql2/promise';
 import { pool } from '../../src/db';
 import { EmailService } from '../integrations/email/email.service';
 import { envConfig } from '../config/env.config';
+import { getOrganization, organizationTag } from '../masters/organizationStore';
 import { logoAttachment, renderEmail, type EmailBrand } from './emailLayout';
 
 /**
@@ -53,13 +54,17 @@ export async function loadParties(ids: Array<number | string | null | undefined>
 export interface Brand extends EmailBrand { logo: { content: Buffer; contentType: string; filename: string } | null }
 
 /** Organization name and logo from Master Settings > Organization; a plain fallback when unavailable. */
+let lastBrand: { tag: string; brand: Brand } | null = null;
 export async function loadBrand(): Promise<Brand> {
   try {
-    const [list] = await pool.query<RowDataPacket[]>("SELECT org_name, logo_data FROM organization_settings WHERE id = 'default' LIMIT 1");
-    const row = list?.[0];
-    if (row) {
-      const logo = logoAttachment(row.logo_data);
-      return { orgName: String(row.org_name || 'Wildlife Institute of India'), hasLogo: Boolean(logo), logo };
+    const org = await getOrganization(); // cached; the 2 MB logo is not read from MySQL for every mail
+    if (org) {
+      const tag = organizationTag(org);
+      if (lastBrand?.tag === tag) return lastBrand.brand; // the logo is decoded once per change
+      const logo = logoAttachment(org.logoData);
+      const brand: Brand = { orgName: org.orgName || 'Wildlife Institute of India', hasLogo: Boolean(logo), logo };
+      lastBrand = { tag, brand };
+      return brand;
     }
   } catch { /* fall through */ }
   return { orgName: 'Wildlife Institute of India', hasLogo: false, logo: null };

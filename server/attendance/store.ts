@@ -3,6 +3,7 @@ import { approvedLeaveDays } from '../leave/requests';
 import { pool } from '../../src/db';
 import { HttpError, badRequest } from '../lib/http';
 import { isValidIsoDate, todayInIndia } from '../lib/validate';
+import { cachedReference } from '../lib/referenceCache';
 import type { RoleId } from '../lib/roles';
 import { DayRecord, Punch, ShiftRule, buildDay, datesBetween, normalizeEmployeeCode, shiftRule, toMinutes, weekdayOf } from './compute';
 
@@ -100,14 +101,24 @@ async function employeesInScope(viewer: AttendanceViewer, onlyUserId: string | n
     }));
 }
 
-async function attendanceMachines(): Promise<Map<string, string>> {
+function attendanceMachines(): Promise<Map<string, string>> {
+  return cachedReference('attendance:machines', loadAttendanceMachines);
+}
+
+async function loadAttendanceMachines(): Promise<Map<string, string>> {
   const found = await rows(
     "SELECT serial_number, short_name FROM biometric_machines WHERE UPPER(status) = 'ACTIVE' AND UPPER(purpose) IN ('ATTENDANCE', 'BOTH')",
   );
   return new Map(found.map((m) => [String(m.serial_number).trim().toUpperCase(), String(m.short_name)]));
 }
 
-async function shiftRules(): Promise<{ byId: Map<string, ShiftRule>; fallback: ShiftRule }> {
+type ShiftRules = { byId: Map<string, ShiftRule>; fallback: ShiftRule };
+
+function shiftRules(): Promise<ShiftRules> {
+  return cachedReference('attendance:shifts', loadShiftRules);
+}
+
+async function loadShiftRules(): Promise<ShiftRules> {
   const found = await rows(
     'SELECT id, code, name, start_time, end_time, grace_period_mins, half_day_hours, full_day_hours, half_day_cutoff_time, applicable_days, is_default, status FROM shifts ORDER BY is_default DESC, id',
   );
@@ -124,7 +135,11 @@ async function shiftRules(): Promise<{ byId: Map<string, ShiftRule>; fallback: S
   return { byId, fallback };
 }
 
-async function gazettedHolidays(from: string, to: string): Promise<Map<string, string>> {
+function gazettedHolidays(from: string, to: string): Promise<Map<string, string>> {
+  return cachedReference(`attendance:holidays:${from}:${to}`, () => loadGazettedHolidays(from, to));
+}
+
+async function loadGazettedHolidays(from: string, to: string): Promise<Map<string, string>> {
   try {
     const found = await rows(
       "SELECT DATE_FORMAT(holiday_date, '%Y-%m-%d') AS d, name FROM holidays WHERE type = 'gazetted' AND holiday_date BETWEEN ? AND ?",
