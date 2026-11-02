@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
-import { CalendarCheck, Plus, Upload } from 'lucide-react';
+import { Plus, Upload } from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
-import { PageHeader } from '../../../../shared/components/PageHeader';
+import { PageHeader, PageHeaderButton } from '../../../../shared/components/PageHeader';
+import { FilterToolbar } from '../../../../shared/components/FilterToolbar';
+import { SegmentedControl } from '../../../../shared/components/SegmentedControl';
+import { PAGE_ICONS } from '../../hrmsPages';
 import { ActivityLogPanel, ActivitySource } from '../../../../shared/components/ActivityLogPanel';
 import { activityEndpoints } from '../../../../shared/services/activityApi';
 import { LeaveRequestsView } from '../components/LeaveRequestsView';
@@ -41,6 +44,9 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ initia
   const [view, setView] = useState<LeaveView>('requests');
   const viewTabs: Array<readonly [LeaveView, string]> = isAdmin ? [['requests', 'Requests'], ['types', 'Leave Types']]
     : isAudit ? [['requests', 'Requests'], ['types', 'Leave Types'], ['activity', 'Activity log']] : [['requests', 'Requests']];
+  const viewSwitch = viewTabs.length > 1
+    ? <SegmentedControl ariaLabel="Leave views" value={view} onChange={setView} options={viewTabs.map(([value, label]) => ({ value, label }))} />
+    : null;
   const [applySignal, setApplySignal] = useState(0);
   const [importSignal, setImportSignal] = useState(0);
 
@@ -57,37 +63,26 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ initia
   return (
     <div className="space-y-5 pb-6">
       <PageHeader
-        icon={CalendarCheck}
+        icon={balances ? PAGE_ICONS.leave_balance : PAGE_ICONS.leave}
         title={balances ? 'Leave Balance' : 'Leave Management'}
         subtitle={subtitle}
         rightAction={balances && isAdmin ? (
-          <button type="button" onClick={() => setImportSignal((n) => n + 1)}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-xl inline-flex items-center gap-1.5 shadow-2xs cursor-pointer">
-            <Upload className="w-4 h-4" /> Import Leave
-          </button>
+          <PageHeaderButton icon={Upload} onClick={() => setImportSignal((n) => n + 1)}>Import leave</PageHeaderButton>
         ) : canApply && !balances && view === 'requests' ? (
-          <button type="button" onClick={() => setApplySignal((n) => n + 1)}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-xl inline-flex items-center gap-1.5 shadow-2xs cursor-pointer">
-            <Plus className="w-4 h-4" /> Apply leave
-          </button>
+          <PageHeaderButton icon={Plus} onClick={() => setApplySignal((n) => n + 1)}>Apply leave</PageHeaderButton>
         ) : undefined}
       />
 
       {balances ? <LeaveBalancesView importSignal={importSignal} /> : (
         <>
-          {viewTabs.length > 1 && (
-            <div role="tablist" aria-label="Leave views" className="inline-flex items-center gap-0.5 p-0.5 rounded-xl bg-slate-100 border border-slate-200">
-              {viewTabs.map(([key, label]) => (
-                <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => setView(key)}
-                  className={`h-7 px-3.5 rounded-lg text-xs font-bold cursor-pointer transition-colors ${view === key ? 'bg-white text-primary shadow-2xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'}`}>
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
-          {view === 'types' && (isAdmin || isAudit) ? <LeavePolicyMaster readOnly={!isAdmin} />
-            : isAudit && view === 'activity' ? <ActivityLogPanel source={LEAVE_ACTIVITY} />
-            : <LeaveRequestsView applySignal={applySignal} />}
+          {view === 'types' && (isAdmin || isAudit) ? (
+            <>
+              {viewSwitch && <FilterToolbar start={viewSwitch} />}
+              <LeavePolicyMaster readOnly={!isAdmin} />
+            </>
+          )
+            : isAudit && view === 'activity' ? <ActivityLogPanel source={LEAVE_ACTIVITY} toolbarStart={viewSwitch} />
+            : <LeaveRequestsView applySignal={applySignal} toolbarStart={viewSwitch} />}
         </>
       )}
     </div>

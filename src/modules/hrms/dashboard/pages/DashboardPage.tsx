@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { LayoutDashboard } from 'lucide-react';
 import { useSession } from '../../../../auth/SessionContext';
 import { PageHeader } from '../../../../shared/components/PageHeader';
+import { PAGE_ICONS } from '../../hrmsPages';
 import { dashboardApi, type DashboardData } from '../dashboardApi';
 import { ManagerDashboard } from '../components/ManagerDashboard';
 import { StaffDashboard } from '../components/StaffDashboard';
@@ -30,7 +30,7 @@ export const DashboardPage: React.FC<DashboardProps> = ({ onNavigate }) => {
 
   return (
     <div className="space-y-6 pb-6">
-      <PageHeader icon={LayoutDashboard} title="Dashboard"
+      <PageHeader icon={PAGE_ICONS.dashboard} title="Dashboard"
         subtitle="Pending requests and action center for your role" />
       {error && <div className="rounded-xl border border-error-border bg-error-subtle px-4 py-6 text-center text-xs text-error">{error}</div>}
       {!data && !error && <div className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-center text-xs text-slate-500">Loading…</div>}

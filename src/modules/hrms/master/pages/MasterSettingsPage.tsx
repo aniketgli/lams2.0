@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Building2, Clock, Cpu, FileText, Layers, Sliders, Users } from 'lucide-react';
+import { Building2, Clock, Cpu, FileText, Layers, Users } from 'lucide-react';
 import { useSession } from '../../../../auth/SessionContext';
 import { PageHeader } from '../../../../shared/components/PageHeader';
+import { PAGE_ICONS } from '../../hrmsPages';
 import { ActivityLogPanel, ActivitySource } from '../../../../shared/components/ActivityLogPanel';
 import { activityEndpoints } from '../../../../shared/services/activityApi';
 import { LeaveGroupsPanel } from '../components/LeaveGroupsPanel';
@@ -60,7 +61,7 @@ export const MasterSettingsPage: React.FC = () => {
   return (
     <div className="space-y-5 pb-6">
       <PageHeader
-        icon={Sliders}
+        icon={PAGE_ICONS.master}
         title="Master Settings"
         subtitle={readOnly ? 'Read-only view of all masters.' : 'Shifts, devices, profile masters and organization details.'}
       />

@@ -56,3 +56,31 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
     </div>
   );
 };
+
+/**
+ * The buttons in a page header's top-right corner: the icon first, then the label (no "+" in the label).
+ * `primary` is the page's main action; `secondary` (a second action next to it) is outlined for the dark header.
+ */
+export const PageHeaderButton: React.FC<{
+  icon: LucideIcon;
+  onClick: () => void;
+  variant?: 'primary' | 'secondary';
+  title?: string;
+  disabled?: boolean;
+  children: React.ReactNode;
+}> = ({ icon: Icon, onClick, variant = 'primary', title, disabled, children }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    title={title}
+    disabled={disabled}
+    className={`h-9 px-4 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 shadow-2xs cursor-pointer transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
+      variant === 'primary'
+        ? 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white border border-blue-600'
+        : 'bg-white/10 hover:bg-white/20 text-white border border-white/25'
+    }`}
+  >
+    <Icon className="w-4 h-4" />
+    <span>{children}</span>
+  </button>
+);

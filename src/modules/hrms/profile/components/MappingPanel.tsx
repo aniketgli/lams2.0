@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeftRight, RefreshCw, Search } from 'lucide-react';
+import { Button } from '../../../../shared/components/Button';
 import { ApiError } from '../../../../shared/services/api';
 import { DataTable } from '../../../../shared/components/Table';
 import type { ColumnDef } from '../../../../shared/components/Table';
@@ -7,7 +8,6 @@ import { FilterToolbar } from '../../../../shared/components/FilterToolbar';
 import { AppSelect } from '../../../../shared/components/AppSelect';
 import { AppDatePicker } from '../../../../shared/components/AppDatePicker';
 import { Modal } from '../../../../shared/components/Modal';
-import { Button } from '../../../../shared/components/Button';
 import { downloadTablePdf, printedAt } from '../../../../shared/services/printTable';
 import { MappingData, MappingLogQuery, MappingLogRow, MappingPerson, mappingApi } from '../mappingApi';
 
@@ -325,13 +325,15 @@ const toQuery = (f: typeof EMPTY): MappingLogQuery => ({
 });
 
 export const MappingPanel: React.FC<{
+  /** The page header's buttons: a new `n` opens that order's form. */
+  order: { kind: 'transfer' | 'replace'; n: number };
   /** Only the administrator may make orders; the auditor reads the register. */
   canChange: boolean;
   /** Called after an order is saved so the employee list (departments, managers) is reloaded. */
   onChanged: () => void;
   /** Shows a short message (the page's toast). */
   notify: (message: string) => void;
-}> = ({ canChange, onChanged, notify }) => {
+}> = ({ order, canChange, onChanged, notify }) => {
   const [filters, setFilters] = useState(EMPTY);
   const [applied, setApplied] = useState(EMPTY);
   const [rows, setRows] = useState<MappingLogRow[]>([]);
@@ -341,6 +343,7 @@ export const MappingPanel: React.FC<{
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState<'csv' | 'pdf' | null>(null);
   const [modal, setModal] = useState<'none' | 'transfer' | 'replace'>('none');
+  useEffect(() => { if (order.n > 0 && canChange) setModal(order.kind); }, [order, canChange]);
 
   const loadLog = useCallback(async () => {
     setLoading(true);
@@ -443,12 +446,6 @@ export const MappingPanel: React.FC<{
   return (
     <div className="space-y-4">
       <FilterToolbar
-        start={canChange ? (
-          <>
-            <Button variant="primary" size="sm" leftIcon={ArrowLeftRight} onClick={() => setModal('transfer')} disabled={!data}>Employee Transfer</Button>
-            <Button variant="outline" size="sm" leftIcon={RefreshCw} onClick={() => setModal('replace')} disabled={!data}>Manager Replacement</Button>
-          </>
-        ) : undefined}
         exports={{
           onCsv: () => void exportCsv(), onPdf: () => void exportPdf(), busy: exporting, disabled: rows.length === 0,
           csvTitle: 'Download the filtered register as CSV (the download is logged)',

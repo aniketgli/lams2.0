@@ -65,7 +65,7 @@ const EMPTY_FORM: LeaveInput = { userId: '', leaveTypeId: '', startDate: '', end
 
 const shiftDate = (iso: string, days: number) => { const d = new Date(`${iso}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
 
-export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySignal }) => {
+export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: React.ReactNode }> = ({ applySignal, toolbarStart }) => {
   const { currentUser, users } = useApp();
   const role = currentUser.role;
   const isAdmin = role === 'administrator';
@@ -524,7 +524,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
       {error && <div role="alert" className="px-4 py-3 rounded-2xl border text-xs font-semibold bg-error-subtle border-error-border text-error">{error}</div>}
 
       <FilterToolbar
-        start={dateRange}
+        start={<>{toolbarStart}{dateRange}</>}
         exports={{
           onCsv: downloadCsv, onPdf: downloadPdf, disabled: sorted.length === 0,
           csvTitle: 'Download the requests shown below as CSV', pdfTitle: 'Download the requests shown below as PDF',

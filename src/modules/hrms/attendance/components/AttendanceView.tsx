@@ -4,6 +4,8 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
 import { PageHeader } from '../../../../shared/components/PageHeader';
+import { SegmentedControl } from '../../../../shared/components/SegmentedControl';
+import { PAGE_ICONS } from '../../hrmsPages';
 import { DataTable } from '../../../../shared/components';
 import type { ColumnDef } from '../../../../shared/components';
 import { AppDatePicker } from '../../../../shared/components/AppDatePicker';
@@ -335,20 +337,13 @@ export const AttendanceView: React.FC = () => {
     .sort((a, b) => a[1].localeCompare(b[1])).map(([value, label]) => ({ label, value }));
 
   const auditorSwitch = isAudit ? (
-    <div role="tablist" aria-label="Auditor view" className="inline-flex items-center gap-0.5 p-0.5 rounded-xl bg-slate-100 border border-slate-200">
-      {([['records', 'Attendance'], ['activity', 'Activity log']] as const).map(([key, text]) => (
-        <button key={key} type="button" role="tab" aria-selected={auditorView === key} onClick={() => setAuditorView(key)}
-          className={`h-7 px-3.5 rounded-lg text-xs font-bold cursor-pointer transition-colors ${auditorView === key ? 'bg-white text-primary shadow-2xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'}`}>
-          {text}
-        </button>
-      ))}
-    </div>
+    <SegmentedControl ariaLabel="Auditor view" value={auditorView} onChange={setAuditorView} options={[{ value: 'records', label: 'Attendance' }, { value: 'activity', label: 'Activity log' }]} />
   ) : null;
 
   return (
     <div className="space-y-5 pb-6">
       <PageHeader
-        icon={CalendarDays}
+        icon={PAGE_ICONS.attendance}
         title="Biometric Attendance"
         subtitle={isAdminOrAudit ? 'Daily attendance of all employees from the biometric machines'
           : isManager ? 'Your attendance and your team’s, from the biometric machines' : 'Your daily attendance from the biometric machines'}
@@ -358,7 +353,6 @@ export const AttendanceView: React.FC = () => {
         <ActivityLogPanel source={ATTENDANCE_ACTIVITY} toolbarStart={auditorSwitch} />
       ) : (
       <>
-      {auditorSwitch}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {statCards.map(({ label, value, note, icon: Icon, tone }) => (
           <div key={label} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex items-start gap-3 min-w-0">
@@ -379,7 +373,10 @@ export const AttendanceView: React.FC = () => {
       )}
 
       <FilterToolbar
-        start={viewMode === 'month' ? (
+        start={(
+          <>
+            {auditorSwitch}
+            {viewMode === 'month' ? (
           <span className="text-xs font-bold text-slate-700">{MONTHS[mm - 1]} {my}</span>
         ) : (
           <div className="flex items-center gap-1.5">
@@ -387,6 +384,8 @@ export const AttendanceView: React.FC = () => {
             <span className="text-slate-300 font-bold">—</span>
             <div className="w-36"><AppDatePicker size="sm" placeholder="To date" value={to} onChange={setTo} isRightColumn /></div>
           </div>
+        )}
+          </>
         )}
         exports={{
           onCsv: downloadCsv, onPdf: downloadPdf, disabled: sorted.length === 0,
