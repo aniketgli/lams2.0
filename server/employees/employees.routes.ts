@@ -4,7 +4,7 @@ import { randomInt } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { db } from '../../src/db';
 import { user_project_histories, users } from '../../src/db/schema';
-import { isAdmin, isAuthenticated, requireActiveRole, requireAuth } from '../middleware/auth.middleware';
+import { isAdmin, isAuthenticated, requireActiveRole, requireAuth, isAuditor } from '../middleware/auth.middleware';
 import { EmailService } from '../integrations/email/email.service';
 import { brandedMail } from '../notifications/notify';
 import { notifyAccountStatus, notifyEmployeeDeleted, notifyEmployeeUpdated, notifyMappingBatch, notifyWelcome } from '../notifications/events';
@@ -77,7 +77,6 @@ router.get('/photos/:biometricId', isAuthenticated, asyncHandler(async (req, res
 // ---------------------------------------------------------------------------
 // Auditor: directory download and employee activity log (read-only).
 // ---------------------------------------------------------------------------
-const isAuditor = [requireAuth, requireActiveRole('hrms', 'audit')];
 /** The mapping register is read by the administrator (who makes the orders) and the auditor. */
 const isAdminOrAuditor = [requireAuth, requireActiveRole('hrms', 'administrator', 'audit')];
 /** Directory downloads: everyone who has a directory (each gets only the people they may see). */

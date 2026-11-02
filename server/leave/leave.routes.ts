@@ -3,7 +3,7 @@ import { Router, type Request, type Response } from 'express';
 import { pool } from '../../src/db';
 import { asyncHandler } from '../lib/http';
 import { Validator } from '../lib/validate';
-import { requireActiveRole, requireAuth } from '../middleware/auth.middleware';
+import { requireActiveRole, requireAuth, isAuditor } from '../middleware/auth.middleware';
 import { activityCsv, activityTable, listActivity, parseActivityFilter } from '../employees/activity';
 import {
   LEAVE_TYPE_SCOPE, createLeaveType, deleteLeaveType, leaveTypeId, leaveTypeOptions, listLeaveTypes, updateLeaveType,
@@ -27,7 +27,6 @@ import {
  */
 const router = Router();
 const isAdmin = [requireAuth, requireActiveRole('hrms', 'administrator')];
-const isAuditor = [requireAuth, requireActiveRole('hrms', 'audit')];
 
 router.get('/leave-types', requireAuth, asyncHandler(async (_req, res) => {
   const [types, options] = await Promise.all([listLeaveTypes(), leaveTypeOptions()]);

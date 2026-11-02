@@ -132,3 +132,5 @@ export function requireModule(moduleId: ModuleId): RequestHandler {
 // ---------------------------------------------------------------------------
 export const isAuthenticated: RequestHandler = requireAuth;
 export const isAdmin: RequestHandler[] = [requireAuth, requireActiveRole('hrms', 'administrator')];
+/** Read-only auditor (hrms/audit) — shared so every route file uses the same rule. */
+export const isAuditor: RequestHandler[] = [requireAuth, requireActiveRole('hrms', 'audit')];

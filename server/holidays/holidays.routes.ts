@@ -1,7 +1,7 @@
 import { Router, type Response } from 'express';
 import { asyncHandler, badRequest } from '../lib/http';
 import { Validator } from '../lib/validate';
-import { requireActiveRole, requireAuth } from '../middleware/auth.middleware';
+import { requireActiveRole, requireAuth, isAuditor } from '../middleware/auth.middleware';
 import { activityCsv, activityTable, listActivity, parseActivityFilter } from '../employees/activity';
 import { HOLIDAY_CATEGORIES, HOLIDAY_SCOPE, HOLIDAY_TYPES, createHoliday, deleteHoliday, holidayId, holidayYears, listHolidays, updateHoliday } from './store';
 
@@ -13,7 +13,6 @@ import { HOLIDAY_CATEGORIES, HOLIDAY_SCOPE, HOLIDAY_TYPES, createHoliday, delete
  */
 const router = Router();
 const isAdmin = [requireAuth, requireActiveRole('hrms', 'administrator')];
-const isAuditor = [requireAuth, requireActiveRole('hrms', 'audit')];
 
 
 router.get('/holidays', requireAuth, asyncHandler(async (req, res) => {
