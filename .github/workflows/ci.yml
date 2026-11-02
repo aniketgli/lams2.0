@@ -1,0 +1,19 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - name: Unit tests
+        run: bun test server
+      - name: Type check (informational until existing errors are cleared)
+        run: bunx tsc --noEmit
+        continue-on-error: true
+      - name: Production build
+        run: bun run build

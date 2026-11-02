@@ -1,7 +1,7 @@
 import { Router, type Response } from 'express';
 import { asyncHandler, badRequest } from '../lib/http';
 import { Validator } from '../lib/validate';
-import { requireActiveRole, requireAuth } from '../middleware/auth.middleware';
+import { requireActiveRole, requireAuth, isAuditor } from '../middleware/auth.middleware';
 import { ActivityScope, activityCsv, activityTable, listActivity, parseActivityFilter } from '../employees/activity';
 import { createSchedule, deleteSchedule, getSchedule, listRuns, listSchedules, scheduleOptions, sendNow, setScheduleStatus, updateSchedule } from './store';
 
@@ -19,7 +19,6 @@ import { createSchedule, deleteSchedule, getSchedule, listRuns, listSchedules, s
 const router = Router();
 const isAdmin = [requireAuth, requireActiveRole('hrms', 'administrator')];
 const canRead = [requireAuth, requireActiveRole('hrms', 'administrator', 'audit')];
-const isAuditor = [requireAuth, requireActiveRole('hrms', 'audit')];
 
 export const REPORT_SCOPE: ActivityScope = {
   keys: ['report_schedule', 'report_export'],

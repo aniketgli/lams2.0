@@ -1,6 +1,6 @@
 import { Router, type Response } from 'express';
 import { asyncHandler } from '../lib/http';
-import { requireActiveRole, requireAuth } from '../middleware/auth.middleware';
+import { requireAuth, isAuditor } from '../middleware/auth.middleware';
 import { ActivityScope, activityCsv, activityTable, listActivity, parseActivityFilter } from '../employees/activity';
 import { listAttendance } from './store';
 
@@ -14,7 +14,6 @@ import { listAttendance } from './store';
  *   GET /attendance/activity[.csv|/export-pdf]   auditor
  */
 const router = Router();
-const isAuditor = [requireAuth, requireActiveRole('hrms', 'audit')];
 
 export const ATTENDANCE_SCOPE: ActivityScope = {
   keys: ['attendance_data_export', 'attendance_export'],

@@ -2,7 +2,7 @@ import { clearReferenceCacheAfterWrites } from '../lib/referenceCache';
 import { Router, type Response } from 'express';
 import { asyncHandler, badRequest } from '../lib/http';
 import { Validator } from '../lib/validate';
-import { requireActiveRole, requireAuth } from '../middleware/auth.middleware';
+import { requireActiveRole, requireAuth, isAuditor } from '../middleware/auth.middleware';
 import { activityCsv, activityTable, listActivity, parseActivityFilter } from '../employees/activity';
 import { HOLIDAY_CATEGORIES, HOLIDAY_SCOPE, HOLIDAY_TYPES, createHoliday, deleteHoliday, holidayId, holidayYears, listHolidays, updateHoliday } from './store';
 
@@ -16,7 +16,6 @@ const router = Router();
 // The attendance page reads gazetted holidays from a cache; any change here clears it.
 router.use('/holidays', clearReferenceCacheAfterWrites);
 const isAdmin = [requireAuth, requireActiveRole('hrms', 'administrator')];
-const isAuditor = [requireAuth, requireActiveRole('hrms', 'audit')];
 
 
 router.get('/holidays', requireAuth, asyncHandler(async (req, res) => {

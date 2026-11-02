@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { asyncHandler } from '../lib/http';
 import { Validator } from '../lib/validate';
-import { requireActiveRole, requireAuth } from '../middleware/auth.middleware';
+import { requireAuth, isAuditor } from '../middleware/auth.middleware';
 import { activityCsv, activityTable, listActivity, parseActivityFilter } from '../employees/activity';
 import {
   OD_SCOPE, OD_TYPES, applicableEmployees, createRequest, decideRequest, deleteRequest, listRequests, requestId, undoDecision, updateRequest,
@@ -17,7 +17,6 @@ import {
  *   logs:     auditor, with CSV / PDF downloads that are logged too
  */
 const router = Router();
-const isAuditor = [requireAuth, requireActiveRole('hrms', 'audit')];
 const viewerOf = (req: Request) => ({ id: req.auth!.account.id, role: req.auth!.activeRole });
 
 router.get('/outdoor-duty', requireAuth, asyncHandler(async (req, res) => {
