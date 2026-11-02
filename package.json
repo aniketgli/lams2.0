@@ -9,6 +9,7 @@
     "start": "node server.ts",
     "preview": "vite preview",
     "clean": "rm -rf dist build",
+    "db:check": "tsx scripts/db-check.ts",
     "lint": "NODE_OPTIONS='--max-old-space-size=4096' tsc --noEmit"
   },
   "dependencies": {
