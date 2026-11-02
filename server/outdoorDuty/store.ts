@@ -333,6 +333,8 @@ export async function createRequest(req: Request, viewer: Viewer, body: unknown)
   checkDates(viewer, input, target.joining);
   try {
     const done = await inTransaction(async (conn) => {
+      // Serialise one employee's requests so a double submit cannot pass the overlap check twice.
+      await rows(conn, 'SELECT id FROM users WHERE id = ? FOR UPDATE', [target.id]);
       const clash = await overlaps(conn, target.id, input, 0);
       if (clash) throw overlapError(clash);
       const [result] = await conn.query(
@@ -368,6 +370,7 @@ export async function updateRequest(req: Request, viewer: Viewer, id: number, bo
       if (input.userId && input.userId !== String(row.user_id)) throw badRequest('Please correct the highlighted fields.', { userId: 'The employee of a request cannot be changed.' });
       const target = await loadTarget(conn, Number(row.user_id));
       checkDates(viewer, input, target.joining);
+      await rows(conn, 'SELECT id FROM users WHERE id = ? FOR UPDATE', [target.id]);
       const clash = await overlaps(conn, target.id, input, id);
       if (clash) throw overlapError(clash);
       await conn.query(

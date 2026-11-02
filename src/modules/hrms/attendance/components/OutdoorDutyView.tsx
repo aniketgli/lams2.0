@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Briefcase, CalendarDays, Check, CheckCircle2, Clock, Eye, Globe, MapPin, Pencil, Plus, RotateCcw, Trash2, X } from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
 import { PageHeader, PageHeaderButton } from '../../../../shared/components/PageHeader';
@@ -158,6 +158,8 @@ export const OutdoorDutyView: React.FC = () => {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [formMessage, setFormMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // A ref is updated at once, so a fast double-click cannot send the same form twice before `saving` re-renders.
+  const submitting = useRef(false);
   const setField = <K extends keyof OdInput>(key: K, value: OdInput[K]) => {
     setForm((f) => ({ ...f, [key]: value }));
     setFormErrors((e) => (e[key] ? { ...e, [key]: '' } : e));
@@ -173,7 +175,8 @@ export const OutdoorDutyView: React.FC = () => {
   };
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (saving) return;
+    if (saving || submitting.current) return;
+    submitting.current = true;
     setSaving(true); setFormMessage(null);
     try {
       const result = editing ? await odApi.update(editing.id, form) : await odApi.create(form);
@@ -189,6 +192,7 @@ export const OutdoorDutyView: React.FC = () => {
         setFormMessage('The request could not be saved.');
       }
     } finally {
+      submitting.current = false;
       setSaving(false);
     }
   };
