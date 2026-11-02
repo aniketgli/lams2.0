@@ -11,6 +11,8 @@ export interface AccountRow {
   email: string;
   status: string;
   validUpto: string | null;
+  /** Fixed system account (Administrator / Auditor): has no validity date and never expires. */
+  isSystem?: boolean;
   /** The user must set their own password before using anything else. */
   mustChangePassword: boolean;
 }
@@ -25,6 +27,7 @@ const accountColumns = {
   email: users.email,
   status: users.status,
   validUpto: users.validUpto,
+  isSystem: users.isSystem,
   mustChangePassword: users.mustChangePassword,
 };
 
@@ -36,11 +39,13 @@ export async function findAccountById(id: number): Promise<AccountRow | null> {
 /**
  * Why an account may not use the portal, or null if it may.
  * An account must be `active` AND have a validity date that is today or later.
+ * System accounts (the fixed Administrator and Auditor) have no validity date: they only need to be active.
  */
-export function accountBlockReason(account: Pick<AccountRow, 'status' | 'validUpto'>): string | null {
+export function accountBlockReason(account: Pick<AccountRow, 'status' | 'validUpto' | 'isSystem'>): string | null {
   const status = String(account.status || '').toLowerCase();
   if (status === 'expired') return 'Account validity has expired. Please contact the administrator.';
   if (status !== 'active') return 'Account is inactive. Please contact the administrator.';
+  if (account.isSystem) return null;
   if (!account.validUpto) return 'Account validity is not configured. Please contact the administrator.';
   if (account.validUpto < todayInIndia()) return 'Account validity has expired. Please contact the administrator.';
   return null;
