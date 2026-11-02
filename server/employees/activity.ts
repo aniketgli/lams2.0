@@ -15,7 +15,7 @@ import { EmployeeRecord, Viewer, canSeeFullProfile, listEmployees } from './stor
  */
 
 /** Audit keys that belong to employee records. */
-export const EMPLOYEE_ACTIVITY_KEYS = ['employee', 'user_roles', 'employee_password', 'employee_photo', 'employee_export'] as const;
+export const EMPLOYEE_ACTIVITY_KEYS = ['employee', 'user_roles', 'employee_password', 'employee_photo', 'employee_export', 'employee_mapping', 'employee_mapping_export'] as const;
 
 const ACTIONS = ['CREATE', 'UPDATE', 'STATUS', 'DELETE', 'RESET', 'EXPORT'] as const;
 
@@ -112,6 +112,7 @@ export const EMPLOYEE_SCOPE: ActivityScope = {
   areaLabels: {
     employee: 'Employee profile', user_roles: 'Module roles', employee_password: 'Password',
     employee_photo: 'Profile photo', employee_export: 'Data download',
+    employee_mapping: 'Transfer / manager mapping', employee_mapping_export: 'Mapping register download',
   },
   exportKey: 'employee_export',
   title: 'Employee activity log',

@@ -20,6 +20,8 @@ import {
 import { deleteOwnPhoto, deletePhotoFor, loadPhoto, saveOwnPhoto, savePhotoFor } from './photos';
 import { activityCsv, activityTable, employeeDirectoryCsv, employeeDirectoryTable, listActivity, parseActivityFilter } from './activity';
 import { getMyProfile, getProfileFor } from './myProfile';
+import { listMappingLog, mappingCsv, mappingData, mappingTable, replaceManager, transferEmployees } from './mapping';
+import { parseLogFilter } from './mappingRules';
 
 /**
  * Employee accounts and profiles (/api/hrms/employees). Reading is open to
@@ -102,6 +104,33 @@ router.get('/employees/activity', ...isAuditor, asyncHandler(async (req, res) =>
 
 router.get('/employees/activity.csv', ...isAuditor, asyncHandler(async (req, res) => {
   sendCsv(res, await activityCsv(req, parseActivityFilter(req.query as Record<string, unknown>)));
+}));
+
+// ---------------------------------------------------------------------------
+// Employees Mapping: transfers and manager / HoD changes. Read: administrator and auditor; change: administrator.
+// ---------------------------------------------------------------------------
+router.get('/mapping/data', ...isAuditor, asyncHandler(async (_req, res) => {
+  res.json(await mappingData());
+}));
+
+router.get('/mapping/log', ...isAuditor, asyncHandler(async (req, res) => {
+  res.json(await listMappingLog(parseLogFilter(req.query as Record<string, unknown>)));
+}));
+
+router.get('/mapping/log.csv', ...isAuditor, asyncHandler(async (req, res) => {
+  sendCsv(res, await mappingCsv(req, parseLogFilter(req.query as Record<string, unknown>)));
+}));
+
+router.get('/mapping/log/export-pdf', ...isAuditor, asyncHandler(async (req, res) => {
+  res.json({ generatedAt: new Date().toISOString(), ...(await mappingTable(req, parseLogFilter(req.query as Record<string, unknown>), 'pdf')) });
+}));
+
+router.post('/mapping/transfer', isAdmin, asyncHandler(async (req, res) => {
+  res.status(201).json(await transferEmployees(req, req.body));
+}));
+
+router.post('/mapping/replace-manager', isAdmin, asyncHandler(async (req, res) => {
+  res.status(201).json(await replaceManager(req, req.body));
 }));
 
 /** One employee's profile, laid out for their type. Allowed: self, admin, auditor, their manager / HoD. */
