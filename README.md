@@ -57,6 +57,7 @@ mysql lams_db < migrations/20261123_system_accounts.sql   # marks erp@ / erpaudi
 mysql lams_db < migrations/20261124_comp_off.sql   # compensatory off from weekend / holiday work
 mysql lams_db < migrations/20261125_comp_off_days.sql   # several compensatory off days in one leave
 mysql lams_db < migrations/20261126_cl_half_day.sql   # CL / SCL can be taken as half day
+mysql lams_db < migrations/20261127_account_settings_collation.sql   # fixes 'Illegal mix of collations' on add employee
 mysql lams_db < migrations/20261031_leave_requests.sql
 npm run dev                   # http://localhost:3000
 npm run lint                  # type-check
