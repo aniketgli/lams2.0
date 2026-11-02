@@ -1,4 +1,5 @@
 import { notifyRolesChanged } from '../notifications/events';
+import { clearAccessCache } from '../services/access.service';
 import type { Request } from 'express';
 import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
 import { pool } from '../../src/db';
@@ -63,6 +64,17 @@ function dateText(value: unknown): string | null {
 // ---------------------------------------------------------------------------
 // Reading
 // ---------------------------------------------------------------------------
+
+/** Runs a write that changes an account, its status or its roles, then drops the cached copies so the change is seen at once. */
+function freshAccess<A extends unknown[], R>(write: (...args: A) => Promise<R>): (...args: A) => Promise<R> {
+  return async (...args: A): Promise<R> => {
+    try {
+      return await write(...args);
+    } finally {
+      clearAccessCache();
+    }
+  };
+}
 
 export interface EmployeeRecord {
   id: string;
@@ -316,7 +328,7 @@ function isDuplicateKey(error: unknown): boolean {
   return code === 'ER_DUP_ENTRY';
 }
 
-export async function createEmployee(req: Request, body: unknown): Promise<EmployeeRecord> {
+async function createEmployeeImpl(req: Request, body: unknown): Promise<EmployeeRecord> {
   const actor = req.auth!.account.biometricId;
   // Every new account starts with the default password (a copy of its hash)
   // and must choose its own password at first sign-in.
@@ -373,8 +385,9 @@ export async function createEmployee(req: Request, body: unknown): Promise<Emplo
     throw error;
   }
 }
+export const createEmployee = freshAccess(createEmployeeImpl);
 
-export async function updateEmployee(req: Request, id: number, body: unknown): Promise<{ record: EmployeeRecord; changed: string[] }> {
+async function updateEmployeeImpl(req: Request, id: number, body: unknown): Promise<{ record: EmployeeRecord; changed: string[] }> {
   const actor = req.auth!.account.biometricId;
   try {
     return await inTransaction(async (conn) => {
@@ -428,6 +441,7 @@ export async function updateEmployee(req: Request, id: number, body: unknown): P
     throw error;
   }
 }
+export const updateEmployee = freshAccess(updateEmployeeImpl);
 
 // ---------------------------------------------------------------------------
 // Status and deletion
@@ -453,7 +467,7 @@ async function responsibilityBlock(q: Querier, target: EmployeeRecord): Promise<
 
 export interface StatusChange { status: 'active' | 'inactive'; reason: string; effectiveDate: string }
 
-export async function setEmployeeStatus(req: Request, id: number, change: StatusChange): Promise<EmployeeRecord> {
+async function setEmployeeStatusImpl(req: Request, id: number, change: StatusChange): Promise<EmployeeRecord> {
   const actor = req.auth!.account.biometricId;
   return inTransaction(async (conn) => {
     const existing = await findEmployee(conn, id, true);
@@ -492,8 +506,9 @@ export async function setEmployeeStatus(req: Request, id: number, change: Status
     return after;
   });
 }
+export const setEmployeeStatus = freshAccess(setEmployeeStatusImpl);
 
-export async function deleteEmployee(req: Request, id: number, reason: string, reference: string | null): Promise<EmployeeRecord> {
+async function deleteEmployeeImpl(req: Request, id: number, reason: string, reference: string | null): Promise<EmployeeRecord> {
   const actor = req.auth!.account.biometricId;
   return inTransaction(async (conn) => {
     const existing = await findEmployee(conn, id, true);
@@ -521,6 +536,7 @@ export async function deleteEmployee(req: Request, id: number, reason: string, r
     return target;
   });
 }
+export const deleteEmployee = freshAccess(deleteEmployeeImpl);
 
 // ---------------------------------------------------------------------------
 // Module roles and password resets
@@ -532,7 +548,7 @@ export interface Grant { moduleId: ModuleId; roleId: string }
  * Replaces a user's whole module-role matrix. Existing rows are switched
  * active/inactive (history is kept) and new ones inserted, with one audit record.
  */
-export async function replaceRoleGrants(req: Request, biometricId: string, wanted: Grant[]): Promise<void> {
+async function replaceRoleGrantsImpl(req: Request, biometricId: string, wanted: Grant[]): Promise<void> {
   const actor = req.auth!.account.biometricId;
   const changed = await inTransaction(async (conn) => {
     const [user] = await rows(conn, 'SELECT id, name, is_system FROM users WHERE biometric_id = ? LIMIT 1', [biometricId]);
@@ -568,6 +584,7 @@ export async function replaceRoleGrants(req: Request, biometricId: string, wante
   });
   if (changed) notifyRolesChanged(biometricId, wanted);
 }
+export const replaceRoleGrants = freshAccess(replaceRoleGrantsImpl);
 
 /** Records a password reset. Only how and why it was done is kept, never the password. */
 export async function auditPasswordReset(req: Request, target: { biometricId: string; name: string }, details: { mode: string; emailStatus: string; reason: string }): Promise<void> {

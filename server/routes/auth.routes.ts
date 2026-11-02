@@ -8,7 +8,7 @@ import {
 } from '../lib/http';
 import { AttemptLimiter } from '../lib/rateLimit';
 import { Validator } from '../lib/validate';
-import { accountBlockReason, findAccountById, loadActiveGrants } from '../services/access.service';
+import { accountBlockReason, clearAccessCache, findAccountById, loadActiveGrants } from '../services/access.service';
 import { buildSessionPayload } from '../services/session.service';
 import { requireAuth } from '../middleware/auth.middleware';
 import { authConfig, normalizeLoginEmail } from '../config/auth.config';
@@ -171,6 +171,7 @@ router.post('/change-password', requireAuth, asyncHandler(async (req, res) => {
     });
   });
 
+  clearAccessCache();
   await destroyUserSessions(account.id, req.sessionID);
   req.auth = { ...req.auth!, account: { ...account, mustChangePassword: false } };
   req.session.lastActivityAt = Date.now();
@@ -187,6 +188,7 @@ router.post('/skip-password-change', requireAuth, asyncHandler(async (req, res) 
   if (account.mustChangePassword) {
     await inTransaction(async (conn) => {
       await conn.query('UPDATE users SET must_change_password = 0 WHERE id = ?', [account.id]);
+      clearAccessCache();
       await writeMasterAuditSql(conn, req, {
         masterKey: 'employee_password', recordId: account.biometricId, recordLabel: account.name, action: 'UPDATE',
         before: { passwordOffer: 'pending' }, after: { passwordOffer: 'skipped by the user' },

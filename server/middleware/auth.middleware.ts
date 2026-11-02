@@ -2,7 +2,7 @@ import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { asyncHandler, clearSessionCookie, destroySession, forbidden, unauthorized, HttpError } from '../lib/http';
 import type { ModuleId, RoleId } from '../lib/roles';
 import { PASSIVE_REQUEST_HEADER, sessionConfig } from '../config/session.config';
-import { accountBlockReason, findAccountById, hasGrant, loadActiveGrants } from '../services/access.service';
+import { accountBlockReason, cachedAccountById, cachedActiveGrants, hasGrant } from '../services/access.service';
 
 /**
  * Every authenticated request re-checks:
@@ -44,14 +44,14 @@ export const requireAuth: RequestHandler = asyncHandler(async (req: Request, res
   }
 
   // --- Account ------------------------------------------------------------
-  const account = await findAccountById(userId);
+  const account = await cachedAccountById(userId);
   if (!account) await endSession(401, 'Your session has ended. Please sign in again.', 'SESSION_ENDED');
 
   const blocked = accountBlockReason(account!);
   if (blocked) await endSession(403, blocked, 'ACCOUNT_BLOCKED');
 
   // --- Active module / role -------------------------------------------------
-  const grants = await loadActiveGrants(account!.biometricId);
+  const grants = await cachedActiveGrants(account!.biometricId);
   let activeModule = req.session.activeModule ?? null;
   let activeRole = req.session.activeRole ?? null;
   if (activeModule && (!activeRole || !hasGrant(grants, activeModule, activeRole))) {

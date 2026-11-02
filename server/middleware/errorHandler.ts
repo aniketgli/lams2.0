@@ -25,6 +25,14 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     return res.status(413).json({ message: 'Request is too large.', code: 'TOO_LARGE' });
   }
 
+  // The database is overloaded: every connection is busy and the waiting line is full, or a query ran past its time limit.
+  const db = err as { code?: string; message?: string; errno?: number };
+  if (/queue limit reached/i.test(db?.message ?? '') || db?.errno === 3024 || db?.code === 'ER_QUERY_TIMEOUT') {
+    console.error(`[OVERLOAD] ${req.method} ${req.originalUrl}`, db.message);
+    res.setHeader('Retry-After', '5');
+    return res.status(503).json({ message: 'The server is busy. Please try again in a few seconds.', code: 'BUSY' });
+  }
+
   console.error(`[SERVER ERROR] ${req.method} ${req.originalUrl}`, err);
   return res.status(500).json({ message: 'Something went wrong on the server. Please try again.', code: 'INTERNAL' });
 }
