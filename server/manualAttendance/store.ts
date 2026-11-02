@@ -328,6 +328,8 @@ export async function createRequest(req: Request, viewer: Viewer, body: unknown)
 
   try {
     const done = await inTransaction(async (conn) => {
+      // Serialise one employee's requests so a double submit cannot pass the duplicate check twice.
+      await rows(conn, 'SELECT id FROM users WHERE id = ? FOR UPDATE', [target.id]);
       if (await hasOpenRequest(conn, target.id, input.date, 0)) throw duplicate(input.date);
       const [result] = await conn.query(
         `INSERT INTO manual_attendance_requests
@@ -363,6 +365,7 @@ export async function updateRequest(req: Request, viewer: Viewer, id: number, bo
       if (input.userId && viewer.role === 'administrator' && input.userId !== String(row.user_id)) throw badRequest('Please correct the highlighted fields.', { userId: 'The employee of a request cannot be changed.' });
       const target = await loadTarget(conn, Number(row.user_id));
       checkDate(input, target.joining);
+      await rows(conn, 'SELECT id FROM users WHERE id = ? FOR UPDATE', [target.id]);
       if (await hasOpenRequest(conn, target.id, input.date, id)) throw duplicate(input.date);
       const original = await biometricDay(target.biometricId, target.shiftId, input.date);
       checkAgainstPunches(input, original);

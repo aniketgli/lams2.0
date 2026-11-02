@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Building2, CalendarDays, MapPin, Send, Check, Paperclip, CheckCircle2, ChevronsRight, Clock, Eye, FileText, Pencil, RotateCcw, Trash2, X, XCircle } from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
 import { DataTable, Modal, Select } from '../../../../shared/components';
@@ -152,6 +152,8 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [formMessage, setFormMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // A ref is updated at once, so a fast double-click cannot send the same form twice before `saving` re-renders.
+  const submitting = useRef(false);
   const [preview, setPreview] = useState<LeavePreview | null>(null);
   const setField = <K extends keyof LeaveInput>(key: K, value: LeaveInput[K]) => {
     setForm((f) => ({ ...f, [key]: value }));
@@ -290,7 +292,8 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (saving) return;
+    if (saving || submitting.current) return;
+    submitting.current = true;
     setSaving(true); setFormMessage(null);
     try {
       const result = editing ? await leaveApi.update(editing.id, form) : await leaveApi.create(form);
@@ -305,6 +308,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
         setFormMessage('The request could not be saved.');
       }
     } finally {
+      submitting.current = false;
       setSaving(false);
     }
   };

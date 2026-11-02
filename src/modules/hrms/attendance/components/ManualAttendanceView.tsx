@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarCheck, Check, CheckCircle2, ClipboardList, Clock, Eye, Pencil, Plus, RotateCcw, Trash2, X, XCircle } from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
 import { PageHeader, PageHeaderButton } from '../../../../shared/components/PageHeader';
@@ -154,6 +154,8 @@ export const ManualAttendanceView: React.FC = () => {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [formMessage, setFormMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // A ref is updated at once, so a fast double-click cannot send the same form twice before `saving` re-renders.
+  const submitting = useRef(false);
   const setField = <K extends keyof ManualInput>(key: K, value: ManualInput[K]) => {
     setForm((f) => ({ ...f, [key]: value }));
     setFormErrors((e) => (e[key] ? { ...e, [key]: '' } : e));
@@ -191,7 +193,8 @@ export const ManualAttendanceView: React.FC = () => {
   };
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (saving) return;
+    if (saving || submitting.current) return;
+    submitting.current = true;
     setSaving(true); setFormMessage(null);
     try {
       const result = editing ? await manualAttendanceApi.update(editing.id, form) : await manualAttendanceApi.create(form);
@@ -207,6 +210,7 @@ export const ManualAttendanceView: React.FC = () => {
         setFormMessage('The request could not be saved.');
       }
     } finally {
+      submitting.current = false;
       setSaving(false);
     }
   };
