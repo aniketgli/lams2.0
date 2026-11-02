@@ -1,3 +1,4 @@
+import { brandedMail } from '../notifications/notify';
 import type { Request } from 'express';
 import type { RowDataPacket } from 'mysql2/promise';
 import { pool } from '../../src/db';
@@ -270,7 +271,6 @@ export async function resolveRecipients(scheduleId: number): Promise<{ email: st
 /** The scheduler acts for nobody: the audit log shows it as the "Report scheduler". */
 const systemRequest = { auth: { account: { biometricId: null, name: 'Report scheduler' }, activeRole: null }, ip: 'scheduler' } as unknown as Request;
 
-const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
 const pretty = (d: string) => `${d.slice(8, 10)}-${d.slice(5, 7)}-${d.slice(0, 4)}`;
 
 export interface RunResult { status: 'sent' | 'partial' | 'failed' | 'no_recipients'; sent: number; message: string }
@@ -295,10 +295,14 @@ export async function runSchedule(row: RowDataPacket, trigger: 'schedule' | 'man
       let sent = 0;
       const failures: string[] = [];
       for (const to of recipients) {
+        const letter = await brandedMail({
+          title: 'Scheduled report', name: to.name,
+          intro: `Please find the ${def.label} report attached.`,
+          details: [['Report', def.label], ['Period', periodText], ['Rows', table.rows.length]],
+        });
         const mail = await EmailService.sendEmail({
-          to: to.email, toName: to.name, subject: `${String(row.name)} — ${periodText}`, category: 'REPORT', eventType: 'SCHEDULED_REPORT', referenceId: `report-${id}`, attachments,
-          html: `<p>Dear ${esc(to.name)},</p><p>Please find attached the <strong>${esc(def.label)}</strong> report for ${esc(periodText)} (${table.rows.length} ${table.rows.length === 1 ? 'row' : 'rows'}).</p><p style="color:#64748b;font-size:12px">This email is sent automatically by the WII Portal.</p>`,
-          text: `Dear ${to.name},\n\nPlease find attached the ${def.label} report for ${periodText} (${table.rows.length} rows).\n\nThis email is sent automatically by the WII Portal.`,
+          to: to.email, toName: to.name, subject: `${String(row.name)} — ${periodText}`, category: 'REPORT', eventType: 'SCHEDULED_REPORT', referenceId: `report-${id}`, attachments: [...attachments, ...letter.logo],
+          html: letter.html, text: letter.text,
         });
         if (mail.status === 'delivered') sent += 1;
         else failures.push(mail.message);

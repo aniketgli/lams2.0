@@ -114,3 +114,14 @@ export function notify(build: () => Promise<Notice | null> | Notice | null): voi
     }
   })();
 }
+
+/** The standard layout for mails that are sent outside `notify` (password reset, scheduled reports). */
+export async function brandedMail(parts: { title: string; name: string; intro: string; details?: Detail[]; remark?: string | null; withButton?: boolean }): Promise<{
+  html: string; text: string; logo: Array<{ content: Buffer; contentType: string; filename: string; cid: string }>;
+}> {
+  const brand = await loadBrand();
+  const { html, text } = renderNotice(
+    { heading: parts.title, intro: parts.intro, details: parts.details ?? [], remark: parts.remark ?? null },
+    { id: 0, name: parts.name, email: '' }, brand);
+  return { html, text, logo: brand.logo ? [{ ...brand.logo, cid: 'org-logo' }] : [] };
+}

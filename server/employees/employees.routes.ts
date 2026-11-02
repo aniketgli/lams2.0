@@ -6,6 +6,7 @@ import { db } from '../../src/db';
 import { user_project_histories, users } from '../../src/db/schema';
 import { isAdmin, isAuthenticated, requireActiveRole, requireAuth } from '../middleware/auth.middleware';
 import { EmailService } from '../integrations/email/email.service';
+import { brandedMail } from '../notifications/notify';
 import { notifyAccountStatus, notifyEmployeeDeleted, notifyEmployeeUpdated, notifyMappingBatch, notifyWelcome } from '../notifications/events';
 import { systemAccountError } from '../lib/systemAccounts';
 import { HttpError, asyncHandler, badRequest, notFound } from '../lib/http';
@@ -13,7 +14,7 @@ import { passwordProblem } from '../lib/passwordPolicy';
 import { defaultPasswordHash } from '../masters/accountSettings';
 import { normalizeModule } from '../lib/roles';
 import { destroyUserSessions } from '../lib/sessionStore';
-import { PATTERNS, Validator, escapeHtml, todayInIndia } from '../lib/validate';
+import { PATTERNS, Validator, todayInIndia } from '../lib/validate';
 import {
   Grant, Viewer, auditPasswordReset, createEmployee, deleteEmployee, getEmployee, listEmployees,
   replaceRoleGrants, setEmployeeStatus, updateEmployee,
@@ -296,12 +297,18 @@ router.post('/employees/:biometricId/reset-password', isAdmin, asyncHandler(asyn
   let emailStatus: 'delivered' | 'simulated' | 'not_required' = 'not_required';
   if (mode === 'auto') {
     const reference = reason || 'Official Reset Request';
+    const mail = await brandedMail({
+      title: 'Password reset', name: target.name,
+      intro: 'An administrator has reset your WII Portal password. You will be asked to choose a new password when you sign in. If you did not request this, contact the IT Cell.',
+      details: [['Temporary password', temporaryPassword], ['Reference', reference]],
+    });
     const emailResult = await EmailService.sendEmail({
       to: target.email,
       toName: target.name,
       subject: 'Your WII Portal temporary password',
-      text: `Dear ${target.name},\n\nAn administrator has reset your WII Portal password. Your temporary password is: ${temporaryPassword}\n\nYou will be asked to choose a new password when you sign in.\n\nReference: ${reference}\n\nIf you did not request this, contact the IT Cell.`,
-      html: `<p>Dear ${escapeHtml(target.name)},</p><p>An administrator has reset your WII Portal password.</p><p>Your temporary password is: <strong>${escapeHtml(temporaryPassword)}</strong></p><p>You will be asked to choose a new password when you sign in.</p><p>Reference: ${escapeHtml(reference)}</p><p>If you did not request this, contact the IT Cell.</p>`,
+      text: mail.text,
+      html: mail.html,
+      attachments: mail.logo,
       category: 'SECURITY',
       eventType: 'PASSWORD_RESET',
       referenceId: biometricId,
