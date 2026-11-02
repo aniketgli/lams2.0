@@ -53,6 +53,7 @@ mysql lams_db < migrations/20261119_scl_like_cl.sql   # SCL takes the leave form
 mysql lams_db < migrations/20261120_bootstrap_users.sql   # accounts erp@wii.gov.in (Administrator) and erpauditor@wii.gov.in (Auditor), password 123456, change at first sign-in
 mysql lams_db < migrations/20261121_report_schedules.sql   # scheduled report emails
 mysql lams_db < migrations/20261122_notification_recipient_scope.sql   # CC / BCC per transaction
+mysql lams_db < migrations/20261123_system_accounts.sql   # marks erp@ / erpauditor@ as protected system accounts
 mysql lams_db < migrations/20261031_leave_requests.sql
 npm run dev                   # http://localhost:3000
 npm run lint                  # type-check

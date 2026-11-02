@@ -121,7 +121,7 @@ export async function getSchedule(id: number): Promise<ScheduleView> {
 export async function scheduleOptions() {
   const people = await rows(
     `SELECT u.id, u.name, u.biometric_id, u.email, p.designation FROM users u LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id
-      WHERE LOWER(u.status) = 'active' AND u.email <> '' ORDER BY u.name`);
+      WHERE LOWER(u.status) = 'active' AND u.is_system = 0 AND u.email <> '' ORDER BY u.name`);
   return {
     reports: REPORTS.map((r) => ({ key: r.key, label: r.label, description: r.description, snapshot: r.snapshot })),
     roles: Object.entries(ROLE_LABELS).map(([id, label]) => ({ id, label })),

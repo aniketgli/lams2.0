@@ -1118,7 +1118,7 @@ export async function applicableEmployees(viewer: Viewer): Promise<{ id: string;
   const found = await rows(pool,
     `SELECT u.id, u.biometric_id, u.name, p.designation, p.profile_data FROM users u
        LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id
-      WHERE LOWER(u.status) = 'active' ORDER BY u.name`);
+      WHERE LOWER(u.status) = 'active' AND u.is_system = 0 ORDER BY u.name`);
   return found.map((r) => ({ id: String(r.id), biometricId: String(r.biometric_id), name: String(r.name), designation: String(r.designation ?? ''), isPwd: profileData(r.profile_data).isPwd === true || profileData(r.profile_data).isPwd === 'true' }));
 }
 
@@ -1153,7 +1153,7 @@ export async function listBalances(viewer: Viewer, yearRaw: unknown): Promise<{ 
     const policies = await attachQuotas(pool, typeRows.map(toPolicy));
     const people = await rows(pool,
       `SELECT u.id, u.biometric_id, u.name, p.designation, p.department, p.employment_type, p.joining_date, p.profile_data
-         FROM users u LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE LOWER(u.status) = 'active' ORDER BY u.name`);
+         FROM users u LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE LOWER(u.status) = 'active' AND u.is_system = 0 ORDER BY u.name`);
     const visible = people.filter((r) => canSee(viewer, { ...r, user_id: r.id }));
     const grants = await rows(pool, 'SELECT user_id, leave_type_id, total, carry_forward FROM leave_balances WHERE cycle_year = ?', [year]);
     const sums = await rows(pool,

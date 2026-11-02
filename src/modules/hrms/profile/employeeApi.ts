@@ -6,6 +6,7 @@ import type { User } from '../../../shared/types/auth.types';
 
 export interface EmployeeRow {
   id: string;
+  isSystem?: boolean;
   biometricId: string;
   name: string;
   email: string;
@@ -98,6 +99,8 @@ export function toSaveError(error: unknown, fallback: string): SaveResult {
 
 export const employeeApi = {
   list: () => api<EmployeeRow[]>('/hrms/employees', { passive: true }),
+  /** The fixed system accounts: only the Profiles table shows these (administrator and auditor only; others get an empty list). */
+  listSystem: () => api<EmployeeRow[]>('/hrms/employees?system=1', { passive: true }),
   create: (user: Partial<User>) =>
     api<{ employee: EmployeeRow; message: string }>('/hrms/employees', { method: 'POST', body: employeePayload(user) }),
   update: (id: string, user: Partial<User>) =>

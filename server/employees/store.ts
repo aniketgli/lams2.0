@@ -12,6 +12,7 @@ import {
   EmployeeInput, FormLayout, PROFILE_DATA_FORBIDDEN, PROFILE_DATA_KEYS, accountValidUpto, parseEmployeeInput, retirementDate,
 } from './fields';
 import { ResolvedReferences, checkReferences, layoutOfEmployeeType } from './references';
+import { isSystemRow, systemAccountError } from '../lib/systemAccounts';
 
 /**
  * Employee accounts and profiles. One save touches three tables in one
@@ -67,6 +68,8 @@ export interface EmployeeRecord {
   biometricId: string;
   name: string;
   email: string;
+  /** Fixed system account: shown in the Profiles table only; read-only. */
+  isSystem: boolean;
   status: 'active' | 'inactive';
   validUpto: string | null;
   suffix: string | null;
@@ -91,7 +94,7 @@ export interface EmployeeRecord {
 }
 
 const SELECT_EMPLOYEES = `
-  SELECT u.id, u.biometric_id, u.name, u.email, u.status, u.valid_upto,
+  SELECT u.id, u.biometric_id, u.name, u.email, u.status, u.valid_upto, u.is_system,
          p.suffix, p.department, p.designation, p.employment_type, p.joining_date,
          p.phone, p.office_location, p.institute, p.shift_id, p.profile_data
     FROM users u
@@ -129,6 +132,7 @@ function toRecord(row: RowDataPacket, grants: { moduleId: string; roleId: string
     biometricId: String(row.biometric_id),
     name: String(row.name),
     email: String(row.email),
+    isSystem: Number(row.is_system ?? 0) === 1,
     status: String(row.status).toLowerCase() === 'active' ? 'active' : 'inactive',
     validUpto: dateText(row.valid_upto),
     suffix: row.suffix ?? null,
@@ -171,8 +175,9 @@ export function canSeeFullProfile(viewer: Viewer, record: EmployeeRecord): boole
   return String(data.reportingManagerId ?? '') === String(viewer.id) || String(data.reviewingManagerId ?? '') === String(viewer.id);
 }
 
-export async function listEmployees(viewer: Viewer): Promise<EmployeeRecord[]> {
-  const found = await rows(pool, `${SELECT_EMPLOYEES} ORDER BY u.name`);
+/** `regular` (default): every employee except the system accounts. `system`: only those, for the Profiles table. */
+export async function listEmployees(viewer: Viewer, which: 'regular' | 'system' = 'regular'): Promise<EmployeeRecord[]> {
+  const found = await rows(pool, `${SELECT_EMPLOYEES} WHERE u.is_system = ${which === 'system' ? 1 : 0} ORDER BY u.name`);
   const grants = await loadGrants(pool, null);
   const photos = await photoUrls(null);
   return found
@@ -375,6 +380,7 @@ export async function updateEmployee(req: Request, id: number, body: unknown): P
       const existing = await findEmployee(conn, id, true);
       if (!existing) throw notFound('Employee account not found.');
       const before = existing.record;
+      if (before.isSystem) throw systemAccountError();
 
       const sentId = body && typeof body === 'object' ? String((body as Record<string, unknown>).biometricId ?? '').trim() : '';
       if (sentId && sentId !== before.biometricId) {
@@ -452,6 +458,7 @@ export async function setEmployeeStatus(req: Request, id: number, change: Status
     const existing = await findEmployee(conn, id, true);
     if (!existing) throw notFound('Employee account not found.');
     const before = existing.record;
+    if (before.isSystem) throw systemAccountError();
     if (before.biometricId === actor) throw badRequest('You cannot change your own account status.');
     if (before.status === change.status) return before;
 
@@ -491,6 +498,7 @@ export async function deleteEmployee(req: Request, id: number, reason: string, r
     const existing = await findEmployee(conn, id, true);
     if (!existing) throw notFound('Employee account not found.');
     const target = existing.record;
+    if (target.isSystem) throw systemAccountError();
     if (target.biometricId === actor) throw new HttpError(409, 'You cannot delete your own account.', 'SELF');
 
     const block = await responsibilityBlock(conn, target);
@@ -526,8 +534,9 @@ export interface Grant { moduleId: ModuleId; roleId: string }
 export async function replaceRoleGrants(req: Request, biometricId: string, wanted: Grant[]): Promise<void> {
   const actor = req.auth!.account.biometricId;
   await inTransaction(async (conn) => {
-    const [user] = await rows(conn, 'SELECT id, name FROM users WHERE biometric_id = ? LIMIT 1', [biometricId]);
+    const [user] = await rows(conn, 'SELECT id, name, is_system FROM users WHERE biometric_id = ? LIMIT 1', [biometricId]);
     if (!user) throw notFound('User account not found.');
+    if (isSystemRow(user)) throw systemAccountError();
 
     const existing = await rows(conn, 'SELECT id, module_id, role_id, status FROM user_module_roles WHERE biometric_id = ? FOR UPDATE', [biometricId]);
     const keyOf = (moduleId: string, roleId: string) => `${normalizeModule(moduleId) ?? moduleId.toLowerCase()}::${roleId}`;

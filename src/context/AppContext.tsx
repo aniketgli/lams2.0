@@ -70,6 +70,8 @@ import {
 interface AppContextType {
   currentUser: User;
   users: User[];
+  /** System accounts (Administrator / Auditor): for the Profiles table only, never in dropdowns, exports or other lists. */
+  systemUsers: User[];
   isAuthenticated: boolean;
   isLoading: boolean;
   /** Active values of every master (salutation, gender, employee type, departments, ...). */
@@ -604,6 +606,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Employee identities must come from the authenticated server/database only.
   // Never hydrate the directory from browser-local seed/demo users.
   const [users, setUsers] = useState<User[]>([]);
+  const [systemUsers, setSystemUsers] = useState<User[]>([]);
   // The employee directory always comes from the database (GET /api/hrms/employees).
   // The server decides how much of each profile this user may see.
   const toDirectoryUser = (row: EmployeeRow): User => {
@@ -617,6 +620,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return {
       ...saved,
       id: String(row.id),
+      isSystem: row.isSystem === true,
       biometricId: row.biometricId,
       suffix: row.suffix ?? undefined,
       name: row.name,
@@ -645,6 +649,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const rows = await employeeApi.list();
       const next = Array.isArray(rows) ? rows.map(toDirectoryUser) : [];
       setUsers(next);
+      employeeApi.listSystem().then((sys) => setSystemUsers(Array.isArray(sys) ? sys.map(toDirectoryUser) : [])).catch(() => setSystemUsers([]));
       return next;
     } catch (error) {
       // Never fall back to seed data for an authenticated directory.
@@ -4682,6 +4687,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateUserProfile,
         addUserProfile,
         reloadEmployees,
+        systemUsers,
         updateUserRoleAndHierarchy,
         toggleUserStatus,
         deleteUser,

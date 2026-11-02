@@ -21,6 +21,8 @@ export interface UserModuleRoles {
 
 export interface User {
   id: string;
+  /** Fixed system account (Administrator / Auditor): shown in the Profiles table only, read-only. */
+  isSystem?: boolean;
   name: string;
   /** Salutation code from the salutation master (Mr., Dr., ...). */
   suffix?: string;

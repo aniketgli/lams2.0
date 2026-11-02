@@ -115,7 +115,7 @@ async function plan(q: Q, input: { strategy: ImportStrategy; csv: string }): Pro
     if (!biometricId) { fail('Biometric_ID is empty.'); continue; }
     if (!leaveCode) { fail('Leave_Code is empty.'); continue; }
     if (!people.has(biometricId)) {
-      const [found] = await q.query<RowDataPacket[]>("SELECT id, name FROM users WHERE biometric_id = ? AND LOWER(status) = 'active' LIMIT 1", [biometricId]);
+      const [found] = await q.query<RowDataPacket[]>("SELECT id, name FROM users WHERE biometric_id = ? AND LOWER(status) = 'active' AND is_system = 0 LIMIT 1", [biometricId]);
       people.set(biometricId, found[0] ? { id: Number(found[0].id), name: String(found[0].name) } : null);
     }
     const person = people.get(biometricId);

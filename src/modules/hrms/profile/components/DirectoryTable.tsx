@@ -83,12 +83,12 @@ export const DirectoryTable: React.FC<DirectoryTableProps> = ({ rows, typeLabel,
           <button type="button" className={iconButton} onClick={() => onView(u)} title="View full profile" aria-label={`View ${u.name}`}>
             <Eye className="w-3.5 h-3.5" />
           </button>
-          {onHistory && (
+          {onHistory && !u.isSystem && (
             <button type="button" className={iconButton} onClick={() => onHistory(u)} title="Manage project & career history" aria-label={`Career history of ${u.name}`}>
               <Briefcase className="w-3.5 h-3.5" />
             </button>
           )}
-          {onEdit && (
+          {onEdit && !u.isSystem && (
             <button type="button" className={iconButton} onClick={() => onEdit(u)} title="Edit profile" aria-label={`Edit ${u.name}`}>
               <Edit3 className="w-3.5 h-3.5" />
             </button>
