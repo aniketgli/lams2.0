@@ -434,7 +434,6 @@ export const OutdoorDutyView: React.FC = () => {
             search={{ value: search, onChange: setSearch, placeholder: teamView ? 'Search employee, location, purpose, funding…' : 'Search location, purpose, funding…' }}
             onReset={filtered ? resetAll : null}
             filters={[
-              isAudit && <div key="range">{dateRange}</div>,
               teamView && <MultiSelectFilter key="emp" label="Employee" options={employeeOptions} selectedValues={employees} onChange={setEmployees} />,
               teamView && <MultiSelectFilter key="dept" label="Department" options={opt(distinct((r) => r.department))} selectedValues={departments} onChange={setDepartments} />,
               <MultiSelectFilter key="type" label="OD type" options={opt(data?.types ?? OD_TYPES)} selectedValues={types} onChange={setTypes} />,

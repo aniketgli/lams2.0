@@ -13,7 +13,7 @@ import { PageHeader } from '../../../../shared/components/PageHeader';
 import { TablePagination } from '../../../../shared/components/TablePagination';
 import { UserProjectHistoryModal } from '../components/UserProjectHistoryModal';
 import { EmployeeProfileView, MyProfileView } from '../components/MyProfileView';
-import { EmployeeActivityLog } from '../components/EmployeeActivityLog';
+import { EmployeeActivityLog, MappingActivityLog, UserControlsActivityLog } from '../components/EmployeeActivityLog';
 import { DirectoryTable } from '../components/DirectoryTable';
 import { MappingPanel } from '../components/MappingPanel';
 import { Button } from '../../../../shared/components/Button';
@@ -280,19 +280,20 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const [auditorView, setAuditorView] = useState<'directory' | 'activity'>('directory');
   /** The header's Employee transfer / Manager replacement buttons ask the mapping panel to open that order form. */
   const [mappingOrder, setMappingOrder] = useState<{ kind: 'transfer' | 'replace'; n: number }>({ kind: 'transfer', n: 0 });
+  const { refresh: refreshSession } = useSession();
+
+  // Sub-tabs State
+  const [activeTab, setActiveTab] = useState<'profile' | 'user_controls' | 'transfers'>(initialTab);
+  useEffect(() => { setAuditorView('directory'); }, [activeTab]);
   /** Auditor: Directory / Activity logs switch, shown at the top-left of whichever panel is open. */
   const auditorSwitch = (
     <SegmentedControl
       ariaLabel="Auditor view"
       value={auditorView}
       onChange={setAuditorView}
-      options={[{ value: 'directory', label: 'Employee directory' }, { value: 'activity', label: 'Activity log' }]}
+      options={[{ value: 'directory', label: activeTab === 'user_controls' ? 'User controls' : activeTab === 'transfers' ? 'Employees mapping' : 'Employee directory' }, { value: 'activity', label: 'Activity log' }]}
     />
   );
-  const { refresh: refreshSession } = useSession();
-
-  // Sub-tabs State
-  const [activeTab, setActiveTab] = useState<'profile' | 'user_controls' | 'transfers'>(initialTab);
 
   useEffect(() => {
     if (!canAccessAdminSubTabs && (initialTab === 'user_controls' || initialTab === 'transfers')) {
@@ -1870,7 +1871,6 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
               filters={[
               <MultiSelectFilter key="employee"
               label="Employee"
-              icon={<UserIcon className="w-3.5 h-3.5" />}
               selectedValues={selectedEmployeeFilter}
               onChange={(newVals) => {
               setSelectedEmployeeFilter(newVals);
@@ -1882,28 +1882,24 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
               />,
               <MultiSelectFilter key="designation"
               label="Designation"
-              icon={<Filter className="w-3.5 h-3.5" />}
               selectedValues={selectedDesignationFilter}
               onChange={setSelectedDesignationFilter}
               options={designationsList.map((desig) => ({ label: desig, value: desig }))}
               />,
               <MultiSelectFilter key="department"
               label="Department"
-              icon={<Building2 className="w-3.5 h-3.5" />}
               selectedValues={selectedDepartmentFilter}
               onChange={setSelectedDepartmentFilter}
               options={departmentsMaster.map((dept) => ({ label: dept, value: dept }))}
               />,
               !isManager && <MultiSelectFilter key="manager"
               label="Reporting Manager"
-              icon={<UserIcon className="w-3.5 h-3.5" />}
               selectedValues={selectedReportingMgrFilter}
               onChange={setSelectedReportingMgrFilter}
               options={reportingMgrsList.map((mgr) => ({ label: mgr.name, value: mgr.id }))}
               />,
               <MultiSelectFilter key="type"
               label="Employment Type"
-              icon={<Filter className="w-3.5 h-3.5" />}
               selectedValues={selectedCategoryFilter}
               onChange={setSelectedCategoryFilter}
               options={[
@@ -1918,7 +1914,6 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
               />,
               <MultiSelectFilter key="status"
               label="Status"
-              icon={<Clock className="w-3.5 h-3.5" />}
               selectedValues={selectedStatusFilter}
               onChange={setSelectedStatusFilter}
               options={[
@@ -2141,10 +2136,12 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       {/* ==================================================================== */}
       {/* TAB 2: USER CONTROLS, ROLES & ACCOUNTS */}
       {/* ==================================================================== */}
-      {activeTab === 'user_controls' && (
+      {activeTab === 'user_controls' && isAudit && auditorView === 'activity' && <UserControlsActivityLog toolbarStart={auditorSwitch} />}
+      {activeTab === 'user_controls' && !(isAudit && auditorView === 'activity') && (
         <div className="space-y-4">
           {/* Search / filter / export bar (same layout on every page) */}
           <FilterToolbar
+            start={isAudit ? auditorSwitch : null}
             exports={{
               onCsv: handleExportUserControlsCSV, onPdf: handleExportUserControlsPDF,
               csvTitle: 'Export the user permissions register as CSV', pdfTitle: 'Export the user permissions register as PDF',
@@ -2156,7 +2153,6 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
             filters={[
             <MultiSelectFilter key="module"
             label="Module"
-            icon={<Building2 className="w-3.5 h-3.5" />}
             selectedValues={userControlsModuleFilter}
             onChange={setUserControlsModuleFilter}
             options={[
@@ -2169,7 +2165,6 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
             />,
             <MultiSelectFilter key="role"
             label="Role"
-            icon={<Shield className="w-3.5 h-3.5" />}
             selectedValues={userControlsRoleFilter}
             onChange={setUserControlsRoleFilter}
             options={[
@@ -2181,7 +2176,6 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
             />,
             <MultiSelectFilter key="status"
             label="Status"
-            icon={<Clock className="w-3.5 h-3.5" />}
             selectedValues={userControlsStatusFilter}
             onChange={setUserControlsStatusFilter}
             options={[
@@ -2437,8 +2431,9 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       {/* ==================================================================== */}
       {/* TAB 3: EMPLOYEES MAPPING (transfers, reporting manager / HoD changes) */}
       {/* ==================================================================== */}
-      {activeTab === 'transfers' && (
-        <MappingPanel order={mappingOrder} canChange={isAdmin && !isAudit} onChanged={() => void reloadEmployees()} notify={showToast} />
+      {activeTab === 'transfers' && isAudit && auditorView === 'activity' && <MappingActivityLog toolbarStart={auditorSwitch} />}
+      {activeTab === 'transfers' && !(isAudit && auditorView === 'activity') && (
+        <MappingPanel order={mappingOrder} canChange={isAdmin && !isAudit} onChanged={() => void reloadEmployees()} notify={showToast} toolbarStart={isAudit ? auditorSwitch : null} />
       )}
 
       {/* ==================================================================== */}

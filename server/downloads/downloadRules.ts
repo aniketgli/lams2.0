@@ -13,7 +13,7 @@ export const DOWNLOAD_AREAS = {
   manual_attendance: { key: 'manual_attendance_data_export', label: 'Manual attendance', roles: EVERYONE },
   outdoor_duty: { key: 'outdoor_duty_data_export', label: 'Outdoor duty', roles: EVERYONE },
   leave_requests: { key: 'leave_data_export', label: 'Leave requests', roles: EVERYONE },
-  leave_balances: { key: 'leave_data_export', label: 'Leave balances', roles: ADMIN_AUDIT },
+  leave_balances: { key: 'leave_balance_data_export', label: 'Leave balances', roles: ADMIN_AUDIT },
   holidays: { key: 'holiday_data_export', label: 'Holiday calendar', roles: EVERYONE },
   user_controls: { key: 'employee_data_export', label: 'User permissions', roles: ADMIN_AUDIT },
 } satisfies Record<string, Area>;

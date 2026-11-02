@@ -27,6 +27,16 @@ const LEAVE_ACTIVITY: ActivitySource = {
   ...activityEndpoints('/hrms/leave/activity', 'WII_Leave_Activity.csv'),
 };
 
+const BALANCE_ACTIVITY: ActivitySource = {
+  ...LEAVE_ACTIVITY,
+  title: 'Leave balance activity log',
+  recordLabel: 'Employee / leave type',
+  searchPlaceholder: 'Employee, leave type, done by, reason…',
+  areas: [{ value: 'leave_balance', label: 'Leave balance' }, { value: 'leave_balance_data_export', label: 'Balance download' }],
+  actions: ['CREATE', 'UPDATE', 'DELETE', 'EXPORT'],
+  limitToAreas: true,
+};
+
 type LeaveView = 'requests' | 'types' | 'activity';
 
 interface LeaveManagementPageProps {
@@ -42,6 +52,10 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ initia
   const canApply = isAdmin || role === 'general_staff';
   const balances = initialTab === 'leave_balance';
   const [view, setView] = useState<LeaveView>('requests');
+  const [balanceView, setBalanceView] = useState<'balances' | 'activity'>('balances');
+  const balanceSwitch = isAudit
+    ? <SegmentedControl ariaLabel="Leave balance views" value={balanceView} onChange={setBalanceView} options={[{ value: 'balances', label: 'Leave balance' }, { value: 'activity', label: 'Activity log' }]} />
+    : null;
   const viewTabs: Array<readonly [LeaveView, string]> = isAdmin ? [['requests', 'Requests'], ['types', 'Leave Types']]
     : isAudit ? [['requests', 'Requests'], ['types', 'Leave Types'], ['activity', 'Activity log']] : [['requests', 'Requests']];
   const viewSwitch = viewTabs.length > 1
@@ -73,7 +87,9 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ initia
         ) : undefined}
       />
 
-      {balances ? <LeaveBalancesView importSignal={importSignal} /> : (
+      {balances ? (isAudit && balanceView === 'activity'
+        ? <ActivityLogPanel source={BALANCE_ACTIVITY} toolbarStart={balanceSwitch} />
+        : <LeaveBalancesView importSignal={importSignal} toolbarStart={balanceSwitch} />) : (
         <>
           {view === 'types' && (isAdmin || isAudit) ? (
             <>

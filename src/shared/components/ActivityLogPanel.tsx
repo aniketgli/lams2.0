@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { DataTable } from './Table';
-import { AppSelect } from './AppSelect';
+import { MultiSelectFilter } from './MultiSelectFilter';
 import { FilterToolbar } from './FilterToolbar';
 import { AppDatePicker } from './AppDatePicker';
 import type { ColumnDef } from './Table';
@@ -26,6 +26,8 @@ export interface ActivitySource {
   /** Label of the record column ("Employee / record", "Holiday"). */
   recordLabel?: string;
   searchPlaceholder?: string;
+  /** When true, "All areas" means only the areas listed here (a page that shows a slice of a bigger audit scope). */
+  limitToAreas?: boolean;
   list: (q: ActivityQuery) => Promise<{ rows: ActivityRow[]; total: number }>;
   downloadCsv: (q: ActivityQuery) => Promise<void>;
   forPdf: (q: ActivityQuery) => Promise<PrintableTable>;
@@ -69,7 +71,11 @@ function when(iso: string): string {
 const EMPTY: ActivityQuery = { area: 'all', action: 'all', from: '', to: '', search: '' };
 
 /** What the server receives: 'all' means no filter. */
-const toQuery = (q: ActivityQuery): ActivityQuery => ({ ...q, area: q.area === 'all' ? '' : q.area, action: q.action === 'all' ? '' : q.action });
+const toQuery = (q: ActivityQuery, source?: ActivitySource): ActivityQuery => ({
+  ...q,
+  area: q.area === 'all' ? (source?.limitToAreas ? source.areas.map((a) => a.value).join(',') : '') : q.area,
+  action: q.action === 'all' ? '' : q.action,
+});
 
 const ROLE_LABEL: Record<string, string> = {
   administrator: 'Administrator', audit: 'Auditor', reviewing_manager: 'HoD', reporting_manager: 'Reporting Manager', general_staff: 'User',
@@ -96,7 +102,7 @@ export const ActivityLogPanel: React.FC<{ source: ActivitySource; toolbarStart?:
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await source.list({ ...toQuery(applied), page, pageSize });
+      const result = await source.list({ ...toQuery(applied, source), page, pageSize });
       setData({ rows: result.rows, total: result.total });
       setError(null);
     } catch (e) {
@@ -120,7 +126,7 @@ export const ActivityLogPanel: React.FC<{ source: ActivitySource; toolbarStart?:
   const exportCsv = async () => {
     setExporting('csv');
     try {
-      await source.downloadCsv(toQuery(applied));
+      await source.downloadCsv(toQuery(applied, source));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'The download failed.');
     } finally {
@@ -132,10 +138,10 @@ export const ActivityLogPanel: React.FC<{ source: ActivitySource; toolbarStart?:
   const exportPdf = async () => {
     setExporting('pdf');
     try {
-      const q = toQuery(applied);
+      const q = toQuery(applied, source);
       const table = await source.forPdf(q);
       const filterLine = [
-        q.area && `Area: ${AREA_LABEL[q.area] ?? q.area}`,
+        q.area && `Area: ${q.area.split(',').map((a) => AREA_LABEL[a] ?? a).join(', ')}`,
         q.action && `Action: ${actionName(q.action)}`,
         q.from && `From ${q.from}`, q.to && `To ${q.to}`, q.search && `Search: “${q.search}”`,
       ].filter(Boolean).join(' · ');
@@ -204,8 +210,8 @@ export const ActivityLogPanel: React.FC<{ source: ActivitySource; toolbarStart?:
         search={{ value: filters.search ?? '', onChange: (v) => set('search', v), placeholder: source.searchPlaceholder ?? 'Search record, done by, reason…' }}
         onReset={filtered ? () => setFilters(EMPTY) : null}
         filters={[
-          <AppSelect key="area" value={filters.area ?? 'all'} options={AREAS} onChange={(v) => set('area', v)} />,
-          <AppSelect key="action" value={filters.action ?? 'all'} options={ACTIONS} onChange={(v) => set('action', v)} />,
+          <MultiSelectFilter single key="area" label="Area" options={AREAS.filter((a) => a.value !== 'all')} selectedValues={[filters.area ?? 'all']} onChange={(v) => set('area', v[0] ?? 'all')} />,
+          <MultiSelectFilter single key="action" label="Action" options={ACTIONS.filter((a) => a.value !== 'all')} selectedValues={[filters.action ?? 'all']} onChange={(v) => set('action', v[0] ?? 'all')} />,
           <AppDatePicker key="from" value={filters.from ?? ''} maxDate={filters.to || undefined} placeholder="From date" onChange={(v) => set('from', v)} className="w-full" />,
           <AppDatePicker key="to" value={filters.to ?? ''} minDate={filters.from || undefined} placeholder="To date" onChange={(v) => set('to', v)} className="w-full" />,
         ]}

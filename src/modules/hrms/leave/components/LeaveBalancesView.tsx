@@ -19,7 +19,7 @@ import { LeaveImportModal } from './LeaveImportModal';
 const PAGE_SIZES = [25, 50, 100];
 const days = (n: number) => String(Math.round(n * 10) / 10);
 
-export const LeaveBalancesView: React.FC<{ importSignal?: number }> = ({ importSignal = 0 }) => {
+export const LeaveBalancesView: React.FC<{ importSignal?: number; toolbarStart?: React.ReactNode }> = ({ importSignal = 0, toolbarStart }) => {
   const { currentUser } = useApp();
   const role = currentUser.role;
   const isAdmin = role === 'administrator';
@@ -122,6 +122,7 @@ export const LeaveBalancesView: React.FC<{ importSignal?: number }> = ({ importS
       {error && <div role="alert" className="px-4 py-3 rounded-2xl border text-xs font-semibold bg-error-subtle border-error-border text-error">{error}</div>}
 
       <FilterToolbar
+        start={toolbarStart}
         start={(
           <div className="w-44">
             <Select value={String(year)} searchable={false} onChange={(v: string) => setYear(Number(v))}
