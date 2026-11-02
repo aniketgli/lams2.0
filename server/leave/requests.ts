@@ -12,7 +12,8 @@ import { WEEK_DAYS, datesBetween, weekdayOf } from '../attendance/compute';
 import { groupLeaveTypeIds, groupLeaveTypeMap } from './groups';
 import { LOOK_DAYS, type Combine, type Neighbour, combineProblem, toCombine } from './combine';
 import { SESSIONS_END, SESSIONS_START, countLeaveDays, cycleYearOf } from './days';
-import { COMP_OFF_CODE, balanceFromCredits, creditProblem, creditsFor, personById } from './compOff';
+import { COMP_OFF_CODE, RESTRICTED_CODE, balanceFromCredits, creditsFor, matchCredits, monthlyProblem, personById, takenByMonth } from './compOff';
+import type { Pair } from './compOffRules';
 
 /**
  * Leave requests and balances. Every rule is checked here, never in the browser.
@@ -79,8 +80,8 @@ export interface LeaveRequest {
   ltcType: 'none' | 'ltc' | 'ex_india';
   encashDays: number;
   contactAddress: string;
-  /** Compensatory off: the worked weekly off / holiday it uses. */
-  compOffDate: string | null;
+  /** Compensatory off: the worked weekly offs / holidays it uses, one per leave day. */
+  compOffDates: string[];
   prefixFrom: string | null;
   prefixTo: string | null;
   suffixFrom: string | null;
@@ -129,8 +130,8 @@ export interface LeaveInput {
   suffix: { from: string; to: string } | null;
   /** A certificate uploaded with this application. */
   file: CertificateFile | null;
-  /** Compensatory off only: the weekly off / holiday worked that this leave uses. */
-  compOffDate: string | null;
+  /** Compensatory off only: the weekly offs / holidays worked that this leave uses, one per leave day. */
+  compOffDates: string[];
 }
 
 export async function rows(q: { query: typeof pool.query }, sql: string, params: unknown[] = []): Promise<RowDataPacket[]> {
@@ -163,6 +164,7 @@ export const num = (n: number) => Math.round(n * 10) / 10;
 const SELECT = `
   SELECT m.*, u.biometric_id, u.name AS user_name, p.designation, p.department, p.profile_data,
          t.name AS type_name, t.code AS type_code, (SELECT c.file_name FROM leave_certificates c WHERE c.request_id = m.id) AS certificate_name,
+         (SELECT GROUP_CONCAT(DATE_FORMAT(w.work_date, '%Y-%m-%d') ORDER BY w.work_date) FROM leave_comp_off_uses w WHERE w.request_id = m.id) AS comp_off_days,
          ab.name AS applied_by_name, mg.name AS manager_name, rv.name AS reviewer_name, l1.name AS l1_name, ac.name AS action_by_name
     FROM leave_requests m
     JOIN users u ON u.id = m.user_id
@@ -249,7 +251,7 @@ function toRequest(viewer: Viewer, row: RowDataPacket): LeaveRequest {
     ltcType: row.ltc_type === 'ltc' ? 'ltc' : row.ltc_type === 'ex_india' ? 'ex_india' : 'none',
     encashDays: Number(row.encash_days ?? 0),
     contactAddress: row.contact_address ? String(row.contact_address) : '',
-    compOffDate: row.comp_off_date ? isoDate(row.comp_off_date) : null,
+    compOffDates: row.comp_off_days ? String(row.comp_off_days).split(',') : [],
     prefixFrom: row.prefix_from ? isoDate(row.prefix_from) : null,
     prefixTo: row.prefix_to ? isoDate(row.prefix_to) : null,
     suffixFrom: row.suffix_from ? isoDate(row.suffix_from) : null,
@@ -279,7 +281,7 @@ function toRequest(viewer: Viewer, row: RowDataPacket): LeaveRequest {
 function auditView(r: LeaveRequest): Record<string, unknown> {
   return {
     employee: `${r.name} (${r.biometricId})`, leaveType: `${r.leaveTypeName} (${r.leaveTypeCode})`, startDate: r.startDate, endDate: r.endDate,
-    startSession: r.startSession, endSession: r.endSession, days: r.daysCount, reason: r.reason, certificate: r.certificateName ?? (r.certificate ? 'Yes' : 'No'), stationPermission: r.stationLeave ? 'Required' : 'Not required', ltc: r.ltcType, encashDays: r.encashDays, contactAddress: r.contactAddress, compOffDay: r.compOffDate, prefix: r.prefixFrom ? `${r.prefixFrom} to ${r.prefixTo}` : null, suffix: r.suffixFrom ? `${r.suffixFrom} to ${r.suffixTo}` : null, status: r.status,
+    startSession: r.startSession, endSession: r.endSession, days: r.daysCount, reason: r.reason, certificate: r.certificateName ?? (r.certificate ? 'Yes' : 'No'), stationPermission: r.stationLeave ? 'Required' : 'Not required', ltc: r.ltcType, encashDays: r.encashDays, contactAddress: r.contactAddress, compOffDays: r.compOffDates.join(', ') || null, prefix: r.prefixFrom ? `${r.prefixFrom} to ${r.prefixTo}` : null, suffix: r.suffixFrom ? `${r.suffixFrom} to ${r.suffixTo}` : null, status: r.status,
     forwardedBy: r.forwardedByName, comment: r.comment,
   };
 }
@@ -536,9 +538,11 @@ export function parseLeaveInput(body: unknown): LeaveInput {
   const suffix = raw.availSuffix === true ? range('suffixFrom', 'suffixTo', 'Suffix') : null;
   if (Object.keys(v.errors).length) v.assert();
   const file = parseCertificate((body as Record<string, unknown> | null)?.certificateFile);
-  const compOffDate = v.date('compOffDate', false) ?? null;
+  const rawDays = raw.compOffDates;
+  const compOffDates: string[] = Array.isArray(rawDays) ? rawDays.map((x) => String(x)) : typeof rawDays === 'string' && rawDays ? rawDays.split(',') : []; // the preview sends them comma-separated
+  if (compOffDates.length > 31 || compOffDates.some((d) => !isValidIsoDate(d))) v.errors.compOffDates ||= 'Choose the worked days from the list.';
   v.assert();
-  return { compOffDate, userId, leaveTypeId, startDate: startDate!, endDate: endDate!, startSession, endSession, reason: reason.replace(/\s+/g, ' '), certificate: Boolean(file), stationLeave: raw.stationLeave === true, ltcType, encashDays, contactAddress, prefix, suffix, file };
+  return { compOffDates, userId, leaveTypeId, startDate: startDate!, endDate: endDate!, startSession, endSession, reason: reason.replace(/\s+/g, ' '), certificate: Boolean(file), stationLeave: raw.stationLeave === true, ltcType, encashDays, contactAddress, prefix, suffix, file };
 }
 
 /** Looks at the employee's other leaves around the new one: see ./combine. */
@@ -562,7 +566,7 @@ async function joinProblem(q: { query: typeof pool.query }, emp: Employee, polic
 export interface HolidayBlock { from: string; to: string; days: number }
 /** Weekly offs / holidays between two straight 2-stage leaves: they become leave days of the earlier leave. */
 export interface JoinedGap { requestId: number; typeId: number; typeName: string; side: 'after' | 'before'; from: string; to: string; days: number }
-export interface Checked { requested: { startDate: string; endDate: string }; days: number; cycleYear: number; policy: Policy; emp: Employee; balance: Balance; stages: 1 | 2; prefix: HolidayBlock | null; suffix: HolidayBlock | null; stationOk: boolean; joins: JoinedGap[] }
+export interface Checked { requested: { startDate: string; endDate: string }; days: number; cycleYear: number; policy: Policy; emp: Employee; balance: Balance; stages: 1 | 2; prefix: HolidayBlock | null; suffix: HolidayBlock | null; stationOk: boolean; joins: JoinedGap[]; compOffPairs: Pair[] }
 
 /** Every rule of a leave application. Throws a field-level 400 / 409 when one fails. */
 async function checkLeave(
@@ -617,17 +621,28 @@ async function checkLeave(
   if (Object.keys(errors).length) throw badRequest('Please correct the highlighted fields.', errors);
 
   const rule = await dayRule(q, emp, policy, input.startDate, input.endDate);
-  const { days } = countLeaveDays(input.startDate, input.endDate, input.startSession, input.endSession, rule);
+  const { days, counted } = countLeaveDays(input.startDate, input.endDate, input.startSession, input.endSession, rule);
   if (days <= 0) throw badRequest('Please correct the highlighted fields.', { startDate: 'No working day falls in these dates.' });
+  let compOffPairs: Pair[] = [];
   if (policy.minDays && days < policy.minDays) errors.endDate = `${policy.name} needs at least ${policy.minDays} days in one application.`;
   if (policy.maxConsecutive && days > policy.maxConsecutive) errors.endDate = `${policy.name} can be taken for at most ${policy.maxConsecutive} days at a time.`;
   if (policy.code === COMP_OFF_CODE) {
-    // One day earned by working a weekly off / holiday (biometric punches only); the monthly limit is the type's "times a month" rule.
+    // One worked weekly off / holiday (biometric punches only) pays for each leave day; the monthly limit counts days by month of the leave day.
     const person = await personById(targetId);
-    const credit = person ? (await creditsFor([person], today, exceptId)).get(targetId)?.find((c) => c.date === input.compOffDate) : undefined;
-    const bad = input.compOffDate ? creditProblem(credit, input.startDate, input.endDate, days) : 'Choose a day you worked on a weekly off or holiday.';
-    if (bad) errors.compOffDate = bad;
-  } else if (input.compOffDate) errors.compOffDate = `Only a compensatory off uses a worked day.`;
+    const credits = person ? (await creditsFor([person], today, exceptId)).get(targetId) ?? [] : [];
+    const matched = matchCredits(credits, input.compOffDates, counted);
+    if (matched.problem) errors.compOffDates = matched.problem;
+    else {
+      compOffPairs = matched.pairs;
+      const bad = monthlyProblem(counted, await takenByMonth(targetId, exceptId), policy.maxSpellsMonth);
+      if (bad) errors.compOffDates = bad;
+    }
+  } else if (input.compOffDates.length) errors.compOffDates = 'Only a compensatory off uses worked days.';
+  if (policy.code === RESTRICTED_CODE) {
+    // A restricted holiday is one day, chosen from the holidays marked restricted in the Holiday Calendar.
+    const [rh] = input.startDate === input.endDate ? await rows(q, "SELECT id FROM holidays WHERE type = 'restricted' AND holiday_date = ? LIMIT 1", [input.startDate]) : [];
+    if (!rh) errors.startDate = 'Choose a restricted holiday from the list.';
+  }
   if (policy.certificateRequired && !input.certificate) errors.certificate = `Upload a medical certificate: ${policy.name} needs one.`;
   else if (policy.certDays && days > policy.certDays && !input.certificate) errors.certificate = `Medical certificate needed above ${policy.certDays} days.`;
   if (policy.lifetimeMax) {
@@ -635,7 +650,7 @@ async function checkLeave(
     const before = Number(taken?.n ?? 0);
     if (before + days > policy.lifetimeMax) errors.endDate = `Only ${num(Math.max(0, policy.lifetimeMax - before))} days left in your service.`;
   }
-  if (policy.maxSpellsMonth && !errors.endDate) {
+  if (policy.maxSpellsMonth && policy.code !== COMP_OFF_CODE && !errors.endDate) {
     const [monthly] = await rows(q, "SELECT COUNT(*) AS n FROM leave_requests WHERE user_id = ? AND leave_type_id = ? AND DATE_FORMAT(start_date, '%Y-%m') = ? AND status <> 'rejected' AND id <> ?", [targetId, policy.id, input.startDate.slice(0, 7), exceptId]);
     if (Number(monthly?.n ?? 0) >= policy.maxSpellsMonth) errors.startDate = `At most ${policy.maxSpellsMonth} times a month.`;
   }
@@ -762,7 +777,7 @@ async function checkLeave(
       if (need > left.available && !soft) {
         throw new HttpError(409, 'Not enough leave balance.', 'NO_BALANCE', { endDate: `${policy.name} uses ${policy.debitFactor} day(s) of ${base.name} for each day: ${need} needed, ${Math.max(0, left.available)} available for ${cycleLabel(cycleYear, emp.basis)}.` });
       }
-      return { requested, days, cycleYear, policy, emp, balance: left, stages, prefix, suffix, stationOk, joins };
+      return { requested, days, cycleYear, policy, emp, balance: left, stages, prefix, suffix, stationOk, joins, compOffPairs };
     }
   }
   if (policy.debited && days + extra + carry > balance.available && !soft) {
@@ -770,7 +785,7 @@ async function checkLeave(
     const hint = next ? ` After it is used up, ${next.name} can be applied for.` : '';
     throw new HttpError(409, 'Not enough leave balance.', 'NO_BALANCE', { endDate: `${policy.name}: ${days} days asked${extra ? ` + ${extra} days encashment` : ''}${carry ? ` + ${carry} holiday days joined with your earlier leave` : ''}, ${Math.max(0, balance.available)} available for ${cycleLabel(cycleYear, emp.basis)}.${hint}` });
   }
-  return { requested, days, cycleYear, policy, emp, balance, stages, prefix, suffix, stationOk, joins };
+  return { requested, days, cycleYear, policy, emp, balance, stages, prefix, suffix, stationOk, joins, compOffPairs };
 }
 
 export const cycleLabel = (year: number, basis: 'CY' | 'FY') => (basis === 'FY' ? `FY ${year}-${String(year + 1).slice(2)}` : `${year}`);
@@ -809,6 +824,25 @@ export async function compOffOptions(viewer: Viewer, query: Record<string, unkno
   try {
     const mine = (await creditsFor([person], todayInIndia(), exceptId)).get(target) ?? [];
     return { credits: mine.filter((c) => c.usedBy === null).map(({ date, in: inTime, out, hours, reason, validUntil }) => ({ date, in: inTime, out, hours, reason, validUntil })) };
+  } catch (error) {
+    missingTable(error);
+    throw error;
+  }
+}
+
+/** The restricted holidays of the Holiday Calendar the employee can still apply for: the dropdown of the Restricted Holiday form. */
+export async function restrictedHolidayOptions(viewer: Viewer, query: Record<string, unknown>, today = todayInIndia()): Promise<{ holidays: Array<{ date: string; name: string }> }> {
+  const target = viewer.role === 'administrator' ? Number(query.userId ?? 0) : viewer.role === 'general_staff' ? viewer.id : 0;
+  if (!Number.isInteger(target) || target <= 0) return { holidays: [] };
+  const exceptId = /^\d{1,20}$/.test(String(query.exceptId ?? '')) ? Number(query.exceptId) : 0;
+  try {
+    const found = await rows(pool,
+      `SELECT DATE_FORMAT(h.holiday_date, '%Y-%m-%d') AS d, h.name FROM holidays h
+        WHERE h.type = 'restricted' AND h.holiday_date BETWEEN ? AND ?
+          AND NOT EXISTS (SELECT 1 FROM leave_requests r WHERE r.user_id = ? AND r.status <> 'rejected' AND r.id <> ? AND r.start_date <= h.holiday_date AND r.end_date >= h.holiday_date)
+        ORDER BY h.holiday_date, h.name`,
+      [oldestApplicationDate(today), addDays(today, 365), target, exceptId]);
+    return { holidays: found.map((h) => ({ date: String(h.d), name: String(h.name) })) };
   } catch (error) {
     missingTable(error);
     throw error;
@@ -972,6 +1006,14 @@ async function dropLinkedStation(conn: { query: typeof pool.query }, req: Reques
   }
 }
 
+/** Replaces the worked days a leave uses (one per leave day). */
+async function saveCompOffUses(conn: { query: typeof pool.query }, requestId: number, userId: number, pairs: Pair[]): Promise<void> {
+  await conn.query('DELETE FROM leave_comp_off_uses WHERE request_id = ?', [requestId]);
+  for (const p of pairs) {
+    await conn.query('INSERT INTO leave_comp_off_uses (request_id, user_id, work_date, leave_date) VALUES (?, ?, ?, ?)', [requestId, userId, p.work, p.leave]);
+  }
+}
+
 export async function createRequest(req: Request, viewer: Viewer, body: unknown): Promise<LeaveRequest> {
   const input = parseLeaveInput(body);
   let targetId: number;
@@ -991,13 +1033,14 @@ export async function createRequest(req: Request, viewer: Viewer, body: unknown)
       const c = await checkLeave(conn, viewer, input, targetId, 0);
       const [result] = await conn.query(
         `INSERT INTO leave_requests
-           (user_id, leave_type_id, start_date, end_date, start_session, end_session, days_count, cycle_year, reason, certificate, station_leave, ltc_type, encash_days, contact_address, prefix_from, prefix_to, suffix_from, suffix_to, stages, status, applied_by, manager_id, reviewer_id, comp_off_date)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_l1', ?, ?, ?, ?)`,
+           (user_id, leave_type_id, start_date, end_date, start_session, end_session, days_count, cycle_year, reason, certificate, station_leave, ltc_type, encash_days, contact_address, prefix_from, prefix_to, suffix_from, suffix_to, stages, status, applied_by, manager_id, reviewer_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_l1', ?, ?, ?)`,
         [targetId, c.policy.id, input.startDate, input.endDate, input.startSession, input.endSession, c.days, c.cycleYear, input.reason, input.certificate ? 1 : 0, input.stationLeave ? 1 : 0,
           input.ltcType, input.encashDays, input.contactAddress || null, input.prefix?.from ?? null, input.prefix?.to ?? null, input.suffix?.from ?? null, input.suffix?.to ?? null,
-          c.stages, viewer.id, c.emp.reportingManagerId, c.emp.reviewingManagerId, input.compOffDate],
+          c.stages, viewer.id, c.emp.reportingManagerId, c.emp.reviewingManagerId],
       );
       const id = Number((result as { insertId: number }).insertId);
+      await saveCompOffUses(conn, id, targetId, c.compOffPairs);
       if (input.file) await saveCertificate(conn, id, input.file, viewer.id);
       await applyJoins(conn, req, viewer, c.joins);
       await createLinkedStation(conn, req, viewer, id, targetId, input, c);
@@ -1029,11 +1072,12 @@ export async function updateRequest(req: Request, viewer: Viewer, id: number, bo
       const c = await checkLeave(conn, viewer, input, Number(row.user_id), id);
       await conn.query(
         `UPDATE leave_requests SET leave_type_id = ?, start_date = ?, end_date = ?, start_session = ?, end_session = ?, days_count = ?, cycle_year = ?,
-           reason = ?, certificate = ?, station_leave = ?, ltc_type = ?, encash_days = ?, contact_address = ?, prefix_from = ?, prefix_to = ?, suffix_from = ?, suffix_to = ?, stages = ?, manager_id = ?, reviewer_id = ?, comp_off_date = ? WHERE id = ?`,
+           reason = ?, certificate = ?, station_leave = ?, ltc_type = ?, encash_days = ?, contact_address = ?, prefix_from = ?, prefix_to = ?, suffix_from = ?, suffix_to = ?, stages = ?, manager_id = ?, reviewer_id = ? WHERE id = ?`,
         [c.policy.id, input.startDate, input.endDate, input.startSession, input.endSession, c.days, c.cycleYear, input.reason, input.certificate ? 1 : 0, input.stationLeave ? 1 : 0,
           input.ltcType, input.encashDays, input.contactAddress || null, input.prefix?.from ?? null, input.prefix?.to ?? null, input.suffix?.from ?? null, input.suffix?.to ?? null,
-          c.stages, c.emp.reportingManagerId, c.emp.reviewingManagerId, input.compOffDate, id],
+          c.stages, c.emp.reportingManagerId, c.emp.reviewingManagerId, id],
       );
+      await saveCompOffUses(conn, id, Number(row.user_id), c.compOffPairs);
       if (input.file) await saveCertificate(conn, id, input.file, viewer.id);
       await applyJoins(conn, req, viewer, c.joins);
       await createLinkedStation(conn, req, viewer, id, Number(row.user_id), input, c);
@@ -1135,6 +1179,7 @@ export async function deleteRequest(req: Request, viewer: Viewer, id: number, re
       await writeMasterAuditSql(conn, req, { masterKey: AUDIT_KEY, recordId: id, recordLabel: label(target), action: 'DELETE', before: auditView(target), reason });
       await dropLinkedStation(conn, req, viewer, id);
       await conn.query('DELETE FROM leave_certificates WHERE request_id = ?', [id]);
+      await conn.query('DELETE FROM leave_comp_off_uses WHERE request_id = ?', [id]);
       await conn.query('DELETE FROM leave_requests WHERE id = ?', [id]);
       return target;
     });

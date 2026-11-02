@@ -60,7 +60,7 @@ const statusBy = (r: LeaveRequest) =>
     : `by ${r.actionByName ?? '—'}${r.actionByRole ? ` (${r.actionByRole})` : ''}`;
 
 const EMPTY_FORM: LeaveInput = { userId: '', leaveTypeId: '', startDate: '', endDate: '', startSession: 'full', endSession: 'full', reason: '', stationLeave: false,
-  ltcType: 'none', encashLtc: false, encashDays: 10, contactAddress: '', compOffDate: '', availPrefix: false, prefixFrom: '', prefixTo: '', availSuffix: false, suffixFrom: '', suffixTo: '', certificateFile: null };
+  ltcType: 'none', encashLtc: false, encashDays: 10, contactAddress: '', compOffDates: [], availPrefix: false, prefixFrom: '', prefixTo: '', availSuffix: false, suffixFrom: '', suffixTo: '', certificateFile: null };
 
 const shiftDate = (iso: string, days: number) => { const d = new Date(`${iso}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
 
@@ -161,7 +161,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
   const openEdit = (r: LeaveRequest) => {
     setEditing(r);
     setForm({ userId: r.userId, leaveTypeId: r.leaveTypeId, startDate: r.startDate, endDate: r.endDate, startSession: r.startSession, endSession: r.endSession, reason: r.reason, stationLeave: r.stationLeave,
-      ltcType: r.ltcType, encashLtc: r.encashDays > 0, encashDays: r.encashDays || 10, contactAddress: r.contactAddress, compOffDate: r.compOffDate ?? '',
+      ltcType: r.ltcType, encashLtc: r.encashDays > 0, encashDays: r.encashDays || 10, contactAddress: r.contactAddress, compOffDates: r.compOffDates,
       availPrefix: Boolean(r.prefixFrom), prefixFrom: r.prefixFrom ?? '', prefixTo: r.prefixTo ?? '', availSuffix: Boolean(r.suffixFrom), suffixFrom: r.suffixFrom ?? '', suffixTo: r.suffixTo ?? '', certificateFile: null });
     setFormErrors({}); setFormMessage(null); setPreview(null); setFormOpen(true);
   };
@@ -220,6 +220,17 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
     return () => { cancelled = true; };
   }, [formOpen, isCompOff, isAdmin, form.userId, editing?.id]);
 
+  // Restricted holiday: one day chosen from the restricted holidays added in the Holiday Calendar.
+  const isRh = type?.code === 'RH';
+  const [rhList, setRhList] = useState<Array<{ date: string; name: string }>>([]);
+  useEffect(() => {
+    if (!formOpen || !isRh || (isAdmin && !form.userId)) { setRhList([]); return; }
+    let cancelled = false;
+    leaveApi.restrictedHolidays({ userId: form.userId, exceptId: editing?.id })
+      .then((r) => { if (!cancelled) setRhList(r.holidays); }).catch(() => { if (!cancelled) setRhList([]); });
+    return () => { cancelled = true; };
+  }, [formOpen, isRh, isAdmin, form.userId, editing?.id]);
+
   // The server works out the days and the balance while the form is filled.
   useEffect(() => {
     if (!formOpen || !form.leaveTypeId || !form.startDate || !form.endDate || (isAdmin && !form.userId)) { setPreview(null); return; }
@@ -228,7 +239,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
       leaveApi.preview({ ...form, exceptId: editing?.id }).then((p) => { if (!cancelled) setPreview(p); }).catch(() => { if (!cancelled) setPreview(null); });
     }, 300);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [formOpen, isAdmin, editing?.id, form.userId, form.leaveTypeId, form.startDate, form.endDate, form.startSession, form.endSession, form.compOffDate]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [formOpen, isAdmin, editing?.id, form.userId, form.leaveTypeId, form.startDate, form.endDate, form.startSession, form.endSession, form.compOffDates.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The server moves the dates off weekly offs / holidays at the start or end of the leave; those days become the prefix / suffix.
   useEffect(() => {
@@ -579,7 +590,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
               <div className="sm:col-span-2 relative">
                 <Select label="Leave type" required value={baseType?.id ?? ''} searchable placeholder="Select leave type" error={formErrors.leaveTypeId}
                   onChange={(v: string) => {
-                    setForm((f) => ({ ...f, leaveTypeId: v, ltcType: 'none', encashLtc: false, availPrefix: false, availSuffix: false, stationLeave: false, compOffDate: '' }));
+                    setForm((f) => ({ ...f, leaveTypeId: v, ltcType: 'none', encashLtc: false, availPrefix: false, availSuffix: false, stationLeave: false, compOffDates: [], ...(isRh || data?.types.find((t) => t.id === v)?.code === 'RH' ? { startDate: '', endDate: '' } : {}) }));
                     setFormErrors({});
                     setFormMessage(null);
                   }}
@@ -592,20 +603,30 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
               </div>
               {isCompOff && (
                 <div className="sm:col-span-2">
-                  <Select label="Worked weekly off / holiday" required value={form.compOffDate} searchable={false} placeholder="Select the day you worked" error={formErrors.compOffDate}
-                    onChange={(v: string) => setField('compOffDate', v)}
+                  <Select label="Worked weekly off / holiday" required isMulti value={form.compOffDates} searchable={false} placeholder="Select the days you worked" error={formErrors.compOffDates}
+                    onChange={(v: string[]) => setField('compOffDates', v)}
                     options={credits.map((c) => ({ value: c.date, label: `${c.reason} (${formatDate(c.date)})`, description: `Worked ${c.in} – ${c.out} (${c.hours}h) · valid up to ${formatDate(c.validUntil)}` }))} />
                 </div>
               )}
-              <div className={isCompOff ? 'sm:col-span-2' : undefined}>
-                <AppDatePicker label={isCompOff ? 'Date of compensatory off' : 'From date (start date)'} required error={formErrors.startDate} value={form.startDate} placeholder="Select date" minDate={localDate(-15)} marks={marks}
-                  onChange={(v) => { setField('startDate', v); if (isCompOff || !form.endDate || form.endDate < v) setField('endDate', v); }} className="w-full" />
-              </div>
-              {!isCompOff && <div>
-                <AppDatePicker label="To date (end date)" required error={formErrors.endDate} value={form.endDate} placeholder="Select date" minDate={form.startDate || undefined} maxDate={lastOffDay} marks={marks}
-                  onChange={(v) => setField('endDate', v)} className="w-full" />
-              </div>}
-              {type?.halfDayAllowed && !isCompOff && (
+              {isRh ? (
+                <div className="sm:col-span-2">
+                  <Select label="Restricted holiday" required value={form.startDate} placeholder="Select the restricted holiday" error={formErrors.startDate}
+                    onChange={(v: string) => setForm((f) => ({ ...f, startDate: v, endDate: v }))}
+                    options={rhList.map((h) => ({ value: h.date, label: `${h.name} (${formatDate(h.date)})` }))} />
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <AppDatePicker label="From date (start date)" required error={formErrors.startDate} value={form.startDate} placeholder="Select date" minDate={localDate(-15)} marks={marks}
+                      onChange={(v) => { setField('startDate', v); if (!form.endDate || form.endDate < v) setField('endDate', v); }} className="w-full" />
+                  </div>
+                  <div>
+                    <AppDatePicker label="To date (end date)" required error={formErrors.endDate} value={form.endDate} placeholder="Select date" minDate={form.startDate || undefined} maxDate={lastOffDay} marks={marks}
+                      onChange={(v) => setField('endDate', v)} className="w-full" />
+                  </div>
+                </>
+              )}
+              {type?.halfDayAllowed && !isCompOff && !isRh && (
                 <>
                   <Select label="Start day" error={formErrors.startSession} value={form.startSession} searchable={false} onChange={(v: string) => setField('startSession', v as LeaveInput['startSession'])} options={sessionOptions.start} />
                   <Select label="End day" error={formErrors.endSession} value={form.endSession} searchable={false} onChange={(v: string) => setField('endSession', v as LeaveInput['endSession'])} options={sessionOptions.end} />
@@ -802,7 +823,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number }> = ({ applySign
               <div key={k}><dt className="font-semibold text-slate-500">{k}</dt><dd className="text-slate-900 font-medium">{v}</dd></div>
             ))}
             <div className="sm:col-span-2"><dt className="font-semibold text-slate-500">Reason</dt><dd className="text-slate-900 font-medium whitespace-pre-wrap">{viewing.reason}</dd></div>
-            {viewing.compOffDate && <div><dt className="font-semibold text-slate-500">Worked day used</dt><dd className="text-slate-900 font-medium">{formatDate(viewing.compOffDate)}</dd></div>}
+            {viewing.compOffDates.length > 0 && <div><dt className="font-semibold text-slate-500">Worked days used</dt><dd className="text-slate-900 font-medium">{viewing.compOffDates.map(formatDate).join(', ')}</dd></div>}
             <div><dt className="font-semibold text-slate-500">Station permission</dt><dd className="text-slate-900 font-medium">{viewing.stationLeave ? 'Station leave' : 'Not required (HQ)'}</dd></div>
             {viewing.ltcType !== 'none' && <div><dt className="font-semibold text-slate-500">LTC / Ex-India</dt><dd className="text-slate-900 font-medium">{viewing.ltcType === 'ltc' ? `Availing LTC${viewing.encashDays ? ` · encashment ${viewing.encashDays} days` : ''}` : 'Ex-India'}</dd></div>}
             {viewing.prefixFrom && <div><dt className="font-semibold text-slate-500">Prefix holidays</dt><dd className="text-slate-900 font-medium">{formatDate(viewing.prefixFrom)} to {formatDate(viewing.prefixTo ?? viewing.prefixFrom)}</dd></div>}

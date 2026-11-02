@@ -13,7 +13,7 @@ import {
 } from './groups';
 import { correctJoining, decideJoining, fitnessOf, listJoining, prepareJoining, submitJoining } from './joining';
 import {
-  LEAVE_SCOPE, applicableEmployees, isPwdUser, certificateOf, createRequest, decideRequest, deleteRequest, leaveHistory, listBalancesPage, listRequests, previewLeave, balancePreview, compOffOptions, occupiedDates, requestId, setBalance,
+  LEAVE_SCOPE, applicableEmployees, isPwdUser, certificateOf, createRequest, decideRequest, deleteRequest, leaveHistory, listBalancesPage, listRequests, previewLeave, balancePreview, compOffOptions, occupiedDates, restrictedHolidayOptions, requestId, setBalance,
   undoDecision, updateRequest,
 } from './requests';
 
@@ -115,6 +115,10 @@ router.get('/leave/requests', requireAuth, asyncHandler(async (req, res) => {
 
 router.get('/leave/balance-preview', requireAuth, asyncHandler(async (req, res) => {
   res.json(await balancePreview(viewerOf(req), req.query as Record<string, unknown>));
+}));
+
+router.get('/leave/restricted-holidays', requireAuth, asyncHandler(async (req, res) => {
+  res.json(await restrictedHolidayOptions(viewerOf(req), req.query as Record<string, unknown>));
 }));
 
 router.get('/leave/comp-off', requireAuth, asyncHandler(async (req, res) => {

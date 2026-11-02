@@ -3,7 +3,7 @@ import { pool } from '../../src/db';
 import { workedOffDays } from '../attendance/store';
 import { type Credit, creditValidUntil, shift } from './compOffRules';
 
-export { COMP_OFF_CODE, balanceFromCredits, creditProblem, creditValidUntil } from './compOffRules';
+export { COMP_OFF_CODE, RESTRICTED_CODE, balanceFromCredits, creditValidUntil, matchCredits, monthlyProblem } from './compOffRules';
 export type { Credit } from './compOffRules';
 
 /**
@@ -28,13 +28,11 @@ export async function creditsFor(people: CreditPerson[], today: string, exceptRe
   if (people.length === 0) return out;
   const worked = await workedOffDays(people, lookBack(today), today);
   const [uses] = await pool.query<RowDataPacket[]>(
-    `SELECT id, user_id, DATE_FORMAT(comp_off_date, '%Y-%m-%d') AS d, status FROM leave_requests
-      WHERE comp_off_date IS NOT NULL AND status <> 'rejected' AND id <> ? AND user_id IN (${people.map(() => '?').join(',')})`,
+    `SELECT c.request_id AS id, c.user_id, DATE_FORMAT(c.work_date, '%Y-%m-%d') AS d, r.status FROM leave_comp_off_uses c
+       JOIN leave_requests r ON r.id = c.request_id
+      WHERE r.status <> 'rejected' AND c.request_id <> ? AND c.user_id IN (${people.map(() => '?').join(',')})`,
     [exceptRequestId, ...people.map((p) => p.userId)],
-  ).catch((error: { code?: string }) => {
-    if (error?.code === 'ER_BAD_FIELD_ERROR') return [[] as RowDataPacket[]] as [RowDataPacket[], unknown]; // migration not run yet
-    throw error;
-  });
+  );
   const usedOf = new Map(uses.map((u) => [`${u.user_id}:${u.d}`, u]));
   for (const p of people) {
     const list: Credit[] = [];
@@ -57,3 +55,11 @@ export async function personById(userId: number): Promise<CreditPerson | null> {
   return r ? { userId: Number(r.id), biometricId: String(r.biometric_id), shiftId: r.shift_id ? String(r.shift_id) : null, joining: r.joining ? String(r.joining) : null } : null;
 }
 
+
+/** Compensatory off days already taken or waiting, by month of the leave day (the leave being edited is left out). */
+export async function takenByMonth(userId: number, exceptRequestId: number): Promise<Record<string, number>> {
+  const [found] = await pool.query<RowDataPacket[]>(
+    `SELECT DATE_FORMAT(c.leave_date, '%Y-%m') AS m, COUNT(*) AS n FROM leave_comp_off_uses c JOIN leave_requests r ON r.id = c.request_id
+      WHERE c.user_id = ? AND r.status <> 'rejected' AND c.request_id <> ? GROUP BY m`, [userId, exceptRequestId]);
+  return Object.fromEntries(found.map((r) => [String(r.m), Number(r.n)]));
+}
