@@ -1064,7 +1064,7 @@ export async function updateRequest(req: Request, viewer: Viewer, id: number, bo
   if (viewer.role !== 'administrator' && viewer.role !== 'general_staff') throw forbidden('Your current role cannot edit leave.');
   const input = parseLeaveInput(body);
   try {
-    return await inTransaction(async (conn) => {
+    const out = await inTransaction(async (conn) => {
       const row = await fetchOne(conn, id, true);
       if (!row || (viewer.role !== 'administrator' && Number(row.user_id) !== viewer.id)) throw notFound('Request not found.');
       if (row.linked_to) throw new HttpError(409, 'This station leave follows its leave request. Change that leave request instead.', 'LINKED');
@@ -1092,6 +1092,8 @@ export async function updateRequest(req: Request, viewer: Viewer, id: number, bo
       if (changed.length) await writeMasterAuditSql(conn, req, { masterKey: AUDIT_KEY, recordId: id, recordLabel: label(after), action: 'UPDATE', before: auditView(before), after: auditView(after) });
       return { request: after, changed };
     });
+    if (out.changed.length) notifyLeave('edited', out.request);
+    return out;
   } catch (error) {
     missingTable(error);
     throw error;
@@ -1179,8 +1181,9 @@ export async function undoDecision(req: Request, viewer: Viewer, id: number, rea
 
 export async function deleteRequest(req: Request, viewer: Viewer, id: number, reason: string | null): Promise<LeaveRequest> {
   if (viewer.role !== 'administrator' && viewer.role !== 'general_staff') throw forbidden('Your current role cannot delete leave.');
+  let managers: { managerId: string | number | null; reviewerId: string | number | null } | undefined;
   try {
-    return await inTransaction(async (conn) => {
+    const out = await inTransaction(async (conn) => {
       const row = await fetchOne(conn, id, true);
       if (!row || (viewer.role !== 'administrator' && Number(row.user_id) !== viewer.id)) throw notFound('Request not found.');
       if (row.linked_to) throw new HttpError(409, 'This station leave follows its leave request. Delete that leave request instead.', 'LINKED');
@@ -1192,8 +1195,11 @@ export async function deleteRequest(req: Request, viewer: Viewer, id: number, re
       await conn.query('DELETE FROM leave_certificates WHERE request_id = ?', [id]);
       await conn.query('DELETE FROM leave_comp_off_uses WHERE request_id = ?', [id]);
       await conn.query('DELETE FROM leave_requests WHERE id = ?', [id]);
+      managers = { managerId: row.manager_id ? Number(row.manager_id) : null, reviewerId: row.reviewer_id ? Number(row.reviewer_id) : null };
       return target;
     });
+    notifyLeave('deleted', { ...out, actionByName: null, ...managers! });
+    return out;
   } catch (error) {
     missingTable(error);
     throw error;

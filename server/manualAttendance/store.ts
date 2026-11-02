@@ -346,7 +346,7 @@ export async function updateRequest(req: Request, viewer: Viewer, id: number, bo
   if (viewer.role !== 'administrator' && viewer.role !== 'general_staff') throw forbidden('Your current role cannot edit requests.');
   const input = parseManualInput(body);
   try {
-    return await inTransaction(async (conn) => {
+    const out = await inTransaction(async (conn) => {
       const row = await fetchOne(viewer, conn, id, true);
       if (!row) throw notFound('Request not found.');
       if (viewer.role !== 'administrator' && Number(row.user_id) !== viewer.id) throw notFound('Request not found.');
@@ -371,6 +371,8 @@ export async function updateRequest(req: Request, viewer: Viewer, id: number, bo
       }
       return { request: after, changed };
     });
+    if (out.changed.length) notifyManual('edited', out.request);
+    return out;
   } catch (error) {
     missingTable(error);
     throw error;
@@ -448,7 +450,7 @@ export async function undoDecision(req: Request, viewer: Viewer, id: number, rea
 export async function deleteRequest(req: Request, viewer: Viewer, id: number, reason: string | null): Promise<ManualRequest> {
   if (viewer.role !== 'administrator' && viewer.role !== 'general_staff') throw forbidden('Your current role cannot delete requests.');
   try {
-    return await inTransaction(async (conn) => {
+    const out = await inTransaction(async (conn) => {
       const row = await fetchOne(viewer, conn, id, true);
       if (!row) throw notFound('Request not found.');
       if (viewer.role !== 'administrator' && Number(row.user_id) !== viewer.id) throw notFound('Request not found.');
@@ -459,6 +461,8 @@ export async function deleteRequest(req: Request, viewer: Viewer, id: number, re
       await conn.query('DELETE FROM manual_attendance_requests WHERE id = ?', [id]);
       return target;
     });
+    notifyManual('deleted', { ...out, actionByName: null });
+    return out;
   } catch (error) {
     missingTable(error);
     throw error;

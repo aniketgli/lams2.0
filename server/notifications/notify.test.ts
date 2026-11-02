@@ -32,6 +32,13 @@ describe('who is told', () => {
     const n = flowNotice('applied', { ...flow, managerId: null });
     expect(n.to).toEqual([1]);
   });
+  test('edited and deleted go to the reporting manager, employee copied', () => {
+    for (const stage of ['edited', 'deleted'] as const) {
+      const n = flowNotice(stage, flow);
+      expect(n.to).toEqual([2]);
+      expect(n.cc).toEqual([1]);
+    }
+  });
   test('forwarded goes to the HoD with employee and manager copied', () => {
     const n = flowNotice('forwarded', flow);
     expect(n.to).toEqual([3]);

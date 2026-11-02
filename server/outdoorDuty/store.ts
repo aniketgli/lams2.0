@@ -353,7 +353,7 @@ export async function updateRequest(req: Request, viewer: Viewer, id: number, bo
   if (viewer.role !== 'administrator' && viewer.role !== 'general_staff') throw forbidden('Your current role cannot edit outdoor duty.');
   const input = parseOdInput(body);
   try {
-    return await inTransaction(async (conn) => {
+    const out = await inTransaction(async (conn) => {
       const row = await fetchOne(conn, id, true);
       if (!row || (viewer.role !== 'administrator' && Number(row.user_id) !== viewer.id)) throw notFound('Request not found.');
       const before = toRequest(viewer, row);
@@ -374,6 +374,8 @@ export async function updateRequest(req: Request, viewer: Viewer, id: number, bo
       if (changed.length) await writeMasterAuditSql(conn, req, { masterKey: AUDIT_KEY, recordId: id, recordLabel: label(after), action: 'UPDATE', before: auditView(before), after: auditView(after) });
       return { request: after, changed };
     });
+    if (out.changed.length) notifyOd('edited', out.request);
+    return out;
   } catch (error) {
     missingTable(error);
     throw error;
@@ -440,7 +442,7 @@ export async function undoDecision(req: Request, viewer: Viewer, id: number, rea
 export async function deleteRequest(req: Request, viewer: Viewer, id: number, reason: string | null): Promise<OdRequest> {
   if (viewer.role !== 'administrator' && viewer.role !== 'general_staff') throw forbidden('Your current role cannot delete outdoor duty.');
   try {
-    return await inTransaction(async (conn) => {
+    const out = await inTransaction(async (conn) => {
       const row = await fetchOne(conn, id, true);
       if (!row || (viewer.role !== 'administrator' && Number(row.user_id) !== viewer.id)) throw notFound('Request not found.');
       const target = toRequest(viewer, row);
@@ -450,6 +452,8 @@ export async function deleteRequest(req: Request, viewer: Viewer, id: number, re
       await conn.query('DELETE FROM outdoor_duty_requests WHERE id = ?', [id]);
       return target;
     });
+    notifyOd('deleted', { ...out, actionByName: null });
+    return out;
   } catch (error) {
     missingTable(error);
     throw error;

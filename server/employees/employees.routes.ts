@@ -6,7 +6,7 @@ import { db } from '../../src/db';
 import { user_project_histories, users } from '../../src/db/schema';
 import { isAdmin, isAuthenticated, requireActiveRole, requireAuth } from '../middleware/auth.middleware';
 import { EmailService } from '../integrations/email/email.service';
-import { notifyAccountStatus, notifyWelcome } from '../notifications/events';
+import { notifyAccountStatus, notifyEmployeeDeleted, notifyEmployeeUpdated, notifyMappingBatch, notifyWelcome } from '../notifications/events';
 import { systemAccountError } from '../lib/systemAccounts';
 import { HttpError, asyncHandler, badRequest, notFound } from '../lib/http';
 import { passwordProblem } from '../lib/passwordPolicy';
@@ -127,11 +127,15 @@ router.get('/mapping/log/export-pdf', ...isAuditor, asyncHandler(async (req, res
 }));
 
 router.post('/mapping/transfer', isAdmin, asyncHandler(async (req, res) => {
-  res.status(201).json(await transferEmployees(req, req.body));
+  const result = await transferEmployees(req, req.body);
+  notifyMappingBatch(result.batchId);
+  res.status(201).json(result);
 }));
 
 router.post('/mapping/replace-manager', isAdmin, asyncHandler(async (req, res) => {
-  res.status(201).json(await replaceManager(req, req.body));
+  const result = await replaceManager(req, req.body);
+  notifyMappingBatch(result.batchId);
+  res.status(201).json(result);
 }));
 
 /** One employee's profile, laid out for their type. Allowed: self, admin, auditor, their manager / HoD. */
@@ -181,6 +185,7 @@ router.post('/employees', isAdmin, asyncHandler(async (req, res) => {
 
 router.put('/employees/:userId', isAdmin, asyncHandler(async (req, res) => {
   const { record, changed } = await updateEmployee(req, accountId(req.params.userId), req.body);
+  notifyEmployeeUpdated(record, changed);
   res.json({ employee: record, changed, message: changed.length ? 'Employee profile updated.' : 'No changes to save.' });
 }));
 
@@ -204,8 +209,9 @@ router.delete('/employees/:userId', isAdmin, asyncHandler(async (req, res) => {
   const reference = v.optionalString('reference', { max: 255 });
   v.assert('A deletion reason is required for the audit log.');
   const id = accountId(req.params.userId);
-  await deleteEmployee(req, id, reason, reference);
+  const removed = await deleteEmployee(req, id, reason, reference);
   await destroyUserSessions(id);
+  notifyEmployeeDeleted(removed, reason);
   res.json({ success: true, message: 'Employee account permanently deleted and audit log recorded.' });
 }));
 

@@ -1,7 +1,8 @@
 import type { RowDataPacket } from 'mysql2/promise';
 import { pool } from '../../src/db';
 import { EmailService } from '../integrations/email/email.service';
-import { escapeHtml } from '../lib/validate';
+import { envConfig } from '../config/env.config';
+import { logoAttachment, renderEmail, type EmailBrand } from './emailLayout';
 
 /**
  * Transaction e-mails. A flow calls `notify(...)` AFTER its database transaction has committed.
@@ -22,11 +23,15 @@ export interface Notice {
   /** One or two sentences, plain text. */
   intro: string;
   details: Detail[];
+  /** Text of the button that opens the portal (default "Open WII Portal"). */
+  buttonLabel?: string;
   /** Shown as a quoted remark (approver's comment). */
   remark?: string | null;
   /** User ids; the first of `to` that has a registered e-mail is the addressee, everyone else is copied. */
   to: Array<number | string | null | undefined>;
   cc?: Array<number | string | null | undefined>;
+  /** Addressees that are not (or no longer) active accounts, e.g. an employee whose account was just deleted. */
+  direct?: Party[];
 }
 
 const validId = (v: unknown): number | null => (/^\d{1,18}$/.test(String(v ?? '').trim()) ? Number(v) : null);
@@ -45,31 +50,35 @@ export async function loadParties(ids: Array<number | string | null | undefined>
   return found;
 }
 
-export function renderNotice(n: Pick<Notice, 'heading' | 'intro' | 'details' | 'remark'>, to: Party): { text: string; html: string } {
+export interface Brand extends EmailBrand { logo: { content: Buffer; contentType: string; filename: string } | null }
+
+/** Organization name and logo from Master Settings > Organization; a plain fallback when unavailable. */
+export async function loadBrand(): Promise<Brand> {
+  try {
+    const [list] = await pool.query<RowDataPacket[]>("SELECT org_name, logo_data FROM organization_settings WHERE id = 'default' LIMIT 1");
+    const row = list?.[0];
+    if (row) {
+      const logo = logoAttachment(row.logo_data);
+      return { orgName: String(row.org_name || 'Wildlife Institute of India'), hasLogo: Boolean(logo), logo };
+    }
+  } catch { /* fall through */ }
+  return { orgName: 'Wildlife Institute of India', hasLogo: false, logo: null };
+}
+
+export function renderNotice(n: Pick<Notice, 'heading' | 'intro' | 'details' | 'remark' | 'buttonLabel'>, to: Party, brand: EmailBrand = { orgName: 'Wildlife Institute of India', hasLogo: false }): { text: string; html: string } {
   const rows = n.details.filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== '') as Array<[string, string | number]>;
-  const text = [
-    `Dear ${to.name},`, '', n.intro, '',
-    ...rows.map(([k, v]) => `${k}: ${v}`),
-    ...(n.remark ? ['', `Remark: ${n.remark}`] : []),
-    '', 'Open the WII Portal to take action or see the details.', '', 'This is an automated message from the WII Portal.',
-  ].join('\n');
-  const html = `<div style="font-family:Arial,sans-serif;font-size:14px;color:#1e293b">
-<p>Dear ${escapeHtml(to.name)},</p>
-<h3 style="margin:16px 0 4px">${escapeHtml(n.heading)}</h3>
-<p>${escapeHtml(n.intro)}</p>
-<table style="border-collapse:collapse;margin:8px 0">${rows.map(([k, v]) =>
-    `<tr><td style="padding:3px 16px 3px 0;color:#64748b">${escapeHtml(k)}</td><td style="padding:3px 0;font-weight:600">${escapeHtml(v)}</td></tr>`).join('')}</table>
-${n.remark ? `<p style="border-left:3px solid #cbd5e1;padding-left:10px;color:#475569">${escapeHtml(n.remark)}</p>` : ''}
-<p>Open the WII Portal to take action or see the details.</p>
-<p style="color:#94a3b8;font-size:12px">This is an automated message from the WII Portal.</p></div>`;
-  return { text, html };
+  return renderEmail({
+    title: n.heading, greetingName: to.name, intro: n.intro, rows, remark: n.remark,
+    button: envConfig.appUrl ? { label: n.buttonLabel || 'Open WII Portal', url: envConfig.appUrl } : null,
+    brand, year: new Date().getFullYear(),
+  });
 }
 
 /** Sends one notice. Resolves with the number of mails handed to the mail service; never rejects. */
 export async function sendNotice(n: Notice): Promise<number> {
   try {
     const people = await loadParties([...n.to, ...(n.cc ?? [])]);
-    const toParties = n.to.map(validId).filter((x): x is number => x !== null).map((id) => people.get(id)).filter((p): p is Party => Boolean(p));
+    const toParties = [...(n.direct ?? []), ...n.to.map(validId).filter((x): x is number => x !== null).map((id) => people.get(id)).filter((p): p is Party => Boolean(p))];
     if (!toParties.length) return 0;
     const seen = new Set<string>();
     const unique = (list: Party[]) => list.filter((p) => !seen.has(p.email.toLowerCase()) && seen.add(p.email.toLowerCase()));
@@ -77,11 +86,13 @@ export async function sendNotice(n: Notice): Promise<number> {
     const copied = unique((n.cc ?? []).map(validId).filter((x): x is number => x !== null).map((id) => people.get(id)).filter((p): p is Party => Boolean(p)));
     // One mail per addressee: every addressee is a direct "to"; the copied people go on each.
     let sent = 0;
+    const brand = await loadBrand();
     for (const addressee of mainTo) {
-      const { text, html } = renderNotice(n, addressee);
+      const { text, html } = renderNotice(n, addressee, brand);
       await EmailService.sendEmail({
         to: addressee.email, toName: addressee.name, cc: copied.map((p) => p.email), subject: n.subject, text, html,
         category: 'NOTIFICATION', eventType: n.event, referenceId: n.referenceId,
+        attachments: brand.logo ? [{ ...brand.logo, cid: 'org-logo' }] : undefined,
       });
       sent += 1;
     }
