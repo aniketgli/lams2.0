@@ -6,6 +6,7 @@ import { DataTable } from '../../../../shared/components/Table';
 import type { ColumnDef } from '../../../../shared/components/Table';
 import { FilterToolbar } from '../../../../shared/components/FilterToolbar';
 import { AppSelect } from '../../../../shared/components/AppSelect';
+import { MultiSelectFilter } from '../../../../shared/components/MultiSelectFilter';
 import { AppDatePicker } from '../../../../shared/components/AppDatePicker';
 import { Modal } from '../../../../shared/components/Modal';
 import { downloadTablePdf, printedAt } from '../../../../shared/services/printTable';
@@ -333,7 +334,9 @@ export const MappingPanel: React.FC<{
   onChanged: () => void;
   /** Shows a short message (the page's toast). */
   notify: (message: string) => void;
-}> = ({ order, canChange, onChanged, notify }) => {
+  /** Auditor's Register / Activity log switch, shown at the left of the toolbar. */
+  toolbarStart?: React.ReactNode;
+}> = ({ order, canChange, onChanged, notify, toolbarStart }) => {
   const [filters, setFilters] = useState(EMPTY);
   const [applied, setApplied] = useState(EMPTY);
   const [rows, setRows] = useState<MappingLogRow[]>([]);
@@ -446,6 +449,7 @@ export const MappingPanel: React.FC<{
   return (
     <div className="space-y-4">
       <FilterToolbar
+        start={toolbarStart}
         exports={{
           onCsv: () => void exportCsv(), onPdf: () => void exportPdf(), busy: exporting, disabled: rows.length === 0,
           csvTitle: 'Download the filtered register as CSV (the download is logged)',
@@ -454,8 +458,8 @@ export const MappingPanel: React.FC<{
         search={{ value: filters.search, onChange: (v) => set('search', v), placeholder: 'Employee, biometric ID, department, manager…' }}
         onReset={filtered ? () => setFilters(EMPTY) : null}
         filters={[
-          <AppSelect key="kind" value={filters.kind} options={KIND_OPTIONS} onChange={(v) => set('kind', v)} />,
-          <AppSelect key="dept" value={filters.department} options={[{ value: 'all', label: 'All departments' }, ...departmentNames.map((d) => ({ value: d, label: d }))]} onChange={(v) => set('department', v)} searchable />,
+          <MultiSelectFilter single key="kind" label="Order type" options={KIND_OPTIONS.filter((k) => k.value !== 'all')} selectedValues={[filters.kind]} onChange={(v) => set('kind', v[0] ?? 'all')} />,
+          <MultiSelectFilter single key="dept" label="Department" options={departmentNames.map((d) => ({ value: d, label: d }))} selectedValues={[filters.department]} onChange={(v) => set('department', v[0] ?? 'all')} />,
           <AppDatePicker key="from" value={filters.from} maxDate={filters.to || undefined} placeholder="From date" onChange={(v) => set('from', v)} className="w-full" />,
           <AppDatePicker key="to" value={filters.to} minDate={filters.from || undefined} placeholder="To date" onChange={(v) => set('to', v)} className="w-full" />,
         ]}

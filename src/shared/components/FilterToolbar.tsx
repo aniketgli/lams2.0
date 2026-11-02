@@ -88,7 +88,8 @@ export function FilterToolbar<V extends string = string>({ start, exports, searc
       )}
 
       {shownFilters.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2">
+        // Every filter of a page sits in one row (it scrolls sideways on a narrow screen instead of wrapping onto a second row).
+        <div className="grid grid-flow-col auto-cols-[minmax(9.5rem,1fr)] gap-2 overflow-x-auto pb-0.5">
           {shownFilters.map((f, i) => <div key={i} className="min-w-0">{f}</div>)}
         </div>
       )}

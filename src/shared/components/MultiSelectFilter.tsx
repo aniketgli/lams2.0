@@ -18,6 +18,8 @@ export interface MultiSelectFilterProps {
   className?: string;
   allLabel?: string;
   align?: 'left' | 'right' | 'auto';
+  /** One value at a time (the screen's server query takes one): choosing an option selects only it and closes the list. */
+  single?: boolean;
 }
 
 export const matchesMultiSelect = (
@@ -40,7 +42,8 @@ export const MultiSelectFilter: React.FC<MultiSelectFilterProps> = ({
   placeholder,
   className = '',
   allLabel = 'All',
-  align = 'auto'
+  align = 'auto',
+  single = false
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -161,6 +164,11 @@ export const MultiSelectFilter: React.FC<MultiSelectFilterProps> = ({
   );
 
   const handleToggleOption = (val: string) => {
+    if (single) {
+      onChange([val]);
+      setIsOpen(false);
+      return;
+    }
     if (val === 'all') {
       onChange(['all']);
       return;
@@ -209,7 +217,7 @@ export const MultiSelectFilter: React.FC<MultiSelectFilterProps> = ({
             ? 'border-blue-500 bg-blue-50/50 text-blue-950 font-bold ring-1 ring-blue-500/20'
             : 'border-slate-300 text-slate-800 font-semibold hover:border-slate-400'
         } rounded-xl pl-8 pr-7 py-1.5 text-xs focus:outline-none cursor-pointer transition-all shadow-2xs text-left truncate flex items-center justify-between group h-9`}
-        title={`${label}: Click to filter by multiple options`}
+        title={single ? `${label}: Click to choose` : `${label}: Click to filter by multiple options`}
       >
         <span className="truncate flex items-center gap-1.5 text-xs">
           {getDisplayText()}

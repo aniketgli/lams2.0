@@ -443,13 +443,6 @@ export const ManualAttendanceView: React.FC = () => {
             search={{ value: search, onChange: setSearch, placeholder: teamView ? 'Search employee, reason, comment…' : 'Search date, reason, comment…' }}
             onReset={filtered ? resetAll : null}
             filters={[
-              isAudit && (
-                <div key="range" className="flex items-center gap-1.5">
-                  <div className="w-36"><AppDatePicker size="sm" placeholder="From date" value={from} onChange={setFrom} /></div>
-                  <span className="text-slate-300 font-bold">—</span>
-                  <div className="w-36"><AppDatePicker size="sm" placeholder="To date" value={to} onChange={setTo} isRightColumn /></div>
-                </div>
-              ),
               teamView && <MultiSelectFilter key="emp" label="Employee" options={employeeOptions} selectedValues={employees} onChange={setEmployees} />,
               teamView && <MultiSelectFilter key="dept" label="Department" options={opt(distinct((r) => r.department))} selectedValues={departments} onChange={setDepartments} />,
               <MultiSelectFilter key="cat" label="Category" options={opt(data?.categories ?? distinct((r) => r.category))} selectedValues={categories} onChange={setCategories} />,
