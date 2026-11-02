@@ -29,7 +29,7 @@ export const WIILogo: React.FC<WIILogoProps> = ({
 
   const effectiveLogoUrl = customLogoUrl || branding?.logoUrl || '';
   const orgHindiName = branding?.orgHindiName || '';
-  const orgName = branding?.orgName || 'Enterprise Portal';
+  const orgName = branding?.orgName || 'WII Portal';
 
   // Alignment classes mapping
   const justifyClass = align === 'center' ? 'justify-center' : align === 'right' ? 'justify-end' : 'justify-start';

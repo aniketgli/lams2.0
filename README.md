@@ -1,4 +1,4 @@
-# WII Enterprise Portal — LAMS 2.0 (HRMS)
+# WII Portal — LAMS 2.0 (HRMS)
 
 Leave & Attendance Management for the Wildlife Institute of India, inside the WII Enterprise Suite lobby.
 

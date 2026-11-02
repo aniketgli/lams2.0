@@ -85,6 +85,8 @@ export class EmailService {
         cc: copies.cc.length ? copies.cc : undefined,
         bcc: copies.bcc.length ? copies.bcc : undefined,
         replyTo: config.replyTo || undefined,
+        // System-generated: well-behaved mail servers / auto-responders (vacation replies, out-of-office) must not answer it (RFC 3834).
+        headers: { 'Auto-Submitted': 'auto-generated', 'X-Auto-Response-Suppress': 'All', Precedence: 'bulk' },
         subject,
         text: text || undefined,
         html: html || undefined,

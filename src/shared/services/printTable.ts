@@ -78,7 +78,7 @@ export function buildTablePdf({ title, subtitle = [], headers, rows, landscape =
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7.5);
       doc.setTextColor(100, 116, 139);
-      doc.text('Wildlife Institute of India · WII Enterprise Portal', margin, pageHeight - 7);
+      doc.text('Wildlife Institute of India · WII Portal', margin, pageHeight - 7);
       doc.text(`Page ${page}`, pageWidth - margin, pageHeight - 7, { align: 'right' });
     },
   });

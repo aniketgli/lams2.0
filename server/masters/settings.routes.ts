@@ -543,7 +543,7 @@ router.post('/organization/email-settings/test', ...canEdit, asyncHandler(async 
   const result = await EmailService.sendEmail({
     to,
     toName: req.auth!.account.name,
-    subject: 'Test email from the WII Enterprise Portal',
+    subject: 'Test email from the WII Portal',
     text: `This is a test email sent from Master Settings > Organization by ${req.auth!.account.name}.\n\nIf you received it, notification emails are set up correctly.`,
     html: `<p>This is a test email sent from <strong>Master Settings &gt; Organization</strong>.</p><p>If you received it, notification emails are set up correctly.</p>`,
     category: 'SECURITY', // never copied to CC/BCC
