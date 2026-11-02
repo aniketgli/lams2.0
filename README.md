@@ -1,4 +1,4 @@
-# WII Enterprise Portal — LAMS 2.0 (HRMS)
+# WII Portal — LAMS 2.0 (HRMS)
 
 Leave & Attendance Management for the Wildlife Institute of India, inside the WII Enterprise Suite lobby.
 
@@ -52,6 +52,12 @@ mysql lams_db < migrations/20261118_leave_joining_reports.sql   # Joining report
 mysql lams_db < migrations/20261119_scl_like_cl.sql   # SCL takes the leave form rules of CL; only PwD can take it
 mysql lams_db < migrations/20261120_bootstrap_users.sql   # accounts erp@wii.gov.in (Administrator) and erpauditor@wii.gov.in (Auditor), password 123456, change at first sign-in
 mysql lams_db < migrations/20261121_report_schedules.sql   # scheduled report emails
+mysql lams_db < migrations/20261122_notification_recipient_scope.sql   # CC / BCC per transaction
+mysql lams_db < migrations/20261123_system_accounts.sql   # marks erp@ / erpauditor@ as protected system accounts
+mysql lams_db < migrations/20261124_comp_off.sql   # compensatory off from weekend / holiday work
+mysql lams_db < migrations/20261125_comp_off_days.sql   # several compensatory off days in one leave
+mysql lams_db < migrations/20261126_cl_half_day.sql   # CL / SCL can be taken as half day
+mysql lams_db < migrations/20261127_account_settings_collation.sql   # fixes 'Illegal mix of collations' on add employee
 mysql lams_db < migrations/20261031_leave_requests.sql
 npm run dev                   # http://localhost:3000
 npm run lint                  # type-check

@@ -34,8 +34,8 @@ export const MAX_OD_DAYS = 60;
 export const MAX_RANGE_DAYS = 400;
 
 export const OD_SCOPE: ActivityScope = {
-  keys: ['outdoor_duty', 'outdoor_duty_export'],
-  areaLabels: { outdoor_duty: 'Outdoor duty', outdoor_duty_export: 'Log download' },
+  keys: ['outdoor_duty', 'outdoor_duty_export', 'outdoor_duty_data_export'],
+  areaLabels: { outdoor_duty: 'Outdoor duty', outdoor_duty_export: 'Log download', outdoor_duty_data_export: 'Data download' },
   actionLabels: { CREATE: 'Applied', UPDATE: 'Edited', STATUS: 'Approved / rejected', DELETE: 'Deleted' },
   exportKey: 'outdoor_duty_export',
   title: 'Outdoor duty activity log',
@@ -468,6 +468,6 @@ export async function applicableEmployees(viewer: Viewer): Promise<{ id: string;
   const found = await rows(pool,
     `SELECT u.id, u.biometric_id, u.name, p.designation FROM users u
        LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id
-      WHERE LOWER(u.status) = 'active' ORDER BY u.name`);
+      WHERE LOWER(u.status) = 'active' AND u.is_system = 0 ORDER BY u.name`);
   return found.map((r) => ({ id: String(r.id), biometricId: String(r.biometric_id), name: String(r.name), designation: String(r.designation ?? '') }));
 }

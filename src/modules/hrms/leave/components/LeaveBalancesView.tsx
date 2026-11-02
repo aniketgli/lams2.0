@@ -6,6 +6,7 @@ import { MultiSelectFilter, matchesMultiSelect } from '../../../../shared/compon
 import { FilterToolbar } from '../../../../shared/components/FilterToolbar';
 import { ApiError } from '../../../../shared/services/api';
 import { downloadCsvText, downloadTablePdf, printedAt, toCsvText } from '../../../../shared/services/printTable';
+import { logThenDownload } from '../../../../shared/services/downloadAudit';
 import { NoticeBar, useNotice } from '../../master/components/masterUi';
 import { BalanceList, BalanceRow, leaveApi } from '../leaveApi';
 import { LeaveImportModal } from './LeaveImportModal';
@@ -18,7 +19,7 @@ import { LeaveImportModal } from './LeaveImportModal';
 const PAGE_SIZES = [25, 50, 100];
 const days = (n: number) => String(Math.round(n * 10) / 10);
 
-export const LeaveBalancesView: React.FC<{ importSignal?: number }> = ({ importSignal = 0 }) => {
+export const LeaveBalancesView: React.FC<{ importSignal?: number; toolbarStart?: React.ReactNode }> = ({ importSignal = 0, toolbarStart }) => {
   const { currentUser } = useApp();
   const role = currentUser.role;
   const isAdmin = role === 'administrator';
@@ -122,17 +123,20 @@ export const LeaveBalancesView: React.FC<{ importSignal?: number }> = ({ importS
 
       <FilterToolbar
         start={(
-          <div className="w-44">
+          <div className="flex flex-wrap items-center gap-2">
+            {toolbarStart}
+            <div className="w-44">
             <Select value={String(year)} searchable={false} onChange={(v: string) => setYear(Number(v))}
               options={(data?.years ?? [year]).map((y) => ({ label: `CY ${y} · FY ${y}-${String(y + 1).slice(2)}`, value: String(y) }))} />
+            </div>
           </div>
         )}
         exports={cards ? null : {
-          onCsv: () => downloadCsvText(toCsvText(exportHeaders, exportRows()), fileName),
-          onPdf: () => downloadTablePdf({
+          onCsv: () => void logThenDownload('leave_balances', 'csv', visible.length, `Leave year ${year}`, () => downloadCsvText(toCsvText(exportHeaders, exportRows()), fileName), setError),
+          onPdf: () => void logThenDownload('leave_balances', 'pdf', visible.length, `Leave year ${year}`, () => downloadTablePdf({
             title: `Leave balances ${year}`, subtitle: [`Generated ${printedAt(new Date().toISOString())}`], headers: exportHeaders, rows: exportRows(), fileName,
             columnWidths: [6, 12, 10, 6, ...types.flatMap(() => [4, 4, 4, 4])],
-          }),
+          }), setError),
           disabled: visible.length === 0,
           csvTitle: 'Download the balances shown below as CSV', pdfTitle: 'Download the balances shown below as PDF',
         }}

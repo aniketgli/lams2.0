@@ -15,6 +15,8 @@ export const users = mysqlTable('users', {
   lastUpdateSummary: text('last_update_summary'),
   /** 1 = must set their own password before using the portal (new account or admin reset). */
   mustChangePassword: boolean('must_change_password').notNull().default(false),
+  /** 1 = fixed system account (Administrator / Auditor): never edited, deleted or listed outside the Profiles table. */
+  isSystem: boolean('is_system').notNull().default(false),
   passwordChangedAt: timestamp('password_changed_at'),
 });
 
@@ -291,6 +293,7 @@ export const lookup_values = mysqlTable('lookup_values', {
 export const notification_recipients = mysqlTable('notification_recipients', {
   id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
   recipientType: varchar('recipient_type', { length: 3 }).notNull(),
+  scope: varchar('scope', { length: 16 }).notNull().default('ALL'),
   email: varchar('email', { length: 254 }).notNull(),
   name: varchar('name', { length: 255 }),
   status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),

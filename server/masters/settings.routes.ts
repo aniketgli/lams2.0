@@ -7,7 +7,7 @@ import { HttpError, asyncHandler, badRequest, notFound } from '../lib/http';
 import { PATTERNS, Validator } from '../lib/validate';
 import { requireActiveRole, requireAuth } from '../middleware/auth.middleware';
 import { writeMasterAudit } from './audit';
-import { invalidateRecipientCache, toRecipient } from './notificationRecipients';
+import { RECIPIENT_SCOPES, invalidateRecipientCache, toRecipient } from './notificationRecipients';
 import {
   EmailSettingsView, emailSettingsView, encryptSecret, invalidateEmailSettingsCache, loadEmailSettingsRow, decryptSecret,
 } from './emailSettings';
@@ -362,22 +362,23 @@ router.put('/organization', ...canEdit, asyncHandler(async (req, res) => {
 function validateRecipient(body: unknown) {
   const v = new Validator(body);
   const type = v.oneOf('type', ['CC', 'BCC'] as const);
+  const scope = v.oneOf('scope', RECIPIENT_SCOPES, false) ?? 'ALL';
   const email = v.string('email', { max: 254, pattern: PATTERNS.email, patternMessage: 'Enter a valid email address.' }).toLowerCase();
   const name = v.optionalString('name', { max: 255 });
   const status = v.oneOf('status', ['ACTIVE', 'INACTIVE'] as const, false) ?? 'ACTIVE';
   v.assert();
-  return { recipientType: type!, email, name, status };
+  return { recipientType: type!, scope, email, name, status };
 }
 
-async function assertUniqueEmail(email: string, exceptId?: number) {
+async function assertUniqueEmail(email: string, scope: string, exceptId?: number) {
   const [row] = await db.select({ id: notification_recipients.id, type: notification_recipients.recipientType })
-    .from(notification_recipients).where(eq(notification_recipients.email, email));
+    .from(notification_recipients).where(and(eq(notification_recipients.email, email), eq(notification_recipients.scope, scope)));
   if (row && row.id !== exceptId) {
-    throw badRequest('Please correct the highlighted fields.', { email: `This email is already in the ${row.type} list.` });
+    throw badRequest('Please correct the highlighted fields.', { email: `This email is already in the ${row.type} list for this transaction.` });
   }
 }
 
-const recipientLabel = (r: { email: string; type: string }) => `${r.type}: ${r.email}`;
+const recipientLabel = (r: { email: string; type: string; scope: string }) => `${r.type}: ${r.email}${r.scope === 'ALL' ? '' : ` (${r.scope})`}`;
 
 router.get('/organization/notification-recipients', ...canView, asyncHandler(async (_req, res) => {
   const rows = await db.select().from(notification_recipients).orderBy(notification_recipients.recipientType, notification_recipients.email);
@@ -386,7 +387,7 @@ router.get('/organization/notification-recipients', ...canView, asyncHandler(asy
 
 router.post('/organization/notification-recipients', ...canEdit, asyncHandler(async (req, res) => {
   const input = validateRecipient(req.body);
-  await assertUniqueEmail(input.email);
+  await assertUniqueEmail(input.email, input.scope);
   const saved = await db.transaction(async (tx) => {
     const [result] = await tx.insert(notification_recipients).values(input);
     const [row] = await tx.select().from(notification_recipients).where(eq(notification_recipients.id, Number(result.insertId)));
@@ -403,7 +404,7 @@ router.put('/organization/notification-recipients/:id', ...canEdit, asyncHandler
   const [existing] = await db.select().from(notification_recipients).where(eq(notification_recipients.id, id));
   if (!existing) throw notFound('Recipient not found.');
   const input = validateRecipient(req.body);
-  await assertUniqueEmail(input.email, id);
+  await assertUniqueEmail(input.email, input.scope, id);
   const before = toRecipient(existing);
   const saved = await db.transaction(async (tx) => {
     await tx.update(notification_recipients).set(input).where(eq(notification_recipients.id, id));
@@ -411,7 +412,7 @@ router.put('/organization/notification-recipients/:id', ...canEdit, asyncHandler
     const recipient = toRecipient(row);
     await writeMasterAudit(tx, req, {
       masterKey: 'notification_recipient', recordId: recipient.id, recordLabel: recipientLabel(recipient),
-      action: before.status !== recipient.status && before.email === recipient.email && before.type === recipient.type ? 'STATUS' : 'UPDATE',
+      action: before.status !== recipient.status && before.email === recipient.email && before.type === recipient.type && before.scope === recipient.scope ? 'STATUS' : 'UPDATE',
       before, after: recipient, reason: reasonOf(req.body),
     });
     return recipient;
@@ -542,7 +543,7 @@ router.post('/organization/email-settings/test', ...canEdit, asyncHandler(async 
   const result = await EmailService.sendEmail({
     to,
     toName: req.auth!.account.name,
-    subject: 'Test email from the WII Enterprise Portal',
+    subject: 'Test email from the WII Portal',
     text: `This is a test email sent from Master Settings > Organization by ${req.auth!.account.name}.\n\nIf you received it, notification emails are set up correctly.`,
     html: `<p>This is a test email sent from <strong>Master Settings &gt; Organization</strong>.</p><p>If you received it, notification emails are set up correctly.</p>`,
     category: 'SECURITY', // never copied to CC/BCC

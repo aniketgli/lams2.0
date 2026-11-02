@@ -36,7 +36,7 @@ async function loadRow(q: Querier): Promise<RowDataPacket | null> {
   try {
     const [rows] = await q.query<RowDataPacket[]>(
       `SELECT s.default_password_hash, s.updated_at, s.updated_by, u.name AS updated_by_name
-         FROM account_settings s LEFT JOIN users u ON u.biometric_id = s.updated_by
+         FROM account_settings s LEFT JOIN users u ON u.biometric_id = s.updated_by COLLATE utf8mb4_unicode_ci
         WHERE s.id = ? LIMIT 1`,
       [ACCOUNT_SETTINGS_ID],
     );

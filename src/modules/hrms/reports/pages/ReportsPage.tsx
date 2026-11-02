@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Clock, FileBarChart, History, Mail, Pause, Pencil, Play, Plus, Send, Trash2, XCircle } from 'lucide-react';
-import { PageHeader } from '../../../../shared/components/PageHeader';
+import { CheckCircle2, Clock, FileBarChart, History, Pause, Pencil, Play, Plus, Send, Trash2, XCircle } from 'lucide-react';
+import { PageHeader, PageHeaderButton } from '../../../../shared/components/PageHeader';
+import { SegmentedControl } from '../../../../shared/components/SegmentedControl';
+import { PAGE_ICONS } from '../../hrmsPages';
 import { Button, DataTable, Input, Modal, Select } from '../../../../shared/components';
 import type { ColumnDef } from '../../../../shared/components';
 import { FilterToolbar } from '../../../../shared/components/FilterToolbar';
@@ -9,6 +11,9 @@ import { Checkbox } from '../../../../shared/components/forms/Checkbox';
 import { ApiError } from '../../../../shared/services/api';
 import { actionBtn } from '../../../../shared/components/actionStyles';
 import { ConfirmDialog, NoticeBar, formatDateTime, useNotice } from '../../master/components/masterUi';
+import { useApp } from '../../../../context/AppContext';
+import { ActivityLogPanel, ActivitySource } from '../../../../shared/components/ActivityLogPanel';
+import { activityEndpoints } from '../../../../shared/services/activityApi';
 import { ReportRun, ReportSchedule, ReportSchedules, ScheduleInput, reportsApi } from '../reportsApi';
 
 /**
@@ -25,6 +30,16 @@ const RESULT: Record<string, { label: string; pill: string }> = {
   failed: { label: 'Failed', pill: 'bg-error-subtle text-error border-error-border' },
   no_recipients: { label: 'No one to send to', pill: 'bg-warning-subtle text-warning border-warning-border' },
 };
+const REPORT_ACTIVITY: ActivitySource = {
+  title: 'Reports activity log',
+  recordLabel: 'Schedule',
+  searchPlaceholder: 'Schedule, done by, reason…',
+  areas: [{ value: 'report_schedule', label: 'Report schedule' }, { value: 'report_export', label: 'Log download' }],
+  actions: ['CREATE', 'UPDATE', 'STATUS', 'DELETE', 'EXPORT'],
+  actionLabels: { CREATE: 'Added', UPDATE: 'Changed / sent now', STATUS: 'Paused / resumed', DELETE: 'Deleted', EXPORT: 'Downloaded' },
+  ...activityEndpoints('/hrms/reports/activity', 'WII_Reports_Activity.csv'),
+};
+
 const blank = (): ScheduleInput => ({ name: '', reportKey: '', frequency: 'daily', weekday: 1, monthDay: 1, sendTime: '', formats: ['pdf'], userIds: [], roles: [], status: 'active' });
 
 const formatDay = (iso: string | null) => {
@@ -34,6 +49,10 @@ const formatDay = (iso: string | null) => {
 };
 
 export const ReportsPage: React.FC = () => {
+  const { currentUser } = useApp();
+  // The auditor reads the schedules and their send history and has the activity log; only the administrator changes anything.
+  const readOnly = currentUser.role === 'audit';
+  const [view, setView] = useState<'schedules' | 'activity'>('schedules');
   const [data, setData] = useState<ReportSchedules>({ schedules: [], reports: [], roles: [], people: [] });
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | undefined>();
@@ -208,13 +227,13 @@ export const ReportsPage: React.FC = () => {
       key: 'actions', header: 'Actions', width: '14%', align: 'center',
       render: (s) => (
         <div className="flex items-center justify-center gap-1">
-          <button type="button" onClick={() => void sendNow(s)} disabled={busyId !== null} title="Send now" aria-label={`Send ${s.name} now`} className={actionBtn('success')}><Send className="w-3.5 h-3.5" /></button>
+          {!readOnly && <button type="button" onClick={() => void sendNow(s)} disabled={busyId !== null} title="Send now" aria-label={`Send ${s.name} now`} className={actionBtn('success')}><Send className="w-3.5 h-3.5" /></button>}
           <button type="button" onClick={() => openHistory(s)} title="Send history" aria-label={`History of ${s.name}`} className={actionBtn('neutral')}><History className="w-3.5 h-3.5" /></button>
-          <button type="button" onClick={() => void toggle(s)} disabled={busyId !== null} title={s.status === 'active' ? 'Pause' : 'Resume'} aria-label={`${s.status === 'active' ? 'Pause' : 'Resume'} ${s.name}`} className={actionBtn('warning')}>
+          {!readOnly && <button type="button" onClick={() => void toggle(s)} disabled={busyId !== null} title={s.status === 'active' ? 'Pause' : 'Resume'} aria-label={`${s.status === 'active' ? 'Pause' : 'Resume'} ${s.name}`} className={actionBtn('warning')}>
             {s.status === 'active' ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-          </button>
-          <button type="button" onClick={() => open(s)} title="Edit" aria-label={`Edit ${s.name}`} className={actionBtn('neutral')}><Pencil className="w-3.5 h-3.5" /></button>
-          <button type="button" onClick={() => { setDeleteError(null); setDeleting(s); }} title="Delete" aria-label={`Delete ${s.name}`} className={actionBtn('danger')}><Trash2 className="w-3.5 h-3.5" /></button>
+          </button>}
+          {!readOnly && <button type="button" onClick={() => open(s)} title="Edit" aria-label={`Edit ${s.name}`} className={actionBtn('neutral')}><Pencil className="w-3.5 h-3.5" /></button>}
+          {!readOnly && <button type="button" onClick={() => { setDeleteError(null); setDeleting(s); }} title="Delete" aria-label={`Delete ${s.name}`} className={actionBtn('danger')}><Trash2 className="w-3.5 h-3.5" /></button>}
         </div>
       ),
     },
@@ -222,17 +241,27 @@ export const ReportsPage: React.FC = () => {
 
   const chosenReport = data.reports.find((r) => r.key === form?.reportKey);
 
+  const viewSwitch = readOnly ? (
+    <SegmentedControl ariaLabel="Reports views" value={view} onChange={setView} options={[{ value: 'schedules', label: 'Schedules' }, { value: 'activity', label: 'Activity log' }]} />
+  ) : null;
+
+  if (readOnly && view === 'activity') {
+    return (
+      <div className="space-y-5 pb-6">
+        <PageHeader icon={PAGE_ICONS.reports} title="Reports" subtitle="The log of who changed, sent or downloaded the scheduled reports" />
+        <ActivityLogPanel source={REPORT_ACTIVITY} toolbarStart={viewSwitch} />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5 pb-6">
       <PageHeader
-        icon={Mail}
+        icon={PAGE_ICONS.reports}
         title="Reports"
-        subtitle="Choose which report is emailed to whom, how often and at what time"
-        rightAction={(
-          <button type="button" onClick={() => open(null)}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-xl inline-flex items-center gap-1.5 shadow-2xs cursor-pointer">
-            <Plus className="w-4 h-4" /> Add schedule
-          </button>
+        subtitle={readOnly ? 'The report schedules, who receives them and when they were sent' : 'Choose which report is emailed to whom, how often and at what time'}
+        rightAction={readOnly ? undefined : (
+          <PageHeaderButton icon={Plus} onClick={() => open(null)}>Add schedule</PageHeaderButton>
         )}
       />
       <NoticeBar notice={notice} onClose={clearNotice} />
@@ -249,10 +278,10 @@ export const ReportsPage: React.FC = () => {
         ))}
       </div>
 
-      <FilterToolbar search={{ value: search, onChange: setSearch, placeholder: 'Search schedule, report, person…' }} onReset={search ? () => setSearch('') : null} />
+      <FilterToolbar start={viewSwitch} search={{ value: search, onChange: setSearch, placeholder: 'Search schedule, report, person…' }} onReset={search ? () => setSearch('') : null} />
 
       <DataTable columns={columns} data={shown} loading={loading} error={loadError} keyExtractor={(s) => s.id}
-        emptyTitle="No report schedules yet" emptyDescription={data.schedules.length ? 'Change the search.' : 'Add the first schedule to have a report emailed on time.'} />
+        emptyTitle="No report schedules yet" emptyDescription={data.schedules.length ? 'Change the search.' : readOnly ? 'No report has been scheduled yet.' : 'Add the first schedule to have a report emailed on time.'} />
 
       <Modal
         isOpen={Boolean(form)}

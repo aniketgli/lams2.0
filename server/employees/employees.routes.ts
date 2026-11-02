@@ -7,6 +7,7 @@ import { user_project_histories, users } from '../../src/db/schema';
 import { isAdmin, isAuthenticated, requireActiveRole, requireAuth } from '../middleware/auth.middleware';
 import { EmailService } from '../integrations/email/email.service';
 import { notifyAccountStatus, notifyWelcome } from '../notifications/events';
+import { systemAccountError } from '../lib/systemAccounts';
 import { HttpError, asyncHandler, badRequest, notFound } from '../lib/http';
 import { passwordProblem } from '../lib/passwordPolicy';
 import { defaultPasswordHash } from '../masters/accountSettings';
@@ -20,6 +21,8 @@ import {
 import { deleteOwnPhoto, deletePhotoFor, loadPhoto, saveOwnPhoto, savePhotoFor } from './photos';
 import { activityCsv, activityTable, employeeDirectoryCsv, employeeDirectoryTable, listActivity, parseActivityFilter } from './activity';
 import { getMyProfile, getProfileFor } from './myProfile';
+import { listMappingLog, mappingCsv, mappingData, mappingTable, replaceManager, transferEmployees } from './mapping';
+import { parseLogFilter } from './mappingRules';
 
 /**
  * Employee accounts and profiles (/api/hrms/employees). Reading is open to
@@ -104,6 +107,33 @@ router.get('/employees/activity.csv', ...isAuditor, asyncHandler(async (req, res
   sendCsv(res, await activityCsv(req, parseActivityFilter(req.query as Record<string, unknown>)));
 }));
 
+// ---------------------------------------------------------------------------
+// Employees Mapping: transfers and manager / HoD changes. Read: administrator and auditor; change: administrator.
+// ---------------------------------------------------------------------------
+router.get('/mapping/data', ...isAuditor, asyncHandler(async (_req, res) => {
+  res.json(await mappingData());
+}));
+
+router.get('/mapping/log', ...isAuditor, asyncHandler(async (req, res) => {
+  res.json(await listMappingLog(parseLogFilter(req.query as Record<string, unknown>)));
+}));
+
+router.get('/mapping/log.csv', ...isAuditor, asyncHandler(async (req, res) => {
+  sendCsv(res, await mappingCsv(req, parseLogFilter(req.query as Record<string, unknown>)));
+}));
+
+router.get('/mapping/log/export-pdf', ...isAuditor, asyncHandler(async (req, res) => {
+  res.json({ generatedAt: new Date().toISOString(), ...(await mappingTable(req, parseLogFilter(req.query as Record<string, unknown>), 'pdf')) });
+}));
+
+router.post('/mapping/transfer', isAdmin, asyncHandler(async (req, res) => {
+  res.status(201).json(await transferEmployees(req, req.body));
+}));
+
+router.post('/mapping/replace-manager', isAdmin, asyncHandler(async (req, res) => {
+  res.status(201).json(await replaceManager(req, req.body));
+}));
+
 /** One employee's profile, laid out for their type. Allowed: self, admin, auditor, their manager / HoD. */
 router.get('/employees/:userId/profile', isAuthenticated, asyncHandler(async (req, res) => {
   res.json(await getProfileFor(viewerOf(req), accountId(req.params.userId)));
@@ -113,8 +143,9 @@ router.get('/employees/:userId/profile', isAuthenticated, asyncHandler(async (re
 async function photoOwner(raw: unknown) {
   const biometricId = String(raw ?? '').trim();
   if (!PATTERNS.biometricId.test(biometricId)) throw badRequest('A valid 4-digit biometric ID is required.');
-  const [target] = await db.select({ biometricId: users.biometricId, name: users.name }).from(users).where(eq(users.biometricId, biometricId)).limit(1);
+  const [target] = await db.select({ biometricId: users.biometricId, name: users.name, isSystem: users.isSystem }).from(users).where(eq(users.biometricId, biometricId)).limit(1);
   if (!target) throw notFound('Employee not found.');
+  if (target.isSystem) throw systemAccountError();
   return target;
 }
 
@@ -129,7 +160,10 @@ router.delete('/employees/:biometricId/photo', isAdmin, asyncHandler(async (req,
 }));
 
 router.get('/employees', isAuthenticated, asyncHandler(async (req, res) => {
-  res.json(await listEmployees(viewerOf(req)));
+  const viewer = viewerOf(req);
+  // The system accounts are listed only for the Profiles table, and only to the administrator and auditor.
+  const system = req.query.system === '1' && (viewer.role === 'administrator' || viewer.role === 'audit');
+  res.json(system ? await listEmployees(viewer, 'system') : req.query.system === '1' ? [] : await listEmployees(viewer));
 }));
 
 router.get('/employees/:userId', isAuthenticated, asyncHandler(async (req, res) => {
@@ -229,9 +263,10 @@ router.post('/employees/:biometricId/reset-password', isAdmin, asyncHandler(asyn
   const reason = String(req.body?.reason || '').trim().slice(0, 500);
   if (req.auth!.account.biometricId === biometricId) throw badRequest('You cannot reset your own password from User Controls.');
 
-  const [target] = await db.select({ id: users.id, name: users.name, email: users.email, biometricId: users.biometricId })
+  const [target] = await db.select({ id: users.id, name: users.name, email: users.email, biometricId: users.biometricId, isSystem: users.isSystem })
     .from(users).where(eq(users.biometricId, biometricId)).limit(1);
   if (!target) throw notFound('User account not found.');
+  if (target.isSystem) throw systemAccountError();
 
   let temporaryPassword = '';
   let passwordHash: string;

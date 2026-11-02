@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Briefcase, CalendarDays, Check, CheckCircle2, Clock, Eye, Globe, MapPin, Pencil, Plus, RotateCcw, Trash2, X } from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
-import { PageHeader } from '../../../../shared/components/PageHeader';
+import { PageHeader, PageHeaderButton } from '../../../../shared/components/PageHeader';
+import { SegmentedControl } from '../../../../shared/components/SegmentedControl';
+import { PAGE_ICONS } from '../../hrmsPages';
 import { DataTable, Input, Modal, Select } from '../../../../shared/components';
 import type { ColumnDef } from '../../../../shared/components';
 import { Textarea } from '../../../../shared/components/forms/Textarea';
@@ -14,6 +16,7 @@ import { ActivityLogPanel, ActivitySource } from '../../../../shared/components/
 import { ApiError } from '../../../../shared/services/api';
 import { activityEndpoints } from '../../../../shared/services/activityApi';
 import { downloadCsvText, downloadTablePdf, printedAt, toCsvText } from '../../../../shared/services/printTable';
+import { logThenDownload } from '../../../../shared/services/downloadAudit';
 import { ConfirmDialog, NoticeBar, useNotice } from '../../master/components/masterUi';
 import { OdInput, OdList, OdRequest, OdStatus, OdType, odApi } from '../odApi';
 import { actionBtn } from '../../../../shared/components/actionStyles';
@@ -42,7 +45,7 @@ const OD_ACTIVITY: ActivitySource = {
   title: 'Outdoor duty activity log',
   recordLabel: 'Request',
   searchPlaceholder: 'Employee, location, done by, reason…',
-  areas: [{ value: 'outdoor_duty', label: 'Outdoor duty' }, { value: 'outdoor_duty_export', label: 'Log download' }],
+  areas: [{ value: 'outdoor_duty', label: 'Outdoor duty' }, { value: 'outdoor_duty_data_export', label: 'Data download' }, { value: 'outdoor_duty_export', label: 'Log download' }],
   actions: ['CREATE', 'UPDATE', 'STATUS', 'DELETE', 'EXPORT'],
   actionLabels: { CREATE: 'Applied', UPDATE: 'Edited', STATUS: 'Approved / rejected', DELETE: 'Deleted', EXPORT: 'Downloaded' },
   ...activityEndpoints('/hrms/outdoor-duty/activity', 'WII_Outdoor_Duty_Activity.csv'),
@@ -358,8 +361,9 @@ export const OutdoorDutyView: React.FC = () => {
     formatDate(r.appliedAt.slice(0, 10)), STATUS_META[r.status].label, statusBy(r).replace(/^by /, ''), r.comment ?? '',
   ]);
   const fileName = `WII_Outdoor_Duty_${from}_to_${to}`;
-  const downloadCsv = () => downloadCsvText(toCsvText(exportHeaders, exportRows()), fileName);
-  const downloadPdf = () => downloadTablePdf({
+  const downloadCsv = () => void logThenDownload('outdoor_duty', 'csv', sorted.length, range, () => downloadCsvText(toCsvText(exportHeaders, exportRows()), fileName), setError);
+  const downloadPdf = () => void logThenDownload('outdoor_duty', 'pdf', sorted.length, range, () => buildPdf(), setError);
+  const buildPdf = () => downloadTablePdf({
     title: 'Outdoor Duty',
     subtitle: [`${range} · Generated ${printedAt(new Date().toISOString())}`, teamView ? 'All requests shown' : currentUser.name],
     headers: exportHeaders,
@@ -372,14 +376,7 @@ export const OutdoorDutyView: React.FC = () => {
     .sort((a, b) => a[1].localeCompare(b[1])).map(([value, label]) => ({ label, value }));
 
   const auditorSwitch = isAudit ? (
-    <div role="tablist" aria-label="Auditor view" className="inline-flex items-center gap-0.5 p-0.5 rounded-xl bg-slate-100 border border-slate-200">
-      {([['records', 'Requests'], ['activity', 'Activity log']] as const).map(([key, text]) => (
-        <button key={key} type="button" role="tab" aria-selected={auditorView === key} onClick={() => setAuditorView(key)}
-          className={`h-7 px-3.5 rounded-lg text-xs font-bold cursor-pointer transition-colors ${auditorView === key ? 'bg-white text-primary shadow-2xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'}`}>
-          {text}
-        </button>
-      ))}
-    </div>
+    <SegmentedControl ariaLabel="Auditor view" value={auditorView} onChange={setAuditorView} options={[{ value: 'records', label: 'Requests' }, { value: 'activity', label: 'Activity log' }]} />
   ) : null;
 
   const subtitle = isAdmin ? 'Apply, edit, approve and reject outdoor duty of all employees'
@@ -399,14 +396,11 @@ export const OutdoorDutyView: React.FC = () => {
   return (
     <div className="space-y-5 pb-6">
       <PageHeader
-        icon={Globe}
+        icon={PAGE_ICONS.od}
         title="Outdoor Duty (OD)"
         subtitle={subtitle}
         rightAction={canApply ? (
-          <button type="button" onClick={openApply}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-xl inline-flex items-center gap-1.5 shadow-2xs cursor-pointer">
-            <Plus className="w-4 h-4" /> Apply OD
-          </button>
+          <PageHeaderButton icon={Plus} onClick={openApply}>Apply OD</PageHeaderButton>
         ) : undefined}
       />
 
@@ -432,7 +426,7 @@ export const OutdoorDutyView: React.FC = () => {
           {error && <div role="alert" className="px-4 py-3 rounded-2xl border text-xs font-semibold bg-error-subtle border-error-border text-error">{error}</div>}
 
           <FilterToolbar
-            start={auditorSwitch ?? dateRange}
+            start={<>{auditorSwitch}{dateRange}</>}
             exports={{
               onCsv: downloadCsv, onPdf: downloadPdf, disabled: sorted.length === 0,
               csvTitle: 'Download the requests shown below as CSV', pdfTitle: 'Download the requests shown below as PDF',
@@ -440,7 +434,6 @@ export const OutdoorDutyView: React.FC = () => {
             search={{ value: search, onChange: setSearch, placeholder: teamView ? 'Search employee, location, purpose, funding…' : 'Search location, purpose, funding…' }}
             onReset={filtered ? resetAll : null}
             filters={[
-              isAudit && <div key="range">{dateRange}</div>,
               teamView && <MultiSelectFilter key="emp" label="Employee" options={employeeOptions} selectedValues={employees} onChange={setEmployees} />,
               teamView && <MultiSelectFilter key="dept" label="Department" options={opt(distinct((r) => r.department))} selectedValues={departments} onChange={setDepartments} />,
               <MultiSelectFilter key="type" label="OD type" options={opt(data?.types ?? OD_TYPES)} selectedValues={types} onChange={setTypes} />,

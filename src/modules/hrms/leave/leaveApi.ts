@@ -124,6 +124,8 @@ export interface LeaveRequest {
   ltcType: 'none' | 'ltc' | 'ex_india';
   encashDays: number;
   contactAddress: string;
+  /** Compensatory off: the worked weekly offs / holidays it uses, one per leave day. */
+  compOffDates: string[];
   prefixFrom: string | null;
   prefixTo: string | null;
   suffixFrom: string | null;
@@ -173,6 +175,8 @@ export interface LeaveInput {
   encashLtc: boolean;
   encashDays: number;
   contactAddress: string;
+  /** Compensatory off: the weekly offs / holidays worked that this leave uses, one per leave day (YYYY-MM-DD). */
+  compOffDates: string[];
   availPrefix: boolean;
   prefixFrom: string;
   prefixTo: string;
@@ -182,6 +186,8 @@ export interface LeaveInput {
   /** Medical certificate chosen in the form (a data URL); the server checks the real file type and size. */
   certificateFile?: { name: string; data: string } | null;
 }
+
+export interface CompOffCredit { date: string; in: string; out: string; hours: number; reason: string; validUntil: string }
 
 export interface LeaveBalance { total: number; carryForward: number; used: number; pending: number; available: number }
 
@@ -311,6 +317,16 @@ export const leaveApi = {
   occupied: (input: { userId: string; leaveTypeId: string; exceptId: string }) => {
     const q = new URLSearchParams(Object.entries(input).filter(([, v]) => v) as [string, string][]);
     return api<{ days: { date: string; status: 'pending' | 'approved' | 'rejected' }[]; joined: string[]; workdays: string[] }>(`${base}/occupied?${q.toString()}`);
+  },
+  /** Worked weekly offs / holidays that can be taken as a compensatory off now. */
+  compOff: (input: { userId: string; exceptId?: string }) => {
+    const q = new URLSearchParams(Object.entries(input).filter(([, v]) => v) as [string, string][]);
+    return api<{ credits: CompOffCredit[] }>(`${base}/comp-off?${q.toString()}`);
+  },
+  /** Restricted holidays of the Holiday Calendar that can still be applied for. */
+  restrictedHolidays: (input: { userId: string; exceptId?: string }) => {
+    const q = new URLSearchParams(Object.entries(input).filter(([, v]) => v) as [string, string][]);
+    return api<{ holidays: Array<{ date: string; name: string }> }>(`${base}/restricted-holidays?${q.toString()}`);
   },
   balancePreview: (input: { userId: string; leaveTypeId: string; date: string }) => {
     const q = new URLSearchParams(Object.entries(input).filter(([, v]) => v) as [string, string][]);

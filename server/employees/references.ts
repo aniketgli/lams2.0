@@ -148,9 +148,9 @@ export async function checkReferences(q: Querier, input: EmployeeInput, layout: 
   // Managers must be active accounts of the same institute (when their institute is recorded).
   const activeAccount = async (id: string) => {
     const [row] = await rows(q,
-      `SELECT u.id, u.name, u.status, p.institute FROM users u
+      `SELECT u.id, u.name, u.status, u.is_system, p.institute FROM users u
          LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE u.id = ? LIMIT 1`, [Number(id)]);
-    if (!row || String(row.status).toLowerCase() !== 'active') return null;
+    if (!row || Number(row.is_system ?? 0) === 1 || String(row.status).toLowerCase() !== 'active') return null;
     if (row.institute && input.institute && String(row.institute) !== input.institute) return null;
     return row;
   };

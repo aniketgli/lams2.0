@@ -17,11 +17,47 @@ const EMPLOYEE_SOURCE: ActivitySource = {
     { value: 'employee_password', label: 'Password' },
     { value: 'employee_photo', label: 'Profile photo' },
     { value: 'employee_export', label: 'Data download' },
+    { value: 'employee_mapping', label: 'Transfer / manager mapping' },
+    { value: 'employee_mapping_export', label: 'Mapping register download' },
+    { value: 'employee_data_export', label: 'Permissions download' },
   ],
   list: auditorApi.activity,
   downloadCsv: auditorApi.downloadActivity,
   forPdf: auditorApi.activityForPdf,
 };
+
+/** Auditor: role / permission changes and permission-register downloads (User Controls tab). */
+const USER_CONTROLS_SOURCE: ActivitySource = {
+  ...EMPLOYEE_SOURCE,
+  title: 'User controls activity log',
+  recordLabel: 'Employee',
+  searchPlaceholder: 'Employee, done by, reason…',
+  areas: [
+    { value: 'user_roles', label: 'Module roles' },
+    { value: 'employee_data_export', label: 'Permissions download' },
+  ],
+  limitToAreas: true,
+};
+
+/** Auditor: transfers, manager / HoD replacements and register downloads (Employees mapping tab). */
+const MAPPING_SOURCE: ActivitySource = {
+  ...EMPLOYEE_SOURCE,
+  title: 'Employees mapping activity log',
+  recordLabel: 'Employee',
+  searchPlaceholder: 'Employee, done by, reason…',
+  areas: [
+    { value: 'employee_mapping', label: 'Transfer / manager mapping' },
+    { value: 'employee_mapping_export', label: 'Mapping register download' },
+  ],
+  limitToAreas: true,
+};
+
+export const UserControlsActivityLog: React.FC<{ toolbarStart?: React.ReactNode }> = ({ toolbarStart }) => (
+  <ActivityLogPanel source={USER_CONTROLS_SOURCE} toolbarStart={toolbarStart} />
+);
+export const MappingActivityLog: React.FC<{ toolbarStart?: React.ReactNode }> = ({ toolbarStart }) => (
+  <ActivityLogPanel source={MAPPING_SOURCE} toolbarStart={toolbarStart} />
+);
 
 export const EmployeeActivityLog: React.FC<{ toolbarStart?: React.ReactNode }> = ({ toolbarStart }) => (
   <ActivityLogPanel source={EMPLOYEE_SOURCE} toolbarStart={toolbarStart} />

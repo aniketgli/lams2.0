@@ -14,7 +14,6 @@ import {
   JoiningReport,
   SlackConfig,
   SlackNotification,
-  UserTransferLog,
   ManualAttendanceRegularizationRequest,
   OrgBranding,
   UserProjectHistory,
@@ -70,6 +69,8 @@ import {
 interface AppContextType {
   currentUser: User;
   users: User[];
+  /** System accounts (Administrator / Auditor): for the Profiles table only, never in dropdowns, exports or other lists. */
+  systemUsers: User[];
   isAuthenticated: boolean;
   isLoading: boolean;
   /** Active values of every master (salutation, gender, employee type, departments, ...). */
@@ -264,37 +265,6 @@ interface AppContextType {
   toggleUserStatus: (userId: string, reason?: string, effectiveDate?: string) => Promise<{ success: boolean; message?: string }>;
   deleteUser: (userId: string, reason: string, reference?: string) => Promise<{ success: boolean; message?: string }>;
   resetUserPassword: (userId: string, customPass?: string, reason?: string) => string;
-  transferUser: (
-    userId: string,
-    data: {
-      newDept: string;
-      newReportingManagerId?: string;
-      newReviewingManagerId?: string;
-      newLocation?: string;
-      effectiveDate: string;
-      notes: string;
-    }
-  ) => void;
-  bulkTransferUsers: (
-    userIds: string[],
-    data: {
-      newDept?: string;
-      newReportingManagerId?: string;
-      newReviewingManagerId?: string;
-      newLocation?: string;
-      effectiveDate: string;
-      notes: string;
-    }
-  ) => { success: boolean; count: number; message: string };
-  bulkReassignManager: (data: {
-    outgoingManagerId: string;
-    incomingManagerId: string;
-    reassignType: 'reporting' | 'reviewing' | 'both';
-    selectedUserIds?: string[];
-    effectiveDate: string;
-    notes: string;
-  }) => { success: boolean; count: number; message: string };
-  transferLogs: UserTransferLog[];
   updateSlackConfig: (newConfig: SlackConfig) => void;
   resetAllData: () => void;
 
@@ -604,6 +574,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Employee identities must come from the authenticated server/database only.
   // Never hydrate the directory from browser-local seed/demo users.
   const [users, setUsers] = useState<User[]>([]);
+  const [systemUsers, setSystemUsers] = useState<User[]>([]);
   // The employee directory always comes from the database (GET /api/hrms/employees).
   // The server decides how much of each profile this user may see.
   const toDirectoryUser = (row: EmployeeRow): User => {
@@ -617,6 +588,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return {
       ...saved,
       id: String(row.id),
+      isSystem: row.isSystem === true,
       biometricId: row.biometricId,
       suffix: row.suffix ?? undefined,
       name: row.name,
@@ -645,6 +617,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const rows = await employeeApi.list();
       const next = Array.isArray(rows) ? rows.map(toDirectoryUser) : [];
       setUsers(next);
+      employeeApi.listSystem().then((sys) => setSystemUsers(Array.isArray(sys) ? sys.map(toDirectoryUser) : [])).catch(() => setSystemUsers([]));
       return next;
     } catch (error) {
       // Never fall back to seed data for an authenticated directory.
@@ -894,50 +867,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     localStorage.setItem('la_hub_project_histories', JSON.stringify(projectHistories));
   }, [projectHistories]);
-  const [transferLogs, setTransferLogs] = useState<UserTransferLog[]>(() => {
-    const saved = localStorage.getItem('la_hub_transfer_logs');
-    return saved ? JSON.parse(saved) : [
-      {
-        id: 'trf-101',
-        userId: 'usr-3',
-        userName: 'Vikram Singh',
-        previousDept: 'Ecology & Biodiversity',
-        newDept: 'Research & Development',
-        previousManagerName: 'Dr. Rajesh Sharma',
-        newManagerName: 'Dr. Rajesh Sharma',
-        effectiveDate: '2026-08-01',
-        notes: 'Promoted to Director of Research & statutory R&D portfolio reallocation.',
-        transferredBy: 'Dr. Rajesh Sharma (Admin)',
-        timestamp: '2026-08-01 10:30'
-      },
-      {
-        id: 'trf-102',
-        userId: 'usr-10',
-        userName: 'Neha Joshi',
-        previousDept: 'Wildlife Ecology & Research',
-        newDept: 'Climate Change & Spatial Ecology',
-        previousManagerName: 'Anita Roy',
-        newManagerName: 'Dr. Sunita Rao',
-        effectiveDate: '2026-07-15',
-        notes: 'Deputed to National Mission on Himalayan Studies (NMHS) specialized research group.',
-        transferredBy: 'Dr. Rajesh Sharma (Admin)',
-        timestamp: '2026-07-15 14:15'
-      },
-      {
-        id: 'trf-103',
-        userId: 'usr-12',
-        userName: 'Kavita Deshmukh',
-        previousDept: 'Administration Section',
-        newDept: 'Ecodevelopment & Community',
-        previousManagerName: 'Dr. Rajesh Sharma',
-        newManagerName: 'Dr. Sunita Rao',
-        effectiveDate: '2026-07-01',
-        notes: 'Project associate transfer to community forest outreach initiative.',
-        transferredBy: 'Dr. Rajesh Sharma (Admin)',
-        timestamp: '2026-07-01 11:00'
-      }
-    ];
-  });
 
   // Organization Branding State
   const DEFAULT_ORG_BRANDING: OrgBranding = {
@@ -945,7 +874,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     logoUrl: '',
     address: 'Office Location',
     copyrightText: `© ${new Date().getFullYear()} Organization • Integrated Enterprise Suite`,
-    appName: 'Enterprise Portal',
+    appName: 'WII Portal',
     orgHindiName: '',
     badgeText: 'HUB',
     logoType: 'custom',
@@ -1215,10 +1144,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, message: `SMTP connection failed: ${err.message}` };
     }
   };
-
-  useEffect(() => {
-    localStorage.setItem('la_hub_transfer_logs', JSON.stringify(transferLogs));
-  }, [transferLogs]);
 
   const logout = () => {
     void sessionLogout();
@@ -4055,489 +3980,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return tempPass;
   };
 
-  const transferUser = (
-    userId: string,
-    data: {
-      newDept: string;
-      newReportingManagerId?: string;
-      newReviewingManagerId?: string;
-      newLocation?: string;
-      effectiveDate: string;
-      notes: string;
-    }
-  ) => {
-    const targetUser = users.find((u) => u.id === userId);
-    if (!targetUser) return;
-
-    const oldDept = targetUser.department;
-    const oldReportingMgr = users.find((u) => u.id === targetUser.reportingManagerId)?.name || 'None';
-    const newReportingMgr = users.find((u) => u.id === data.newReportingManagerId)?.name || 'None';
-
-    setUsers((prev) =>
-      prev.map((u) => {
-        if (u.id === userId) {
-          return {
-            ...u,
-            department: data.newDept,
-            reportingManagerId: data.newReportingManagerId || u.reportingManagerId,
-            reviewingManagerId: data.newReviewingManagerId || u.reviewingManagerId,
-            officeLocation: data.newLocation || u.officeLocation
-          };
-        }
-        return u;
-      })
-    );
-
-    const newLog: UserTransferLog = {
-      id: `trf-${Date.now()}`,
-      userId,
-      userName: targetUser.name,
-      previousDept: oldDept,
-      newDept: data.newDept,
-      previousManagerName: oldReportingMgr,
-      newManagerName: newReportingMgr,
-      effectiveDate: data.effectiveDate,
-      notes: data.notes || 'Inter-departmental posting/transfer',
-      transferredBy: currentUser.name,
-      timestamp: new Date().toLocaleString()
-    };
-
-    setTransferLogs((prev) => [newLog, ...prev]);
-
-    sendSlackNotification(
-      slackConfig,
-      {
-        channel: '#leave-and-attendance-logs',
-        sender: currentUser.name,
-        title: `🔄 Employee Transfer Executed`,
-        message: `*${targetUser.name}* transferred from *${oldDept}* to *${data.newDept}* (Manager: ${newReportingMgr}). Effective date: ${data.effectiveDate}.`,
-        type: 'role_change'
-      },
-      addSlackLog
-    );
-
-    // Send Automated Email Notification to Transferred Employee, Incoming Manager & Relieving Manager
-    if (emailConfig.notifyOnTransfer) {
-      const outgoingMgrObj = users.find((u) => u.id === targetUser.reportingManagerId);
-      const incomingMgrObj = data.newReportingManagerId ? users.find((u) => u.id === data.newReportingManagerId) : undefined;
-      const orderRef = `WII/EST/TRF/${new Date().getFullYear()}/${newLog.id.slice(-4)}`;
-
-      // 1. Email to Employee
-      if (targetUser.email) {
-        const empMail = buildTransferOrderEmail(
-          {
-            orderNumber: orderRef,
-            employeeName: targetUser.name,
-            employeeEmail: targetUser.email,
-            designation: targetUser.designation,
-            previousDepartment: oldDept,
-            newDepartment: data.newDept,
-            previousManagerName: oldReportingMgr,
-            newManagerName: newReportingMgr,
-            effectiveDate: data.effectiveDate,
-            stationLocation: data.newLocation || targetUser.officeLocation || 'Main Campus',
-            remarks: data.notes || 'Inter-departmental transfer order',
-            issuingAuthority: currentUser.name
-          },
-          'employee'
-        );
-        triggerEmailDispatch({
-          to: targetUser.email,
-          toName: targetUser.name,
-          toRole: 'Transferred Official',
-          cc: emailConfig.adminCcEmail ? [emailConfig.adminCcEmail] : undefined,
-          subject: empMail.subject,
-          category: 'transfer',
-          eventType: 'EMPLOYEE_TRANSFER_ORDER',
-          bodyHtml: empMail.html,
-          bodyText: empMail.text,
-          referenceId: newLog.id,
-          referenceType: 'transfer'
-        });
-      }
-
-      // 2. Email to Incoming Manager
-      if (incomingMgrObj?.email && incomingMgrObj.id !== targetUser.id) {
-        const inMgrMail = buildTransferOrderEmail(
-          {
-            orderNumber: orderRef,
-            employeeName: targetUser.name,
-            employeeEmail: targetUser.email,
-            designation: targetUser.designation,
-            previousDepartment: oldDept,
-            newDepartment: data.newDept,
-            previousManagerName: oldReportingMgr,
-            newManagerName: newReportingMgr,
-            effectiveDate: data.effectiveDate,
-            stationLocation: data.newLocation || targetUser.officeLocation || 'Main Campus',
-            remarks: data.notes || 'Inter-departmental transfer order',
-            issuingAuthority: currentUser.name
-          },
-          'incoming_manager'
-        );
-        triggerEmailDispatch({
-          to: incomingMgrObj.email,
-          toName: incomingMgrObj.name,
-          toRole: 'Incoming Reporting Officer',
-          subject: inMgrMail.subject,
-          category: 'transfer',
-          eventType: 'TRANSFER_INCOMING_MANAGER_NOTICE',
-          bodyHtml: inMgrMail.html,
-          bodyText: inMgrMail.text,
-          referenceId: newLog.id,
-          referenceType: 'transfer'
-        });
-      }
-
-      // 3. Email to Outgoing Manager (Relieving Notice)
-      if (outgoingMgrObj?.email && outgoingMgrObj.id !== incomingMgrObj?.id && outgoingMgrObj.id !== targetUser.id) {
-        const outMgrMail = buildTransferOrderEmail(
-          {
-            orderNumber: orderRef,
-            employeeName: targetUser.name,
-            employeeEmail: targetUser.email,
-            designation: targetUser.designation,
-            previousDepartment: oldDept,
-            newDepartment: data.newDept,
-            previousManagerName: oldReportingMgr,
-            newManagerName: newReportingMgr,
-            effectiveDate: data.effectiveDate,
-            stationLocation: data.newLocation || targetUser.officeLocation || 'Main Campus',
-            remarks: data.notes || 'Inter-departmental transfer order',
-            issuingAuthority: currentUser.name
-          },
-          'outgoing_manager'
-        );
-        triggerEmailDispatch({
-          to: outgoingMgrObj.email,
-          toName: outgoingMgrObj.name,
-          toRole: 'Relieving Officer',
-          subject: outMgrMail.subject,
-          category: 'transfer',
-          eventType: 'TRANSFER_RELIEVING_ORDER',
-          bodyHtml: outMgrMail.html,
-          bodyText: outMgrMail.text,
-          referenceId: newLog.id,
-          referenceType: 'transfer'
-        });
-      }
-    }
-  };
-
-  const bulkTransferUsers = (
-    userIds: string[],
-    data: {
-      newDept?: string;
-      newReportingManagerId?: string;
-      newReviewingManagerId?: string;
-      newLocation?: string;
-      effectiveDate: string;
-      notes: string;
-    }
-  ) => {
-    if (!userIds || userIds.length === 0) {
-      return { success: false, count: 0, message: 'No employees selected for transfer.' };
-    }
-
-    const newLogs: UserTransferLog[] = [];
-    const newReportingMgrObj = data.newReportingManagerId ? users.find((u) => u.id === data.newReportingManagerId) : undefined;
-    const newReportingMgrName = newReportingMgrObj ? newReportingMgrObj.name : 'Unchanged / Direct';
-
-    setUsers((prev) =>
-      prev.map((u) => {
-        if (userIds.includes(u.id)) {
-          const oldDept = u.department;
-          const oldReportingMgr = users.find((m) => m.id === u.reportingManagerId)?.name || 'None';
-          const targetDept = data.newDept && data.newDept.trim() ? data.newDept.trim() : u.department;
-
-          newLogs.push({
-            id: `trf-${Date.now()}-${u.id}`,
-            userId: u.id,
-            userName: u.name,
-            previousDept: oldDept,
-            newDept: targetDept,
-            previousManagerName: oldReportingMgr,
-            newManagerName: newReportingMgrObj ? newReportingMgrObj.name : oldReportingMgr,
-            effectiveDate: data.effectiveDate,
-            notes: data.notes ? `[Bulk Transfer] ${data.notes}` : 'Bulk departmental transfer',
-            transferredBy: currentUser.name,
-            timestamp: new Date().toLocaleString()
-          });
-
-          return {
-            ...u,
-            department: targetDept,
-            reportingManagerId: data.newReportingManagerId || u.reportingManagerId,
-            reviewingManagerId: data.newReviewingManagerId || u.reviewingManagerId,
-            officeLocation: data.newLocation || u.officeLocation
-          };
-        }
-        return u;
-      })
-    );
-
-    setTransferLogs((prev) => [...newLogs, ...prev]);
-
-    sendSlackNotification(
-      slackConfig,
-      {
-        channel: '#leave-and-attendance-logs',
-        sender: currentUser.name,
-        title: `🔄 Bulk Employee Transfer Executed (${userIds.length} Staff)`,
-        message: `Admin *${currentUser.name}* transferred *${userIds.length} employee(s)*.${data.newDept ? ` New Dept: *${data.newDept}*` : ''}${newReportingMgrObj ? ` | New Reporting Manager: *${newReportingMgrName}*` : ''}. Effective: ${data.effectiveDate}.`,
-        type: 'role_change'
-      },
-      addSlackLog
-    );
-
-    if (emailConfig.notifyOnTransfer) {
-      newLogs.forEach((log) => {
-        const transferredUser = users.find((u) => u.id === log.userId);
-        if (transferredUser?.email) {
-          const empMail = buildTransferOrderEmail(
-            {
-              orderNumber: `WII/EST/TRF/${new Date().getFullYear()}/${log.id.slice(-4)}`,
-              employeeName: transferredUser.name,
-              employeeEmail: transferredUser.email,
-              designation: transferredUser.designation,
-              previousDepartment: log.previousDept,
-              newDepartment: log.newDept,
-              previousManagerName: log.previousManagerName,
-              newManagerName: log.newManagerName,
-              effectiveDate: log.effectiveDate,
-              stationLocation: data.newLocation || transferredUser.officeLocation || 'Main Campus',
-              remarks: log.notes,
-              issuingAuthority: currentUser.name
-            },
-            'employee'
-          );
-          triggerEmailDispatch({
-            to: transferredUser.email,
-            toName: transferredUser.name,
-            toRole: 'Transferred Official',
-            cc: emailConfig.adminCcEmail ? [emailConfig.adminCcEmail] : undefined,
-            subject: empMail.subject,
-            category: 'transfer',
-            eventType: 'EMPLOYEE_TRANSFER_ORDER',
-            bodyHtml: empMail.html,
-            bodyText: empMail.text,
-            referenceId: log.id,
-            referenceType: 'transfer'
-          });
-        }
-      });
-
-      if (newReportingMgrObj?.email) {
-        const mgrMail = buildTransferOrderEmail(
-          {
-            orderNumber: `WII/EST/BULK-TRF/${new Date().getFullYear()}`,
-            employeeName: `${userIds.length} Appointed Staff Members`,
-            employeeEmail: newReportingMgrObj.email,
-            designation: 'Various Appointees',
-            previousDepartment: 'Various Divisions',
-            newDepartment: data.newDept || 'Assigned Division',
-            previousManagerName: 'Outgoing Supervisors',
-            newManagerName: newReportingMgrName,
-            effectiveDate: data.effectiveDate,
-            stationLocation: data.newLocation || 'Main Campus',
-            remarks: `Bulk transfer assignment of ${userIds.length} officers under your supervisory reporting line.`,
-            issuingAuthority: currentUser.name
-          },
-          'incoming_manager'
-        );
-        triggerEmailDispatch({
-          to: newReportingMgrObj.email,
-          toName: newReportingMgrObj.name,
-          toRole: 'Incoming Reporting Officer',
-          subject: mgrMail.subject,
-          category: 'transfer',
-          eventType: 'TRANSFER_INCOMING_MANAGER_NOTICE',
-          bodyHtml: mgrMail.html,
-          bodyText: mgrMail.text,
-          referenceId: `bulk-trf-${Date.now()}`,
-          referenceType: 'transfer'
-        });
-      }
-    }
-
-    return {
-      success: true,
-      count: userIds.length,
-      message: `Successfully transferred ${userIds.length} employee(s) with updated hierarchy records.`
-    };
-  };
-
-  const bulkReassignManager = (data: {
-    outgoingManagerId: string;
-    incomingManagerId: string;
-    reassignType: 'reporting' | 'reviewing' | 'both';
-    selectedUserIds?: string[];
-    effectiveDate: string;
-    notes: string;
-  }) => {
-    const outgoingMgr = users.find((u) => u.id === data.outgoingManagerId);
-    const incomingMgr = users.find((u) => u.id === data.incomingManagerId);
-
-    if (!outgoingMgr || !incomingMgr) {
-      return { success: false, count: 0, message: 'Invalid manager selection.' };
-    }
-
-    if (data.outgoingManagerId === data.incomingManagerId) {
-      return { success: false, count: 0, message: 'Outgoing and Incoming managers must be different.' };
-    }
-
-    const newLogs: UserTransferLog[] = [];
-    let affectedCount = 0;
-
-    setUsers((prev) =>
-      prev.map((u) => {
-        // Skip if specifically filtering reportees and user is not in selected list
-        if (data.selectedUserIds && data.selectedUserIds.length > 0 && !data.selectedUserIds.includes(u.id)) {
-          return u;
-        }
-
-        let isMatchesReporting = u.reportingManagerId === data.outgoingManagerId;
-        let isMatchesReviewing = u.reviewingManagerId === data.outgoingManagerId || u.hodName === outgoingMgr.name;
-
-        if (data.reassignType === 'reporting') isMatchesReviewing = false;
-        if (data.reassignType === 'reviewing') isMatchesReporting = false;
-
-        if (isMatchesReporting || isMatchesReviewing) {
-          affectedCount++;
-          const prevL1 = users.find((m) => m.id === u.reportingManagerId)?.name || 'None';
-
-          newLogs.push({
-            id: `trf-mgr-${Date.now()}-${u.id}`,
-            userId: u.id,
-            userName: u.name,
-            previousDept: u.department,
-            newDept: u.department,
-            previousManagerName: outgoingMgr.name,
-            newManagerName: incomingMgr.name,
-            effectiveDate: data.effectiveDate,
-            notes: data.notes ? `[Manager Re-mapping] ${data.notes}` : `Bulk Manager Transition from ${outgoingMgr.name} to ${incomingMgr.name}`,
-            transferredBy: currentUser.name,
-            timestamp: new Date().toLocaleString()
-          });
-
-          return {
-            ...u,
-            reportingManagerId: isMatchesReporting || data.reassignType === 'both' ? incomingMgr.id : u.reportingManagerId,
-            reviewingManagerId: isMatchesReviewing || data.reassignType === 'both' ? incomingMgr.id : u.reviewingManagerId,
-            hodName: isMatchesReviewing || data.reassignType === 'both' ? incomingMgr.name : u.hodName
-          };
-        }
-        return u;
-      })
-    );
-
-    if (affectedCount === 0) {
-      return { success: false, count: 0, message: `No direct reportees found under ${outgoingMgr.name} for the selected transition type.` };
-    }
-
-    setTransferLogs((prev) => [...newLogs, ...prev]);
-
-    sendSlackNotification(
-      slackConfig,
-      {
-        channel: '#leave-and-attendance-logs',
-        sender: currentUser.name,
-        title: `🔀 Manager Hierarchy Re-assigned (${affectedCount} Direct Reportees)`,
-        message: `Admin *${currentUser.name}* executed bulk manager migration: All reportees under *${outgoingMgr.name}* (${outgoingMgr.designation}) have been re-assigned to *${incomingMgr.name}* (${incomingMgr.designation}). Effective: ${data.effectiveDate}.`,
-        type: 'role_change'
-      },
-      addSlackLog
-    );
-
-    if (emailConfig.notifyOnTransfer) {
-      // 1. Email to Incoming Manager
-      if (incomingMgr.email) {
-        const incMail = buildManagerMigrationEmail({
-          incomingManagerName: incomingMgr.name,
-          outgoingManagerName: outgoingMgr.name,
-          effectiveDate: data.effectiveDate,
-          reassignType: data.reassignType,
-          reporteesCount: affectedCount,
-          reporteeNames: newLogs.map((l) => l.userName),
-          adminName: currentUser.name,
-          notes: data.notes
-        });
-        triggerEmailDispatch({
-          to: incomingMgr.email,
-          toName: incomingMgr.name,
-          toRole: 'Incoming Manager',
-          cc: emailConfig.adminCcEmail ? [emailConfig.adminCcEmail] : undefined,
-          subject: incMail.subject,
-          category: 'transfer',
-          eventType: 'MANAGER_MIGRATION_INCOMING',
-          bodyHtml: incMail.html,
-          bodyText: incMail.text,
-          referenceId: `mgr-reassign-${Date.now()}`,
-          referenceType: 'transfer'
-        });
-      }
-
-      // 2. Email to Outgoing Manager
-      if (outgoingMgr.email) {
-        const outMail = buildRelievingManagerNoticeEmail({
-          outgoingManagerName: outgoingMgr.name,
-          incomingManagerName: incomingMgr.name,
-          effectiveDate: data.effectiveDate,
-          reassignType: data.reassignType,
-          reporteesCount: affectedCount,
-          reporteeNames: newLogs.map((l) => l.userName),
-          adminName: currentUser.name,
-          notes: data.notes
-        });
-        triggerEmailDispatch({
-          to: outgoingMgr.email,
-          toName: outgoingMgr.name,
-          toRole: 'Relieved Manager',
-          subject: outMail.subject,
-          category: 'transfer',
-          eventType: 'MANAGER_MIGRATION_OUTGOING',
-          bodyHtml: outMail.html,
-          bodyText: outMail.text,
-          referenceId: `mgr-reassign-${Date.now()}`,
-          referenceType: 'transfer'
-        });
-      }
-
-      // 3. Notification to Affected Reportees
-      newLogs.forEach((log) => {
-        const reportee = users.find((u) => u.id === log.userId);
-        if (reportee?.email) {
-          const reporteeMail = buildReporteeManagerTransitionEmail({
-            employeeName: reportee.name,
-            outgoingManagerName: outgoingMgr.name,
-            incomingManagerName: incomingMgr.name,
-            effectiveDate: data.effectiveDate,
-            reassignType: data.reassignType,
-            notes: data.notes
-          });
-          triggerEmailDispatch({
-            to: reportee.email,
-            toName: reportee.name,
-            toRole: 'Employee',
-            subject: reporteeMail.subject,
-            category: 'transfer',
-            eventType: 'REPORTEE_MANAGER_TRANSITION',
-            bodyHtml: reporteeMail.html,
-            bodyText: reporteeMail.text,
-            referenceId: log.id,
-            referenceType: 'transfer'
-          });
-        }
-      });
-    }
-
-    return {
-      success: true,
-      count: affectedCount,
-      message: `Successfully re-assigned ${affectedCount} reportees from ${outgoingMgr.name} to ${incomingMgr.name}.`
-    };
-  };
-
   const updateSlackConfig = (newConfig: SlackConfig) => {
     setSlackConfig(newConfig);
     sendSlackNotification(
@@ -4682,14 +4124,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateUserProfile,
         addUserProfile,
         reloadEmployees,
+        systemUsers,
         updateUserRoleAndHierarchy,
         toggleUserStatus,
         deleteUser,
         resetUserPassword,
-        transferUser,
-        bulkTransferUsers,
-        bulkReassignManager,
-        transferLogs,
         updateSlackConfig,
         resetAllData,
         holidays,

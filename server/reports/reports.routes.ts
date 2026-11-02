@@ -1,11 +1,13 @@
-import { Router } from 'express';
+import { Router, type Response } from 'express';
 import { asyncHandler, badRequest } from '../lib/http';
 import { Validator } from '../lib/validate';
 import { requireActiveRole, requireAuth } from '../middleware/auth.middleware';
+import { ActivityScope, activityCsv, activityTable, listActivity, parseActivityFilter } from '../employees/activity';
 import { createSchedule, deleteSchedule, getSchedule, listRuns, listSchedules, scheduleOptions, sendNow, setScheduleStatus, updateSchedule } from './store';
 
 /**
- * Scheduled report emails (/api/hrms/reports/...). Administrators only.
+ * Scheduled report emails (/api/hrms/reports/...). Administrators manage them; the auditor can read the schedules and their
+ * send history and has an activity log (changes to schedules, sends and downloads of that log).
  *   GET    /reports/schedules              the schedules, with the options for the form
  *   POST   /reports/schedules              add one
  *   PUT    /reports/schedules/:id          change one
@@ -16,13 +18,44 @@ import { createSchedule, deleteSchedule, getSchedule, listRuns, listSchedules, s
  */
 const router = Router();
 const isAdmin = [requireAuth, requireActiveRole('hrms', 'administrator')];
+const canRead = [requireAuth, requireActiveRole('hrms', 'administrator', 'audit')];
+const isAuditor = [requireAuth, requireActiveRole('hrms', 'audit')];
+
+export const REPORT_SCOPE: ActivityScope = {
+  keys: ['report_schedule', 'report_export'],
+  areaLabels: { report_schedule: 'Report schedule', report_export: 'Log download' },
+  actionLabels: { CREATE: 'Added', UPDATE: 'Changed / sent now', STATUS: 'Paused / resumed', DELETE: 'Deleted' },
+  exportKey: 'report_export',
+  title: 'Reports activity log',
+  filePrefix: 'WII_Reports_Activity',
+};
+
+function sendCsv(res: Response, file: { filename: string; csv: string }) {
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+  res.send(file.csv);
+}
 
 const scheduleId = (raw: string): number => {
   if (!/^\d{1,18}$/.test(raw)) throw badRequest('Invalid report schedule.');
   return Number(raw);
 };
 
-router.get('/reports/schedules', ...isAdmin, asyncHandler(async (_req, res) => {
+// Auditor log routes come before /reports/schedules/:id so "activity" is never read as an ID.
+router.get('/reports/activity', ...isAuditor, asyncHandler(async (req, res) => {
+  res.json(await listActivity(parseActivityFilter(req.query as Record<string, unknown>, REPORT_SCOPE), REPORT_SCOPE));
+}));
+
+router.get('/reports/activity.csv', ...isAuditor, asyncHandler(async (req, res) => {
+  sendCsv(res, await activityCsv(req, parseActivityFilter(req.query as Record<string, unknown>, REPORT_SCOPE), REPORT_SCOPE));
+}));
+
+router.get('/reports/activity/export-pdf', ...isAuditor, asyncHandler(async (req, res) => {
+  const table = await activityTable(req, parseActivityFilter(req.query as Record<string, unknown>, REPORT_SCOPE), 'pdf', REPORT_SCOPE);
+  res.json({ generatedAt: new Date().toISOString(), ...table });
+}));
+
+router.get('/reports/schedules', ...canRead, asyncHandler(async (_req, res) => {
   const [schedules, options] = await Promise.all([listSchedules(), scheduleOptions()]);
   res.json({ schedules, ...options });
 }));
@@ -55,7 +88,7 @@ router.post('/reports/schedules/:id/send', ...isAdmin, asyncHandler(async (req, 
   res.json({ schedule, result, message: result.status === 'sent' || result.status === 'partial' ? result.message : `Not sent: ${result.message}` });
 }));
 
-router.get('/reports/schedules/:id/runs', ...isAdmin, asyncHandler(async (req, res) => {
+router.get('/reports/schedules/:id/runs', ...canRead, asyncHandler(async (req, res) => {
   const id = scheduleId(req.params.id);
   res.json({ schedule: await getSchedule(id), runs: await listRuns(id) });
 }));

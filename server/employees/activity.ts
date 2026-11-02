@@ -15,7 +15,7 @@ import { EmployeeRecord, Viewer, canSeeFullProfile, listEmployees } from './stor
  */
 
 /** Audit keys that belong to employee records. */
-export const EMPLOYEE_ACTIVITY_KEYS = ['employee', 'user_roles', 'employee_password', 'employee_photo', 'employee_export'] as const;
+export const EMPLOYEE_ACTIVITY_KEYS = ['employee', 'user_roles', 'employee_password', 'employee_photo', 'employee_export', 'employee_mapping', 'employee_mapping_export', 'employee_data_export'] as const;
 
 const ACTIONS = ['CREATE', 'UPDATE', 'STATUS', 'DELETE', 'RESET', 'EXPORT'] as const;
 
@@ -112,6 +112,7 @@ export const EMPLOYEE_SCOPE: ActivityScope = {
   areaLabels: {
     employee: 'Employee profile', user_roles: 'Module roles', employee_password: 'Password',
     employee_photo: 'Profile photo', employee_export: 'Data download',
+    employee_mapping: 'Transfer / manager mapping', employee_mapping_export: 'Mapping register download', employee_data_export: 'Permissions download',
   },
   exportKey: 'employee_export',
   title: 'Employee activity log',
@@ -133,7 +134,7 @@ export function parseActivityFilter(query: Record<string, unknown>, scope: Activ
   const action = one('action')?.toUpperCase() ?? null;
   if (action && !(ACTIONS as readonly string[]).includes(action)) throw badRequest('Unknown action.');
   const area = one('area');
-  if (area && !scope.keys.includes(area)) throw badRequest('Unknown area.');
+  if (area && !area.split(',').every((a) => scope.keys.includes(a))) throw badRequest('Unknown area.');
   const from = one('from');
   const to = one('to');
   if (from && !isValidIsoDate(from)) throw badRequest('Invalid from date.');
@@ -152,7 +153,7 @@ export function parseActivityFilter(query: Record<string, unknown>, scope: Activ
 function whereFor(f: ActivityFilter, scope: ActivityScope): { sql: string; params: unknown[] } {
   const where = [`master_key IN (${scope.keys.map(() => '?').join(',')})`];
   const params: unknown[] = [...scope.keys];
-  if (f.area) { where.push('master_key = ?'); params.push(f.area); }
+  if (f.area) { const areas = f.area.split(','); where.push(`master_key IN (${areas.map(() => '?').join(',')})`); params.push(...areas); }
   if (f.action) { where.push('action = ?'); params.push(f.action); }
   if (f.from) { where.push('created_at >= ?'); params.push(`${f.from} 00:00:00`); }
   if (f.to) { where.push('created_at < DATE_ADD(?, INTERVAL 1 DAY)'); params.push(f.to); }

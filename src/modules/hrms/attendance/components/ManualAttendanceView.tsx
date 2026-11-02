@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarCheck, Check, CheckCircle2, ClipboardList, Clock, Eye, Pencil, Plus, RotateCcw, Trash2, X, XCircle } from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
-import { PageHeader } from '../../../../shared/components/PageHeader';
+import { PageHeader, PageHeaderButton } from '../../../../shared/components/PageHeader';
+import { SegmentedControl } from '../../../../shared/components/SegmentedControl';
+import { PAGE_ICONS } from '../../hrmsPages';
 import { DataTable, Modal, Select } from '../../../../shared/components';
 import type { ColumnDef } from '../../../../shared/components';
 import { Textarea } from '../../../../shared/components/forms/Textarea';
@@ -14,6 +16,7 @@ import { ActivityLogPanel, ActivitySource } from '../../../../shared/components/
 import { ApiError } from '../../../../shared/services/api';
 import { activityEndpoints } from '../../../../shared/services/activityApi';
 import { downloadCsvText, downloadTablePdf, printedAt, toCsvText } from '../../../../shared/services/printTable';
+import { logThenDownload } from '../../../../shared/services/downloadAudit';
 import { ConfirmDialog, NoticeBar, useNotice } from '../../master/components/masterUi';
 import { ManualInput, ManualList, ManualRequest, ManualStatus, PunchGap, manualAttendanceApi } from '../manualAttendanceApi';
 import { actionBtn } from '../../../../shared/components/actionStyles';
@@ -41,7 +44,7 @@ const MANUAL_ACTIVITY: ActivitySource = {
   title: 'Manual attendance activity log',
   recordLabel: 'Request',
   searchPlaceholder: 'Employee, done by, reason…',
-  areas: [{ value: 'manual_attendance', label: 'Manual attendance' }, { value: 'manual_attendance_export', label: 'Log download' }],
+  areas: [{ value: 'manual_attendance', label: 'Manual attendance' }, { value: 'manual_attendance_data_export', label: 'Data download' }, { value: 'manual_attendance_export', label: 'Log download' }],
   actions: ['CREATE', 'UPDATE', 'STATUS', 'DELETE', 'EXPORT'],
   actionLabels: { CREATE: 'Applied', UPDATE: 'Edited', STATUS: 'Approved / rejected', DELETE: 'Deleted', EXPORT: 'Downloaded' },
   ...activityEndpoints('/hrms/manual-attendance/activity', 'WII_Manual_Attendance_Activity.csv'),
@@ -364,8 +367,9 @@ export const ManualAttendanceView: React.FC = () => {
     STATUS_META[r.status].label, r.actionByName ?? '', r.comment ?? '',
   ]);
   const fileName = `WII_Manual_Attendance_${from}_to_${to}`;
-  const downloadCsv = () => downloadCsvText(toCsvText(exportHeaders, exportRows()), fileName);
-  const downloadPdf = () => downloadTablePdf({
+  const downloadCsv = () => void logThenDownload('manual_attendance', 'csv', sorted.length, range, () => downloadCsvText(toCsvText(exportHeaders, exportRows()), fileName), setError);
+  const downloadPdf = () => void logThenDownload('manual_attendance', 'pdf', sorted.length, range, () => buildPdf(), setError);
+  const buildPdf = () => downloadTablePdf({
     title: 'Manual Attendance',
     subtitle: [`${range} · Generated ${printedAt(new Date().toISOString())}`, teamView ? 'All requests shown' : currentUser.name],
     headers: exportHeaders,
@@ -378,14 +382,7 @@ export const ManualAttendanceView: React.FC = () => {
     .sort((a, b) => a[1].localeCompare(b[1])).map(([value, label]) => ({ label, value }));
 
   const auditorSwitch = isAudit ? (
-    <div role="tablist" aria-label="Auditor view" className="inline-flex items-center gap-0.5 p-0.5 rounded-xl bg-slate-100 border border-slate-200">
-      {([['records', 'Requests'], ['activity', 'Activity log']] as const).map(([key, text]) => (
-        <button key={key} type="button" role="tab" aria-selected={auditorView === key} onClick={() => setAuditorView(key)}
-          className={`h-7 px-3.5 rounded-lg text-xs font-bold cursor-pointer transition-colors ${auditorView === key ? 'bg-white text-primary shadow-2xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'}`}>
-          {text}
-        </button>
-      ))}
-    </div>
+    <SegmentedControl ariaLabel="Auditor view" value={auditorView} onChange={setAuditorView} options={[{ value: 'records', label: 'Requests' }, { value: 'activity', label: 'Activity log' }]} />
   ) : null;
 
   const subtitle = isAdmin ? 'Apply, edit, approve and reject manual attendance of all employees'
@@ -397,14 +394,11 @@ export const ManualAttendanceView: React.FC = () => {
   return (
     <div className="space-y-5 pb-6">
       <PageHeader
-        icon={ClipboardList}
+        icon={PAGE_ICONS.manual_attendance}
         title="Manual Attendance"
         subtitle={subtitle}
         rightAction={canApply ? (
-          <button type="button" onClick={openApply}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-xl inline-flex items-center gap-1.5 shadow-2xs cursor-pointer">
-            <Plus className="w-4 h-4" /> Apply manual attendance
-          </button>
+          <PageHeaderButton icon={Plus} onClick={openApply}>Apply manual attendance</PageHeaderButton>
         ) : undefined}
       />
 
@@ -432,12 +426,15 @@ export const ManualAttendanceView: React.FC = () => {
           )}
 
           <FilterToolbar
-            start={auditorSwitch ?? (
+            start={(
+              <>
+                {auditorSwitch}
               <div className="flex items-center gap-1.5">
                 <div className="w-36"><AppDatePicker size="sm" placeholder="From date" value={from} onChange={setFrom} /></div>
                 <span className="text-slate-300 font-bold">—</span>
                 <div className="w-36"><AppDatePicker size="sm" placeholder="To date" value={to} onChange={setTo} isRightColumn /></div>
               </div>
+              </>
             )}
             exports={{
               onCsv: downloadCsv, onPdf: downloadPdf, disabled: sorted.length === 0,
@@ -446,13 +443,6 @@ export const ManualAttendanceView: React.FC = () => {
             search={{ value: search, onChange: setSearch, placeholder: teamView ? 'Search employee, reason, comment…' : 'Search date, reason, comment…' }}
             onReset={filtered ? resetAll : null}
             filters={[
-              isAudit && (
-                <div key="range" className="flex items-center gap-1.5">
-                  <div className="w-36"><AppDatePicker size="sm" placeholder="From date" value={from} onChange={setFrom} /></div>
-                  <span className="text-slate-300 font-bold">—</span>
-                  <div className="w-36"><AppDatePicker size="sm" placeholder="To date" value={to} onChange={setTo} isRightColumn /></div>
-                </div>
-              ),
               teamView && <MultiSelectFilter key="emp" label="Employee" options={employeeOptions} selectedValues={employees} onChange={setEmployees} />,
               teamView && <MultiSelectFilter key="dept" label="Department" options={opt(distinct((r) => r.department))} selectedValues={departments} onChange={setDepartments} />,
               <MultiSelectFilter key="cat" label="Category" options={opt(data?.categories ?? distinct((r) => r.category))} selectedValues={categories} onChange={setCategories} />,

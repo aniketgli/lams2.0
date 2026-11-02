@@ -79,7 +79,7 @@ async function employeesInScope(viewer: AttendanceViewer, onlyUserId: string | n
   const found = await rows(
     `SELECT u.id, u.biometric_id, u.status, u.valid_upto, p.joining_date, p.shift_id, p.profile_data
        FROM users u LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id
-      WHERE LOWER(u.status) = 'active'`,
+      WHERE LOWER(u.status) = 'active' AND u.is_system = 0`,
   );
   const all = viewer.role === 'administrator' || viewer.role === 'audit';
   const manager = viewer.role === 'reporting_manager' || viewer.role === 'reviewing_manager';
@@ -330,4 +330,42 @@ export async function listAttendance(viewer: AttendanceViewer, query: { from?: u
     from, to, machinesConfigured: machines.size > 0, records,
     shifts: [...usedShifts.values()].map((sh) => ({ code: sh.code, name: sh.name, startTime: sh.start, endTime: sh.end })),
   };
+}
+
+/** A weekly off or gazetted holiday on which the biometric machines recorded both an In and an Out punch. */
+export interface WorkedOffDay { date: string; in: string; out: string; hours: number; reason: string }
+
+/**
+ * Weekly offs / gazetted holidays worked, per employee code, between two dates (compensatory off credits).
+ * Only the biometric log counts: approved manual attendance is never used here. Days before joining are skipped.
+ */
+export async function workedOffDays(
+  emps: Array<{ biometricId: string; shiftId: string | null; joining: string | null }>, from: string, to: string,
+): Promise<Map<string, WorkedOffDay[]>> {
+  const out = new Map<string, WorkedOffDay[]>();
+  if (emps.length === 0 || from > to) return out;
+  const [machines, shifts, holidays] = await Promise.all([attendanceMachines(), shiftRules(), gazettedHolidays(from, to)]);
+  let punches: Map<string, Map<string, Punch[]>>;
+  try {
+    punches = await loadPunches(from, to, machines, emps.map((e) => normalizeEmployeeCode(e.biometricId)));
+  } catch (error) {
+    if (error instanceof HttpError) return out; // attendance not set up: no punch is known
+    throw error;
+  }
+  const dates = datesBetween(from, to);
+  for (const emp of emps) {
+    const shift = (emp.shiftId && shifts.byId.get(emp.shiftId)) || shifts.fallback;
+    const byDate = punches.get(normalizeEmployeeCode(emp.biometricId));
+    const found: WorkedOffDay[] = [];
+    for (const date of dates) {
+      if (emp.joining && date < emp.joining) continue;
+      const holiday = holidays.get(date);
+      if (!holiday && shift.workingDays.includes(weekdayOf(date))) continue;
+      const day = classifyPunches((byDate?.get(date) ?? []).map((p) => p.time), shift);
+      if (day.in === null || day.out === null) continue;
+      found.push({ date, in: day.in, out: day.out, hours: Math.round(((toMinutes(day.out) - toMinutes(day.in)) / 60) * 100) / 100, reason: holiday ?? 'Weekly off' });
+    }
+    out.set(emp.biometricId, found);
+  }
+  return out;
 }

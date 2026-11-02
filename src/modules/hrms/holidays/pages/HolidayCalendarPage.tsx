@@ -3,7 +3,9 @@ import {
   CalendarCheck, CalendarClock, CalendarDays, ChevronLeft, ChevronRight, LayoutGrid, List, Pencil, Plus, Sparkles, Tag, Trash2,
 } from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
-import { PageHeader } from '../../../../shared/components/PageHeader';
+import { PageHeader, PageHeaderButton } from '../../../../shared/components/PageHeader';
+import { SegmentedControl } from '../../../../shared/components/SegmentedControl';
+import { PAGE_ICONS } from '../../hrmsPages';
 import { DataTable, Input, Modal, Select } from '../../../../shared/components';
 import type { ColumnDef } from '../../../../shared/components';
 import { Textarea } from '../../../../shared/components/forms/Textarea';
@@ -15,6 +17,7 @@ import { ActivityLogPanel, ActivitySource } from '../../../../shared/components/
 import { ApiError } from '../../../../shared/services/api';
 import { activityEndpoints } from '../../../../shared/services/activityApi';
 import { downloadCsvText, downloadTablePdf, printedAt, toCsvText } from '../../../../shared/services/printTable';
+import { logThenDownload } from '../../../../shared/services/downloadAudit';
 import { ConfirmDialog, NoticeBar, useNotice } from '../../master/components/masterUi';
 import { HolidayItem, MONTH_NAMES } from '../data/holidayData';
 import { HolidayInput, holidayApi } from '../holidayApi';
@@ -44,7 +47,7 @@ const HOLIDAY_ACTIVITY: ActivitySource = {
   title: 'Holiday activity log',
   recordLabel: 'Holiday',
   searchPlaceholder: 'Holiday, done by, reason…',
-  areas: [{ value: 'holiday', label: 'Holiday' }, { value: 'holiday_export', label: 'Log download' }],
+  areas: [{ value: 'holiday', label: 'Holiday' }, { value: 'holiday_data_export', label: 'Data download' }, { value: 'holiday_export', label: 'Log download' }],
   actions: ['CREATE', 'UPDATE', 'DELETE', 'EXPORT'],
   ...activityEndpoints('/hrms/holidays/activity', 'WII_Holiday_Activity.csv'),
 };
@@ -118,9 +121,12 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = () => {
     search.trim() ? `Search: “${search.trim()}”` : null,
   ].filter(Boolean).join(' · ');
 
-  const downloadCsv = () => downloadCsvText(toCsvText(exportHeaders, exportRows()), `WII_Holiday_Calendar_${year}`);
+  const filtersText = () => `Year ${year}${filterLine() ? ` · ${filterLine()}` : ''}`;
+  const onDownloadError = (message: string) => showNotice('error', message);
+  const downloadCsv = () => void logThenDownload('holidays', 'csv', visible.length, filtersText(), () => downloadCsvText(toCsvText(exportHeaders, exportRows()), `WII_Holiday_Calendar_${year}`), onDownloadError);
+  const downloadPdf = () => void logThenDownload('holidays', 'pdf', visible.length, filtersText(), () => buildPdf(), onDownloadError);
   // PDF fonts cannot draw Devanagari, so the Hindi name stays in the CSV only.
-  const downloadPdf = () => {
+  const buildPdf = () => {
     const hindi = exportHeaders.indexOf('Hindi name');
     downloadTablePdf({
       title: `Holiday Calendar ${year}`,
@@ -296,14 +302,7 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = () => {
 
   // ---- Layout ----------------------------------------------------------------
   const auditorSwitch = isAudit ? (
-    <div className="inline-flex p-1 bg-slate-100/90 border border-slate-200/90 rounded-xl gap-1" role="tablist" aria-label="Auditor view">
-      {([['calendar', 'Holiday calendar'], ['activity', 'Activity logs']] as const).map(([key, label]) => (
-        <button key={key} type="button" role="tab" aria-selected={auditorView === key} onClick={() => setAuditorView(key)}
-          className={`h-7 px-3.5 rounded-lg text-xs font-bold cursor-pointer transition-colors ${auditorView === key ? 'bg-white text-primary shadow-2xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'}`}>
-          {label}
-        </button>
-      ))}
-    </div>
+    <SegmentedControl ariaLabel="Auditor view" value={auditorView} onChange={setAuditorView} options={[{ value: 'calendar', label: 'Holiday calendar' }, { value: 'activity', label: 'Activity log' }]} />
   ) : null;
 
   const statCards = [
@@ -319,14 +318,11 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = () => {
   return (
     <div className="space-y-5 pb-6">
       <PageHeader
-        icon={CalendarDays}
+        icon={PAGE_ICONS.holiday_calendar}
         title="Holiday Calendar"
         subtitle={isAdmin ? 'Add, edit and remove institute holidays' : 'Gazetted, restricted and local holidays of the institute'}
         rightAction={isAdmin ? (
-          <button type="button" onClick={() => openAdd()}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-xl inline-flex items-center gap-1.5 shadow-2xs cursor-pointer">
-            <Plus className="w-4 h-4" /> Add holiday
-          </button>
+          <PageHeaderButton icon={Plus} onClick={() => openAdd()}>Add holiday</PageHeaderButton>
         ) : undefined}
       />
 

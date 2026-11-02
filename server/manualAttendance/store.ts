@@ -34,8 +34,8 @@ const AUDIT_KEY = 'manual_attendance';
 
 /** The auditor's activity log: request changes and downloads of that log. */
 export const MANUAL_SCOPE: ActivityScope = {
-  keys: ['manual_attendance', 'manual_attendance_export'],
-  areaLabels: { manual_attendance: 'Manual attendance', manual_attendance_export: 'Log download' },
+  keys: ['manual_attendance', 'manual_attendance_export', 'manual_attendance_data_export'],
+  areaLabels: { manual_attendance: 'Manual attendance', manual_attendance_export: 'Log download', manual_attendance_data_export: 'Data download' },
   actionLabels: { CREATE: 'Applied', UPDATE: 'Edited', STATUS: 'Approved / rejected', DELETE: 'Deleted' },
   exportKey: 'manual_attendance_export',
   title: 'Manual attendance activity log',
@@ -477,7 +477,7 @@ export async function applicableEmployees(viewer: Viewer): Promise<{ id: string;
   const found = await rows(pool,
     `SELECT u.id, u.biometric_id, u.name, p.designation FROM users u
        LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id
-      WHERE LOWER(u.status) = 'active' ORDER BY u.name`);
+      WHERE LOWER(u.status) = 'active' AND u.is_system = 0 ORDER BY u.name`);
   return found.map((r) => ({ id: String(r.id), biometricId: String(r.biometric_id), name: String(r.name), designation: String(r.designation ?? '') }));
 }
 

@@ -4,6 +4,8 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
 import { PageHeader } from '../../../../shared/components/PageHeader';
+import { SegmentedControl } from '../../../../shared/components/SegmentedControl';
+import { PAGE_ICONS } from '../../hrmsPages';
 import { DataTable } from '../../../../shared/components';
 import type { ColumnDef } from '../../../../shared/components';
 import { AppDatePicker } from '../../../../shared/components/AppDatePicker';
@@ -12,6 +14,9 @@ import { FilterToolbar } from '../../../../shared/components/FilterToolbar';
 import { UserAvatar } from '../../../../shared/components/UserAvatar';
 import { ApiError } from '../../../../shared/services/api';
 import { downloadCsvText, downloadTablePdf, printedAt, toCsvText } from '../../../../shared/services/printTable';
+import { logThenDownload } from '../../../../shared/services/downloadAudit';
+import { ActivityLogPanel, ActivitySource } from '../../../../shared/components/ActivityLogPanel';
+import { activityEndpoints } from '../../../../shared/services/activityApi';
 import { AttendanceDay, AttendanceResponse, attendanceApi } from '../attendanceApi';
 
 /**
@@ -67,10 +72,23 @@ const StatusPill: React.FC<{ status: AttendanceDay['status'] }> = ({ status }) =
 
 type Row = AttendanceDay & { name: string; department: string; designation: string; employmentType: string; reportingManagerId: string; avatar: string };
 
+/** Attendance comes from the biometric machines and is never edited here, so the auditor's log is the record of who downloaded it. */
+const ATTENDANCE_ACTIVITY: ActivitySource = {
+  title: 'Attendance activity log',
+  recordLabel: 'Download',
+  searchPlaceholder: 'Done by, filter…',
+  areas: [{ value: 'attendance_data_export', label: 'Data download' }, { value: 'attendance_export', label: 'Log download' }],
+  actions: ['EXPORT'],
+  actionLabels: { EXPORT: 'Downloaded' },
+  ...activityEndpoints('/hrms/attendance/activity', 'WII_Attendance_Activity.csv'),
+};
+
 export const AttendanceView: React.FC = () => {
   const { currentUser, users, masterOptions } = useApp();
   const role = currentUser.role;
+  const isAudit = role === 'audit';
   const isAdminOrAudit = role === 'administrator' || role === 'audit';
+  const [auditorView, setAuditorView] = useState<'records' | 'activity'>('records');
   const isManager = role === 'reporting_manager' || role === 'reviewing_manager';
   const teamView = isAdminOrAudit || isManager;
   const showManagerFilter = isAdminOrAudit || role === 'reviewing_manager';
@@ -256,8 +274,9 @@ export const AttendanceView: React.FC = () => {
     search.trim() ? `Search: “${search.trim()}”` : null,
   ].filter(Boolean).join(' · ');
   const fileName = `WII_Attendance_${start}_to_${end}`;
-  const downloadCsv = () => downloadCsvText(toCsvText(exportHeaders, exportRows()), fileName);
-  const downloadPdf = () => downloadTablePdf({
+  const downloadCsv = () => void logThenDownload('attendance', 'csv', sorted.length, `${range}${filterLine() ? ` · ${filterLine()}` : ''}`, () => downloadCsvText(toCsvText(exportHeaders, exportRows()), fileName), setError);
+  const downloadPdf = () => void logThenDownload('attendance', 'pdf', sorted.length, `${range}${filterLine() ? ` · ${filterLine()}` : ''}`, () => buildPdf(), setError);
+  const buildPdf = () => downloadTablePdf({
     title: 'Biometric Attendance',
     subtitle: [`${range} · Generated ${printedAt(new Date().toISOString())}`, filterLine() || (teamView ? 'All employees shown' : currentUser.name)],
     headers: exportHeaders,
@@ -317,15 +336,23 @@ export const AttendanceView: React.FC = () => {
   const employeeOptions = [...new Map(rows.map((r) => [r.userId, `${r.name} (${r.biometricId})`])).entries()]
     .sort((a, b) => a[1].localeCompare(b[1])).map(([value, label]) => ({ label, value }));
 
+  const auditorSwitch = isAudit ? (
+    <SegmentedControl ariaLabel="Auditor view" value={auditorView} onChange={setAuditorView} options={[{ value: 'records', label: 'Attendance' }, { value: 'activity', label: 'Activity log' }]} />
+  ) : null;
+
   return (
     <div className="space-y-5 pb-6">
       <PageHeader
-        icon={CalendarDays}
+        icon={PAGE_ICONS.attendance}
         title="Biometric Attendance"
         subtitle={isAdminOrAudit ? 'Daily attendance of all employees from the biometric machines'
           : isManager ? 'Your attendance and your team’s, from the biometric machines' : 'Your daily attendance from the biometric machines'}
       />
 
+      {isAudit && auditorView === 'activity' ? (
+        <ActivityLogPanel source={ATTENDANCE_ACTIVITY} toolbarStart={auditorSwitch} />
+      ) : (
+      <>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {statCards.map(({ label, value, note, icon: Icon, tone }) => (
           <div key={label} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex items-start gap-3 min-w-0">
@@ -346,7 +373,10 @@ export const AttendanceView: React.FC = () => {
       )}
 
       <FilterToolbar
-        start={viewMode === 'month' ? (
+        start={(
+          <>
+            {auditorSwitch}
+            {viewMode === 'month' ? (
           <span className="text-xs font-bold text-slate-700">{MONTHS[mm - 1]} {my}</span>
         ) : (
           <div className="flex items-center gap-1.5">
@@ -354,6 +384,8 @@ export const AttendanceView: React.FC = () => {
             <span className="text-slate-300 font-bold">—</span>
             <div className="w-36"><AppDatePicker size="sm" placeholder="To date" value={to} onChange={setTo} isRightColumn /></div>
           </div>
+        )}
+          </>
         )}
         exports={{
           onCsv: downloadCsv, onPdf: downloadPdf, disabled: sorted.length === 0,
@@ -419,6 +451,8 @@ export const AttendanceView: React.FC = () => {
             ))}
           </div>
         </section>
+      )}
+      </>
       )}
     </div>
   );

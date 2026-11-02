@@ -36,7 +36,7 @@ async function bootstrap() {
 
       console.log('');
       console.log('==============================================');
-      console.log('  WII Enterprise Portal - Development Server');
+      console.log('  WII Portal - Development Server');
       console.log('==============================================');
       console.log(`  Local:   http://localhost:${port}`);
 
