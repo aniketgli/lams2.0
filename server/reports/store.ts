@@ -291,14 +291,14 @@ export async function runSchedule(row: RowDataPacket, trigger: 'schedule' | 'man
       const periodText = def.snapshot ? `as on ${pretty(today)}` : period.from === period.to ? pretty(period.from) : `${pretty(period.from)} to ${pretty(period.to)}`;
       const formats = String(row.formats).split(',').filter(Boolean) as ReportFormat[];
       const attachments = renderReport(table, formats, `${def.label}_${def.snapshot ? today : period.from}${!def.snapshot && period.from !== period.to ? `_to_${period.to}` : ''}`,
-        [`${def.label} · ${periodText}`, `Sent automatically by WII Enterprise Portal on ${pretty(today)}`]);
+        [`${def.label} · ${periodText}`, `Sent automatically by WII Portal on ${pretty(today)}`]);
       let sent = 0;
       const failures: string[] = [];
       for (const to of recipients) {
         const mail = await EmailService.sendEmail({
           to: to.email, toName: to.name, subject: `${String(row.name)} — ${periodText}`, category: 'REPORT', eventType: 'SCHEDULED_REPORT', referenceId: `report-${id}`, attachments,
-          html: `<p>Dear ${esc(to.name)},</p><p>Please find attached the <strong>${esc(def.label)}</strong> report for ${esc(periodText)} (${table.rows.length} ${table.rows.length === 1 ? 'row' : 'rows'}).</p><p style="color:#64748b;font-size:12px">This email is sent automatically by the WII Enterprise Portal.</p>`,
-          text: `Dear ${to.name},\n\nPlease find attached the ${def.label} report for ${periodText} (${table.rows.length} rows).\n\nThis email is sent automatically by the WII Enterprise Portal.`,
+          html: `<p>Dear ${esc(to.name)},</p><p>Please find attached the <strong>${esc(def.label)}</strong> report for ${esc(periodText)} (${table.rows.length} ${table.rows.length === 1 ? 'row' : 'rows'}).</p><p style="color:#64748b;font-size:12px">This email is sent automatically by the WII Portal.</p>`,
+          text: `Dear ${to.name},\n\nPlease find attached the ${def.label} report for ${periodText} (${table.rows.length} rows).\n\nThis email is sent automatically by the WII Portal.`,
         });
         if (mail.status === 'delivered') sent += 1;
         else failures.push(mail.message);

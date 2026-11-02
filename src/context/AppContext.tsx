@@ -874,7 +874,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     logoUrl: '',
     address: 'Office Location',
     copyrightText: `© ${new Date().getFullYear()} Organization • Integrated Enterprise Suite`,
-    appName: 'Enterprise Portal',
+    appName: 'WII Portal',
     orgHindiName: '',
     badgeText: 'HUB',
     logoType: 'custom',
