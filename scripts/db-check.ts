@@ -36,7 +36,7 @@ const REQUIRED: Record<string, string[]> = {
   users: ['id', 'biometric_id', 'status', 'valid_upto', 'is_system', 'must_change_password'],
   employee_profiles: ['biometric_id', 'profile_data', 'joining_date', 'shift_id', 'reporting_manager_id', 'reviewing_manager_id'],
   user_module_roles: ['biometric_id', 'module_id', 'role_id', 'status'],
-  web_sessions: ['session_id'],
+  web_sessions: ['sid', 'user_id', 'expires_at', 'data'],
   leave_requests: ['user_id', 'start_date', 'end_date', 'status'],
   outdoor_duty_requests: ['user_id', 'start_date', 'end_date', 'status'],
   manual_attendance_requests: ['user_id', 'att_date', 'status'],
@@ -89,6 +89,9 @@ async function main(): Promise<void> {
       report(Number(invalid?.n) === 0 ? 'PASS' : 'WARN', 'profile_data is valid JSON everywhere', `${invalid?.n} invalid`);
     } catch (e) { report('FAIL', 'Generated manager columns', (e as Error).message); }
 
+    const punchCount = Number((await one(c, 'SELECT COUNT(*) AS n FROM `Attendance`'))?.n ?? 0);
+    if (punchCount < 100_000) report('WARN', 'Test data volume', `Attendance has only ${punchCount.toLocaleString('en-IN')} punches; timings and plans are meaningful only with production-sized data (copy production or load ~1 year)`);
+
     // 4. EXPLAIN: hot queries must use an index ---------------------------------------------------
     const sample = await one(c, 'SELECT id, biometric_id FROM users WHERE is_system = 0 ORDER BY id LIMIT 1');
     const uid = sample?.id ?? 0;
@@ -104,10 +107,11 @@ async function main(): Promise<void> {
     ];
     for (const [name, sql, params] of hot) {
       try {
-        const plan = await rows(c, `EXPLAIN ${sql}`, params);
+        // Column names of EXPLAIN differ in case between servers, so read them case-insensitively.
+        const plan = (await rows(c, `EXPLAIN ${sql}`, params)).map((r) => Object.fromEntries(Object.entries(r).map(([k, val]) => [k.toLowerCase(), val])));
         const scans = plan.filter((p) => p.type === 'ALL' && Number(p.rows) > 1000);
         if (scans.length) report('WARN', `Plan: ${name}`, `full scan of ${scans.map((p) => `${p.table} (~${p.rows} rows)`).join(', ')}`);
-        else report('PASS', `Plan: ${name}`, plan.map((p) => `${p.table}:${p.key ?? 'no key'}`).join(', '));
+        else report('PASS', `Plan: ${name}`, plan.map((p) => (p.table ? `${p.table}:${p.key ?? 'no index (empty table or no match)'}` : String(p.extra ?? 'no table used'))).join(', '));
       } catch (e) { report('FAIL', `Plan: ${name}`, (e as Error).message); }
     }
 
