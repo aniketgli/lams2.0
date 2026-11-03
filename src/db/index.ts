@@ -1,20 +1,21 @@
 import { drizzle } from 'drizzle-orm/mysql2';
 import mysql from 'mysql2/promise';
 import * as schema from './schema';
+import { envConfig } from '../../server/config/env.config';
 
-if (!process.env.DATABASE_URL) {
+if (!envConfig.databaseUrl) {
   throw new Error('DATABASE_URL is not set. Copy .env.example to .env and configure the database.');
 }
 
 /** Shared connection pool. Also used directly by the session store. */
 export const pool = mysql.createPool({
-  uri: process.env.DATABASE_URL,
+  uri: envConfig.databaseUrl,
   // Thousands of people use the portal together, so the pool is sized for that (MySQL's
   // max_connections must be higher than this number times the number of server processes).
-  connectionLimit: Number(process.env.DB_POOL_SIZE || 40),
+  connectionLimit: envConfig.dbPoolSize,
   // When every connection is busy, up to this many requests wait; more are refused at once
   // (a clear error) instead of piling up without limit until the server runs out of memory.
-  queueLimit: Number(process.env.DB_QUEUE_LIMIT || 500),
+  queueLimit: envConfig.dbQueueLimit,
   connectTimeout: 10_000,
   enableKeepAlive: true,
   maxIdle: 10,
@@ -22,7 +23,7 @@ export const pool = mysql.createPool({
 });
 
 // A SELECT that runs longer than this is stopped by MySQL, so one huge report cannot hold the database.
-const queryTimeoutMs = Math.max(1000, Number(process.env.DB_QUERY_TIMEOUT_MS || 30_000));
+const queryTimeoutMs = envConfig.dbQueryTimeoutMs;
 pool.pool.on('connection', (connection) => {
   connection.query(`SET SESSION max_execution_time = ${Math.trunc(queryTimeoutMs)}`);
 });

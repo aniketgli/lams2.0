@@ -49,7 +49,7 @@ export interface EmailSettingsView {
 // ---- Encryption ----------------------------------------------------------------
 
 function key(): Buffer {
-  const raw = process.env.SETTINGS_ENCRYPTION_KEY || process.env.SESSION_SECRET || 'local-development-only-settings-key';
+  const raw = envConfig.settingsEncryptionKey || 'local-development-only-settings-key';
   return createHash('sha256').update(`wii-settings:${raw}`).digest();
 }
 
@@ -173,7 +173,7 @@ export function transportOptions(config: EmailTransportConfig) {
     requireTLS: config.security === 'starttls',
     ignoreTLS: config.security === 'none',
     auth: config.user ? { user: config.user, pass: config.password ?? '' } : undefined,
-    tls: { rejectUnauthorized: process.env.SMTP_ALLOW_SELF_SIGNED !== 'true' },
+    tls: { rejectUnauthorized: !envConfig.smtpAllowSelfSigned },
     connectionTimeout: 10_000,
     greetingTimeout: 10_000,
   };

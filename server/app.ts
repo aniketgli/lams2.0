@@ -27,6 +27,7 @@ import { MySqlSessionStore } from './lib/sessionStore';
 import { SESSION_COOKIE } from './lib/http';
 import { sessionConfig } from './config/session.config';
 import { requireCurrentContext } from './middleware/auth.middleware';
+import { envConfig } from './config/env.config';
 
 
 async function sessionTableExists(): Promise<boolean> {
@@ -40,7 +41,7 @@ async function sessionTableExists(): Promise<boolean> {
 }
 
 async function createSessionStore(isProduction: boolean): Promise<session.Store | undefined> {
-  if (process.env.SESSION_STORE === 'memory' && !isProduction) {
+  if (envConfig.sessionStore === 'memory' && !isProduction) {
     console.warn('[startup] SESSION_STORE=memory: logins will be lost on every restart.');
     return undefined;
   }
@@ -54,8 +55,8 @@ async function createSessionStore(isProduction: boolean): Promise<session.Store 
 
 export async function createApp(httpServer?: HttpServer) {
   const app = express();
-  const isProduction = process.env.NODE_ENV === 'production';
-  const sessionSecret = process.env.SESSION_SECRET;
+  const isProduction = envConfig.isProduction;
+  const sessionSecret = envConfig.sessionSecret;
 
   // Never run production with a missing or weak session secret.
   if (isProduction && (!sessionSecret || sessionSecret.length < 32)) {
