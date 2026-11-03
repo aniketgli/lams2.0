@@ -1,5 +1,5 @@
 import 'express-session';
-import type { AccountRow, ModuleGrants } from '../services/access.service';
+import type { AccountRow, ModuleGrants } from '../auth/access.service';
 import type { ModuleId, RoleId } from '../lib/roles';
 
 declare module 'express-session' {

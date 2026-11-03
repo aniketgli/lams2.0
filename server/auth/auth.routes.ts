@@ -9,8 +9,8 @@ import {
 import { AttemptLimiter } from '../lib/rateLimit';
 import { captchaEnabled, createCaptcha, verifyCaptcha } from '../lib/captcha';
 import { Validator } from '../lib/validate';
-import { accountBlockReason, clearAccessCache, findAccountById, loadActiveGrants } from '../services/access.service';
-import { buildSessionPayload } from '../services/session.service';
+import { accountBlockReason, clearAccessCache, findAccountById, loadActiveGrants } from './access.service';
+import { buildSessionPayload } from './session.service';
 import { requireAuth } from '../middleware/auth.middleware';
 import { authConfig, normalizeLoginEmail } from '../config/auth.config';
 import { destroyUserSessions } from '../lib/sessionStore';

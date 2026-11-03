@@ -2,7 +2,7 @@ import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { asyncHandler, clearSessionCookie, destroySession, forbidden, unauthorized, HttpError } from '../lib/http';
 import type { ModuleId, RoleId } from '../lib/roles';
 import { PASSIVE_REQUEST_HEADER, sessionConfig } from '../config/session.config';
-import { accountBlockReason, cachedAccountById, cachedActiveGrants, hasGrant } from '../services/access.service';
+import { accountBlockReason, cachedAccountById, cachedActiveGrants, hasGrant } from '../auth/access.service';
 
 /**
  * Every authenticated request re-checks:
