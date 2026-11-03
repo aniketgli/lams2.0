@@ -5,6 +5,8 @@ Leave & Attendance Management for the Wildlife Institute of India, inside the WI
 - **Frontend:** React 19, Vite, Tailwind 4 (`src/`)
 - **Backend:** Express 4 + MySQL via Drizzle ORM (`server/`, schema in `src/db/schema.ts`)
 
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the folder structure, naming and error-handling conventions.
+
 ## Setup
 
 ```bash
