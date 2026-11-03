@@ -7,10 +7,11 @@
  * Only the exact domains listed are accepted: "x@wii.gov.in" is allowed,
  * "x@mail.wii.gov.in" or "x@wii.gov.in.example.com" are not.
  */
+import { envConfig } from './env.config';
 const DEFAULT_DOMAINS = ['wii.gov.in', 'edu.wii.gov.in'];
 
 function readDomains(): string[] {
-  const raw = process.env.LOGIN_EMAIL_DOMAINS;
+  const raw = envConfig.loginEmailDomains;
   const list = (raw ? raw.split(',') : DEFAULT_DOMAINS)
     .map((d) => d.trim().toLowerCase().replace(/^@/, ''))
     .filter((d) => /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(d));

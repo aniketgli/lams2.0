@@ -1,4 +1,5 @@
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
+import { envConfig } from '../config/env.config';
 
 /**
  * An error that is safe to show to the client. Anything else that reaches the
@@ -53,7 +54,7 @@ export function clearSessionCookie(res: Response) {
   res.clearCookie(SESSION_COOKIE, {
     httpOnly: true,
     sameSite: 'strict',
-    secure: process.env.NODE_ENV === 'production',
+    secure: envConfig.isProduction,
     path: '/',
   });
 }

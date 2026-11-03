@@ -1,6 +1,7 @@
 import bcrypt from 'bcrypt';
 import type { RowDataPacket } from 'mysql2/promise';
 import { pool } from '../../src/db';
+import { envConfig } from '../config/env.config';
 
 /**
  * Default password for new employees. Only its bcrypt hash is stored
@@ -19,7 +20,7 @@ export const ACCOUNT_SETTINGS_ID = 'default';
 let envHash: { source: string; hash: string } | null = null;
 
 async function hashOfEnvPassword(): Promise<string | null> {
-  const value = process.env.DEFAULT_EMPLOYEE_PASSWORD;
+  const value = envConfig.defaultEmployeePassword;
   if (!value) return null;
   if (envHash?.source !== value) envHash = { source: value, hash: await bcrypt.hash(value, 12) };
   return envHash.hash;
@@ -71,6 +72,6 @@ export async function defaultPasswordView(q: Querier = pool): Promise<DefaultPas
       updatedBy: row.updated_by ? { biometricId: String(row.updated_by), name: row.updated_by_name ? String(row.updated_by_name) : null } : null,
     };
   }
-  if (process.env.DEFAULT_EMPLOYEE_PASSWORD) return { isSet: true, source: 'env', updatedAt: null, updatedBy: null };
+  if (envConfig.defaultEmployeePassword) return { isSet: true, source: 'env', updatedAt: null, updatedBy: null };
   return { isSet: false, source: null, updatedAt: null, updatedBy: null };
 }

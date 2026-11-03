@@ -1,4 +1,5 @@
 import type { RequestHandler } from 'express';
+import { envConfig } from '../config/env.config';
 
 /** Basic hardening headers for every response. */
 export const securityHeaders: RequestHandler = (_req, res, next) => {
@@ -7,7 +8,7 @@ export const securityHeaders: RequestHandler = (_req, res, next) => {
   res.setHeader('Referrer-Policy', 'same-origin');
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-  if (process.env.NODE_ENV === 'production') {
+  if (envConfig.isProduction) {
     res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
   }
   next();

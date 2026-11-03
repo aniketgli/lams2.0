@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
+import { envConfig } from '../config/env.config';
 
 /**
  * Sign-in CAPTCHA, generated and checked entirely on the server (no third-party service, no database).
@@ -21,9 +22,9 @@ const LENGTH = 6;
 const LIFETIME_MS = 5 * 60 * 1000;
 const MAX_USED = 50_000; // cap on remembered nonces, so memory stays bounded under attack
 
-export const captchaEnabled = (): boolean => String(process.env.LOGIN_CAPTCHA ?? 'on').toLowerCase() !== 'off';
+export const captchaEnabled = (): boolean => envConfig.loginCaptcha;
 
-const secret = (): string => process.env.SESSION_SECRET || 'local-development-only-captcha-key';
+const secret = (): string => envConfig.sessionSecret || 'local-development-only-captcha-key';
 const sign = (expiresAt: number, nonce: string, answer: string): string =>
   createHmac('sha256', secret()).update(`${expiresAt}.${nonce}.${answer}`).digest('base64url');
 

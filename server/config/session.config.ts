@@ -5,15 +5,10 @@
  *   SESSION_IDLE_MINUTES  sign out after this long with no user activity (default 15)
  *   SESSION_MAX_HOURS     sign out this long after login, however active (default 8)
  */
-function readNumber(name: string, fallback: number, min: number, max: number): number {
-  const raw = Number(process.env[name]);
-  if (!Number.isFinite(raw) || raw <= 0) return fallback;
-  return Math.min(Math.max(raw, min), max);
-}
-
+import { envConfig } from './env.config';
 export const sessionConfig = {
-  idleMs: readNumber('SESSION_IDLE_MINUTES', 15, 2, 240) * 60 * 1000,
-  maxMs: readNumber('SESSION_MAX_HOURS', 8, 1, 24) * 60 * 60 * 1000,
+  idleMs: envConfig.sessionIdleMinutes * 60 * 1000,
+  maxMs: envConfig.sessionMaxHours * 60 * 60 * 1000,
   /** Activity timestamps are written at most this often to avoid a DB write on every request. */
   activityWriteIntervalMs: 15 * 1000,
 };
