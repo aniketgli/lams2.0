@@ -33,12 +33,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpenMobile,
   setIsOpenMobile
 }) => {
-  const {
-    currentUser,
-    users,
-    orgBranding,
-    setIsLogoViewerOpen
-  } = useApp();
+  const { currentUser } = useApp();
   const [expandedGroup, setExpandedGroup] = useState<'attendance' | 'leave' | 'employee' | null>(null);
 
   // Which links appear comes from the same page map the router enforces.

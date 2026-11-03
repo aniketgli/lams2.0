@@ -1,27 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import {
-  PageHeader,
-  Button,
-  Badge,
-  StatusBadge,
-  MetricCard,
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-  TableEmpty,
-  TablePagination,
-  Modal,
-  ModalHeader,
-  ModalBody,
-  ModalFooter,
-  FormField,
-  Input,
-  Select
-} from '../../shared/components';
+import { PageHeader, Button, Badge, MetricCard, Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableEmpty, TablePagination, Modal, ModalHeader, ModalBody, ModalFooter, FormField, Input } from '../../shared/components';
 import {
   Briefcase,
   Plus,

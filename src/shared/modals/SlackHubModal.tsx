@@ -12,14 +12,7 @@ import {
   Input,
   Switch
 } from '../components';
-import {
-  MessageSquare,
-  Send,
-  CheckCircle,
-  AlertCircle,
-  Check,
-  Radio
-} from 'lucide-react';
+import { MessageSquare, Send, CheckCircle } from 'lucide-react';
 
 interface SlackHubModalProps {
   isOpen: boolean;

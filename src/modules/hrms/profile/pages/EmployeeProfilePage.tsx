@@ -30,62 +30,7 @@ import { AppSelect } from '../../../../shared/components/AppSelect';
 import { AppDatePicker } from '../../../../shared/components/AppDatePicker';
 import { api } from '../../../../shared/services/api';
 import { LeaveGroupRecord, leaveGroupApi } from '../../leave/leaveApi';
-import { getUserLeaveCycleType, isCalendarYearCadre } from '../../leave/utils/leaveCycleUtils';
-import {
-  User as UserIcon,
-  Users,
-  Users2,
-  Mail,
-  Phone,
-  Briefcase,
-  MapPin,
-  Calendar,
-  AlertCircle,
-  Edit3,
-  Check,
-  X,
-  Clock,
-  MessageSquare,
-  Shield,
-  ShieldCheck,
-  KeyRound,
-  Fingerprint,
-  UserCheck,
-  UserCog,
-  UserX,
-  Trash2,
-  Plus,
-  Search,
-  ArrowLeftRight,
-  ArrowLeft,
-  ArrowRight,
-  ArrowUp,
-  ArrowDown,
-  ArrowUpDown,
-  RefreshCw,
-  Building,
-  Lock,
-  FileText,
-  ChevronRight,
-  UserPlus,
-  Eye,
-  EyeOff,
-  GraduationCap,
-  BookOpen,
-  Microscope,
-  Building2,
-  Award,
-  Sparkles,
-  LayoutGrid,
-  List,
-  Filter,
-  Layers,
-  School,
-  Download,
-  ChevronDown,
-  RotateCcw,
-  Grid3X3
-} from 'lucide-react';
+import { User as UserIcon, Briefcase, Edit3, Check, X, Shield, KeyRound, UserCheck, UserX, Trash2, Plus, ArrowLeftRight, ArrowUp, ArrowDown, ArrowUpDown, RefreshCw, UserPlus, Eye, EyeOff, GraduationCap, BookOpen, Microscope, Building2, Award, Sparkles, LayoutGrid, List } from 'lucide-react';
 import { RoleMatrixTable } from '../../master/components/RoleMatrixTable';
 import { exportHRMSToCSV, exportHRMSToPDF, HRMSExportColumn, HRMSFilterTag } from '../../utils/hrmsExportUtils';
 import { UserAvatar } from '../../../../shared/components/UserAvatar';
@@ -212,12 +157,9 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     systemUsers,
     updateUserProfile,
     addUserProfile,
-    updateUserRoleAndHierarchy,
     toggleUserStatus,
     deleteUser,
-    resetUserPassword,
     departmentsMaster,
-    locationsMaster,
     masterOptions,
     reloadEmployees
   } = useApp();
@@ -225,8 +167,6 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   // Every dropdown on the employee form comes from the database masters
   // (Master Settings), loaded once in AppContext and refreshed when they change.
   const optionNames = (key: string) => (masterOptions[key] ?? []).map((r) => r.name);
-  const databaseStreams = optionNames('mscStreams');
-  const databaseBatches = optionNames('mscBatches');
   const salutationOptions = (masterOptions.salutation ?? []).map((r) => ({ label: r.name, value: r.code }));
   const genderOptions = (masterOptions.gender ?? []).map((r) => ({ label: r.name, value: r.code }));
   const employeeTypeOptions = (masterOptions.employeeType ?? []).map((r) => ({ label: r.name, value: r.code }));
@@ -309,15 +249,6 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   // Dynamic Search Query for Employee Profiles
   const [profileSearchQuery, setProfileSearchQuery] = useState('');
 
-  // Profile / Directory Summary KPI Stats
-  const profileStats = useMemo(() => {
-    const total = users.length;
-    const regular = users.filter((u) => layoutOf(u.employmentType) === 'regular' || layoutOf(u.employmentType) === 'permanent' || layoutOf(u.employmentType) === 'deputation').length;
-    const contractual = users.filter((u) => layoutOf(u.employmentType) === 'contractual' || layoutOf(u.employmentType) === 'project' || layoutOf(u.employmentType) === 'outsourced').length;
-    const depts = new Set(users.map((u) => u.department).filter(Boolean)).size;
-    return { total, regular, contractual, depts };
-  }, [users]);
-
   // Category Filter State for Directory Tab
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string[]>(['all']);
 
@@ -327,36 +258,6 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const [selectedDepartmentFilter, setSelectedDepartmentFilter] = useState<string[]>(['all']);
   const [selectedReportingMgrFilter, setSelectedReportingMgrFilter] = useState<string[]>(['all']);
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string[]>(['all']);
-
-  // Date Range Filter States (Pic 2)
-  const [startDateFilter, setStartDateFilter] = useState<string>('2026-01-01');
-  const [endDateFilter, setEndDateFilter] = useState<string>('2026-12-31');
-
-  // Helper to format YYYY-MM-DD to "Thu, 01 Jan, 2026"
-  const formatDateDisplay = (dateStr: string) => {
-    if (!dateStr) return '';
-    try {
-      const d = new Date(dateStr + 'T00:00:00');
-      if (isNaN(d.getTime())) return dateStr;
-      return d.toLocaleDateString('en-US', {
-        weekday: 'short',
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-      });
-    } catch {
-      return dateStr;
-    }
-  };
-
-  const handleSetCurrentMonthRange = () => {
-    const now = new Date();
-    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    const formatYMD = (d: Date) => d.toISOString().split('T')[0];
-    setStartDateFilter(formatYMD(firstDay));
-    setEndDateFilter(formatYMD(lastDay));
-  };
 
   // Directory View Mode: 'grid' (Category Cards Grid) or 'detail' (Single Detailed Profile View)
   // table (default) or cards; 'detail' = one employee's full profile.
@@ -477,9 +378,6 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     setSelectedStatusFilter(['all']);
     setProfileSearchQuery('');
   };
-
-  // Legacy alias for existing dropdown compatibility
-  const filteredProfiles = categoryFilteredProfiles;
 
   // Export Handlers for Personnel Directory
   // Auditor: the server builds the files from the database and logs every download.
@@ -646,24 +544,6 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     const m = String(lastDay.getMonth() + 1).padStart(2, '0');
     const d = String(lastDay.getDate()).padStart(2, '0');
     return `${d}/${m}/${y}`;
-  };
-
-  // Calculate total tenure in service
-  const calculateServiceTenure = (joiningDateStr?: string): string => {
-    if (!joiningDateStr) return 'Service Record Active';
-    const join = new Date(joiningDateStr);
-    if (isNaN(join.getTime())) return `Joined: ${joiningDateStr}`;
-    const now = new Date();
-    let years = now.getFullYear() - join.getFullYear();
-    let months = now.getMonth() - join.getMonth();
-    if (months < 0) {
-      years--;
-      months += 12;
-    }
-    if (years <= 0 && months <= 0) return 'Joined Recently';
-    const yStr = years > 0 ? `${years} Year${years > 1 ? 's' : ''}` : '';
-    const mStr = months > 0 ? `${months} Month${months > 1 ? 's' : ''}` : '';
-    return `${[yStr, mStr].filter(Boolean).join(', ')} in Service`;
   };
 
   // Modals and Toasts State
@@ -876,10 +756,6 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const [editUserRolesState, setEditUserRolesState] = useState<UserRole[]>(['general_staff']);
   const [editUserModuleRolesState, setEditUserModuleRolesState] = useState<Record<string, string[]>>({});
   const [isRoleMatrixLoading, setIsRoleMatrixLoading] = useState(false);
-  const [editUserL1, setEditUserL1] = useState<string>('');
-  const [editUserL2, setEditUserL2] = useState<string>('');
-  const [editUserShift, setEditUserShift] = useState<string>('shift-gen-01');
-  const [editUserEmpType, setEditUserEmpType] = useState<EmploymentType>('permanent');
 
   const handleOpenEditRoles = async (u: UserType) => {
     if (u.id === currentUser.id) {
@@ -929,10 +805,6 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     setUserToEditRoles(userForRoleEditor);
     setEditUserBaseRole(u.role);
     setEditUserRolesState(getUserRoles(u));
-    setEditUserL1(u.reportingManagerId || '');
-    setEditUserL2(u.reviewingManagerId || '');
-    setEditUserShift(u.shiftId || 'shift-gen-01');
-    setEditUserEmpType(u.employmentType || 'permanent');
 
     const modRoles: Record<string, string[]> = {
       lams: u.moduleRoles?.lams ? [...u.moduleRoles.lams] : getUserModuleRoles(u, 'lams'),
@@ -997,49 +869,6 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     }
   };
 
-  // Live Summary of all Assigned Roles in Matrix
-  const activeAssignedRolesSummary = useMemo(() => {
-    const list: {
-      id: string;
-      name: string;
-      moduleLabel: string;
-      color: string;
-      bgClass: string;
-      borderClass: string;
-      textClass: string;
-    }[] = [];
-
-    // Enterprise Module Roles (HRMS, PMS, Stock, Finance, Facility)
-    const moduleLabels: Record<string, string> = {
-      lams: 'HRMS',
-      pms: 'PMS',
-      sims: 'Stock',
-      finance: 'Finance',
-      fms: 'Facility'
-    };
-
-    Object.entries(editUserModuleRolesState).forEach(([modId, rawRoleIds]) => {
-      const defs = MODULE_ROLE_DEFINITIONS[modId as EnterpriseModuleId] || [];
-      const roleIds = Array.isArray(rawRoleIds) ? (rawRoleIds as string[]) : [];
-      roleIds.forEach((rId) => {
-        const matched = defs.find((d) => d.id === rId);
-        if (matched) {
-          list.push({
-            id: `${modId}-${rId}`,
-            name: matched.name,
-            moduleLabel: moduleLabels[modId] || modId.toUpperCase(),
-            color: matched.color || 'indigo',
-            bgClass: matched.badgeBg || 'bg-indigo-100',
-            borderClass: matched.badgeBg?.includes('border-') ? '' : 'border-indigo-300',
-            textClass: matched.badgeText || 'text-indigo-900'
-          });
-        }
-      });
-    });
-
-    return list;
-  }, [editUserModuleRolesState]);
-
   const handleToggleSystemRoleInMatrix = (role: UserRole) => {
     if (editUserRolesState.includes(role)) {
       if (editUserRolesState.length > 1) {
@@ -1067,75 +896,6 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
         : [...current, roleId];
       return { ...prev, [moduleId]: updated };
     });
-  };
-
-  const handleApplyPresetInProfile = (
-    presetType: 'super_admin' | 'hod_pi' | 'store_keeper' | 'finance_ddo' | 'research_fellow' | 'reset_staff'
-  ) => {
-    if (presetType === 'super_admin') {
-      setEditUserBaseRole('administrator');
-      setEditUserRolesState(['administrator', 'reviewing_manager', 'reporting_manager', 'general_staff']);
-      setEditUserModuleRolesState({
-        lams: ['hrms_admin', 'hrms_reviewing', 'hrms_reporting', 'hrms_staff'],
-        pms: ['pms_admin', 'pms_pi', 'pms_reviewer'],
-        sims: ['sims_admin', 'sims_store_keeper', 'sims_approver'],
-        fms: ['fms_admin', 'fms_officer'],
-        finance: ['fin_admin', 'fin_officer', 'fin_accountant']
-      });
-    } else if (presetType === 'hod_pi') {
-      setEditUserBaseRole('reviewing_manager');
-      setEditUserRolesState(['reviewing_manager', 'reporting_manager', 'general_staff']);
-      setEditUserModuleRolesState({
-        lams: ['hrms_reviewing', 'hrms_reporting', 'hrms_staff'],
-        pms: ['pms_pi', 'pms_reviewer'],
-        sims: ['sims_approver', 'sims_indenter'],
-        fms: ['fms_requester'],
-        finance: ['fin_officer', 'fin_claimant']
-      });
-    } else if (presetType === 'store_keeper') {
-      setEditUserBaseRole('reporting_manager');
-      setEditUserRolesState(['reporting_manager', 'general_staff']);
-      setEditUserModuleRolesState({
-        lams: ['hrms_staff'],
-        pms: ['pms_researcher'],
-        sims: ['sims_store_keeper', 'sims_approver', 'sims_indenter'],
-        fms: ['fms_supervisor', 'fms_requester'],
-        finance: ['fin_claimant']
-      });
-    } else if (presetType === 'finance_ddo') {
-      setEditUserBaseRole('reviewing_manager');
-      setEditUserRolesState(['reviewing_manager', 'reporting_manager', 'general_staff']);
-      setEditUserModuleRolesState({
-        lams: ['hrms_reviewing', 'hrms_staff'],
-        pms: ['pms_reviewer'],
-        sims: ['sims_approver'],
-        fms: ['fms_officer'],
-        finance: ['fin_admin', 'fin_officer', 'fin_accountant', 'fin_claimant']
-      });
-    } else if (presetType === 'research_fellow') {
-      setEditUserBaseRole('general_staff');
-      setEditUserRolesState(['general_staff']);
-      setEditUserEmpType('researcher');
-      setEditUserModuleRolesState({
-        lams: ['hrms_staff'],
-        pms: ['pms_researcher'],
-        sims: ['sims_indenter'],
-        fms: ['fms_requester'],
-        finance: ['fin_claimant']
-      });
-    } else if (presetType === 'reset_staff') {
-      setEditUserBaseRole('general_staff');
-      setEditUserRolesState(['general_staff']);
-      setEditUserEmpType('permanent');
-      setEditUserModuleRolesState({
-        lams: ['hrms_staff'],
-        pms: ['pms_researcher'],
-        sims: ['sims_indenter'],
-        fms: ['fms_requester'],
-        finance: ['fin_claimant']
-      });
-    }
-    showToast('Role preset applied to matrix! Click Save to confirm.');
   };
 
   const handleSaveRoleChangesInProfile = async (e: React.FormEvent) => {
@@ -1226,30 +986,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const getEmploymentTypeLabel = (type: EmploymentType) => {
-    switch (type) {
-      case 'permanent':
-        return 'Permanent';
-      case 'contractual':
-        return 'Contractual';
-      case 'researcher':
-        return 'Project Staff';
-      case 'diploma_trainee':
-        return 'Trainee';
-      case 'intern':
-        return 'Intern';
-      case 'bsc_msc_student':
-        return 'M.Sc Student';
-      case 'phd_student':
-        return 'PhD Scholar';
-      default:
-        return type;
-    }
-  };
-
   // Handlers
   const [savingProfile, setSavingProfile] = useState(false);
-
 
   const closeEmployeeForm = () => {
     setIsCreatingUser(false);
@@ -2236,21 +1974,6 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                   {paginatedUsersForControls.map((u) => {
                     const isSelf = u.id === currentUser.id;
 
-                    const isSystemAdmin = u.roles?.includes('administrator') || u.role === 'administrator';
-                    const isReviewing = u.roles?.includes('reviewing_manager') || u.role === 'reviewing_manager';
-                    const isReporting = u.roles?.includes('reporting_manager') || u.role === 'reporting_manager';
-
-                    const primarySystemRole: UserRole = isSystemAdmin
-                      ? 'administrator'
-                      : isReviewing
-                      ? 'reviewing_manager'
-                      : isReporting
-                      ? 'reporting_manager'
-                      : 'general_staff';
-
-                    const reportingManagerObj = u.reportingManagerId
-                      ? users.find((m) => m.id === u.reportingManagerId)
-                      : null;
 
                     return (
                       <tr key={u.id} className="hover:bg-slate-50/80 transition-colors">

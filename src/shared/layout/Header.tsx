@@ -5,15 +5,7 @@ import { useSession } from '../../auth/SessionContext';
 import { ROLE_LABELS, ROLE_ORDER } from '../../auth/access';
 import { WIILogo } from '../components/WIILogo';
 import { UserAvatar } from '../components/UserAvatar';
-import {
-  Menu,
-  LogOut,
-  ArrowLeft,
-  ChevronDown,
-  ShieldCheck,
-  Check,
-  User as UserIcon
-} from 'lucide-react';
+import { Menu, ArrowLeft, ChevronDown, Check } from 'lucide-react';
 
 interface HeaderProps {
   activeTab: string;

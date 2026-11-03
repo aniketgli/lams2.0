@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Building2, CalendarDays, MapPin, Send, Check, Paperclip, CheckCircle2, ChevronsRight, Clock, Eye, FileText, Pencil, RotateCcw, Trash2, X, XCircle } from 'lucide-react';
+import { Building2, CalendarDays, MapPin, Send, Check, Paperclip, CheckCircle2, ChevronsRight, Clock, Eye, Pencil, RotateCcw, Trash2, X, XCircle } from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
 import { DataTable, Modal, Select } from '../../../../shared/components';
 import type { ColumnDef } from '../../../../shared/components';
@@ -75,7 +75,6 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
   const teamView = isAdmin || isAudit || isManager;
 
   // ---- Data -----------------------------------------------------------------------------
-  const today = localDate();
   const defaultFrom = localDate(-90);
   const defaultTo = localDate(90);
   const [from, setFrom] = useState(defaultFrom);

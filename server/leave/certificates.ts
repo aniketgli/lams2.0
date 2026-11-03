@@ -1,4 +1,3 @@
-import type { Request } from 'express';
 import type { RowDataPacket } from 'mysql2/promise';
 import { badRequest } from '../lib/http';
 

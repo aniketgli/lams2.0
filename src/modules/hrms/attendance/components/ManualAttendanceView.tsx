@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarCheck, Check, CheckCircle2, ClipboardList, Clock, Eye, Pencil, Plus, RotateCcw, Trash2, X, XCircle } from 'lucide-react';
+import { CalendarCheck, Check, CheckCircle2, Clock, Eye, Pencil, Plus, RotateCcw, Trash2, X, XCircle } from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
 import { PageHeader, PageHeaderButton } from '../../../../shared/components/PageHeader';
 import { SegmentedControl } from '../../../../shared/components/SegmentedControl';

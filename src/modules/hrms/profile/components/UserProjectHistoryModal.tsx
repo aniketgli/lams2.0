@@ -25,7 +25,6 @@ export const UserProjectHistoryModal: React.FC<UserProjectHistoryModalProps> = (
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
 
-  const [resolvedBiometricId, setResolvedBiometricId] = useState('');
   const biometricId = String((user as any)?.biometricId ?? (user as any)?.biometric_id ?? '').trim();
 
   useEffect(() => {
@@ -33,7 +32,6 @@ export const UserProjectHistoryModal: React.FC<UserProjectHistoryModalProps> = (
     const controller = new AbortController();
     setLoading(true);
     setLoadError('');
-    setResolvedBiometricId('');
     const resolveBiometricId = async (): Promise<string> => {
       if (/^\d{1,4}$/.test(biometricId)) return biometricId;
       // The profile list can contain a user without the canonical biometric field.
@@ -58,7 +56,6 @@ export const UserProjectHistoryModal: React.FC<UserProjectHistoryModalProps> = (
     };
     resolveBiometricId()
       .then((resolvedId) => {
-        setResolvedBiometricId(resolvedId);
         return fetch(`/api/hrms/employees/${encodeURIComponent(resolvedId)}/project-history`, {
           credentials: 'include',
           signal: controller.signal

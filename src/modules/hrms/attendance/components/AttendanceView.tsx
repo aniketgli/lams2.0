@@ -1,7 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  AlarmClock, CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, Clock, LayoutGrid, List, UserX,
-} from 'lucide-react';
+import { AlarmClock, CalendarCheck, ChevronLeft, ChevronRight, Clock, LayoutGrid, List, UserX } from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
 import { PageHeader } from '../../../../shared/components/PageHeader';
 import { SegmentedControl } from '../../../../shared/components/SegmentedControl';
