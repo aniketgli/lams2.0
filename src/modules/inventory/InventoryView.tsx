@@ -1,26 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import {
-  PageHeader,
-  Button,
-  Badge,
-  MetricCard,
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-  TableEmpty,
-  TablePagination,
-  Modal,
-  ModalHeader,
-  ModalBody,
-  ModalFooter,
-  FormField,
-  Input,
-  Select
-} from '../../shared/components';
+import { PageHeader, Button, Badge, MetricCard, Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableEmpty, Modal, ModalHeader, ModalBody, ModalFooter, FormField, Input, Select } from '../../shared/components';
 import {
   Package,
   Plus,
@@ -142,16 +122,12 @@ const INITIAL_INDENTS: IndentItem[] = [
 
 export const InventoryView: React.FC<SIMSViewProps> = ({ onReturnToLobby }) => {
   const { currentUser } = useApp();
-  const [inventory, setInventory] = useState<InventoryItem[]>(INITIAL_INVENTORY);
+  const [inventory] = useState<InventoryItem[]>(INITIAL_INVENTORY);
   const [indents, setIndents] = useState<IndentItem[]>(INITIAL_INDENTS);
   const [activeSubTab, setActiveSubTab] = useState<'inventory' | 'indents'>('inventory');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCat, setSelectedCat] = useState<string>('ALL');
   const [showIndentModal, setShowIndentModal] = useState(false);
-
-  // Pagination states
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
 
   // New Indent form state
   const [selectedItemName, setSelectedItemName] = useState(inventory[0]?.name || '');
@@ -327,7 +303,6 @@ export const InventoryView: React.FC<SIMSViewProps> = ({ onReturnToLobby }) => {
           leftIcon={<Boxes className="w-4 h-4" />}
           onClick={() => {
             setActiveSubTab('inventory');
-            setCurrentPage(1);
           }}
         >
           Central Inventory Catalog ({inventory.length})
@@ -338,7 +313,6 @@ export const InventoryView: React.FC<SIMSViewProps> = ({ onReturnToLobby }) => {
           leftIcon={<ClipboardList className="w-4 h-4" />}
           onClick={() => {
             setActiveSubTab('indents');
-            setCurrentPage(1);
           }}
         >
           Staff Store Indents ({indents.length})
@@ -357,7 +331,6 @@ export const InventoryView: React.FC<SIMSViewProps> = ({ onReturnToLobby }) => {
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
-              setCurrentPage(1);
             }}
             leftIcon={Search}
             size="sm"
@@ -374,7 +347,6 @@ export const InventoryView: React.FC<SIMSViewProps> = ({ onReturnToLobby }) => {
                 variant={selectedCat === cat ? 'primary' : 'outline'}
                 onClick={() => {
                   setSelectedCat(cat);
-                  setCurrentPage(1);
                 }}
               >
                 {cat}

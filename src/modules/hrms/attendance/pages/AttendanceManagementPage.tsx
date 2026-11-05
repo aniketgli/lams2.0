@@ -2,8 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { AttendanceView } from '../components/AttendanceView';
 import { ManualAttendanceView } from '../components/ManualAttendanceView';
 import { OutdoorDutyView } from '../components/OutdoorDutyView';
-import { Clock, MapPin, CheckCircle2 } from 'lucide-react';
-
 interface AttendanceManagementPageProps {
   initialTab?: string;
 }

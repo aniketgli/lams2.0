@@ -1,7 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { UploadCloud, File, FileText, CheckCircle2, AlertCircle, X, Trash2 } from 'lucide-react';
-import { Button } from './Button';
-
+import { UploadCloud, File, FileText, AlertCircle, Trash2 } from 'lucide-react';
 export interface UploadedFileItem {
   id: string;
   file: globalThis.File;

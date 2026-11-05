@@ -1,8 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Check, Search, X, Loader2 } from 'lucide-react';
-import { AppSelectOption, AppSelectProps } from './AppSelect';
-
 export interface SelectOption {
   label: string;
   value: string;

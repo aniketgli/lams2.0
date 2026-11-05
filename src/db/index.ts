@@ -2,13 +2,13 @@ import { drizzle } from 'drizzle-orm/mysql2';
 import mysql from 'mysql2/promise';
 import * as schema from './schema';
 
-if (!process.env.DATABASE_URL) {
-  throw new Error('DATABASE_URL is not set. Copy .env.example to .env and configure the database.');
+if (!process.env.LAMS_PROD_DB_URL) {
+  throw new Error('LAMS_PROD_DB_URL is not set. Set it in .env locally, and on the server as an environment variable.');
 }
 
 /** Shared connection pool. Also used directly by the session store. */
 export const pool = mysql.createPool({
-  uri: process.env.DATABASE_URL,
+  uri: process.env.NODE_ENV === 'production' ? process.env.LAMS_PROD_DB_URL : process.env.DATABASE_URL,
   // Thousands of people use the portal together, so the pool is sized for that (MySQL's
   // max_connections must be higher than this number times the number of server processes).
   connectionLimit: Number(process.env.DB_POOL_SIZE || 40),

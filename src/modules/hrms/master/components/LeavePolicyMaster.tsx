@@ -12,10 +12,6 @@ import { ConfirmDialog, NoticeBar, PanelCard, StatusPill, useNotice } from './ma
  * Nothing is pre-filled: the administrator adds the institute's own leave types.
  */
 
-const ACCRUALS = [
-  { label: 'Yearly', value: 'yearly' }, { label: 'Half-yearly', value: 'half_yearly' }, { label: 'Quarterly', value: 'quarterly' },
-  { label: 'Monthly', value: 'monthly' }, { label: 'Upfront', value: 'upfront' },
-];
 const yesNo = [{ label: 'Yes', value: 'yes' }, { label: 'No', value: 'no' }];
 
 const blank = (): LeaveTypeInput => ({

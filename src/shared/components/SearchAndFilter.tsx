@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, X, Filter, RotateCcw, Check, Calendar } from 'lucide-react';
+import { Search, X, Filter, RotateCcw, Check } from 'lucide-react';
 import { Button } from './Button';
 import { AppDatePicker } from './AppDatePicker';
 
