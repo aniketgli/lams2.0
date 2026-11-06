@@ -4,7 +4,8 @@ import fs from 'fs';
 import type { Server as HttpServer } from 'http';
 import session from 'express-session';
 import type { RowDataPacket } from 'mysql2';
-import { pool } from '../src/db';
+import { dbTarget, pool } from '../src/db';
+import { describeDatabase } from '../src/db/connection';
 import { emailRoutes } from './integrations/email/email.routes';
 import { slackRoutes } from './integrations/slack/slack.routes';
 import { authRoutes } from './routes/auth.routes';
@@ -34,7 +35,7 @@ async function sessionTableExists(): Promise<boolean> {
     const [rows] = await pool.query<RowDataPacket[]>("SHOW TABLES LIKE 'web_sessions'");
     return rows.length > 0;
   } catch (error) {
-    console.error('[startup] Could not reach the database:', error instanceof Error ? error.message : error);
+    console.error(`[startup] Could not reach the ${describeDatabase(dbTarget)}:`, error instanceof Error ? error.message : error);
     return false;
   }
 }
@@ -79,7 +80,10 @@ export async function createApp(httpServer?: HttpServer) {
     rolling: false,
     cookie: {
       httpOnly: true,
-      secure: isProduction,
+      // 'auto': the cookie is marked Secure when the page is opened over HTTPS. A plain
+      // http://<ip>:3000 address still works; with `secure: true` the browser would drop the
+      // cookie there and every sign-in would bounce back to the login page.
+      secure: 'auto',
       sameSite: 'strict',
       maxAge: sessionConfig.maxMs,
       path: '/',

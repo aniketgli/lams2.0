@@ -53,7 +53,8 @@ export function clearSessionCookie(res: Response) {
   res.clearCookie(SESSION_COOKIE, {
     httpOnly: true,
     sameSite: 'strict',
-    secure: process.env.NODE_ENV === 'production',
+    // Must match how the cookie was set (see `secure: 'auto'` in app.ts).
+    secure: res.req.secure,
     path: '/',
   });
 }

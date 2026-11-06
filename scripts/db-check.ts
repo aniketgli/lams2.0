@@ -15,6 +15,7 @@
  *   6. Row-lock behaviour that stops a double submit (two sessions locking the same employee)
  */
 import 'dotenv/config';
+import { databaseTarget, type DatabaseTarget } from '../src/db/connection';
 import mysql from 'mysql2/promise';
 import type { Connection, RowDataPacket } from 'mysql2/promise';
 
@@ -25,8 +26,8 @@ const report = (level: Level, name: string, detail = ''): void => {
   console.log(`${level.padEnd(4)}  ${name}${detail ? ` — ${detail}` : ''}`);
 };
 
-const url = process.env.DATABASE_URL;
-if (!url) { console.error('DATABASE_URL is not set (see .env.example).'); process.exit(2); }
+let target: DatabaseTarget;
+try { target = databaseTarget(); } catch (error) { console.error((error as Error).message); process.exit(2); }
 
 const rows = async (c: Connection, sql: string, params: unknown[] = []): Promise<RowDataPacket[]> => (await c.query<RowDataPacket[]>(sql, params))[0];
 const one = async (c: Connection, sql: string, params: unknown[] = []): Promise<RowDataPacket | undefined> => (await rows(c, sql, params))[0];
@@ -36,7 +37,7 @@ const REQUIRED: Record<string, string[]> = {
   users: ['id', 'biometric_id', 'status', 'valid_upto', 'is_system', 'must_change_password'],
   employee_profiles: ['biometric_id', 'profile_data', 'joining_date', 'shift_id', 'reporting_manager_id', 'reviewing_manager_id'],
   user_module_roles: ['biometric_id', 'module_id', 'role_id', 'status'],
-  web_sessions: ['session_id'],
+  web_sessions: ['sid'],
   leave_requests: ['user_id', 'start_date', 'end_date', 'status'],
   outdoor_duty_requests: ['user_id', 'start_date', 'end_date', 'status'],
   manual_attendance_requests: ['user_id', 'att_date', 'status'],
@@ -52,7 +53,7 @@ const REQUIRED_INDEXES: Array<[string, string]> = [
 ];
 
 async function main(): Promise<void> {
-  const c = await mysql.createConnection({ uri: url, multipleStatements: false });
+  const c = await mysql.createConnection({ ...target, multipleStatements: false });
   try {
     // 1. Connection and limits ------------------------------------------------------------------
     const v = await one(c, 'SELECT VERSION() AS v, DATABASE() AS db');
@@ -126,8 +127,8 @@ async function main(): Promise<void> {
 
     // 6. Double-submit lock: a second session must wait for the first ----------------------------
     if (uid) {
-      const a = await mysql.createConnection({ uri: url });
-      const b = await mysql.createConnection({ uri: url });
+      const a = await mysql.createConnection({ ...target });
+      const b = await mysql.createConnection({ ...target });
       try {
         await a.query('SET SESSION innodb_lock_wait_timeout = 2');
         await b.query('SET SESSION innodb_lock_wait_timeout = 2');
