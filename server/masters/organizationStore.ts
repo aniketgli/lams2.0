@@ -19,13 +19,7 @@ export interface OrganizationRow {
 const cache = new TtlCache<OrganizationRow | null>(5 * 60_000, 1);
 
 async function loadOrganization(): Promise<OrganizationRow | null> {
-  const [list] = try {
-    const [list] = await pool.query<RowDataPacket[]>("SELECT org_name, logo_data, address, copyright_text, updated_at FROM organization_settings WHERE id = 'default' LIMIT 1");
-    // ... existing code ...
-  } catch (err) {
-    console.error('Error fetching organization settings:', err);
-    throw err;
-  }
+  const [list] = await pool.query<RowDataPacket[]>("SELECT org_name, logo_data, address, copyright_text, updated_at FROM organization_settings WHERE id = 'default' LIMIT 1");
   const row = list[0];
   if (!row) return null;
   return {
