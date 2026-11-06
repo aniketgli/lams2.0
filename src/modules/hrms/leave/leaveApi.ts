@@ -48,6 +48,8 @@ export interface LeaveTypeRecord {
   /** Only weekly offs and gazetted holidays can be chosen (station leave). */
   offDaysOnly: boolean;
   fitnessCertificate: boolean;
+  /** Purposes the leave can be taken for (e.g. Special Casual Leave); the apply form asks for one when not empty. */
+  purposes: string[];
   quotas: Array<{ employeeType: string; quota: number }>;
   status: 'active' | 'inactive';
   updatedAt: string | null;
@@ -126,6 +128,12 @@ export interface LeaveRequest {
   contactAddress: string;
   /** Compensatory off: the worked weekly offs / holidays it uses, one per leave day. */
   compOffDates: string[];
+  purpose: string | null;
+  /** Paternity Leave: birth or adoption, its date, the adopted child's date of birth, surviving children before this child. */
+  childEvent: 'delivery' | 'adoption' | null;
+  childEventDate: string | null;
+  childBirthDate: string | null;
+  survivingChildren: number | null;
   prefixFrom: string | null;
   prefixTo: string | null;
   suffixFrom: string | null;
@@ -177,6 +185,13 @@ export interface LeaveInput {
   contactAddress: string;
   /** Compensatory off: the weekly offs / holidays worked that this leave uses, one per leave day (YYYY-MM-DD). */
   compOffDates: string[];
+  /** One of the leave type's purposes, when it has a list. */
+  purpose: string;
+  /** Paternity Leave only. */
+  childEvent: '' | 'delivery' | 'adoption';
+  childEventDate: string;
+  childBirthDate: string;
+  survivingChildren: string;
   availPrefix: boolean;
   prefixFrom: string;
   prefixTo: string;

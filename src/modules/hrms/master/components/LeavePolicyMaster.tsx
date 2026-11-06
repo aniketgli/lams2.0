@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { FileText, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Button, DataTable, Input, Modal, Select } from '../../../../shared/components';
 import type { ColumnDef } from '../../../../shared/components';
+import { Textarea } from '../../../../shared/components/forms/Textarea';
 import { ApiError } from '../../../../shared/services/api';
 import { LeaveTypeInput, LeaveTypeList, LeaveTypeRecord, leaveTypeApi } from '../../leave/leaveApi';
 import { ConfirmDialog, NoticeBar, PanelCard, StatusPill, useNotice } from './masterUi';
@@ -17,7 +18,7 @@ const yesNo = [{ label: 'Yes', value: 'yes' }, { label: 'No', value: 'no' }];
 const blank = (): LeaveTypeInput => ({
   code: '', name: '', description: '', defaultQuota: 0, pwdQuota: null, pwdOnly: false, accrual: 'yearly', maxAccumulation: 0, carryForward: false, maxCarryForward: 0,
   encashmentAllowed: false, approvalStages: 1, minNoticeDays: 0, halfDayAllowed: false, medicalCertDays: 0, sandwichRule: 'excluded', combineWith: 'none',
-  employeeTypes: [], gender: 'all', minServiceMonths: 0, maxConsecutiveDays: 0, isDebited: true, isPaid: true, joiningRequired: false, afterExhaustedTypeId: '', debitFromTypeId: '', debitFactor: 1, lifetimeMax: 0, maxSpellsPerYear: 0, minDaysPerApplication: 0, maxSpellsPerMonth: 0, maxSpellsLifetime: 0, needsContact: false, ltcAllowed: false, prefixSuffix: false, hodAfterDays: 0, certificateRequired: false, offDaysOnly: false, fitnessCertificate: false, quotas: [], status: 'active',
+  employeeTypes: [], gender: 'all', minServiceMonths: 0, maxConsecutiveDays: 0, isDebited: true, isPaid: true, joiningRequired: false, afterExhaustedTypeId: '', debitFromTypeId: '', debitFactor: 1, lifetimeMax: 0, maxSpellsPerYear: 0, minDaysPerApplication: 0, maxSpellsPerMonth: 0, maxSpellsLifetime: 0, needsContact: false, ltcAllowed: false, prefixSuffix: false, hodAfterDays: 0, certificateRequired: false, offDaysOnly: false, fitnessCertificate: false, purposes: [], quotas: [], status: 'active',
 });
 
 const flag = (b: boolean) => (b ? 'yes' : 'no');
@@ -226,7 +227,7 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
                 options={[{ label: 'Active', value: 'active' }, { label: 'Inactive', value: 'inactive' }]} />
             </FormSection>
 
-            <FormSection step={2} title="Rules for taking leave" errorCount={countErrors(['approvalStages', 'combineWith', 'halfDayAllowed', 'minDaysPerApplication', 'maxConsecutiveDays', 'gender', 'pwdOnly', 'maxSpellsPerMonth', 'maxSpellsLifetime', 'joiningRequired', 'isPaid', 'isDebited', 'needsContact', 'ltcAllowed', 'hodAfterDays', 'certificateRequired', 'offDaysOnly', 'fitnessCertificate'])}>
+            <FormSection step={2} title="Rules for taking leave" errorCount={countErrors(['approvalStages', 'combineWith', 'halfDayAllowed', 'minDaysPerApplication', 'maxConsecutiveDays', 'gender', 'pwdOnly', 'maxSpellsPerMonth', 'maxSpellsLifetime', 'joiningRequired', 'isPaid', 'isDebited', 'needsContact', 'ltcAllowed', 'hodAfterDays', 'certificateRequired', 'offDaysOnly', 'fitnessCertificate', 'purposes'])}>
               <Select label="Approval stages" required value={String(form.approvalStages)} searchable={false} error={Boolean(errors.approvalStages)}
                 onChange={(v: string) => { set('approvalStages', Number(v) as 1 | 2); if (v === '1') set('hodAfterDays', 0); }}
                 options={[{ label: '1 stage · Reporting Manager', value: '1' }, { label: '2 stages · Reporting Manager, HoD', value: '2' }]} />
@@ -254,6 +255,11 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
               <Select label="Only weekly offs and holidays" value={flag(form.offDaysOnly)} searchable={false} error={Boolean(errors.offDaysOnly)} onChange={(v: string) => set('offDaysOnly', v === 'yes')} options={yesNo} />
               <Select label="Fitness certificate on joining" value={flag(form.fitnessCertificate)} searchable={false} error={Boolean(errors.fitnessCertificate)} onChange={(v: string) => set('fitnessCertificate', v === 'yes')} options={yesNo} />
               <Select label="LTC / Ex-India option" value={flag(form.ltcAllowed)} searchable={false} error={Boolean(errors.ltcAllowed)} onChange={(v: string) => set('ltcAllowed', v === 'yes')} options={yesNo} />
+              <div className="sm:col-span-3">
+                <Textarea label="Purposes (one per line; leave empty for any reason)" rows={3} maxLength={3200} value={form.purposes.join('\n')} error={errors.purposes}
+                  helperText="When filled, the leave form asks the employee to choose one of these (e.g. Special Casual Leave: National sports / cultural event, Family planning, Natural calamity, Bandh)."
+                  onChange={(e) => set('purposes', e.target.value.split('\n'))} />
+              </div>
               {form.approvalStages === 2 && (
                 <Input label="HoD approval above (days, 0 = always)" type="number" min={0} max={730} step="0.5" value={String(form.hodAfterDays)} error={errors.hodAfterDays} onChange={num('hodAfterDays')} />
               )}

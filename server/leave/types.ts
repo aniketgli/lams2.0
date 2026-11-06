@@ -7,6 +7,7 @@ import { Validator } from '../lib/validate';
 import { changedFields, writeMasterAuditSql } from '../masters/audit';
 import type { ActivityScope } from '../employees/activity';
 import { COMBINES, type Combine, toCombine } from './combine';
+import { parsePurposes, purposesProblem } from './specialLeave';
 
 /**
  * Leave types (the Leave Policy master, table `leave_types`). Everyone signed in reads
@@ -71,6 +72,8 @@ export interface LeaveType {
   offDaysOnly: boolean;
   /** A fitness medical certificate (PDF) can be attached to the joining report. */
   fitnessCertificate: boolean;
+  /** Purposes the leave can be taken for; the apply form asks for one when the list is not empty. */
+  purposes: string[];
   quotas: Array<{ employeeType: string; quota: number }>;
   status: 'active' | 'inactive';
   updatedAt: string | null;
@@ -120,6 +123,7 @@ export function toLeaveType(row: RowDataPacket): LeaveType {
     certificateRequired: Boolean(row.certificate_required),
     offDaysOnly: Boolean(row.off_days_only),
     fitnessCertificate: Boolean(row.fitness_certificate),
+    purposes: parsePurposes(row.purposes),
     quotas: [],
     status: String(row.status) === 'inactive' ? 'inactive' : 'active',
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : null,
@@ -192,6 +196,10 @@ export async function parseLeaveTypeInput(body: unknown, selfId = 0): Promise<Le
   const certificateRequired = v.bool('certificateRequired', false);
   const offDaysOnly = v.bool('offDaysOnly', false);
   const fitnessCertificate = v.bool('fitnessCertificate', false);
+  const rawPurposes = v.raw('purposes');
+  const purposes = rawPurposes === undefined || rawPurposes === null ? [] : parsePurposes(rawPurposes);
+  const badPurposes = purposesProblem(purposes);
+  if (badPurposes) v.errors.purposes ||= badPurposes;
   const hodAfterDays = Number(v.raw('hodAfterDays') ?? 0);
   if (!Number.isFinite(hodAfterDays) || hodAfterDays < 0 || hodAfterDays > 730 || Math.round(hodAfterDays * 2) !== hodAfterDays * 2) v.errors.hodAfterDays ||= 'Enter days from 0 to 730, in steps of 0.5.';
   else if (hodAfterDays > 0 && stages !== 2) v.errors.hodAfterDays ||= 'Only a 2-stage leave goes to the HoD. Set Approval stages to 2.';
@@ -253,7 +261,7 @@ export async function parseLeaveTypeInput(body: unknown, selfId = 0): Promise<Le
     code, name, description: description ?? '', defaultQuota: quota, pwdQuota, pwdOnly, accrual: accrual!, maxAccumulation: maxAccumulation!, carryForward,
     maxCarryForward: carryForward ? cf : 0, encashmentAllowed, approvalStages: stages as 1 | 2, minNoticeDays: minNoticeDays!, halfDayAllowed,
     medicalCertDays: medicalCertDays!, sandwichRule, combineWith: combineWith!, employeeTypes, gender: gender!, minServiceMonths: minServiceMonths!,
-    maxConsecutiveDays: maxConsecutiveDays!, isDebited, isPaid, joiningRequired, afterExhaustedTypeId, debitFromTypeId, debitFactor, lifetimeMax, maxSpellsPerYear: maxSpellsPerYear!, minDaysPerApplication, maxSpellsPerMonth: maxSpellsPerMonth!, maxSpellsLifetime: maxSpellsLifetime!, needsContact, ltcAllowed, prefixSuffix, hodAfterDays, certificateRequired, offDaysOnly, fitnessCertificate, quotas, status: status!,
+    maxConsecutiveDays: maxConsecutiveDays!, isDebited, isPaid, joiningRequired, afterExhaustedTypeId, debitFromTypeId, debitFactor, lifetimeMax, maxSpellsPerYear: maxSpellsPerYear!, minDaysPerApplication, maxSpellsPerMonth: maxSpellsPerMonth!, maxSpellsLifetime: maxSpellsLifetime!, needsContact, ltcAllowed, prefixSuffix, hodAfterDays, certificateRequired, offDaysOnly, fitnessCertificate, purposes, quotas, status: status!,
   };
 }
 
@@ -289,12 +297,12 @@ export async function leaveTypeOptions(): Promise<{ employeeTypes: Array<{ code:
 const COLS = `code, name, description, default_quota, pwd_quota, accrual, max_accumulation, carry_forward, max_carry_forward, encashment_allowed, approval_stages,
   min_notice_days, half_day_allowed, medical_cert_days, sandwich_rule, combine_with, employee_types, pwd_only, gender, min_service_months, max_consecutive_days,
   is_debited, is_paid, joining_required, after_exhausted_type_id, debit_from_type_id, debit_factor, lifetime_max, max_spells_per_year, min_days_per_application, max_spells_per_month, max_spells_lifetime, status,
-  needs_contact, ltc_allowed, prefix_suffix, hod_after_days, certificate_required, off_days_only, fitness_certificate`;
+  needs_contact, ltc_allowed, prefix_suffix, hod_after_days, certificate_required, off_days_only, fitness_certificate, purposes`;
 const values = (t: LeaveTypeInput) => [
   t.code, t.name, t.description || null, t.defaultQuota, t.pwdQuota, t.accrual, t.maxAccumulation, t.carryForward ? 1 : 0, t.maxCarryForward, t.encashmentAllowed ? 1 : 0,
   t.approvalStages, t.minNoticeDays, t.halfDayAllowed ? 1 : 0, t.medicalCertDays, t.sandwichRule, t.combineWith, t.employeeTypes.join(','), t.pwdOnly ? 1 : 0, t.gender, t.minServiceMonths,
   t.maxConsecutiveDays, t.isDebited ? 1 : 0, t.isPaid ? 1 : 0, t.joiningRequired ? 1 : 0, t.afterExhaustedTypeId ? Number(t.afterExhaustedTypeId) : null, t.debitFromTypeId ? Number(t.debitFromTypeId) : null, t.debitFactor, t.lifetimeMax, t.maxSpellsPerYear, t.minDaysPerApplication, t.maxSpellsPerMonth, t.maxSpellsLifetime, t.status,
-  t.needsContact ? 1 : 0, t.ltcAllowed ? 1 : 0, t.prefixSuffix ? 1 : 0, t.hodAfterDays, t.certificateRequired ? 1 : 0, t.offDaysOnly ? 1 : 0, t.fitnessCertificate ? 1 : 0,
+  t.needsContact ? 1 : 0, t.ltcAllowed ? 1 : 0, t.prefixSuffix ? 1 : 0, t.hodAfterDays, t.certificateRequired ? 1 : 0, t.offDaysOnly ? 1 : 0, t.fitnessCertificate ? 1 : 0, t.purposes.length ? t.purposes.join('\n') : null,
 ];
 
 function duplicate(error: unknown): never | void {

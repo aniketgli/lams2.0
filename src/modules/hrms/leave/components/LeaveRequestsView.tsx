@@ -61,7 +61,22 @@ const statusBy = (r: LeaveRequest) =>
     : `by ${r.actionByName ?? '—'}${r.actionByRole ? ` (${r.actionByRole})` : ''}`;
 
 const EMPTY_FORM: LeaveInput = { userId: '', leaveTypeId: '', startDate: '', endDate: '', startSession: 'full', endSession: 'full', reason: '', stationLeave: false,
-  ltcType: 'none', encashLtc: false, encashDays: 10, contactAddress: '', compOffDates: [], availPrefix: false, prefixFrom: '', prefixTo: '', availSuffix: false, suffixFrom: '', suffixTo: '', certificateFile: null };
+  ltcType: 'none', encashLtc: false, encashDays: 10, contactAddress: '', compOffDates: [], availPrefix: false, prefixFrom: '', prefixTo: '', availSuffix: false, suffixFrom: '', suffixTo: '', certificateFile: null,
+  purpose: '', childEvent: '', childEventDate: '', childBirthDate: '', survivingChildren: '' };
+
+/** Paternity Leave (code PAT): taken from 15 days before up to 6 months after the date of delivery, or up to 6 months after the date of adoption. */
+const PATERNITY_CODE = 'PAT';
+function plusMonths(date: string, n: number): string {
+  const [y, m, d] = date.split('-').map(Number);
+  const first = new Date(Date.UTC(y, m - 1 + n, 1));
+  first.setUTCDate(Math.min(d, new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate()));
+  return first.toISOString().slice(0, 10);
+}
+function plusDays(date: string, n: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
 
 const shiftDate = (iso: string, days: number) => { const d = new Date(`${iso}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
 
@@ -164,7 +179,8 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
     setEditing(r);
     setForm({ userId: r.userId, leaveTypeId: r.leaveTypeId, startDate: r.startDate, endDate: r.endDate, startSession: r.startSession, endSession: r.endSession, reason: r.reason, stationLeave: r.stationLeave,
       ltcType: r.ltcType, encashLtc: r.encashDays > 0, encashDays: r.encashDays || 10, contactAddress: r.contactAddress, compOffDates: r.compOffDates,
-      availPrefix: Boolean(r.prefixFrom), prefixFrom: r.prefixFrom ?? '', prefixTo: r.prefixTo ?? '', availSuffix: Boolean(r.suffixFrom), suffixFrom: r.suffixFrom ?? '', suffixTo: r.suffixTo ?? '', certificateFile: null });
+      availPrefix: Boolean(r.prefixFrom), prefixFrom: r.prefixFrom ?? '', prefixTo: r.prefixTo ?? '', availSuffix: Boolean(r.suffixFrom), suffixFrom: r.suffixFrom ?? '', suffixTo: r.suffixTo ?? '', certificateFile: null,
+      purpose: r.purpose ?? '', childEvent: r.childEvent ?? '', childEventDate: r.childEventDate ?? '', childBirthDate: r.childBirthDate ?? '', survivingChildren: r.survivingChildren === null ? '' : String(r.survivingChildren) });
     setFormErrors({}); setFormMessage(null); setPreview(null); setFormOpen(true);
   };
 
@@ -595,7 +611,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
               <div className="sm:col-span-2 relative">
                 <Select label="Leave type" required value={baseType?.id ?? ''} searchable placeholder="Select leave type" error={formErrors.leaveTypeId}
                   onChange={(v: string) => {
-                    setForm((f) => ({ ...f, leaveTypeId: v, ltcType: 'none', encashLtc: false, availPrefix: false, availSuffix: false, stationLeave: false, compOffDates: [], ...(isRh || data?.types.find((t) => t.id === v)?.code === 'RH' ? { startDate: '', endDate: '' } : {}) }));
+                    setForm((f) => ({ ...f, leaveTypeId: v, ltcType: 'none', encashLtc: false, availPrefix: false, availSuffix: false, stationLeave: false, compOffDates: [], purpose: '', childEvent: '', childEventDate: '', childBirthDate: '', survivingChildren: '', ...(isRh || data?.types.find((t) => t.id === v)?.code === 'RH' ? { startDate: '', endDate: '' } : {}) }));
                     setFormErrors({});
                     setFormMessage(null);
                   }}
@@ -640,6 +656,41 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
                 <>
                   <Select label="Start day" error={formErrors.startSession} value={form.startSession} searchable={false} onChange={(v: string) => setField('startSession', v as LeaveInput['startSession'])} options={sessionOptions.start} />
                   <Select label="End day" error={formErrors.endSession} value={form.endSession} searchable={false} onChange={(v: string) => setField('endSession', v as LeaveInput['endSession'])} options={sessionOptions.end} />
+                </>
+              )}
+              {type && type.purposes.length > 0 && (
+                <div className="sm:col-span-2">
+                  <Select label={`Purpose of ${type.code}`} required value={form.purpose} searchable={false} placeholder="Select the purpose" error={formErrors.purpose}
+                    onChange={(v: string) => setField('purpose', v)} options={type.purposes.map((p) => ({ value: p, label: p }))} />
+                </div>
+              )}
+              {type?.code === PATERNITY_CODE && (
+                <>
+                  <div className="sm:col-span-2">
+                    <Select label="Paternity Leave for" required value={form.childEvent} searchable={false} placeholder="Select" error={formErrors.childEvent}
+                      onChange={(v: string) => setForm((f) => ({ ...f, childEvent: v as LeaveInput['childEvent'], childBirthDate: v === 'adoption' ? f.childBirthDate : '' }))}
+                      options={[{ value: 'delivery', label: 'Birth of a child (confinement of wife)' }, { value: 'adoption', label: 'Adoption of a child less than one year old' }]} />
+                  </div>
+                  <div>
+                    <AppDatePicker label={form.childEvent === 'adoption' ? 'Date of adoption' : 'Date of delivery (expected date if not yet)'} required error={formErrors.childEventDate}
+                      value={form.childEventDate} placeholder="Select date" onChange={(v) => setField('childEventDate', v)} className="w-full" />
+                  </div>
+                  {form.childEvent === 'adoption' ? (
+                    <div>
+                      <AppDatePicker label="Child's date of birth" required error={formErrors.childBirthDate} value={form.childBirthDate} placeholder="Select date"
+                        maxDate={form.childEventDate || undefined} onChange={(v) => setField('childBirthDate', v)} className="w-full" />
+                    </div>
+                  ) : <div className="hidden sm:block" />}
+                  <div className="sm:col-span-2">
+                    <Select label="Surviving children (before this child)" required value={form.survivingChildren} searchable={false} placeholder="Select" error={formErrors.survivingChildren}
+                      onChange={(v: string) => setField('survivingChildren', v)} options={[{ value: '0', label: 'None' }, { value: '1', label: 'One' }, { value: '2', label: 'Two or more' }]} />
+                  </div>
+                  <p className="sm:col-span-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-[11px] leading-relaxed text-sky-900">
+                    Paternity Leave is 15 days for one birth / adoption, for a male employee with less than two surviving children. It can be joined with any other leave.
+                    {form.childEvent && form.childEventDate
+                      ? ` Take it between ${formatDate(form.childEvent === 'delivery' ? plusDays(form.childEventDate, -15) : form.childEventDate)} and ${formatDate(plusMonths(form.childEventDate, 6))}; after that it lapses.`
+                      : ' Birth: from 15 days before up to 6 months after the date of delivery. Adoption: up to 6 months after the date of adoption. Not taken in that time, it lapses.'}
+                  </p>
                 </>
               )}
             </div>
@@ -832,6 +883,15 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
             ] as const).map(([k, v]) => (
               <div key={k}><dt className="font-semibold text-slate-500">{k}</dt><dd className="text-slate-900 font-medium">{v}</dd></div>
             ))}
+            {viewing.purpose && <div className="sm:col-span-2"><dt className="font-semibold text-slate-500">Purpose</dt><dd className="text-slate-900 font-medium">{viewing.purpose}</dd></div>}
+            {viewing.childEvent && (
+              <div className="sm:col-span-2"><dt className="font-semibold text-slate-500">Paternity Leave for</dt><dd className="text-slate-900 font-medium">
+                {viewing.childEvent === 'delivery' ? 'Birth of a child' : 'Adoption of a child'}
+                {viewing.childEventDate ? ` · ${viewing.childEvent === 'delivery' ? 'date of delivery' : 'date of adoption'} ${formatDate(viewing.childEventDate)}` : ''}
+                {viewing.childBirthDate ? ` · child born ${formatDate(viewing.childBirthDate)}` : ''}
+                {viewing.survivingChildren !== null ? ` · surviving children before: ${viewing.survivingChildren}` : ''}
+              </dd></div>
+            )}
             <div className="sm:col-span-2"><dt className="font-semibold text-slate-500">Reason</dt><dd className="text-slate-900 font-medium whitespace-pre-wrap">{viewing.reason}</dd></div>
             {viewing.compOffDates.length > 0 && <div><dt className="font-semibold text-slate-500">Worked days used</dt><dd className="text-slate-900 font-medium">{viewing.compOffDates.map(formatDate).join(', ')}</dd></div>}
             <div><dt className="font-semibold text-slate-500">Station permission</dt><dd className="text-slate-900 font-medium">{viewing.stationLeave ? 'Station leave' : 'Not required (HQ)'}</dd></div>
