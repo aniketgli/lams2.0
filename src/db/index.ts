@@ -9,6 +9,8 @@ if (!process.env.LAMS_PROD_DB_URL) {
 /** Shared connection pool. Also used directly by the session store. */
 export const pool = mysql.createPool({
   uri: process.env.NODE_ENV === 'production' ? process.env.LAMS_PROD_DB_URL : process.env.DATABASE_URL,
+   // Log the connection options for debugging
+   debug: true,
   // Thousands of people use the portal together, so the pool is sized for that (MySQL's
   // max_connections must be higher than this number times the number of server processes).
   connectionLimit: Number(process.env.DB_POOL_SIZE || 40),
