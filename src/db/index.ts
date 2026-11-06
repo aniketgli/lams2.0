@@ -1,9 +1,11 @@
-import { drizzle } from 'drizzle-orm/mysql2';
-import mysql from 'mysql2/promise';
-import * as schema from './schema';
+import { drizzle } from "drizzle-orm/mysql2";
+import mysql from "mysql2/promise";
+import * as schema from "./schema";
 
 if (!process.env.LAMS_PROD_DB_URL) {
-  throw new Error('LAMS_PROD_DB_URL is not set. Set it in .env locally, and on the server as an environment variable.');
+  throw new Error(
+    "LAMS_PROD_DB_URL is not set. Set it in .env locally, and on the server as an environment variable.",
+  );
 }
 
 /** Shared connection pool. Also used directly by the session store. */
@@ -24,9 +26,14 @@ export const pool = mysql.createPool({
 });
 
 // A SELECT that runs longer than this is stopped by MySQL, so one huge report cannot hold the database.
-const queryTimeoutMs = Math.max(1000, Number(process.env.DB_QUERY_TIMEOUT_MS || 30_000));
-pool.pool.on('connection', (connection) => {
-  connection.query(`SET SESSION max_execution_time = ${Math.trunc(queryTimeoutMs)}`);
+const queryTimeoutMs = Math.max(
+  1000,
+  Number(process.env.DB_QUERY_TIMEOUT_MS || 30_000),
+);
+pool.pool.on("connection", (connection) => {
+  connection.query(
+    `SET SESSION max_execution_time = ${Math.trunc(queryTimeoutMs)}`,
+  );
 });
 
-export const db = drizzle(pool, { schema, mode: 'default' });
+export const db = drizzle(pool, { schema, mode: "default" });
