@@ -13,6 +13,7 @@ import type { ActivityScope } from '../employees/activity';
 import { WEEK_DAYS, datesBetween, weekdayOf } from '../attendance/compute';
 import { groupLeaveTypeIds, groupLeaveTypeMap } from './groups';
 import { LOOK_DAYS, type Combine, type Neighbour, combineProblem, toCombine } from './combine';
+import { CHILD_EVENTS, PATERNITY_CODE, type ChildDetails, matchPurpose, parsePurposes, paternityDaysProblem, paternityProblems } from './specialLeave';
 import { SESSIONS_END, SESSIONS_START, countLeaveDays, cycleYearOf } from './days';
 import { notifyLeave } from '../notifications/events';
 import { COMP_OFF_CODE, RESTRICTED_CODE, balanceFromCredits, creditsFor, matchCredits, monthlyProblem, personById, takenByMonth } from './compOff';
@@ -85,6 +86,13 @@ export interface LeaveRequest {
   contactAddress: string;
   /** Compensatory off: the worked weekly offs / holidays it uses, one per leave day. */
   compOffDates: string[];
+  /** One of the leave type's purposes (e.g. Special Casual Leave), else null. */
+  purpose: string | null;
+  /** Paternity Leave: birth or adoption, its date, the adopted child's date of birth, surviving children before this child. */
+  childEvent: 'delivery' | 'adoption' | null;
+  childEventDate: string | null;
+  childBirthDate: string | null;
+  survivingChildren: number | null;
   prefixFrom: string | null;
   prefixTo: string | null;
   suffixFrom: string | null;
@@ -135,6 +143,10 @@ export interface LeaveInput {
   file: CertificateFile | null;
   /** Compensatory off only: the weekly offs / holidays worked that this leave uses, one per leave day. */
   compOffDates: string[];
+  /** For a leave type with a purpose list: the purpose chosen (checked against the list). */
+  purpose: string;
+  /** Paternity Leave only. */
+  child: ChildDetails;
 }
 
 export async function rows(q: { query: typeof pool.query }, sql: string, params: unknown[] = []): Promise<RowDataPacket[]> {
@@ -257,6 +269,11 @@ function toRequest(viewer: Viewer, row: RowDataPacket): LeaveRequest {
     encashDays: Number(row.encash_days ?? 0),
     contactAddress: row.contact_address ? String(row.contact_address) : '',
     compOffDates: row.comp_off_days ? String(row.comp_off_days).split(',') : [],
+    purpose: row.purpose ? String(row.purpose) : null,
+    childEvent: row.child_event === 'delivery' || row.child_event === 'adoption' ? row.child_event : null,
+    childEventDate: row.child_event_date ? isoDate(row.child_event_date) : null,
+    childBirthDate: row.child_birth_date ? isoDate(row.child_birth_date) : null,
+    survivingChildren: row.surviving_children === null || row.surviving_children === undefined ? null : Number(row.surviving_children),
     prefixFrom: row.prefix_from ? isoDate(row.prefix_from) : null,
     prefixTo: row.prefix_to ? isoDate(row.prefix_to) : null,
     suffixFrom: row.suffix_from ? isoDate(row.suffix_from) : null,
@@ -286,7 +303,8 @@ function toRequest(viewer: Viewer, row: RowDataPacket): LeaveRequest {
 function auditView(r: LeaveRequest): Record<string, unknown> {
   return {
     employee: `${r.name} (${r.biometricId})`, leaveType: `${r.leaveTypeName} (${r.leaveTypeCode})`, startDate: r.startDate, endDate: r.endDate,
-    startSession: r.startSession, endSession: r.endSession, days: r.daysCount, reason: r.reason, certificate: r.certificateName ?? (r.certificate ? 'Yes' : 'No'), stationPermission: r.stationLeave ? 'Required' : 'Not required', ltc: r.ltcType, encashDays: r.encashDays, contactAddress: r.contactAddress, compOffDays: r.compOffDates.join(', ') || null, prefix: r.prefixFrom ? `${r.prefixFrom} to ${r.prefixTo}` : null, suffix: r.suffixFrom ? `${r.suffixFrom} to ${r.suffixTo}` : null, status: r.status,
+    startSession: r.startSession, endSession: r.endSession, days: r.daysCount, reason: r.reason, certificate: r.certificateName ?? (r.certificate ? 'Yes' : 'No'), stationPermission: r.stationLeave ? 'Required' : 'Not required', ltc: r.ltcType, encashDays: r.encashDays, contactAddress: r.contactAddress, compOffDays: r.compOffDates.join(', ') || null, purpose: r.purpose,
+    child: r.childEvent ? `${r.childEvent === 'delivery' ? 'Delivery' : 'Adoption'} on ${r.childEventDate}${r.childBirthDate ? `, child born ${r.childBirthDate}` : ''}, surviving children ${r.survivingChildren ?? '-'}` : null, prefix: r.prefixFrom ? `${r.prefixFrom} to ${r.prefixTo}` : null, suffix: r.suffixFrom ? `${r.suffixFrom} to ${r.suffixTo}` : null, status: r.status,
     forwardedBy: r.forwardedByName, comment: r.comment,
   };
 }
@@ -373,6 +391,8 @@ export interface Policy {
   sandwich: 'included' | 'excluded'; employeeTypes: string[]; gender: string; minServiceMonths: number; maxConsecutive: number; debited: boolean;
   status: string; combineWith: Combine; maxAccumulation: number; afterExhaustedId: number; accrual: string; debitFromId: number; debitFactor: number; lifetimeMax: number; maxSpells: number; minDays: number; maxSpellsMonth: number; maxSpellsLifetime: number; quotas: Record<string, number>;
   needsContact: boolean; ltcAllowed: boolean; prefixSuffix: boolean; hodAfterDays: number; certificateRequired: boolean; offDaysOnly: boolean;
+  /** Purposes the leave can be taken for (empty: any reason). */
+  purposes: string[];
 }
 
 function toPolicy(r: RowDataPacket): Policy {
@@ -386,6 +406,7 @@ function toPolicy(r: RowDataPacket): Policy {
     debitFromId: Number(r.debit_from_type_id ?? 0), debitFactor: Number(r.debit_factor ?? 1),
     lifetimeMax: Number(r.lifetime_max ?? 0), maxSpells: Number(r.max_spells_per_year ?? 0), minDays: Number(r.min_days_per_application ?? 0), maxSpellsMonth: Number(r.max_spells_per_month ?? 0), maxSpellsLifetime: Number(r.max_spells_lifetime ?? 0), quotas: {},
     needsContact: Boolean(r.needs_contact), ltcAllowed: Boolean(r.ltc_allowed), prefixSuffix: Boolean(r.prefix_suffix), hodAfterDays: Number(r.hod_after_days ?? 0), certificateRequired: Boolean(r.certificate_required), offDaysOnly: Boolean(r.off_days_only),
+    purposes: parsePurposes(r.purposes),
   };
 }
 
@@ -550,8 +571,23 @@ export function parseLeaveInput(body: unknown): LeaveInput {
   const rawDays = raw.compOffDates;
   const compOffDates: string[] = Array.isArray(rawDays) ? rawDays.map((x) => String(x)) : typeof rawDays === 'string' && rawDays ? rawDays.split(',') : []; // the preview sends them comma-separated
   if (compOffDates.length > 31 || compOffDates.some((d) => !isValidIsoDate(d))) v.errors.compOffDates ||= 'Choose the worked days from the list.';
+  const purpose = typeof raw.purpose === 'string' ? raw.purpose.trim().slice(0, 200) : '';
+  const optionalDate = (key: string): string | null => {
+    const value = typeof raw[key] === 'string' ? (raw[key] as string).trim() : '';
+    if (!value) return null;
+    if (!isValidIsoDate(value)) { v.errors[key] ||= 'Enter a valid date.'; return null; }
+    return value;
+  };
+  const event = (CHILD_EVENTS as readonly string[]).includes(String(raw.childEvent)) ? (String(raw.childEvent) as ChildDetails['event']) : null;
+  const rawChildren = raw.survivingChildren;
+  let survivingChildren: number | null = null;
+  if (rawChildren !== undefined && rawChildren !== null && String(rawChildren).trim() !== '') {
+    survivingChildren = Number(rawChildren);
+    if (!Number.isInteger(survivingChildren) || survivingChildren < 0 || survivingChildren > 20) { v.errors.survivingChildren ||= 'Enter a whole number.'; survivingChildren = null; }
+  }
+  const child: ChildDetails = { event, eventDate: optionalDate('childEventDate'), birthDate: event === 'adoption' ? optionalDate('childBirthDate') : null, survivingChildren };
   v.assert();
-  return { compOffDates, userId, leaveTypeId, startDate: startDate!, endDate: endDate!, startSession, endSession, reason: reason.replace(/\s+/g, ' '), certificate: Boolean(file), stationLeave: raw.stationLeave === true, ltcType, encashDays, contactAddress, prefix, suffix, file };
+  return { purpose, child, compOffDates, userId, leaveTypeId, startDate: startDate!, endDate: endDate!, startSession, endSession, reason: reason.replace(/\s+/g, ' '), certificate: Boolean(file), stationLeave: raw.stationLeave === true, ltcType, encashDays, contactAddress, prefix, suffix, file };
 }
 
 /** Looks at the employee's other leaves around the new one: see ./combine. */
@@ -561,9 +597,10 @@ async function joinProblem(q: { query: typeof pool.query }, emp: Employee, polic
   const found = await rows(q,
     `SELECT r.leave_type_id, r.start_date, r.end_date, t.name, t.approval_stages, t.combine_with FROM leave_requests r
        JOIN leave_types t ON t.id = r.leave_type_id
-      WHERE r.user_id = ? AND r.status <> 'rejected' AND r.id <> ? AND r.end_date >= ? AND r.start_date <= ? AND (r.linked_to IS NULL OR r.linked_to <> ?)`,
-    [targetId, exceptId, from, to, exceptId]);
-  if (!found.length) return null;
+      WHERE r.user_id = ? AND r.status <> 'rejected' AND r.id <> ? AND r.end_date >= ? AND r.start_date <= ? AND (r.linked_to IS NULL OR r.linked_to <> ?)
+        AND t.code <> ?`, // Paternity Leave can be joined with any other kind of leave
+    [targetId, exceptId, from, to, exceptId, PATERNITY_CODE]);
+  if (!found.length || policy.code === PATERNITY_CODE) return null;
   const others: Neighbour[] = found.map((r) => ({
     id: Number(r.leave_type_id), name: String(r.name), stages: Number(r.approval_stages) === 2 ? 2 : 1, combineWith: toCombine(r.combine_with), start: isoDate(r.start_date), end: isoDate(r.end_date),
   }));
@@ -620,6 +657,16 @@ async function checkLeave(
   if (cycleYearOf(input.endDate, emp.basis) !== cycleYear) errors.endDate ||= 'A leave cannot run across two leave years. Apply separately for each year.';
   if (daysBetween(input.startDate, input.endDate) > 366) errors.endDate ||= 'A leave can cover at most one year.';
   if ((input.startSession !== 'full' || input.endSession !== 'full') && !policy.halfDay) errors.startSession = `${policy.name} cannot be taken as a half day.`;
+  // A leave type with a purpose list (e.g. Special Casual Leave) is taken only for one of those purposes.
+  if (policy.purposes.length) {
+    const matched = matchPurpose(policy.purposes, input.purpose);
+    if (matched) input.purpose = matched;
+    else if (!soft) errors.purpose = input.purpose ? 'Choose a purpose from the list.' : `Choose the purpose of the ${policy.name}.`;
+  } else input.purpose = '';
+  // Paternity Leave: birth / adoption details and the time it must be taken in (see ./specialLeave).
+  if (policy.code === PATERNITY_CODE) {
+    if (!soft) for (const [key, message] of Object.entries(paternityProblems(input.child, input.startDate, input.endDate))) errors[key] ||= message;
+  } else input.child = { event: null, eventDate: null, birthDate: null, survivingChildren: null };
   if (policy.afterExhaustedId && !errors.leaveTypeId) {
     const base = await loadPolicy(q, policy.afterExhaustedId);
     if (base && eligibilityProblem(base, emp, input.startDate) === null) {
@@ -635,6 +682,13 @@ async function checkLeave(
   let compOffPairs: Pair[] = [];
   if (policy.minDays && days < policy.minDays) errors.endDate = `${policy.name} needs at least ${policy.minDays} days in one application.`;
   if (policy.maxConsecutive && days > policy.maxConsecutive) errors.endDate = `${policy.name} can be taken for at most ${policy.maxConsecutive} days at a time.`;
+  if (policy.code === PATERNITY_CODE && !soft && input.child.event && input.child.eventDate && !errors.endDate) {
+    const [taken] = await rows(q,
+      "SELECT COALESCE(SUM(days_count), 0) AS n FROM leave_requests WHERE user_id = ? AND leave_type_id = ? AND child_event = ? AND child_event_date = ? AND status <> 'rejected' AND id <> ?",
+      [targetId, policy.id, input.child.event, input.child.eventDate, exceptId]);
+    const tooMany = paternityDaysProblem(Number(taken?.n ?? 0), days);
+    if (tooMany) errors.endDate = tooMany;
+  }
   if (policy.code === COMP_OFF_CODE) {
     // One worked weekly off / holiday (biometric punches only) pays for each leave day; the monthly limit counts days by month of the leave day.
     const person = await personById(targetId);
@@ -689,7 +743,7 @@ async function checkLeave(
 
   // The employee's own leaves straight before / after this one (only weekly offs and holidays in between).
   const around = await rows(q,
-    `SELECT r.id, r.leave_type_id, r.start_date, r.end_date, r.days_count, t.name, t.approval_stages, t.max_consecutive_days, t.off_days_only
+    `SELECT r.id, r.leave_type_id, r.start_date, r.end_date, r.days_count, t.name, t.code, t.approval_stages, t.max_consecutive_days, t.off_days_only
        FROM leave_requests r JOIN leave_types t ON t.id = r.leave_type_id
       WHERE r.user_id = ? AND r.status <> 'rejected' AND r.id <> ? AND r.end_date >= ? AND r.start_date <= ? AND (r.linked_to IS NULL OR r.linked_to <> ?) ORDER BY r.start_date`,
     [targetId, exceptId, addDays(input.startDate, -46), addDays(input.endDate, 46), exceptId]);
@@ -710,7 +764,8 @@ async function checkLeave(
     const other = found.hit;
     const otherStages = Number(other.approval_stages) === 2 ? 2 : 1;
     const range = `${isoDate(other.start_date)} to ${isoDate(other.end_date)}`;
-    if (otherStages !== policy.stages) {
+    // Paternity Leave can be joined with any other kind of leave.
+    if (otherStages !== policy.stages && policy.code !== PATERNITY_CODE && String(other.code) !== PATERNITY_CODE) {
       throw new HttpError(409, 'This leave cannot be joined with the leave next to it.', 'COMBINE', {
         startDate: `A ${policy.stages}-stage leave cannot be joined with a ${otherStages}-stage leave.`,
       });
@@ -1023,6 +1078,11 @@ async function saveCompOffUses(conn: { query: typeof pool.query }, requestId: nu
   }
 }
 
+/** purpose, child_event, child_event_date, child_birth_date, surviving_children (checkLeave has already cleared what does not apply). */
+const specialValues = (input: LeaveInput): unknown[] => [
+  input.purpose || null, input.child.event, input.child.event ? input.child.eventDate : null, input.child.event ? input.child.birthDate : null, input.child.event ? input.child.survivingChildren : null,
+];
+
 export async function createRequest(req: Request, viewer: Viewer, body: unknown): Promise<LeaveRequest> {
   const input = parseLeaveInput(body);
   let targetId: number;
@@ -1042,11 +1102,12 @@ export async function createRequest(req: Request, viewer: Viewer, body: unknown)
       const c = await checkLeave(conn, viewer, input, targetId, 0);
       const [result] = await conn.query(
         `INSERT INTO leave_requests
-           (user_id, leave_type_id, start_date, end_date, start_session, end_session, days_count, cycle_year, reason, certificate, station_leave, ltc_type, encash_days, contact_address, prefix_from, prefix_to, suffix_from, suffix_to, stages, status, applied_by, manager_id, reviewer_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_l1', ?, ?, ?)`,
+           (user_id, leave_type_id, start_date, end_date, start_session, end_session, days_count, cycle_year, reason, certificate, station_leave, ltc_type, encash_days, contact_address, prefix_from, prefix_to, suffix_from, suffix_to, stages, status, applied_by, manager_id, reviewer_id,
+            purpose, child_event, child_event_date, child_birth_date, surviving_children)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_l1', ?, ?, ?, ?, ?, ?, ?, ?)`,
         [targetId, c.policy.id, input.startDate, input.endDate, input.startSession, input.endSession, c.days, c.cycleYear, input.reason, input.certificate ? 1 : 0, input.stationLeave ? 1 : 0,
           input.ltcType, input.encashDays, input.contactAddress || null, input.prefix?.from ?? null, input.prefix?.to ?? null, input.suffix?.from ?? null, input.suffix?.to ?? null,
-          c.stages, viewer.id, c.emp.reportingManagerId, c.emp.reviewingManagerId],
+          c.stages, viewer.id, c.emp.reportingManagerId, c.emp.reviewingManagerId, ...specialValues(input)],
       );
       const id = Number((result as { insertId: number }).insertId);
       await saveCompOffUses(conn, id, targetId, c.compOffPairs);
@@ -1083,10 +1144,11 @@ export async function updateRequest(req: Request, viewer: Viewer, id: number, bo
       const c = await checkLeave(conn, viewer, input, Number(row.user_id), id);
       await conn.query(
         `UPDATE leave_requests SET leave_type_id = ?, start_date = ?, end_date = ?, start_session = ?, end_session = ?, days_count = ?, cycle_year = ?,
-           reason = ?, certificate = ?, station_leave = ?, ltc_type = ?, encash_days = ?, contact_address = ?, prefix_from = ?, prefix_to = ?, suffix_from = ?, suffix_to = ?, stages = ?, manager_id = ?, reviewer_id = ? WHERE id = ?`,
+           reason = ?, certificate = ?, station_leave = ?, ltc_type = ?, encash_days = ?, contact_address = ?, prefix_from = ?, prefix_to = ?, suffix_from = ?, suffix_to = ?, stages = ?, manager_id = ?, reviewer_id = ?,
+           purpose = ?, child_event = ?, child_event_date = ?, child_birth_date = ?, surviving_children = ? WHERE id = ?`,
         [c.policy.id, input.startDate, input.endDate, input.startSession, input.endSession, c.days, c.cycleYear, input.reason, input.certificate ? 1 : 0, input.stationLeave ? 1 : 0,
           input.ltcType, input.encashDays, input.contactAddress || null, input.prefix?.from ?? null, input.prefix?.to ?? null, input.suffix?.from ?? null, input.suffix?.to ?? null,
-          c.stages, c.emp.reportingManagerId, c.emp.reviewingManagerId, id],
+          c.stages, c.emp.reportingManagerId, c.emp.reviewingManagerId, ...specialValues(input), id],
       );
       await saveCompOffUses(conn, id, Number(row.user_id), c.compOffPairs);
       if (input.file) await saveCertificate(conn, id, input.file, viewer.id);

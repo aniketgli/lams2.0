@@ -107,7 +107,7 @@ router.get('/leave/requests', requireAuth, asyncHandler(async (req, res) => {
   const [list, employees, types] = await Promise.all([listRequests(viewer, { from: q.from, to: q.to }), applicableEmployees(viewer), listLeaveTypes()]);
   // A staff member applies only for the leave types of their own leave group.
   const own = viewer.role === 'general_staff' ? await groupLeaveTypeIdsOfUser(pool, viewer.id) : null;
-  // A leave type for persons with disability (SCL) is not shown to anyone else, whatever their leave group.
+  // A leave type marked for persons with disability only is not shown to anyone else, whatever their leave group.
   const pwd = viewer.role === 'general_staff' ? await isPwdUser(viewer.id) : true;
   res.json({ ...list, employees, types: types.filter((t) => t.status === 'active' && (!own || own.has(Number(t.id))) && (pwd || !t.pwdOnly)) });
 }));
