@@ -19,6 +19,7 @@ import { JoiningDetails, JoiningStatusLine, useJoining } from './JoiningPanel';
 import { actionBtn } from '../../../../shared/components/actionStyles';
 import { decidedBy, pendingAt, pendingAtManager, statusPerson } from '../../../../shared/services/statusLine';
 import { KeepDates } from '../../../../shared/components/KeepDates';
+import { earliestViewable, yearEnd, yearStart } from '../../../../shared/services/dateWindow';
 
 /**
  * Leave requests. The server decides everything (days, balance, who may do what); this page only shows it.
@@ -93,8 +94,10 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
   const teamView = isAdmin || isAudit || isManager;
 
   // ---- Data -----------------------------------------------------------------------------
-  const defaultFrom = localDate(-90);
-  const defaultTo = localDate(90);
+  // Opens on this year; only an administrator may look further back than 1 January of last year.
+  const defaultFrom = yearStart(localDate());
+  const defaultTo = yearEnd(localDate());
+  const earliest = earliestViewable(role, localDate());
   const [from, setFrom] = useState(defaultFrom);
   const [to, setTo] = useState(defaultTo);
   const [data, setData] = useState<LeaveList | null>(null);
@@ -523,9 +526,9 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
 
   const dateRange = (
     <div className="flex items-center gap-1.5">
-      <div className="w-36"><AppDatePicker size="sm" placeholder="From date" value={from} onChange={(v) => setFrom(v || defaultFrom)} /></div>
+      <div className="w-36"><AppDatePicker size="sm" placeholder="From date" value={from} minDate={earliest} maxDate={to || undefined} onChange={(v) => setFrom(v || defaultFrom)} /></div>
       <span className="text-slate-300 font-bold">—</span>
-      <div className="w-36"><AppDatePicker size="sm" placeholder="To date" value={to} onChange={(v) => setTo(v || defaultTo)} isRightColumn /></div>
+      <div className="w-36"><AppDatePicker size="sm" placeholder="To date" value={to} minDate={from || earliest} onChange={(v) => setTo(v || defaultTo)} isRightColumn /></div>
     </div>
   );
 
