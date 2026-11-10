@@ -17,7 +17,7 @@ import { ActivityLogPanel, ActivitySource } from '../../../../shared/components/
 import { activityEndpoints } from '../../../../shared/services/activityApi';
 import { AttendanceDay, AttendanceResponse, attendanceApi } from '../attendanceApi';
 import { KeepDates } from '../../../../shared/components/KeepDates';
-import { earliestViewable, monthEnd, monthStart } from '../../../../shared/services/dateWindow';
+import { earliestViewable, monthEnd as lastOfMonth, monthStart as firstOfMonth } from '../../../../shared/services/dateWindow';
 
 /**
  * Biometric Attendance.
@@ -96,8 +96,8 @@ export const AttendanceView: React.FC = () => {
   // ---- Dates and data ---------------------------------------------------------
   const today = localToday();
   // Opens on this month; only an administrator may look further back than 1 January of last year.
-  const defaultFrom = monthStart(today);
-  const defaultTo = monthEnd(today);
+  const defaultFrom = firstOfMonth(today);
+  const defaultTo = lastOfMonth(today);
   const earliest = earliestViewable(role, today);
   const [from, setFrom] = useState(defaultFrom);
   const [to, setTo] = useState(defaultTo);
@@ -111,7 +111,7 @@ export const AttendanceView: React.FC = () => {
     const [y, m] = month.split('-').map(Number);
     return `${month}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
   })();
-  const start = viewMode === 'month' ? `${month}-01` : from || monthStart;
+  const start = viewMode === 'month' ? `${month}-01` : from || defaultFrom;
   const end = viewMode === 'month' ? (monthEnd < today ? monthEnd : today) : to || today;
 
   useEffect(() => {
@@ -154,7 +154,7 @@ export const AttendanceView: React.FC = () => {
 
   const distinct = (pick: (r: Row) => string) => [...new Set(rows.map(pick).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const filterSets = [statuses, employees, departments, designations, types, shiftsFilter, managers];
-  const filtered = Boolean(search.trim()) || filterSets.some((f) => !f.includes('all')) || (viewMode === 'table' && (from !== defaultFrom || to !== today));
+  const filtered = Boolean(search.trim()) || filterSets.some((f) => !f.includes('all')) || (viewMode === 'table' && (from !== defaultFrom || to !== defaultTo));
   const resetAll = () => {
     setSearch(''); [setStatuses, setEmployees, setDepartments, setDesignations, setTypes, setShiftsFilter, setManagers].forEach((set) => set(['all']));
     setFrom(defaultFrom); setTo(defaultTo);
