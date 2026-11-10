@@ -69,7 +69,6 @@ const EMPTY_FORM: LeaveInput = { userId: '', leaveTypeId: '', startDate: '', end
 /** Paternity Leave (code PAT): taken from 15 days before up to 6 months after the date of delivery, or up to 6 months after the date of adoption. */
 const PATERNITY_CODE = 'PAT';
 const PATERNITY_DAYS = 15;
-const PATERNITY_SPELLS = 2;
 function plusMonths(date: string, n: number): string {
   const [y, m, d] = date.split('-').map(Number);
   const first = new Date(Date.UTC(y, m - 1 + n, 1));
@@ -524,9 +523,9 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
 
   const dateRange = (
     <div className="flex items-center gap-1.5">
-      <div className="w-36"><AppDatePicker size="sm" placeholder="From date" value={from} onChange={setFrom} /></div>
+      <div className="w-36"><AppDatePicker size="sm" placeholder="From date" value={from} onChange={(v) => setFrom(v || defaultFrom)} /></div>
       <span className="text-slate-300 font-bold">—</span>
-      <div className="w-36"><AppDatePicker size="sm" placeholder="To date" value={to} onChange={setTo} isRightColumn /></div>
+      <div className="w-36"><AppDatePicker size="sm" placeholder="To date" value={to} onChange={(v) => setTo(v || defaultTo)} isRightColumn /></div>
     </div>
   );
 
@@ -677,7 +676,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
                   <div>
                     <AppDatePicker label="From date (start date)" required error={formErrors.startDate} value={form.startDate} placeholder={patWindow ? 'Select date' : 'Choose the date of delivery first'}
                       minDate={patWindow?.from} maxDate={patWindow?.lastStart} marks={marks}
-                      onChange={(v) => setForm((f) => ({ ...f, startDate: v, endDate: plusDays(v, PATERNITY_DAYS - 1), startSession: 'full', endSession: 'full' }))} className="w-full" />
+                      onChange={(v) => setForm((f) => ({ ...f, startDate: v, endDate: v ? plusDays(v, PATERNITY_DAYS - 1) : '', startSession: 'full', endSession: 'full' }))} className="w-full" />
                   </div>
                   <div>
                     <Input label={`To date (${PATERNITY_DAYS} days, worked out)`} value={form.endDate ? formatDate(form.endDate) : ''} placeholder="Set by the From date" disabled readOnly error={formErrors.endDate} />
@@ -706,15 +705,6 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
                   <Select label={`Purpose of ${type.code}`} required value={form.purpose} searchable={false} placeholder="Select the purpose" error={formErrors.purpose}
                     onChange={(v: string) => setField('purpose', v)} options={type.purposes.map((p) => ({ value: p, label: p }))} />
                 </div>
-              )}
-              {isPat && (
-                <p className="sm:col-span-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-[11px] leading-relaxed text-sky-900">
-                  Paternity Leave: {PATERNITY_DAYS} days in one go for one birth / adoption, at most {PATERNITY_SPELLS} times in service, for a male employee with less than two surviving children.
-                  It goes to the HoD (2 stages) and can be joined with any other leave.
-                  {patWindow
-                    ? ` Take it between ${formatDate(patWindow.from)} and ${formatDate(patWindow.to)}; after that it lapses.`
-                    : ' Birth: from 15 days before up to 6 months after the date of delivery. Adoption: up to 6 months after the date of adoption. Not taken in that time, it lapses.'}
-                </p>
               )}
             </div>
 

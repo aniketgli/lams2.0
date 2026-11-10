@@ -394,9 +394,9 @@ export const OutdoorDutyView: React.FC = () => {
 
   const dateRange = (
     <div className="flex items-center gap-1.5">
-      <div className="w-36"><AppDatePicker size="sm" placeholder="From date" value={from} onChange={setFrom} /></div>
+      <div className="w-36"><AppDatePicker size="sm" placeholder="From date" value={from} onChange={(v) => setFrom(v || defaultFrom)} /></div>
       <span className="text-slate-300 font-bold">—</span>
-      <div className="w-36"><AppDatePicker size="sm" placeholder="To date" value={to} onChange={setTo} isRightColumn /></div>
+      <div className="w-36"><AppDatePicker size="sm" placeholder="To date" value={to} onChange={(v) => setTo(v || defaultTo)} isRightColumn /></div>
     </div>
   );
 
