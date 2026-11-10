@@ -28,8 +28,16 @@ if (!process.execArgv.some(arg => arg.includes('tsx')) && !process.env.TSX_SPAWN
     const port = Number(process.env.PORT) || envConfig.port || 3000;
     const listenHost = '0.0.0.0';
 
-    httpServer.listen(port, listenHost, () => {
+    httpServer.listen(port, listenHost, async () => {
       console.log(`Server listening on http://${listenHost}:${port}`);
+      // Background jobs. (This file is what `npm run dev` / `npm start` run; without these lines queued notification
+      // emails waited forever and scheduled reports were never sent.)
+      const { startReportScheduler } = await import('./server/reports/scheduler.ts');
+      const { logEmailReadiness } = await import('./server/masters/emailSettings.ts');
+      const { startOutboxWorker } = await import('./server/notifications/outbox.ts');
+      startReportScheduler();      // sends scheduled report emails when they are due
+      void logEmailReadiness();    // says in the log whether notification emails can go out, and if not, why
+      startOutboxWorker();         // sends queued notification emails and retries failed ones
     });
   };
 
