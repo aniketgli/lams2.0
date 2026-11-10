@@ -20,6 +20,8 @@ import { logThenDownload } from '../../../../shared/services/downloadAudit';
 import { ConfirmDialog, NoticeBar, useNotice } from '../../master/components/masterUi';
 import { OdInput, OdList, OdRequest, OdStatus, OdType, odApi } from '../odApi';
 import { actionBtn } from '../../../../shared/components/actionStyles';
+import { decidedBy, pendingAtManager, statusPerson } from '../../../../shared/services/statusLine';
+import { KeepDates } from '../../../../shared/components/KeepDates';
 
 /**
  * Outdoor Duty (OD): official work away from the institute.
@@ -258,7 +260,8 @@ export const OutdoorDutyView: React.FC = () => {
   const [viewing, setViewing] = useState<OdRequest | null>(null);
 
   // ---- Table ---------------------------------------------------------------------------------
-  const statusBy = (r: OdRequest) => (r.status === 'pending' ? `by ${r.managerName ?? 'Administrator'} (${r.managerName ? 'R.M.' : 'Admin'})` : `by ${r.actionByName ?? '—'}${r.actionByRole ? ` (${r.actionByRole})` : ''}`);
+  // Status line: who it is waiting for ("at R.M. Harendra Kumar"), or who decided ("by Admin Aniket Gupta").
+  const statusBy = (r: OdRequest) => (r.status === 'pending' ? pendingAtManager(r.managerName) : decidedBy(r.actionByRole, r.actionByName));
   const columns: ColumnDef<OdRequest>[] = [
     ...(teamView ? [{
       key: 'employee', header: 'Employee', width: '15%', sortValue: (r: OdRequest) => r.name,
@@ -276,7 +279,7 @@ export const OutdoorDutyView: React.FC = () => {
       key: 'date', header: 'Duration', width: teamView ? '14%' : '16%', sortValue: (r) => r.startDate,
       render: (r) => (
         <div className="leading-tight">
-          <div className="font-semibold text-slate-900 whitespace-nowrap">{duration(r)}</div>
+          <div className="font-semibold text-slate-900"><KeepDates text={duration(r)} /></div>
           <div className="text-[11px] text-slate-500 whitespace-nowrap">{r.startTime} – {r.endTime} · {r.daysCount} {r.daysCount === 1 ? 'day' : 'days'}</div>
         </div>
       ),
@@ -307,7 +310,7 @@ export const OutdoorDutyView: React.FC = () => {
       render: (r) => (
         <div className="leading-tight space-y-1">
           <StatusPill status={r.status} />
-          <div className="text-[11px] text-slate-500 truncate" title={statusBy(r)}>{statusBy(r)}</div>
+          <div className="text-[11px] text-slate-500 leading-snug mt-0.5">{statusBy(r)}</div>
         </div>
       ),
     },
@@ -362,7 +365,7 @@ export const OutdoorDutyView: React.FC = () => {
   const exportRows = () => sorted.map((r) => [
     ...(teamView ? [r.biometricId, r.name, r.department] : []),
     r.odType, formatDate(r.startDate), formatDate(r.endDate), r.startTime, r.endTime, r.daysCount, r.location, r.estimatedFunds, r.fundingSource ?? '', r.purpose,
-    formatDate(r.appliedAt.slice(0, 10)), STATUS_META[r.status].label, statusBy(r).replace(/^by /, ''), r.comment ?? '',
+    formatDate(r.appliedAt.slice(0, 10)), STATUS_META[r.status].label, statusPerson(statusBy(r)), r.comment ?? '',
   ]);
   const fileName = `WII_Outdoor_Duty_${from}_to_${to}`;
   const downloadCsv = () => void logThenDownload('outdoor_duty', 'csv', sorted.length, range, () => downloadCsvText(toCsvText(exportHeaders, exportRows()), fileName), setError);
