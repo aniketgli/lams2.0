@@ -23,20 +23,21 @@ const flow = { noun: 'Leave request', code: 'LEAVE', id: '9', employeeId: 1, emp
 beforeEach(() => { sent.length = 0; });
 
 describe('who is told', () => {
-  test('applied goes to the reporting manager, employee copied', () => {
+  test('applied goes to the reporting manager, employee copied, and the HoD when it will go to the HoD', () => {
     const n = flowNotice('applied', flow);
     expect(n.to).toEqual([2]);
-    expect(n.cc).toEqual([1]);
+    expect(n.cc).toEqual([1, 3]);
+    expect(flowNotice('applied', { ...flow, viaHod: false }).cc).toEqual([1, null]);
   });
   test('no reporting manager: the employee alone', () => {
     const n = flowNotice('applied', { ...flow, managerId: null });
     expect(n.to).toEqual([1]);
   });
-  test('edited and deleted go to the reporting manager, employee copied', () => {
+  test('edited and deleted go to the reporting manager, employee and HoD copied', () => {
     for (const stage of ['edited', 'deleted'] as const) {
       const n = flowNotice(stage, flow);
       expect(n.to).toEqual([2]);
-      expect(n.cc).toEqual([1]);
+      expect(n.cc).toEqual([1, 3]);
     }
   });
   test('forwarded goes to the HoD with employee and manager copied', () => {

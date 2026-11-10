@@ -34,6 +34,8 @@ export interface SaveResult {
   message: string;
   fieldErrors?: Record<string, string>;
   user?: User;
+  /** A new account's own temporary password (also emailed); shown to the administrator once. */
+  temporaryPassword?: string;
 }
 
 /** Only the fields the employee form owns are sent; the server ignores anything else anyway. */
@@ -102,12 +104,12 @@ export const employeeApi = {
   /** The fixed system accounts: only the Profiles table shows these (administrator and auditor only; others get an empty list). */
   listSystem: () => api<EmployeeRow[]>('/hrms/employees?system=1', { passive: true }),
   create: (user: Partial<User>) =>
-    api<{ employee: EmployeeRow; message: string }>('/hrms/employees', { method: 'POST', body: employeePayload(user) }),
+    api<{ employee: EmployeeRow; message: string; temporaryPassword?: string }>('/hrms/employees', { method: 'POST', body: employeePayload(user) }),
   update: (id: string, user: Partial<User>) =>
     api<{ employee: EmployeeRow; changed: string[]; message: string }>(`/hrms/employees/${encodeURIComponent(id)}`, { method: 'PUT', body: employeePayload(user) }),
   /** effectiveDate is optional; the server uses today's date in India when it is missing. */
   setStatus: (id: string, status: 'active' | 'inactive', reason: string, effectiveDate?: string) =>
-    api<{ employee: EmployeeRow; message: string }>(`/hrms/employees/${encodeURIComponent(id)}/status`, {
+    api<{ employee: EmployeeRow; message: string; temporaryPassword?: string }>(`/hrms/employees/${encodeURIComponent(id)}/status`, {
       method: 'PATCH', body: { status, reason, ...(effectiveDate ? { effectiveDate } : {}) },
     }),
   remove: (id: string, reason: string, reference: string) =>

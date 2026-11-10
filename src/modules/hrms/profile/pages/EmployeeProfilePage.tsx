@@ -654,6 +654,9 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const [passwordResetModal, setPasswordResetModal] = useState<{
     user: UserType;
     tempPass: string;
+    /** Heading and the line under the password (defaults: a password reset). */
+    title?: string;
+    note?: string;
   } | null>(null);
 
   // Password Reset Form Modal State
@@ -1139,6 +1142,13 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     const savedId = result.user?.id ?? editingEmployeeId;
     closeEmployeeForm();
     if (savedId) setSelectedUserId(savedId);
+    // A new account: show its temporary password once, in case the welcome email does not arrive.
+    if (result.temporaryPassword && result.user) {
+      setPasswordResetModal({
+        user: result.user, tempPass: result.temporaryPassword, title: 'Employee account created',
+        note: `Also emailed to ${result.user.email} with the login ID and portal address. They will be asked to choose their own password at sign-in.`,
+      });
+    }
   };
 
   const handleOpenCreateEmployeeModal = () => {
@@ -1282,6 +1292,12 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     showToast(`Account status for ${target.name} changed to ${isActivating ? 'Active' : 'Deactivated'}`);
     setStatusChangeError(null);
     setUserToToggleStatusModal(null);
+    if (isActivating && result.temporaryPassword) {
+      setPasswordResetModal({
+        user: target, tempPass: result.temporaryPassword, title: 'Account reactivated',
+        note: `Also emailed to ${target.email} with the login ID and portal address. They will be asked to choose their own password at sign-in.`,
+      });
+    }
   };
 
   const handleConfirmDeleteUser = async () => {
@@ -3393,7 +3409,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                   <KeyRound className="w-4.5 h-4.5 text-emerald-300" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-white tracking-tight">Password Reset Generated</h3>
+                  <h3 className="font-bold text-base text-white tracking-tight">{passwordResetModal.title ?? 'Password Reset Generated'}</h3>
                   <p className="text-xs text-slate-400 mt-0.5">Temporary credential generated</p>
                 </div>
               </div>
@@ -3415,7 +3431,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                   {passwordResetModal.tempPass}
                 </p>
                 <p className="text-[10px] text-slate-400">
-                  Dispatched via simulated SMS &amp; Official Slack notification. User must reset upon first login.
+                  {passwordResetModal.note ?? 'The user must choose a new password at the next sign-in.'}
                 </p>
               </div>
 

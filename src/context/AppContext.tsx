@@ -22,7 +22,7 @@ interface AppContextType {
   updateUserProfile: (userId: string, updatedFields: Partial<User>) => Promise<SaveResult>;
   addUserProfile: (newUser: Omit<User, 'id' | 'leaveBalances'>) => Promise<SaveResult>;
   reloadEmployees: () => Promise<User[] | null>;
-  toggleUserStatus: (userId: string, reason?: string, effectiveDate?: string) => Promise<{ success: boolean; message?: string }>;
+  toggleUserStatus: (userId: string, reason?: string, effectiveDate?: string) => Promise<{ success: boolean; message?: string; temporaryPassword?: string }>;
   deleteUser: (userId: string, reason: string, reference?: string) => Promise<{ success: boolean; message?: string }>;
   updateSlackConfig: (newConfig: SlackConfig) => void;
 
@@ -305,9 +305,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addUserProfile = async (newUser: Omit<User, 'id' | 'leaveBalances'>): Promise<SaveResult> => {
     let createdUser: User;
     let savedMessage = '';
+    let temporaryPassword: string | undefined;
     try {
       const result = await employeeApi.create(newUser);
       savedMessage = result.message;
+      temporaryPassword = result.temporaryPassword;
       const fresh = await reloadEmployees();
       createdUser = fresh?.find((u) => u.id === String(result.employee.id)) ?? toDirectoryUser(result.employee);
     } catch (error) {
@@ -315,17 +317,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     // The welcome and supervisor emails are sent by the server (server/notifications) after the account is saved.
-    return { success: true, message: savedMessage || `Employee ${createdUser.name} saved.`, user: createdUser };
+    return { success: true, message: savedMessage || `Employee ${createdUser.name} saved.`, user: createdUser, temporaryPassword };
   };
 
-  const toggleUserStatus = async (userId: string, reason?: string, effectiveDate?: string): Promise<{ success: boolean; message?: string }> => {
+  const toggleUserStatus = async (userId: string, reason?: string, effectiveDate?: string): Promise<{ success: boolean; message?: string; temporaryPassword?: string }> => {
     const targetUser = users.find((u) => u.id === userId);
     if (!targetUser) return { success: false, message: 'Employee account not found.' };
 
     const isActivating = targetUser.status === 'deactivated';
+    let temporaryPassword: string | undefined;
     try {
       // The server checks responsibilities, writes users + profile + audit, and signs a deactivated user out.
-      await employeeApi.setStatus(userId, isActivating ? 'active' : 'inactive', reason || '', effectiveDate || undefined);
+      ({ temporaryPassword } = await employeeApi.setStatus(userId, isActivating ? 'active' : 'inactive', reason || '', effectiveDate || undefined));
     } catch (error) {
       return toSaveError(error, 'Unable to reach the server. Account status was not changed.');
     }
@@ -344,7 +347,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       },
       addSlackLog
     );
-    return { success: true };
+    return { success: true, temporaryPassword };
   };
 
   const deleteUser = async (userId: string, reason: string, reference?: string): Promise<{ success: boolean; message?: string }> => {

@@ -239,7 +239,29 @@ export interface EmailSettings {
   user: string;
   hasPassword: boolean;
   updatedAt: string | null;
+  /** Why notification mails are not sent from this server right now (null: they are). */
+  notReady: string | null;
+  /** Portal address put in mails (APP_URL on the server); empty: mails carry no link. */
+  appUrl: string;
 }
+
+/** One mail this server tried to send (kept in memory since the server last started). */
+export interface EmailLogEntry {
+  id: string;
+  timestamp: string;
+  to: string;
+  toName?: string;
+  cc?: string[];
+  bcc?: string[];
+  subject: string;
+  status: 'delivered' | 'sent' | 'simulated' | 'failed';
+  error?: string;
+  eventType?: string;
+}
+
+export const emailLogApi = {
+  list: () => api<{ logs: EmailLogEntry[] }>('/email/logs'),
+};
 
 export interface EmailSettingsInput {
   enabled: boolean;

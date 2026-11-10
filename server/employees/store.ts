@@ -328,11 +328,11 @@ function isDuplicateKey(error: unknown): boolean {
   return code === 'ER_DUP_ENTRY';
 }
 
-async function createEmployeeImpl(req: Request, body: unknown): Promise<EmployeeRecord> {
+async function createEmployeeImpl(req: Request, body: unknown, temporaryPasswordHash?: string): Promise<EmployeeRecord> {
   const actor = req.auth!.account.biometricId;
-  // Every new account starts with the default password (a copy of its hash)
-  // and must choose its own password at first sign-in.
-  const passwordHash = await defaultPasswordHash();
+  // Every new account starts with its own temporary password (emailed to it; the route makes it) or, when none
+  // is given, the default password, and is asked to choose its own password at first sign-in.
+  const passwordHash = temporaryPasswordHash ?? await defaultPasswordHash();
   if (!passwordHash) {
     throw new HttpError(409, 'Set the default password for new employees first (Master Settings → Organization).', 'DEFAULT_PASSWORD_MISSING');
   }
@@ -467,7 +467,7 @@ async function responsibilityBlock(q: Querier, target: EmployeeRecord): Promise<
 
 export interface StatusChange { status: 'active' | 'inactive'; reason: string; effectiveDate: string }
 
-async function setEmployeeStatusImpl(req: Request, id: number, change: StatusChange): Promise<EmployeeRecord> {
+async function setEmployeeStatusImpl(req: Request, id: number, change: StatusChange, temporaryPasswordHash?: string): Promise<EmployeeRecord> {
   const actor = req.auth!.account.biometricId;
   return inTransaction(async (conn) => {
     const existing = await findEmployee(conn, id, true);
@@ -475,7 +475,8 @@ async function setEmployeeStatusImpl(req: Request, id: number, change: StatusCha
     const before = existing.record;
     if (before.isSystem) throw systemAccountError();
     if (before.biometricId === actor) throw badRequest('You cannot change your own account status.');
-    if (before.status === change.status) return before;
+    // Nothing to change. (A refusal, not a silent success: a reactivation would otherwise email a temporary password that was never saved.)
+    if (before.status === change.status) throw new HttpError(409, `The account is already ${change.status === 'active' ? 'active' : 'inactive'}.`, 'NO_CHANGE');
 
     if (change.status === 'inactive') {
       const block = await responsibilityBlock(conn, before);
@@ -484,7 +485,7 @@ async function setEmployeeStatusImpl(req: Request, id: number, change: StatusCha
 
     const verb = change.status === 'inactive' ? 'Deactivated' : 'Reactivated';
     // A reactivated account signs in with the default password again and is offered (not forced) to choose its own, once.
-    const resetHash = change.status === 'active' ? await defaultPasswordHash(conn) : null;
+    const resetHash = change.status === 'active' ? temporaryPasswordHash ?? await defaultPasswordHash(conn) : null;
     if (change.status === 'active' && !resetHash) {
       throw new HttpError(409, 'Set the default password first (Master Settings → Organization).', 'DEFAULT_PASSWORD_MISSING');
     }
@@ -500,7 +501,7 @@ async function setEmployeeStatusImpl(req: Request, id: number, change: StatusCha
     await writeMasterAuditSql(conn, req, {
       masterKey: AUDIT_EMPLOYEE, recordId: before.biometricId, recordLabel: before.name, action: 'STATUS',
       before: { status: before.status, effectiveDate: existing.rawData.statusEffectiveDate ?? null },
-      after: { status: after.status, effectiveDate: change.effectiveDate, ...(resetHash ? { password: 'default (change offered at first sign-in)' } : {}) },
+      after: { status: after.status, effectiveDate: change.effectiveDate, ...(resetHash ? { password: temporaryPasswordHash ? 'temporary password emailed (change offered at sign-in)' : 'default (change offered at first sign-in)' } : {}) },
       reason: change.reason || null,
     });
     return after;

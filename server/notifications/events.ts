@@ -4,7 +4,7 @@ import { type Detail, type Notice, notify } from './notify';
 
 /**
  * Who hears about what.
- *   applied    → reporting manager (employee copied). No manager set → the employee.
+ *   applied / edited / deleted → reporting manager (employee copied; HoD copied when it will go to the HoD). No manager set → the employee.
  *   forwarded  → HoD (employee and reporting manager copied)
  *   approved / rejected → the employee (reporting manager, and HoD when the request went to the HoD, copied)
  *   undone     → the employee (managers copied)
@@ -47,8 +47,9 @@ export function flowNotice(stage: Stage, f: Flow, remark?: string | null): Notic
   let to: Notice['to'];
   let cc: Notice['cc'];
   if (stage === 'applied' || stage === 'edited' || stage === 'deleted') {
+    // A request that will go to the HoD: the HoD is copied from the start, so they know what is coming.
     to = f.managerId ? [f.managerId] : [employee];
-    cc = f.managerId ? [employee] : [];
+    cc = f.managerId ? [employee, hod] : [hod];
   } else if (stage === 'forwarded') {
     to = [f.reviewerId ?? f.managerId];
     cc = [employee, f.managerId];
@@ -163,7 +164,10 @@ export function notifyJoining(stage: Stage, r: JoiningView, actor?: string | nul
 
 // --- Employee accounts ---------------------------------------------------------------
 
-export interface EmployeeView { id: string | number; name: string; biometricId: string; designation?: string | null; department?: string | null; profileData?: string }
+export interface EmployeeView { id: string | number; name: string; biometricId: string; email?: string | null; designation?: string | null; department?: string | null; profileData?: string }
+
+/** What a new or reactivated employee needs to sign in. The password is the account's own temporary one. */
+export interface SignIn { temporaryPassword: string | null; portalUrl: string }
 
 function managersInProfile(e: EmployeeView): { rm: string | null; hod: string | null } {
   try {
@@ -173,50 +177,90 @@ function managersInProfile(e: EmployeeView): { rm: string | null; hod: string | 
   } catch { return { rm: null, hod: null }; }
 }
 
-/** A new employee: a welcome to them, and a "new team member" note to their reporting manager and HoD. */
-export function notifyWelcome(e: EmployeeView): void {
-  const { rm, hod } = managersInProfile(e);
-  const details: Detail[] = [['Name', e.name], ['Biometric ID', e.biometricId], ['Designation', e.designation ?? null], ['Department / Project', e.department ?? null]];
-  notify(() => ({
-    event: 'EMPLOYEE_CREATED', referenceId: e.biometricId,
-    subject: `Welcome to the WII Portal, ${e.name}`,
-    heading: 'Welcome to the WII Portal',
-    intro: 'Your account has been created. Sign in with your registered email and the default password given by the IT Cell. You will be offered a password change after your first sign-in.',
-    details, to: [e.id],
-  }));
-  if (rm || hod) {
+const personDetails = (e: EmployeeView): Detail[] => [['Name', e.name], ['Biometric ID', e.biometricId], ['Designation', e.designation ?? null], ['Department / Project', e.department ?? null]];
+
+/** Sign-in details for the employee's own mail. It carries a password, so it is never copied to the organization CC / BCC. */
+export function signInNotice(e: EmployeeView, signIn: SignIn, event: string, subject: string, heading: string, intro: string): Notice {
+  return {
+    event, referenceId: e.biometricId, subject, heading, intro,
+    details: [
+      ...personDetails(e),
+      ['Login ID (email)', e.email ?? null],
+      ['Temporary password', signIn.temporaryPassword],
+      ['Portal address', signIn.portalUrl || null],
+    ],
+    buttonLabel: 'Sign in to WII Portal', portalUrl: signIn.portalUrl,
+    category: 'SECURITY', to: [e.id],
+  };
+}
+const signInMail = (...args: Parameters<typeof signInNotice>) => notify(() => signInNotice(...args));
+
+type TeamChange = 'added' | 'deactivated' | 'reactivated';
+const TEAM_WORDS: Record<TeamChange, { subject: string; heading: string; intro: (name: string, role: string) => string }> = {
+  added: { subject: 'New team member', heading: 'New team member', intro: (n, r) => `${n} has been added to your team in the WII Portal, with you as the ${r}.` },
+  deactivated: { subject: 'Team member deactivated', heading: 'Team member deactivated', intro: (n, r) => `The WII Portal account of ${n}, for whom you are the ${r}, has been deactivated.` },
+  reactivated: { subject: 'Team member reactivated', heading: 'Team member reactivated', intro: (n, r) => `The WII Portal account of ${n}, for whom you are the ${r}, is active again.` },
+};
+
+/** Mails to the reporting manager and / or HoD about a change in their team (one each, naming their role). */
+export function teamNotices(change: TeamChange, e: EmployeeView, who: { rm?: string | null; hod?: string | null }, portalUrl?: string | null): Notice[] {
+  const words = TEAM_WORDS[change];
+  const out: Notice[] = [];
+  const sent = new Set<string>();
+  for (const [id, role] of [[who.rm, 'reporting manager'], [who.hod, 'HoD']] as const) {
+    if (!id || sent.has(id)) continue;
+    sent.add(id);
+    const roleText = id === who.rm && id === who.hod ? 'reporting manager and HoD' : role;
+    out.push({
+      event: `EMPLOYEE_TEAM_${change.toUpperCase()}`, referenceId: e.biometricId,
+      subject: `${words.subject}: ${e.name} (${e.biometricId})`, heading: words.heading,
+      intro: words.intro(e.name, roleText), details: personDetails(e), portalUrl, to: [id],
+    });
+  }
+  return out;
+}
+function notifyTeam(...args: Parameters<typeof teamNotices>): void {
+  for (const notice of teamNotices(...args)) notify(() => notice);
+}
+
+/** A new employee: their sign-in details, and a "new team member" note to their reporting manager and HoD. */
+export function notifyWelcome(e: EmployeeView, signIn: SignIn): void {
+  signInMail(e, signIn, 'EMPLOYEE_CREATED', `Welcome to the WII Portal, ${e.name}`, 'Welcome to the WII Portal',
+    'Your WII Portal account has been created. Sign in with the login ID and temporary password below; you will be asked to choose your own password.');
+  notifyTeam('added', e, managersInProfile(e), signIn.portalUrl);
+}
+
+/** An account was switched on (with a new temporary password) or off; the reporting manager and HoD are told too. */
+export function notifyAccountStatus(status: 'active' | 'inactive', e: EmployeeView, signIn?: SignIn): void {
+  if (status === 'active') {
+    signInMail(e, signIn ?? { temporaryPassword: null, portalUrl: '' }, 'EMPLOYEE_REACTIVATED', 'Your WII Portal account is active again', 'Account reactivated',
+      signIn?.temporaryPassword
+        ? 'Your WII Portal account is active again. Sign in with the login ID and temporary password below; you will be asked to choose your own password.'
+        : 'Your WII Portal account is active again. Sign in with the password given by the IT Cell; you will be asked to choose your own password.');
+  } else {
     notify(() => ({
-      event: 'EMPLOYEE_CREATED_MANAGER', referenceId: e.biometricId,
-      subject: `New team member: ${e.name} (${e.biometricId})`,
-      heading: 'New team member',
-      intro: `${e.name} has been added to the WII Portal${rm ? ' with you as the reporting manager' : ' with you as the HoD'}.`,
-      details, to: [rm, hod],
+      event: 'EMPLOYEE_DEACTIVATED', referenceId: e.biometricId,
+      subject: 'Your WII Portal account has been deactivated', heading: 'Account deactivated',
+      intro: 'Your WII Portal account has been deactivated. Contact the IT Cell if you think this is a mistake.',
+      details: [['Name', e.name], ['Biometric ID', e.biometricId]], to: [e.id],
     }));
   }
+  notifyTeam(status === 'active' ? 'reactivated' : 'deactivated', e, managersInProfile(e), signIn?.portalUrl);
 }
 
-/** An account was switched on or off. */
-export function notifyAccountStatus(status: 'active' | 'inactive', e: EmployeeView): void {
-  const on = status === 'active';
-  notify(() => ({
-    event: on ? 'EMPLOYEE_REACTIVATED' : 'EMPLOYEE_DEACTIVATED', referenceId: e.biometricId,
-    subject: on ? 'Your WII Portal account is active again' : 'Your WII Portal account has been deactivated',
-    heading: on ? 'Account reactivated' : 'Account deactivated',
-    intro: on ? 'Your account is active again. Sign in with the default password given by the IT Cell; you will be offered a password change.' : 'Your account has been deactivated. Contact the IT Cell if you think this is a mistake.',
-    details: [['Biometric ID', e.biometricId]], to: [e.id],
-  }));
-}
-
-/** The profile of an employee was changed by the administrator. */
-export function notifyEmployeeUpdated(e: EmployeeView, changed: string[]): void {
+/** The profile of an employee was changed by the administrator. A new reporting manager / HoD hears about their new team member. */
+export function notifyEmployeeUpdated(e: EmployeeView, changed: string[], portalUrl?: string | null): void {
   if (!changed.length) return;
   notify(() => ({
     event: 'EMPLOYEE_UPDATED', referenceId: e.biometricId,
     subject: 'Your WII Portal profile has been updated',
     heading: 'Profile updated',
-    intro: 'The administrator has updated your profile. If something looks wrong, contact the IT Cell.',
-    details: [['Name', e.name], ['Biometric ID', e.biometricId], ['Updated', changed.map(readable).join(', ')]], to: [e.id],
+    intro: 'The administrator has updated your profile. Your password is not changed. If something looks wrong, contact the IT Cell.',
+    details: [['Name', e.name], ['Biometric ID', e.biometricId], ['Login ID (email)', e.email ?? null], ['Updated', changed.map(readable).join(', ')]],
+    portalUrl, to: [e.id],
   }));
+  const { rm, hod } = managersInProfile(e);
+  notifyTeam('added', e, { rm: changed.includes('reportingManagerId') ? rm : null, hod: changed.includes('reviewingManagerId') ? hod : null }, portalUrl);
 }
 
 /** The account was deleted for good. The employee is no longer an active account, so the mail goes to the address saved before. */
