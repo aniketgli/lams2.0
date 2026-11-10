@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { AppDatePicker } from '../../shared/components/AppDatePicker';
 import {
   PageHeader,
   Button,
@@ -378,21 +379,11 @@ export const FMSView: React.FC<FMSViewProps> = ({ onReturnToLobby }) => {
 
             <div className="grid grid-cols-2 gap-4">
               <FormField label="From Date" required>
-                <Input
-                  type="date"
-                  value={fromDate}
-                  onChange={(e) => setFromDate(e.target.value)}
-                  required
-                />
+                <AppDatePicker value={fromDate} placeholder="Select date" maxDate={toDate || undefined} onChange={setFromDate} className="w-full" />
               </FormField>
 
               <FormField label="To Date" required>
-                <Input
-                  type="date"
-                  value={toDate}
-                  onChange={(e) => setToDate(e.target.value)}
-                  required
-                />
+                <AppDatePicker value={toDate} placeholder="Select date" minDate={fromDate || undefined} onChange={setToDate} className="w-full" isRightColumn />
               </FormField>
             </div>
           </ModalBody>
