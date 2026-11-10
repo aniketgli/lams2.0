@@ -1,16 +1,15 @@
 import { Router, type Request } from 'express';
 import bcrypt from 'bcrypt';
-import { randomInt } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { db } from '../../src/db';
 import { user_project_histories, users } from '../../src/db/schema';
 import { isAdmin, isAuthenticated, requireActiveRole, requireAuth, isAuditor } from '../middleware/auth.middleware';
 import { EmailService } from '../integrations/email/email.service';
-import { brandedMail } from '../notifications/notify';
+import { brandedMail, portalUrlOf } from '../notifications/notify';
 import { notifyAccountStatus, notifyEmployeeDeleted, notifyEmployeeUpdated, notifyMappingBatch, notifyWelcome } from '../notifications/events';
 import { systemAccountError } from '../lib/systemAccounts';
 import { HttpError, asyncHandler, badRequest, notFound } from '../lib/http';
-import { passwordProblem } from '../lib/passwordPolicy';
+import { generateTemporaryPassword, passwordProblem } from '../lib/passwordPolicy';
 import { defaultPasswordHash } from '../masters/accountSettings';
 import { normalizeModule } from '../lib/roles';
 import { destroyUserSessions } from '../lib/sessionStore';
@@ -176,18 +175,32 @@ router.get('/employees/:userId', isAuthenticated, asyncHandler(async (req, res) 
   res.json(await getEmployee(viewerOf(req), accountId(req.params.userId)));
 }));
 
+/** A temporary password of its own for a new or reactivated account (emailed with the sign-in details), and its hash. */
+async function temporaryPasswordFor(identity: { email?: string | null; biometricId?: string | null }): Promise<{ password: string; hash: string }> {
+  let password = generateTemporaryPassword();
+  while (passwordProblem(password, identity)) password = generateTemporaryPassword();
+  return { password, hash: await bcrypt.hash(password, 12) };
+}
+
+/** The administrator sees the temporary password once, in case the email does not reach the employee. */
+const passwordNote = (password: string, email: string) =>
+  `Temporary password: ${password} (also emailed to ${email}). They will be asked to choose their own password at sign-in.`;
+
 router.post('/employees', isAdmin, asyncHandler(async (req, res) => {
-  const employee = await createEmployee(req, req.body);
-  notifyWelcome(employee);
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const temp = await temporaryPasswordFor({ email: typeof body.email === 'string' ? body.email : null, biometricId: typeof body.biometricId === 'string' ? body.biometricId : null });
+  const employee = await createEmployee(req, req.body, temp.hash);
+  notifyWelcome(employee, { temporaryPassword: temp.password, portalUrl: portalUrlOf(req) });
   res.status(201).json({
     employee,
-    message: `Employee ${employee.name} saved with the HRMS User role and the default password. They must choose their own password at first sign-in.`,
+    temporaryPassword: temp.password,
+    message: `Employee ${employee.name} saved with the HRMS User role. ${passwordNote(temp.password, employee.email)}`,
   });
 }));
 
 router.put('/employees/:userId', isAdmin, asyncHandler(async (req, res) => {
   const { record, changed } = await updateEmployee(req, accountId(req.params.userId), req.body);
-  notifyEmployeeUpdated(record, changed);
+  notifyEmployeeUpdated(record, changed, portalUrlOf(req));
   res.json({ employee: record, changed, message: changed.length ? 'Employee profile updated.' : 'No changes to save.' });
 }));
 
@@ -198,11 +211,17 @@ router.patch('/employees/:userId/status', isAdmin, asyncHandler(async (req, res)
   const effectiveDate = v.date('effectiveDate', false) ?? todayInIndia();
   v.assert();
   const id = accountId(req.params.userId);
-  const employee = await setEmployeeStatus(req, id, { status, reason, effectiveDate });
+  // A reactivated account gets a new temporary password of its own, emailed with the sign-in details.
+  const temp = status === 'active' ? await temporaryPasswordFor({}) : null;
+  const employee = await setEmployeeStatus(req, id, { status, reason, effectiveDate }, temp?.hash);
   // A deactivated user is signed out everywhere at once.
   if (status === 'inactive') await destroyUserSessions(id);
-  notifyAccountStatus(status, employee);
-  res.json({ success: true, status, effectiveDate, employee, message: status === 'inactive' ? 'Account deactivated.' : 'Account reactivated.' });
+  notifyAccountStatus(status, employee, { temporaryPassword: temp?.password ?? null, portalUrl: portalUrlOf(req) });
+  res.json({
+    success: true, status, effectiveDate, employee,
+    ...(temp ? { temporaryPassword: temp.password } : {}),
+    message: status === 'inactive' ? 'Account deactivated.' : `Account reactivated. ${temp ? passwordNote(temp.password, employee.email) : ''}`.trim(),
+  });
 }));
 
 router.delete('/employees/:userId', isAdmin, asyncHandler(async (req, res) => {
@@ -247,16 +266,6 @@ router.put('/employees/:userId/module-roles', isAdmin, asyncHandler(async (req, 
 // out of every device and must set a new password; the reset is audited
 // without the password.
 // ---------------------------------------------------------------------------
-const TEMP_PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
-/** Random 12-character password that always meets the password rules (has a letter and a digit). */
-function generateTemporaryPassword(length = 12): string {
-  for (;;) {
-    let out = '';
-    for (let i = 0; i < length; i++) out += TEMP_PASSWORD_ALPHABET[randomInt(TEMP_PASSWORD_ALPHABET.length)];
-    if (/\d/.test(out) && /[A-Za-z]/.test(out)) return out;
-  }
-}
-
 /**
  * Modes:
  *   auto     a random temporary password is emailed to the user

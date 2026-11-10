@@ -29,6 +29,8 @@ export interface EmailTransportConfig {
   security: SmtpSecurity;
   user: string | null;
   password: string | null;
+  /** A password is saved but could not be decrypted here (a different encryption key saved it). */
+  passwordUnreadable?: boolean;
 }
 
 /** What the browser sees: never the password itself. */
@@ -44,6 +46,10 @@ export interface EmailSettingsView {
   user: string;
   hasPassword: boolean;
   updatedAt: string | null;
+  /** Why notification mails are not sent from this server right now (null: they are). */
+  notReady: string | null;
+  /** The portal address put in mails (APP_URL in .env); empty means mails carry no link. */
+  appUrl: string;
 }
 
 // ---- Encryption ----------------------------------------------------------------
@@ -122,6 +128,7 @@ export async function resolveEmailTransport(): Promise<EmailTransportConfig> {
     console.warn('[email] could not load email settings, using .env:', error instanceof Error ? error.message : error);
     return null;
   });
+  const password = row ? decryptSecret(row.smtpPasswordEnc) : null;
   const config: EmailTransportConfig = row
     ? {
         source: 'database',
@@ -133,7 +140,8 @@ export async function resolveEmailTransport(): Promise<EmailTransportConfig> {
         port: Number(row.smtpPort),
         security: normalizeSecurity(row.smtpSecurity, Number(row.smtpPort)),
         user: row.smtpUser || null,
-        password: decryptSecret(row.smtpPasswordEnc),
+        password,
+        passwordUnreadable: Boolean(row.smtpPasswordEnc) && password === null,
       }
     : fromEnv();
   cache = { at: Date.now(), config };
@@ -142,8 +150,12 @@ export async function resolveEmailTransport(): Promise<EmailTransportConfig> {
 
 export async function emailSettingsView(): Promise<EmailSettingsView> {
   const row = await loadEmailSettingsRow();
+  invalidateEmailSettingsCache();
+  const { EmailService } = await import('../integrations/email/email.service');
+  const status = { notReady: EmailService.notReadyReason(await resolveEmailTransport()), appUrl: envConfig.appUrl };
   if (row) {
     return {
+      ...status,
       source: 'database',
       enabled: Boolean(row.enabled),
       fromName: row.fromName,
@@ -159,6 +171,7 @@ export async function emailSettingsView(): Promise<EmailSettingsView> {
   }
   const env = fromEnv();
   return {
+    ...status,
     source: env.source, enabled: env.enabled, fromName: env.fromName, fromEmail: env.fromEmail, replyTo: '',
     host: env.host, port: env.port, security: env.security, user: env.user ?? '', hasPassword: Boolean(env.password), updatedAt: null,
   };
@@ -177,4 +190,18 @@ export function transportOptions(config: EmailTransportConfig) {
     connectionTimeout: 10_000,
     greetingTimeout: 10_000,
   };
+}
+
+/** One line in the server log at start: whether notification mails will go out from this server, and if not, why. */
+export async function logEmailReadiness(): Promise<void> {
+  try {
+    const { EmailService } = await import('../integrations/email/email.service');
+    const config = await resolveEmailTransport();
+    const reason = EmailService.notReadyReason(config);
+    if (reason) console.warn(`[email] Notification emails are NOT sent from this server: ${reason}`);
+    else console.log(`[email] Notification emails go out through ${config.host}:${config.port} as ${config.fromEmail}.`);
+    if (!envConfig.appUrl) console.warn('[email] APP_URL is not set in .env, so emails carry no link to the portal.');
+  } catch (error) {
+    console.warn('[email] could not check the email settings:', error instanceof Error ? error.message : error);
+  }
 }

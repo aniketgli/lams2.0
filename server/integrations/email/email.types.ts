@@ -11,6 +11,8 @@ export interface ServerEmailLog {
   messageId?: string;
   referenceId?: string;
   category?: string;
+  /** What the mail was about, e.g. LEAVE_APPLIED. */
+  eventType?: string;
 }
 
 export interface SmtpConfigPayload {

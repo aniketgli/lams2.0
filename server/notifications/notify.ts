@@ -33,6 +33,17 @@ export interface Notice {
   cc?: Array<number | string | null | undefined>;
   /** Addressees that are not (or no longer) active accounts, e.g. an employee whose account was just deleted. */
   direct?: Party[];
+  /** SECURITY for mails that carry a password: they never get the organization CC / BCC copies. */
+  category?: 'NOTIFICATION' | 'SECURITY';
+  /** Portal address for the button when APP_URL is not set (the address the administrator used). */
+  portalUrl?: string | null;
+}
+
+/** The portal address mails link to: APP_URL, else the address the request came in on. */
+export function portalUrlOf(req?: { protocol: string; get(name: string): string | undefined } | null): string {
+  if (envConfig.appUrl) return envConfig.appUrl;
+  const host = req?.get('host');
+  return host ? `${req!.protocol}://${host}` : '';
 }
 
 const validId = (v: unknown): number | null => (/^\d{1,18}$/.test(String(v ?? '').trim()) ? Number(v) : null);
@@ -70,11 +81,12 @@ export async function loadBrand(): Promise<Brand> {
   return { orgName: 'Wildlife Institute of India', hasLogo: false, logo: null };
 }
 
-export function renderNotice(n: Pick<Notice, 'heading' | 'intro' | 'details' | 'remark' | 'buttonLabel'>, to: Party, brand: EmailBrand = { orgName: 'Wildlife Institute of India', hasLogo: false }): { text: string; html: string } {
+export function renderNotice(n: Pick<Notice, 'heading' | 'intro' | 'details' | 'remark' | 'buttonLabel' | 'portalUrl'>, to: Party, brand: EmailBrand = { orgName: 'Wildlife Institute of India', hasLogo: false }): { text: string; html: string } {
   const rows = n.details.filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== '') as Array<[string, string | number]>;
+  const url = envConfig.appUrl || n.portalUrl || '';
   return renderEmail({
     title: n.heading, greetingName: to.name, intro: n.intro, rows, remark: n.remark,
-    button: envConfig.appUrl ? { label: n.buttonLabel || 'Open WII Portal', url: envConfig.appUrl } : null,
+    button: url ? { label: n.buttonLabel || 'Open WII Portal', url } : null,
     brand, year: new Date().getFullYear(),
   });
 }
@@ -96,7 +108,7 @@ export async function sendNotice(n: Notice): Promise<number> {
       const { text, html } = renderNotice(n, addressee, brand);
       await EmailService.sendEmail({
         to: addressee.email, toName: addressee.name, cc: copied.map((p) => p.email), subject: n.subject, text, html,
-        category: 'NOTIFICATION', eventType: n.event, referenceId: n.referenceId,
+        category: n.category ?? 'NOTIFICATION', eventType: n.event, referenceId: n.referenceId,
         attachments: brand.logo ? [{ ...brand.logo, cid: 'org-logo' }] : undefined,
       });
       sent += 1;

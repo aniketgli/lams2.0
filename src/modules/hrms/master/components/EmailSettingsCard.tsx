@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { KeyRound, Save, Send, Server, UserRound } from 'lucide-react';
-import { Button, Input, Select, Switch } from '../../../../shared/components';
+import React, { useCallback, useEffect, useState } from 'react';
+import { AlertTriangle, CheckCircle2, History, KeyRound, RefreshCw, Save, Send, Server, UserRound } from 'lucide-react';
+import { Button, DataTable, Input, Select, Switch } from '../../../../shared/components';
+import type { ColumnDef } from '../../../../shared/components';
 import { ApiError } from '../../../../shared/services/api';
-import { EmailSettings, EmailSettingsInput, SmtpSecurity, emailSettingsApi } from '../masterApi';
+import { EmailLogEntry, EmailSettings, EmailSettingsInput, SmtpSecurity, emailLogApi, emailSettingsApi } from '../masterApi';
 import { NoticeBar, PanelCard, formatDateTime, useNotice } from './masterUi';
 
 const SECURITY_OPTIONS: { value: SmtpSecurity; label: string; port: number }[] = [
@@ -22,6 +23,73 @@ const SectionTitle: React.FC<{ icon: React.ComponentType<{ className?: string }>
   </h4>
 );
 
+/** Whether this server sends notification mails now, and if not, the exact reason. */
+const SendingStatus: React.FC<{ saved: EmailSettings }> = ({ saved }) => (
+  <div className="space-y-2">
+    {saved.notReady ? (
+      <div className="flex gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-xs text-rose-800">
+        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+        <p><span className="font-bold">Notification emails are not being sent from this server.</span> {saved.notReady}</p>
+      </div>
+    ) : (
+      <div className="flex gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-xs text-emerald-800">
+        <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+        <p><span className="font-bold">Notification emails are sent</span> through {saved.host}:{saved.port} as {saved.fromEmail}. Use “Send test email to me” to check that they arrive.</p>
+      </div>
+    )}
+    {!saved.appUrl && (
+      <div className="flex gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-900">
+        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+        <p><span className="font-bold">Portal address not set.</span> Add <code className="font-mono">APP_URL=http://&lt;server address&gt;:3000</code> to the server’s .env and restart, so emails carry a link to the portal.</p>
+      </div>
+    )}
+  </div>
+);
+
+const STATUS_TEXT: Record<EmailLogEntry['status'], { label: string; tone: string }> = {
+  delivered: { label: 'Sent', tone: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
+  sent: { label: 'Sent', tone: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
+  simulated: { label: 'Not sent', tone: 'border-amber-200 bg-amber-50 text-amber-800' },
+  failed: { label: 'Failed', tone: 'border-rose-200 bg-rose-50 text-rose-700' },
+};
+
+/** The last mails this server tried to send, with the reason when one did not go out. */
+const RecentMails: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
+  const [logs, setLogs] = useState<EmailLogEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | undefined>();
+  const load = useCallback(() => {
+    setLoading(true);
+    emailLogApi.list()
+      .then((r) => { setLogs(r.logs); setError(undefined); })
+      .catch((e) => setError(e instanceof Error ? e.message : 'The mail log could not be loaded.'))
+      .finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load, refreshKey]);
+
+  const columns: ColumnDef<EmailLogEntry>[] = [
+    { key: 'time', header: 'Time', width: '15%', sortValue: (m) => m.timestamp, render: (m) => formatDateTime(m.timestamp) },
+    {
+      key: 'to', header: 'To', width: '22%', sortValue: (m) => m.to,
+      render: (m) => <div><div className="font-semibold text-slate-900">{m.toName || m.to}</div>{m.toName && <div className="text-[11px] text-slate-500">{m.to}</div>}
+        {(m.cc?.length || m.bcc?.length) ? <div className="text-[11px] text-slate-500">{m.cc?.length ? `CC ${m.cc.length}` : ''}{m.cc?.length && m.bcc?.length ? ' · ' : ''}{m.bcc?.length ? `BCC ${m.bcc.length}` : ''}</div> : null}</div>,
+    },
+    { key: 'subject', header: 'Subject', width: '30%', sortValue: (m) => m.subject, render: (m) => <div>{m.subject}{m.eventType && <div className="text-[11px] text-slate-500 font-mono">{m.eventType}</div>}</div> },
+    { key: 'status', header: 'Status', width: '10%', sortValue: (m) => m.status, render: (m) => <span className={`inline-flex px-2 py-0.5 rounded-full border text-[11px] font-bold ${STATUS_TEXT[m.status].tone}`}>{STATUS_TEXT[m.status].label}</span> },
+    { key: 'reason', header: 'Reason', render: (m) => <span className="text-slate-600">{m.error || '—'}</span> },
+  ];
+  return (
+    <PanelCard
+      title={<><History className="w-4 h-4 text-primary" />Recent emails from this server</>}
+      description="Every notification, report and test mail this server tried to send since it last started, newest first. A mail that did not go out shows why."
+      actions={<Button variant="outline" size="sm" leftIcon={RefreshCw} loading={loading} onClick={load}>Refresh</Button>}
+    >
+      <DataTable columns={columns} data={logs} loading={loading && !logs.length} error={error} keyExtractor={(m) => m.id}
+        emptyTitle="No emails yet" emptyDescription="Nothing has been sent since the server last started." />
+    </PanelCard>
+  );
+};
+
 /**
  * Who notification emails come from and which mail server sends them.
  * The SMTP password is write-only: it is never sent back to the browser.
@@ -34,6 +102,7 @@ export const EmailSettingsCard: React.FC<{ readOnly: boolean }> = ({ readOnly })
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [notice, showNotice, clearNotice] = useNotice();
+  const [logKey, setLogKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -84,6 +153,8 @@ export const EmailSettingsCard: React.FC<{ readOnly: boolean }> = ({ readOnly })
       showNotice('error', error instanceof Error ? error.message : 'The test failed.');
     } finally {
       setTesting(false);
+      setLogKey((k) => k + 1);
+      emailSettingsApi.get().then(setSaved).catch(() => undefined);
     }
   };
 
@@ -109,6 +180,7 @@ export const EmailSettingsCard: React.FC<{ readOnly: boolean }> = ({ readOnly })
         }
       >
         <form onSubmit={save} noValidate>
+          {saved && <div className="mb-5"><SendingStatus saved={saved} /></div>}
           <fieldset disabled={readOnly || saving} className="space-y-6">
             <div className="space-y-3">
               <SectionTitle icon={UserRound}>Sender</SectionTitle>
@@ -174,6 +246,7 @@ export const EmailSettingsCard: React.FC<{ readOnly: boolean }> = ({ readOnly })
           </fieldset>
         </form>
       </PanelCard>
+      {!readOnly && <RecentMails refreshKey={logKey} />}
     </div>
   );
 };

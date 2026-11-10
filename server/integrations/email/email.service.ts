@@ -38,11 +38,20 @@ export class EmailService {
     if (this.emailLogs.length > this.MAX_LOGS) this.emailLogs.splice(0, this.emailLogs.length - this.MAX_LOGS);
   }
 
+  /** Why mails cannot be sent with these settings on this server, or null when they can. */
+  static notReadyReason(config: EmailTransportConfig): string | null {
+    return this.ready(config);
+  }
+
   private static ready(config: EmailTransportConfig): string | null {
     if (!config.enabled) return 'Notification emails are turned off in Master Settings > Organization.';
     if (!config.host) return 'No SMTP server is configured (Master Settings > Organization).';
     if (!config.fromEmail) return 'No sender email is configured (Master Settings > Organization).';
-    if (config.user && !config.password) return 'The SMTP password is missing. Enter it again in Master Settings > Organization.';
+    if (config.user && !config.password) {
+      return config.passwordUnreadable
+        ? 'The saved SMTP password cannot be read on this server: it was saved where SETTINGS_ENCRYPTION_KEY (or SESSION_SECRET) is different. Use the same SETTINGS_ENCRYPTION_KEY in .env on every machine that shares this database, then enter the password again in Master Settings > Organization.'
+        : 'The SMTP password is missing. Enter it again in Master Settings > Organization.';
+    }
     return null;
   }
 
@@ -83,6 +92,7 @@ export class EmailService {
       status: 'sent',
       referenceId,
       category,
+      eventType,
     };
 
     const notReady = this.ready(config);

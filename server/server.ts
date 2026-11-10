@@ -3,6 +3,7 @@ import http from 'http';
 import os from 'os';
 import { createApp } from './app';
 import { startReportScheduler } from './reports/scheduler';
+import { logEmailReadiness } from './masters/emailSettings';
 import { envConfig } from './config/env.config';
 
 function getLanIPv4Addresses(): string[] {
@@ -55,6 +56,7 @@ async function bootstrap() {
       console.log('==============================================');
       console.log('');
       startReportScheduler(); // sends the scheduled report emails when they are due
+      void logEmailReadiness(); // says in the log whether notification emails can go out, and if not, why
     });
   } catch (error) {
     console.error('Fatal Server Startup Error:', error);

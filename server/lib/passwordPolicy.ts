@@ -1,3 +1,5 @@
+import { randomInt } from 'node:crypto';
+
 /**
  * Password rules, applied by the server to every password a person sets:
  * the default password for new employees, an administrator's custom reset,
@@ -25,4 +27,18 @@ export function passwordProblem(password: unknown, identity: { email?: string | 
   }
   if (identity.biometricId && lower === identity.biometricId.toLowerCase()) return 'The password cannot be your biometric ID.';
   return null;
+}
+
+const TEMP_PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+/**
+ * Random temporary password (12 characters, no look-alike letters such as O/0 or l/1) that always meets
+ * the password rules. Given to a new or reactivated account, or on an administrator's reset; the person
+ * is asked to choose their own password at the next sign-in.
+ */
+export function generateTemporaryPassword(length = 12): string {
+  for (;;) {
+    let out = '';
+    for (let i = 0; i < length; i++) out += TEMP_PASSWORD_ALPHABET[randomInt(TEMP_PASSWORD_ALPHABET.length)];
+    if (/\d/.test(out) && /[A-Za-z]/.test(out)) return out;
+  }
 }
