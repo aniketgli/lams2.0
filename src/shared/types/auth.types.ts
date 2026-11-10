@@ -1,6 +1,6 @@
 import { EnterpriseModuleId, ModuleRoleDef } from './module.types';
 
-export type UserRole = 'administrator' | 'reporting_manager' | 'reviewing_manager' | 'general_staff' | 'audit';
+export type UserRole = 'administrator' | 'reporting_manager' | 'reviewing_manager' | 'general_staff' | 'audit' | 'leave_balance_manager';
 
 export type EmploymentType = 
   | 'permanent'
@@ -123,6 +123,17 @@ export const MODULE_ROLE_DEFINITIONS: Record<EnterpriseModuleId, ModuleRoleDef[]
       color: 'emerald',
       badgeBg: 'bg-emerald-100 border-emerald-300',
       badgeText: 'text-emerald-800',
+      level: 'staff'
+    },
+    {
+      id: 'hrms_leave_balance',
+      name: 'Leave Balance Manager',
+      shortName: 'Leave Balance Manager',
+      description: 'Sees and sets the leave balance of every employee (Leave Balance page and import), and nothing else. Can be given to any user.',
+      moduleId: 'lams',
+      color: 'teal',
+      badgeBg: 'bg-teal-100 border-teal-300',
+      badgeText: 'text-teal-800',
       level: 'staff'
     },
     {

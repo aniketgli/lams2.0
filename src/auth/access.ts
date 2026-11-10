@@ -13,10 +13,11 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   reviewing_manager: 'HoD',
   reporting_manager: 'Reporting Manager',
   general_staff: 'User',
+  leave_balance_manager: 'Leave Balance Manager',
 };
 
 /** Order roles appear in the role switcher. */
-export const ROLE_ORDER: UserRole[] = ['general_staff', 'reporting_manager', 'reviewing_manager', 'audit', 'administrator'];
+export const ROLE_ORDER: UserRole[] = ['general_staff', 'reporting_manager', 'reviewing_manager', 'leave_balance_manager', 'audit', 'administrator'];
 
 const SERVER_TO_UI: Record<ServerModuleId, EnterpriseModuleId> = {
   hrms: 'lams',

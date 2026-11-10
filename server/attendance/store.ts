@@ -54,7 +54,7 @@ function nowTimeInIndia(): string {
   return new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date());
 }
 
-export function parseRange(query: { from?: unknown; to?: unknown }, today = todayInIndia(), role?: string): { from: string; to: string } {
+export function parseRange(query: { from?: unknown; to?: unknown }, today = todayInIndia(), role?: string | null): { from: string; to: string } {
   const from = String(query.from ?? monthStart(today));
   const to = String(query.to ?? monthEnd(today));
   if (!isValidIsoDate(from) || !isValidIsoDate(to)) throw badRequest('Dates must be in YYYY-MM-DD format.');

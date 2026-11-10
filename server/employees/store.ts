@@ -35,7 +35,7 @@ const AUDIT_PASSWORD = 'employee_password';
 /** Role every new employee starts with (the role-matrix spelling for HRMS "User"). */
 const NEW_EMPLOYEE_GRANT = { moduleId: 'hrms', roleId: 'hrms_staff' } as const;
 
-const ROLE_RANK: RoleId[] = ['administrator', 'audit', 'reviewing_manager', 'reporting_manager', 'general_staff'];
+const ROLE_RANK: RoleId[] = ['administrator', 'audit', 'leave_balance_manager', 'reviewing_manager', 'reporting_manager', 'general_staff'];
 
 /** Module-specific "plain user" roles that, like HRMS User, carry no responsibilities. */
 const PLAIN_USER_ROLES = new Set(['pms_researcher', 'sims_indenter', 'fin_claimant', 'fms_requester']);

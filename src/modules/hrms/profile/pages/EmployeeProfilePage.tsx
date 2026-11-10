@@ -839,7 +839,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
           reportingmanager: 'hrms_reporting', hrmsreporting: 'hrms_reporting',
           hod: 'hrms_reviewing', reviewingmanager: 'hrms_reviewing', hrmsreviewing: 'hrms_reviewing',
           administrator: 'hrms_admin', admin: 'hrms_admin', hrmsadmin: 'hrms_admin',
-          auditor: 'auditor', audit: 'auditor'
+          auditor: 'auditor', audit: 'auditor',
+          leavebalancemanager: 'hrms_leave_balance', hrmsleavebalance: 'hrms_leave_balance', leavebalance: 'hrms_leave_balance'
         };
         const matrixRoleAliases: Record<string, Record<string, string>> = {
           lams: hrmsRoleMap,

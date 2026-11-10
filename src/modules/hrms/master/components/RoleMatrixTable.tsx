@@ -33,8 +33,10 @@ const MODULE_COLUMNS: ModuleColumnDef[] = [
   { id: 'fms', label: 'Facility', shortLabel: 'Facility' }
 ];
 
+type Tier = 'admin' | 'l2' | 'l1' | 'staff' | 'balance' | 'audit';
+
 interface RoleRowDef {
-  tierId: 'admin' | 'l2' | 'l1' | 'staff' | 'audit';
+  tierId: Tier;
   title: string;
 }
 
@@ -56,13 +58,18 @@ const ROLE_ROWS: RoleRowDef[] = [
     title: 'User'
   },
   {
+    tierId: 'balance',
+    title: 'Leave Balance Manager'
+  },
+  {
     tierId: 'audit',
     title: 'Auditor'
   }
 ];
 
 // Direct 1-to-1 deterministic mapping of Role Tier & Module to exact Role ID
-export const ROLE_MATRIX_CELL_MAP: Record<'admin' | 'l2' | 'l1' | 'staff' | 'audit', Record<EnterpriseModuleId, string>> = {
+// An empty id means the role does not exist in that module: the cell shows a dash.
+export const ROLE_MATRIX_CELL_MAP: Record<Tier, Record<EnterpriseModuleId, string>> = {
   admin: {
     lams: 'hrms_admin',
     pms: 'pms_admin',
@@ -90,6 +97,13 @@ export const ROLE_MATRIX_CELL_MAP: Record<'admin' | 'l2' | 'l1' | 'staff' | 'aud
     sims: 'sims_indenter',
     finance: 'fin_claimant',
     fms: 'fms_requester'
+  },
+  balance: {
+    lams: 'hrms_leave_balance',
+    pms: '',
+    sims: '',
+    finance: '',
+    fms: ''
   },
   audit: {
     lams: 'auditor',
@@ -166,6 +180,13 @@ export const RoleMatrixTable: React.FC<RoleMatrixTableProps> = ({
                   {MODULE_COLUMNS.map((col) => {
                     const roleId = ROLE_MATRIX_CELL_MAP[row.tierId][col.id];
                     const active = (moduleRoles[col.id] || []).includes(roleId);
+                    if (!roleId) {
+                      return (
+                        <td key={col.id} className="p-3 text-center border-r border-slate-100 last:border-r-0 align-middle text-slate-300">
+                          –
+                        </td>
+                      );
+                    }
                     const desc = getRoleDescription(col.id, roleId);
 
                     return (

@@ -29,7 +29,8 @@ export const HRMS_PAGES: HrmsPage[] = [
   { id: 'manual_attendance', slug: 'manual-attendance', roles: ALL },
   { id: 'od', slug: 'outdoor-duty', roles: ALL },
   { id: 'leave', slug: 'leave', roles: ALL },
-  { id: 'leave_balance', slug: 'leave-balance', roles: ['administrator', 'audit'] },
+  // Leave Balance Manager: this page only.
+  { id: 'leave_balance', slug: 'leave-balance', roles: ['administrator', 'audit', 'leave_balance_manager'] },
   { id: 'holiday_calendar', slug: 'holidays', roles: ALL },
   { id: 'profile', slug: 'profiles', roles: ALL },
   { id: 'user_controls', slug: 'user-controls', roles: ['administrator', 'audit'] },
@@ -65,6 +66,12 @@ export const PAGE_ICONS: Record<string, LucideIcon> = {
 };
 
 export const HRMS_HOME = 'dashboard';
+
+/** The page a role lands on: the dashboard, or the first page it may open when it has no dashboard (Leave Balance Manager). */
+export function homePageFor(role: UserRole | null | undefined): string {
+  if (!role || canOpenPage(HRMS_HOME, role)) return HRMS_HOME;
+  return HRMS_PAGES.find((page) => page.roles.includes(role))?.id ?? HRMS_HOME;
+}
 
 export function findPageById(id: string): HrmsPage | undefined {
   const canonical = ALIASES[id] ?? id;

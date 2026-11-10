@@ -8,6 +8,7 @@ import { writeMasterAuditSql } from '../masters/audit';
 import {
   BALANCE_KEY, type Employee, type Policy, type Viewer, balanceOf, creditedQuota, cycleLabel, eligibilityProblem, listBalances, loadEmployee, loadPolicy, missingTable, num,
 } from './requests';
+import { canManageBalances } from '../lib/roles';
 
 /**
  * Leave quota import (administrator). A CSV with Biometric_ID, Leave_Year (CY 2026 / FY 2026-27), Leave_Code and Total_Quota sets, adds to
@@ -72,7 +73,7 @@ export interface ImportReview {
 interface Planned { row: ImportRow; year: number; emp: Employee; policy: Policy; carryForward: number; total: number; before: { total: number; carryForward: number } }
 
 function parseInput(body: unknown, admin: boolean): { strategy: ImportStrategy; csv: string } {
-  if (!admin) throw forbidden('Only an administrator can import leave quotas.');
+  if (!admin) throw forbidden('Only an administrator or Leave Balance Manager can import leave quotas.');
   const v = new Validator(body);
   const strategy = v.oneOf('strategy', IMPORT_STRATEGIES);
   const csv = v.string('csv', { min: 1, max: MAX_CSV_CHARS });
@@ -160,7 +161,7 @@ async function plan(q: Q, input: { strategy: ImportStrategy; csv: string }): Pro
 
 /** What the import would do, row by row. Never writes. */
 export async function reviewImport(viewer: { role: string | null }, body: unknown): Promise<ImportReview> {
-  const input = parseInput(body, viewer.role === 'administrator');
+  const input = parseInput(body, canManageBalances(viewer.role));
   try {
     return (await plan(pool, input)).review;
   } catch (error) {
@@ -171,7 +172,7 @@ export async function reviewImport(viewer: { role: string | null }, body: unknow
 
 /** Writes the import. Every row is checked again; one problem row stops the whole import. */
 export async function applyImport(req: Request, viewer: { role: string | null }, body: unknown): Promise<ImportReview> {
-  const input = parseInput(body, viewer.role === 'administrator');
+  const input = parseInput(body, canManageBalances(viewer.role));
   try {
     return await inTransaction(async (conn) => {
       const { review, planned } = await plan(conn, input);
@@ -206,7 +207,7 @@ export const TEMPLATE_CYCLES = ['all', 'CY', 'FY'] as const;
  * chosen cycle with every leave type that has a balance for them, and the days granted today.
  */
 export async function importTemplate(viewer: Viewer, yearRaw: unknown, cycleRaw: unknown): Promise<{ year: number; headers: string[]; rows: Array<Array<string | number>> }> {
-  if (viewer.role !== 'administrator') throw forbidden('Only an administrator can import leave quotas.');
+  if (!canManageBalances(viewer.role)) throw forbidden('Only an administrator or Leave Balance Manager can import leave quotas.');
   const cycle = cycleRaw === undefined || cycleRaw === '' ? 'all' : String(cycleRaw);
   if (!(TEMPLATE_CYCLES as readonly string[]).includes(cycle)) throw badRequest('Choose All, CY or FY.');
   const list = await listBalances(viewer, yearRaw);

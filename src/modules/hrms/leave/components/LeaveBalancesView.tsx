@@ -22,7 +22,8 @@ const days = (n: number) => String(Math.round(n * 10) / 10);
 export const LeaveBalancesView: React.FC<{ importSignal?: number; toolbarStart?: React.ReactNode }> = ({ importSignal = 0, toolbarStart }) => {
   const { currentUser } = useApp();
   const role = currentUser.role;
-  const isAdmin = role === 'administrator';
+  // Administrator and Leave Balance Manager set balances (import); the auditor only reads.
+  const isAdmin = role === 'administrator' || role === 'leave_balance_manager';
   const cards = role === 'general_staff';
   const thisYear = new Date().getFullYear();
   const [year, setYear] = useState(thisYear);
