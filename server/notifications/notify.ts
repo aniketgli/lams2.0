@@ -1,6 +1,7 @@
 import type { RowDataPacket } from 'mysql2/promise';
 import { pool } from '../../src/db';
 import { EmailService } from '../integrations/email/email.service';
+import { enqueue } from './outbox';
 import { envConfig } from '../config/env.config';
 import { getOrganization, organizationTag } from '../masters/organizationStore';
 import { logoAttachment, renderEmail, type EmailBrand } from './emailLayout';
@@ -91,7 +92,7 @@ export function renderNotice(n: Pick<Notice, 'heading' | 'intro' | 'details' | '
   });
 }
 
-/** Sends one notice. Resolves with the number of mails handed to the mail service; never rejects. */
+/** Sends one notice (through the outbox). Resolves with the number of mails queued or sent; never rejects. */
 export async function sendNotice(n: Notice): Promise<number> {
   try {
     const people = await loadParties([...n.to, ...(n.cc ?? [])]);
@@ -106,11 +107,21 @@ export async function sendNotice(n: Notice): Promise<number> {
     const brand = await loadBrand();
     for (const addressee of mainTo) {
       const { text, html } = renderNotice(n, addressee, brand);
-      await EmailService.sendEmail({
-        to: addressee.email, toName: addressee.name, cc: copied.map((p) => p.email), subject: n.subject, text, html,
-        category: n.category ?? 'NOTIFICATION', eventType: n.event, referenceId: n.referenceId,
-        attachments: brand.logo ? [{ ...brand.logo, cid: 'org-logo' }] : undefined,
+      const category = n.category ?? 'NOTIFICATION';
+      const cc = copied.map((p) => p.email);
+      // Mails go through the outbox (sent in the background, tried again on failure). A mail with a password is
+      // never stored, so it is sent straight away; so is everything when there is no outbox table yet.
+      const queued = category !== 'SECURITY' && await enqueue({
+        event: n.event, referenceId: n.referenceId, category, to: addressee.email, toName: addressee.name, cc,
+        subject: n.subject, html, text, withLogo: Boolean(brand.logo),
       });
+      if (!queued) {
+        await EmailService.sendEmail({
+          to: addressee.email, toName: addressee.name, cc, subject: n.subject, text, html,
+          category, eventType: n.event, referenceId: n.referenceId,
+          attachments: brand.logo ? [{ ...brand.logo, cid: 'org-logo' }] : undefined,
+        });
+      }
       sent += 1;
     }
     return sent;

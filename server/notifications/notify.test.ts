@@ -11,6 +11,10 @@ const users = [
 mock.module('../../src/db', () => ({
   pool: { query: async (_sql: string, ids: number[]) => [users.filter((u) => ids.includes(u.id) && u.status === 'active')] },
 }));
+// The outbox is switched per test: off = sent straight away (as without the table), on = queued.
+const queued: Array<Record<string, unknown>> = [];
+let outboxOn = false;
+mock.module('./outbox', () => ({ enqueue: async (m: Record<string, unknown>) => { if (!outboxOn) return false; queued.push(m); return true; } }));
 mock.module('../integrations/email/email.service', () => ({
   EmailService: { sendEmail: async (p: Record<string, unknown>) => { sent.push(p); return { success: true, status: 'delivered' }; } },
 }));
@@ -20,7 +24,7 @@ const { sendNotice, renderNotice } = await import('./notify');
 
 const flow = { noun: 'Leave request', code: 'LEAVE', id: '9', employeeId: 1, employeeName: 'Asha Employee', biometricId: '0317', managerId: 2, reviewerId: 3, viaHod: true, summary: 'CL 2026-11-03', details: [['Days', 1]] as Array<[string, number]> };
 
-beforeEach(() => { sent.length = 0; });
+beforeEach(() => { sent.length = 0; queued.length = 0; outboxOn = false; });
 
 describe('who is told', () => {
   test('applied goes to the reporting manager, employee copied, and the HoD when it will go to the HoD', () => {
@@ -84,4 +88,25 @@ test('html is escaped', () => {
   const { html } = renderNotice({ heading: 'H', intro: 'i', details: [['Reason', '<script>x</script>']], remark: null }, { id: 1, name: 'A<b>', email: 'a@x' });
   expect(html).not.toContain('<script>');
   expect(html).toContain('&lt;script&gt;');
+});
+
+describe('outbox', () => {
+  test('notices are queued, not sent in the request', async () => {
+    outboxOn = true;
+    const n = await sendNotice(flowNotice('approved', flow));
+    expect(n).toBe(1);
+    expect(sent).toHaveLength(0);
+    expect(queued[0]).toMatchObject({ to: 'asha@wii.gov.in', event: 'LEAVE_APPROVED', category: 'NOTIFICATION' });
+  });
+  test('a mail with a password is never stored: it is sent straight away', async () => {
+    outboxOn = true;
+    // (an earlier test left the mail service failing)
+    mock.module('../integrations/email/email.service', () => ({
+      EmailService: { sendEmail: async (p: Record<string, unknown>) => { sent.push(p); return { success: true, status: 'delivered' }; } },
+    }));
+    const fresh = await import('./notify?security');
+    await fresh.sendNotice({ ...flowNotice('approved', flow), category: 'SECURITY' });
+    expect(queued).toHaveLength(0);
+    expect(sent[0]).toMatchObject({ to: 'asha@wii.gov.in', category: 'SECURITY' });
+  });
 });

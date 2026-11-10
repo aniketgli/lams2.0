@@ -3,6 +3,7 @@ import { scopeOfEvent } from '../masters/copyRules';
 
 // No database or mail server in tests (the same stand-ins as notify.test.ts).
 mock.module('../../src/db', () => ({ pool: { query: async () => [[]] } }));
+mock.module('./outbox', () => ({ enqueue: async () => false }));
 mock.module('../integrations/email/email.service', () => ({ EmailService: { sendEmail: async () => ({ success: true, status: 'delivered' }) } }));
 const { signInNotice, teamNotices } = await import('./events');
 

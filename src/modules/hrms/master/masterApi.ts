@@ -259,8 +259,29 @@ export interface EmailLogEntry {
   eventType?: string;
 }
 
+/** One mail in the outbox / log table (all servers, kept across restarts). */
+export interface OutboxEntry {
+  id: string;
+  createdAt: string;
+  event: string;
+  category: string;
+  to: string;
+  toName: string | null;
+  subject: string;
+  status: 'pending' | 'sending' | 'sent' | 'failed' | 'not_sent';
+  attempts: number;
+  sentAt: string | null;
+  error: string | null;
+  ccCount: number;
+  bccCount: number;
+  canResend: boolean;
+}
+
 export const emailLogApi = {
-  list: () => api<{ logs: EmailLogEntry[] }>('/email/logs'),
+  /** `source: 'database'` with entries, or (no outbox table yet) this server's in-memory list. */
+  list: (status?: string) => api<{ source: 'database'; entries: OutboxEntry[] } | { source: 'memory'; logs: EmailLogEntry[] }>(
+    `/email/logs${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+  resend: (body: { ids: string[] } | { all: true }) => api<{ queued: number; message: string }>('/email/logs/resend', { method: 'POST', body }),
 };
 
 export interface EmailSettingsInput {

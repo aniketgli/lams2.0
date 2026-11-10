@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { pool } from '../../../src/db';
 import { ServerEmailLog, SendEmailPayload } from './email.types';
 import { activeCopyAddresses, mergeCopies, scopeOfEvent } from '../../masters/notificationRecipients';
 import { EmailTransportConfig, resolveEmailTransport, transportOptions } from '../../masters/emailSettings';
@@ -67,13 +68,34 @@ export class EmailService {
     }
   }
 
-  static async sendEmail(payload: SendEmailPayload): Promise<{
+  /**
+   * Writes a mail that was sent straight away (not through the outbox) into the email_outbox log, without its text:
+   * password mails, the test mail and scheduled reports then show in the same log. Best effort.
+   */
+  private static async record(entry: ServerEmailLog, eventType: string | undefined, ccCount: number, bccCount: number): Promise<void> {
+    try {
+      const status = entry.status === 'delivered' ? 'sent' : entry.status === 'simulated' ? 'not_sent' : 'failed';
+      await pool.query(
+        `INSERT INTO email_outbox (event, reference_id, category, to_email, to_name, subject, status, attempts, sent_at, cc_count, bcc_count, last_error)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 1, ${status === 'sent' ? 'NOW(3)' : 'NULL'}, ?, ?, ?)`,
+        [(eventType || 'GENERAL').slice(0, 60), entry.referenceId?.slice(0, 100) ?? null, entry.category || 'NOTIFICATION', entry.to, entry.toName ?? null,
+          entry.subject.slice(0, 500), status, ccCount, bccCount, entry.error?.slice(0, 1000) ?? null]);
+    } catch { /* no outbox table yet: the in-memory log still has it */ }
+  }
+
+  /**
+   * Sends one mail now. `outboxId`: the mail comes from the outbox, which records the result itself;
+   * otherwise the result is written to the log here.
+   */
+  static async sendEmail(payload: SendEmailPayload, options: { outboxId?: number } = {}): Promise<{
     success: boolean;
     status: 'delivered' | 'simulated' | 'failed';
     messageId?: string;
     message: string;
     warning?: string;
     log?: ServerEmailLog;
+    ccCount: number;
+    bccCount: number;
   }> {
     const { to, toName, cc, subject, html, text, category, eventType, referenceId, attachments } = payload;
     const config = await resolveEmailTransport();
@@ -100,8 +122,9 @@ export class EmailService {
       logEntry.status = 'simulated';
       logEntry.error = notReady;
       this.remember(logEntry);
+      if (!options.outboxId) await this.record(logEntry, eventType, copies.cc.length, copies.bcc.length);
       console.log(`[EMAIL NOT SENT] ${notReady} To: ${to} | Subject: "${subject}" | Event: ${eventType || 'GENERAL'}`);
-      return { success: true, status: 'simulated', message: notReady, log: logEntry };
+      return { success: true, status: 'simulated', message: notReady, log: logEntry, ccCount: copies.cc.length, bccCount: copies.bcc.length };
     }
 
     try {
@@ -121,7 +144,8 @@ export class EmailService {
       logEntry.status = 'delivered';
       logEntry.messageId = info.messageId;
       this.remember(logEntry);
-      return { success: true, status: 'delivered', messageId: info.messageId, message: `Email sent to ${to}.` };
+      if (!options.outboxId) await this.record(logEntry, eventType, copies.cc.length, copies.bcc.length);
+      return { success: true, status: 'delivered', messageId: info.messageId, message: `Email sent to ${to}.`, ccCount: copies.cc.length, bccCount: copies.bcc.length };
     } catch (err) {
       const raw = err instanceof Error ? err.message : 'SMTP dispatch failed';
       // 530 / 5.7.0: the server wants a sign-in that was not given (or was refused).
@@ -132,7 +156,8 @@ export class EmailService {
       logEntry.status = 'failed';
       logEntry.error = reason;
       this.remember(logEntry);
-      return { success: false, status: 'failed', message: `Email could not be sent: ${reason}`, log: logEntry };
+      if (!options.outboxId) await this.record(logEntry, eventType, copies.cc.length, copies.bcc.length);
+      return { success: false, status: 'failed', message: `Email could not be sent: ${reason}`, log: logEntry, ccCount: copies.cc.length, bccCount: copies.bcc.length };
     }
   }
 }

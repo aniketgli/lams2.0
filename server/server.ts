@@ -4,6 +4,7 @@ import os from 'os';
 import { createApp } from './app';
 import { startReportScheduler } from './reports/scheduler';
 import { logEmailReadiness } from './masters/emailSettings';
+import { startOutboxWorker } from './notifications/outbox';
 import { envConfig } from './config/env.config';
 
 function getLanIPv4Addresses(): string[] {
@@ -57,6 +58,7 @@ async function bootstrap() {
       console.log('');
       startReportScheduler(); // sends the scheduled report emails when they are due
       void logEmailReadiness(); // says in the log whether notification emails can go out, and if not, why
+      startOutboxWorker(); // sends queued notification emails in the background and retries failed ones
     });
   } catch (error) {
     console.error('Fatal Server Startup Error:', error);

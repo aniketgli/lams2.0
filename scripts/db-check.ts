@@ -43,6 +43,10 @@ const REQUIRED: Record<string, string[]> = {
   manual_attendance_requests: ['user_id', 'att_date', 'status'],
   biometric_machines: ['serial_number', 'short_name', 'status', 'purpose'],
   Attendance: ['EmployeeCode', 'LogDate', 'LogDateTime', 'DeviceSR'],
+  // Notification emails: queue, retries and log (migrations/20261202_email_outbox.sql). Without it mails are sent at once, with no retry.
+  email_outbox: ['status', 'next_attempt_at', 'queued_at', 'body_html'],
+  // The latest columns for leave purposes / paternity details (20261130_scl_paternity.sql).
+  leave_types: ['purposes'],
 };
 
 /** Indexes that keep the hot queries fast: table -> index name. */
