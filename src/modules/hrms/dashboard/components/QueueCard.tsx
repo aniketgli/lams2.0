@@ -2,6 +2,7 @@ import React from 'react';
 import { ChevronRight } from 'lucide-react';
 import { DataTable, type ColumnDef } from '../../../../shared/components';
 import type { Queue, QueueItem } from '../dashboardApi';
+import { KeepDates } from '../../../../shared/components/KeepDates';
 
 interface QueueTableProps {
   title: string;
@@ -20,10 +21,10 @@ export const QueueTable: React.FC<QueueTableProps> = ({ title, icon: Icon, queue
       key: 'name', header: 'Employee', width: '24%', sortValue: (i: QueueItem) => i.name,
       render: (i: QueueItem) => <div><div className="font-semibold text-slate-900">{i.name}</div><div className="text-[11px] text-slate-500">{i.department}{i.designation ? ` · ${i.designation}` : ''}</div></div>,
     }] : []),
-    { key: 'tag', header: 'Type', width: '16%', sortValue: (i) => i.tag, render: (i) => <span className="inline-flex px-2 py-0.5 rounded-full border border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-700 whitespace-nowrap">{i.tag}</span> },
+    { key: 'tag', header: 'Type', width: '16%', sortValue: (i) => i.tag, render: (i) => <span className="inline-flex px-2 py-0.5 rounded-full border border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-700">{i.tag}</span> },
     {
       key: 'when', header: 'Date', width: '22%', sortValue: (i) => i.when,
-      render: (i) => <div><div className="text-slate-800">{i.when}</div>{(i.where || i.days != null) && <div className="text-[11px] text-slate-500">{[i.where, i.days != null ? `${i.days} ${i.days === 1 ? 'day' : 'days'}` : null].filter(Boolean).join(' · ')}</div>}</div>,
+      render: (i) => <div><div className="text-slate-800"><KeepDates text={i.when} /></div>{(i.where || i.days != null) && <div className="text-[11px] text-slate-500">{[i.where, i.days != null ? `${i.days} ${i.days === 1 ? 'day' : 'days'}` : null].filter(Boolean).join(' · ')}</div>}</div>,
     },
     {
       key: 'text', header: 'Reason', render: (i) => <div className="text-slate-700 break-words">{i.text}{i.note && <div className="text-[11px] font-semibold text-amber-700 mt-0.5">{i.note}</div>}</div>,

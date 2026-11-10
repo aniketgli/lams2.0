@@ -20,6 +20,8 @@ import { logThenDownload } from '../../../../shared/services/downloadAudit';
 import { ConfirmDialog, NoticeBar, useNotice } from '../../master/components/masterUi';
 import { ManualInput, ManualList, ManualRequest, ManualStatus, PunchGap, manualAttendanceApi } from '../manualAttendanceApi';
 import { actionBtn } from '../../../../shared/components/actionStyles';
+import { decidedBy, pendingAtManager } from '../../../../shared/services/statusLine';
+import { KeepDates } from '../../../../shared/components/KeepDates';
 
 /**
  * Manual Attendance: a request to correct a missed or wrong punch.
@@ -274,7 +276,8 @@ export const ManualAttendanceView: React.FC = () => {
       setUndoBusy(false);
     }
   };
-  const statusBy = (r: ManualRequest) => (r.status === 'pending' ? `by ${r.managerName ?? 'Administrator'} (${r.managerName ? 'R.M.' : 'Admin'})` : `by ${r.actionByName ?? '—'}${r.actionByRole ? ` (${r.actionByRole})` : ''}`);
+  // Status line: who it is waiting for ("at R.M. Harendra Kumar"), or who decided ("by Admin Aniket Gupta").
+  const statusBy = (r: ManualRequest) => (r.status === 'pending' ? pendingAtManager(r.managerName) : decidedBy(r.actionByRole, r.actionByName));
   // Who sees which columns: the employee column for everyone who sees other people's requests.
   const columns: ColumnDef<ManualRequest>[] = [
     ...(teamView ? [{
@@ -293,7 +296,7 @@ export const ManualAttendanceView: React.FC = () => {
       key: 'date', header: 'Forgot date & time', width: teamView ? '14%' : '17%', sortValue: (r) => r.date,
       render: (r) => (
         <div className="leading-tight">
-          <div className="font-semibold text-slate-900 whitespace-nowrap">{formatDate(r.date)}</div>
+          <div className="font-semibold text-slate-900"><KeepDates text={formatDate(r.date)} /></div>
           <div className="text-[11px] text-slate-500 font-mono whitespace-nowrap">{r.inTime} – {r.outTime}</div>
         </div>
       ),
@@ -317,7 +320,7 @@ export const ManualAttendanceView: React.FC = () => {
       render: (r) => (
         <div className="leading-tight space-y-1">
           <StatusPill status={r.status} />
-          <div className="text-[11px] text-slate-500 truncate" title={statusBy(r)}>{statusBy(r)}</div>
+          <div className="text-[11px] text-slate-500 leading-snug mt-0.5">{statusBy(r)}</div>
         </div>
       ),
     },

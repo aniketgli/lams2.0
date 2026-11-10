@@ -85,7 +85,7 @@ export const TableHead: React.FC<TableHeadProps> = ({
     onClick={sortable ? onSort : undefined}
     tabIndex={sortable ? 0 : undefined}
     onKeyDown={sortable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSort?.(); } } : undefined}
-    className={`group/th py-2.5 px-3 text-[11px] font-bold text-slate-600 uppercase tracking-wider whitespace-nowrap select-none ${
+    className={`group/th py-2.5 px-3 text-[11px] font-bold text-slate-600 uppercase tracking-wider ${/(^|\s)whitespace-/.test(className) ? '' : 'whitespace-nowrap'} select-none ${
       sortable ? 'cursor-pointer hover:text-slate-900 group' : ''
     } ${className}`}
     {...rest}
@@ -113,7 +113,8 @@ export const TableCell: React.FC<React.TdHTMLAttributes<HTMLTableCellElement>> =
   className = '',
   ...rest
 }) => (
-  <td className={`py-2.5 px-3 text-xs font-medium text-slate-800 whitespace-nowrap align-middle ${className}`} {...rest}>
+  // One line by default; a className that sets its own white-space (as DataTable does) replaces it.
+  <td className={`py-2.5 px-3 text-xs font-medium text-slate-800 ${/(^|\s)whitespace-/.test(className) ? '' : 'whitespace-nowrap'} align-middle ${className}`} {...rest}>
     {children}
   </td>
 );
@@ -194,6 +195,30 @@ export interface DataTableProps<T> {
   serial?: boolean;
 }
 
+/**
+ * Cell text of every DataTable: long text wraps inside its column (it never pushes the table wider
+ * than the page), a single long word breaks, and text a page marked one-line (or a long pill / badge) wraps
+ * instead of spilling into the next column. Dates are kept whole with <KeepDates>.
+ */
+const CELL_TEXT = 'whitespace-normal [overflow-wrap:anywhere] [&_.whitespace-nowrap]:whitespace-normal [&_.rounded-full]:whitespace-normal [&_.rounded-full]:max-w-full';
+
+/**
+ * Column widths for a fixed-layout table. Percentages are scaled down when, together with the
+ * fixed (px / rem) columns and Sr. No., they would add up to more than the table, because a
+ * fixed-layout table then grows wider than the page. Fixed columns are counted against an 800px
+ * table so a narrow screen still fits; on a wider one the spare space is shared out.
+ */
+export function fittedWidths(widths: Array<string | undefined>, serialPx: number): Array<string | undefined> {
+  const px = (w: string) => (w.endsWith('px') ? parseFloat(w) : w.endsWith('rem') ? parseFloat(w) * 16 : 0);
+  const fixedPx = serialPx + widths.reduce((sum, w) => sum + (w ? px(w) : 0), 0);
+  const percents = widths.map((w) => (w?.endsWith('%') ? parseFloat(w) : 0));
+  const totalPct = percents.reduce((a, b) => a + b, 0);
+  const unsized = widths.filter((w) => !w).length;
+  const room = 100 - (fixedPx / 800) * 100 - unsized * 10;
+  const scale = totalPct > 0 && totalPct > room ? Math.max(room, 0) / totalPct : 1;
+  return widths.map((w, i) => (percents[i] ? `${Math.floor(percents[i] * scale * 100) / 100}%` : w));
+}
+
 export function DataTable<T>({
   columns,
   data,
@@ -220,6 +245,11 @@ export function DataTable<T>({
   React.useEffect(() => { setAutoPage(1); }, [data.length, autoSize]);
   const serialStart = pagination ? (pagination.currentPage - 1) * pagination.pageSize : auto ? (Math.min(autoPage, Math.max(1, Math.ceil(data.length / autoSize))) - 1) * autoSize : 0;
   const columnCount = columns.length + (serial ? 1 : 0);
+  // When the page gives column widths, those widths are kept exactly (table-fixed), so tables with the
+  // same columns line up with each other and one long value cannot squeeze the other columns. The rest
+  // share what is left. On a narrow screen the table keeps a usable width and scrolls sideways.
+  const fixedLayout = columns.some((c) => c.width);
+  const widths = fixedLayout ? fittedWidths(columns.map((c) => c.width), serial ? 64 : 0) : columns.map((c) => c.width);
   // Built-in sorting when the parent does not control it.
   const controlled = Boolean(onSort);
   const [internalSort, setInternalSort] = React.useState<{ key: string; dir: 'asc' | 'desc' } | null>(null);
@@ -252,19 +282,20 @@ export function DataTable<T>({
 
   return (
     <div className={`space-y-3 ${containerClassName}`}>
-      <Table className={className}>
+      <Table className={`${fixedLayout ? 'table-fixed min-w-[640px]' : ''} ${className}`}>
         <TableHeader>
           <tr>
             {serial && <TableHead style={{ width: '64px' }} className="text-center">Sr. No.</TableHead>}
-            {columns.map((col) => (
+            {columns.map((col, colIndex) => (
               <TableHead
                 key={col.key}
                 sortable={isSortable(col)}
                 sortDirection={activeKey === col.key ? activeDir ?? null : null}
                 onSort={() => handleSort(col)}
                 aria-sort={activeKey === col.key ? (activeDir === 'asc' ? 'ascending' : 'descending') : undefined}
-                style={col.width ? { width: col.width } : undefined}
-                className={col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left'}
+                style={widths[colIndex] ? { width: widths[colIndex] } : undefined}
+                // With fixed widths a long heading wraps inside its column instead of running into the next one.
+                className={`${fixedLayout ? 'whitespace-normal align-bottom' : ''} ${col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left'}`}
               >
                 {col.header}
               </TableHead>
@@ -320,13 +351,13 @@ export function DataTable<T>({
                     return (
                       <TableCell
                         key={col.key}
-                        className={
+                        className={`${CELL_TEXT} ${
                           col.align === 'right'
                             ? 'text-right'
                             : col.align === 'center'
                             ? 'text-center'
                             : 'text-left'
-                        }
+                        }`}
                       >
                         {cellContent}
                       </TableCell>

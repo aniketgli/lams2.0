@@ -8,7 +8,7 @@ import { ExportButtons, ExportButtonsProps } from './ExportButtons';
  *
  *   row 1  start (view switch, year…)                    Export CSV · Export PDF
  *   row 2  [ search ……………………………………… ]   Reset   [ view toggle ]
- *   row 3  filter · filter · filter …
+ *   row 3  filter · filter · filter …          (one line, from the left)
  */
 
 export interface ViewOption<V extends string> {
@@ -24,7 +24,7 @@ export interface FilterToolbarProps<V extends string = string> {
   /** Shown only when something is filtered. */
   onReset?: (() => void) | null;
   view?: { value: V; options: ViewOption<V>[]; onChange: (value: V) => void } | null;
-  /** Filter controls; each is given the same width. */
+  /** Filter controls; each is given the same width, in one line starting from the left. */
   filters?: React.ReactNode[];
 }
 
@@ -88,9 +88,11 @@ export function FilterToolbar<V extends string = string>({ start, exports, searc
       )}
 
       {shownFilters.length > 0 && (
-        // Every filter of a page sits in one row (it scrolls sideways on a narrow screen instead of wrapping onto a second row).
-        <div className="grid grid-flow-col auto-cols-[minmax(9.5rem,1fr)] gap-2 overflow-x-auto pb-0.5">
-          {shownFilters.map((f, i) => <div key={i} className="min-w-0">{f}</div>)}
+        // Every filter of a page sits in one line from the left, each the same width (13rem, shrinking to
+        // 9.5rem when many share the line). A few filters do not stretch across the whole bar; on a narrow
+        // screen the line scrolls sideways instead of wrapping onto a second line.
+        <div className="flex flex-nowrap items-center justify-start gap-2 overflow-x-auto pb-0.5">
+          {shownFilters.map((f, i) => <div key={i} className="flex-[0_1_13rem] min-w-[9.5rem]">{f}</div>)}
         </div>
       )}
     </section>

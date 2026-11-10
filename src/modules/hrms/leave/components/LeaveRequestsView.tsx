@@ -17,6 +17,8 @@ import { ConfirmDialog, NoticeBar, useNotice } from '../../master/components/mas
 import { CompOffCredit, JoiningItem, LeaveBalance, LeaveInput, LeaveList, LeavePreview, LeaveRequest, LeaveStatus, leaveApi } from '../leaveApi';
 import { JoiningDetails, JoiningStatusLine, useJoining } from './JoiningPanel';
 import { actionBtn } from '../../../../shared/components/actionStyles';
+import { decidedBy, pendingAt, pendingAtManager, statusPerson } from '../../../../shared/services/statusLine';
+import { KeepDates } from '../../../../shared/components/KeepDates';
 
 /**
  * Leave requests. The server decides everything (days, balance, who may do what); this page only shows it.
@@ -54,11 +56,11 @@ const StatusPill: React.FC<{ status: LeaveStatus }> = ({ status }) => (
   <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] font-bold whitespace-nowrap ${STATUS_META[status].pill}`}>{STATUS_META[status].label}</span>
 );
 
-/** Who the status line names: the person it waits for, or who decided. */
+/** Status line: who it is waiting for ("at R.M. Harendra Kumar"), or who decided ("by HoD Ravi Sharma"). */
 const statusBy = (r: LeaveRequest) =>
-  r.status === 'pending_l1' ? `by ${r.managerName ?? 'Administrator'} (${r.managerName ? 'R.M.' : 'Admin'})`
-    : r.status === 'pending_l2' ? `by ${r.reviewerName ?? 'HoD'} (HoD)`
-    : `by ${r.actionByName ?? '—'}${r.actionByRole ? ` (${r.actionByRole})` : ''}`;
+  r.status === 'pending_l1' ? pendingAtManager(r.managerName)
+    : r.status === 'pending_l2' ? pendingAt('HoD', r.reviewerName)
+    : decidedBy(r.actionByRole, r.actionByName);
 
 const EMPTY_FORM: LeaveInput = { userId: '', leaveTypeId: '', startDate: '', endDate: '', startSession: 'full', endSession: 'full', reason: '', stationLeave: false,
   ltcType: 'none', encashLtc: false, encashDays: 10, contactAddress: '', compOffDates: [], availPrefix: false, prefixFrom: '', prefixTo: '', availSuffix: false, suffixFrom: '', suffixTo: '', certificateFile: null,
@@ -416,7 +418,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
       key: 'date', header: 'Duration', width: teamView ? '15%' : '18%', sortValue: (r) => r.startDate,
       render: (r) => (
         <div className="leading-tight">
-          <div className="font-semibold text-slate-900 whitespace-nowrap">{duration(r)}</div>
+          <div className="font-semibold text-slate-900"><KeepDates text={duration(r)} /></div>
           <div className="text-[11px] text-slate-500 whitespace-normal">{daysText(r.daysCount)}{halves(r) ? ` · ${halves(r)}` : ''}</div>
         </div>
       ),
@@ -436,7 +438,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
       render: (r) => (
         <div className="leading-tight space-y-1">
           <StatusPill status={r.status} />
-          <div className="text-[11px] text-slate-500 truncate" title={statusBy(r)}>{statusBy(r)}</div>
+          <div className="text-[11px] text-slate-500 leading-snug mt-0.5">{statusBy(r)}</div>
           <JoiningStatusLine item={joining.byRequest.get(r.id)} />
         </div>
       ),
@@ -493,7 +495,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
   const exportRows = () => sorted.map((r) => [
     ...(teamView ? [r.biometricId, r.name, r.department] : []),
     `${r.leaveTypeName} (${r.leaveTypeCode})`, formatDate(r.startDate), formatDate(r.endDate), r.daysCount, r.reason, formatDate(r.appliedAt.slice(0, 10)),
-    STATUS_META[r.status].label, statusBy(r).replace(/^by /, ''), r.comment ?? '',
+    STATUS_META[r.status].label, statusPerson(statusBy(r)), r.comment ?? '',
   ]);
   const fileName = `WII_Leave_${from}_to_${to}`;
   const downloadCsv = () => void logThenDownload('leave_requests', 'csv', sorted.length, range, () => downloadCsvText(toCsvText(exportHeaders, exportRows()), fileName), setError);

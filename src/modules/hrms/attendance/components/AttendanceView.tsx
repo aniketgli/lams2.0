@@ -16,6 +16,7 @@ import { logThenDownload } from '../../../../shared/services/downloadAudit';
 import { ActivityLogPanel, ActivitySource } from '../../../../shared/components/ActivityLogPanel';
 import { activityEndpoints } from '../../../../shared/services/activityApi';
 import { AttendanceDay, AttendanceResponse, attendanceApi } from '../attendanceApi';
+import { KeepDates } from '../../../../shared/components/KeepDates';
 
 /**
  * Biometric Attendance.
@@ -201,7 +202,7 @@ export const AttendanceView: React.FC = () => {
       key: 'date', header: 'Date', width: teamView ? '11%' : '17%', sortValue: (r) => r.date,
       render: (r) => (
         <div className="leading-tight">
-          <div className="font-semibold text-slate-900 whitespace-nowrap">{formatDate(r.date)}</div>
+          <div className="font-semibold text-slate-900"><KeepDates text={formatDate(r.date)} /></div>
           <div className="text-[11px] text-slate-500">{dayName(r.date)}</div>
         </div>
       ),

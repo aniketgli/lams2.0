@@ -5,6 +5,7 @@ import { Modal } from '../../../../shared/components';
 import { Textarea } from '../../../../shared/components/forms/Textarea';
 import { ApiError } from '../../../../shared/services/api';
 import { JoiningFile, JoiningItem, leaveApi } from '../leaveApi';
+import { decidedBy, pendingAt, pendingAtManager } from '../../../../shared/services/statusLine';
 import { actionBtn } from '../../../../shared/components/actionStyles';
 
 /**
@@ -33,13 +34,13 @@ const duration = (i: JoiningItem) => (i.startDate === i.endDate ? formatDate(i.s
 const daysText = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`;
 const punchText = (inn: string | null, session: string | null) => (inn ? `In ${inn} · Joining at ${session ?? '—'}` : 'No punch');
 
-/** Who the joining status line names: the person it waits for, or who decided. */
+/** Joining status line: who it is waiting for ("at R.M. Harendra Kumar"), or who decided ("by HoD Ravi Sharma"). */
 const statusBy = (i: JoiningItem) => {
   const r = i.report;
   if (!r) return '';
-  return r.status === 'pending_l1' ? `by ${r.managerName ?? 'Administrator'} (${r.managerName ? 'R.M.' : 'Admin'})`
-    : r.status === 'pending_l2' ? `by ${r.reviewerName ?? 'HoD'} (HoD)`
-    : `by ${r.actionByName ?? '—'}${r.actionByRole ? ` (${r.actionByRole})` : ''}`;
+  return r.status === 'pending_l1' ? pendingAtManager(r.managerName)
+    : r.status === 'pending_l2' ? pendingAt('HoD', r.reviewerName)
+    : decidedBy(r.actionByRole, r.actionByName);
 };
 
 const Detail: React.FC<{ label: string; children: React.ReactNode; wide?: boolean }> = ({ label, children, wide }) => (
