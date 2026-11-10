@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { addMonths, matchPurpose, parsePurposes, paternityDaysProblem, paternityProblems, paternityWindow, purposesProblem } from './specialLeave';
+import { addMonths, matchPurpose, paternityEnd, parsePurposes, paternityDaysProblem, paternityProblems, paternityWindow, purposesProblem } from './specialLeave';
 
 describe('purposes', () => {
   test('one per line, trimmed, blanks and repeats dropped', () => {
@@ -53,6 +53,11 @@ describe('paternity leave', () => {
     expect(paternityProblems({ ...adoption, birthDate: '2025-12-01' }, '2026-12-01', '2026-12-10').childBirthDate).toContain('less than one year');
     expect(paternityProblems({ ...adoption, birthDate: '2026-12-05' }, '2026-12-01', '2026-12-10').childBirthDate).toContain('after the date of adoption');
     expect(paternityProblems({ ...adoption, birthDate: null }, '2026-12-01', '2026-12-10').childBirthDate).toBeDefined();
+  });
+
+  test('taken in one go: To is From + 14 days, across months and years', () => {
+    expect(paternityEnd('2026-11-25')).toBe('2026-12-09');
+    expect(paternityEnd('2026-12-20')).toBe('2027-01-03');
   });
 
   test('15 days for one birth / adoption', () => {
