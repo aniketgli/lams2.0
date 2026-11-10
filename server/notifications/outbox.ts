@@ -110,8 +110,6 @@ export interface OutboxEntry {
   canResend: boolean;
 }
 
-const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : v ? String(v) : null);
-
 /** The latest mails, newest first; null when there is no outbox table. */
 export async function listOutbox(options: { status?: string | null; limit?: number } = {}): Promise<OutboxEntry[] | null> {
   const statuses: OutboxStatus[] = ['pending', 'sending', 'sent', 'failed', 'not_sent'];
@@ -119,13 +117,15 @@ export async function listOutbox(options: { status?: string | null; limit?: numb
   const limit = Math.max(1, Math.min(500, Math.trunc(options.limit ?? 200)));
   try {
     const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT id, created_at, event, category, to_email, to_name, subject, status, attempts, sent_at, last_error, cc_count, bcc_count,
-              (body_html IS NOT NULL) AS has_body
+      // Times as epoch milliseconds, worked out by MySQL itself: DATETIME has no time zone, and the database server and a
+      // PC running the portal can be in different zones (it showed 07:16 for 12:46 IST).
+      `SELECT id, ROUND(UNIX_TIMESTAMP(created_at) * 1000) AS created_ms, event, category, to_email, to_name, subject, status, attempts,
+              ROUND(UNIX_TIMESTAMP(sent_at) * 1000) AS sent_ms, last_error, cc_count, bcc_count, (body_html IS NOT NULL) AS has_body
          FROM email_outbox ${status ? 'WHERE status = ?' : ''} ORDER BY id DESC LIMIT ${limit}`, status ? [status] : []);
     return rows.map((r) => ({
-      id: String(r.id), createdAt: iso(r.created_at)!, event: String(r.event), category: String(r.category), to: String(r.to_email),
+      id: String(r.id), createdAt: new Date(Number(r.created_ms)).toISOString(), event: String(r.event), category: String(r.category), to: String(r.to_email),
       toName: r.to_name ? String(r.to_name) : null, subject: String(r.subject), status: String(r.status) as OutboxStatus,
-      attempts: Number(r.attempts), sentAt: iso(r.sent_at), error: r.last_error ? String(r.last_error) : null,
+      attempts: Number(r.attempts), sentAt: r.sent_ms === null || r.sent_ms === undefined ? null : new Date(Number(r.sent_ms)).toISOString(), error: r.last_error ? String(r.last_error) : null,
       ccCount: Number(r.cc_count), bccCount: Number(r.bcc_count),
       canResend: canResend({ status: String(r.status), hasBody: Boolean(Number(r.has_body)) }),
     }));
