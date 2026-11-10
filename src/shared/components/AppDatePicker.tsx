@@ -39,6 +39,29 @@ const MARK_TONES = {
   slate: 'bg-slate-100 text-slate-400 border-slate-200 font-normal',
 } as const;
 
+/** Today in the browser's own time zone as YYYY-MM-DD (toISOString would give yesterday's date before 05:30 IST). */
+function localToday(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** A YYYY-MM-DD value as a Date at noon, or null when empty or not a real date. */
+function parseDay(value?: string | null): Date | null {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const d = new Date(`${value}T12:00:00`);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/** The month a picker opens on: the chosen date's, else today's (moved inside the allowed dates when today is outside them). */
+function openingDay(value: string, minDate?: string, maxDate?: string): Date {
+  const chosen = parseDay(value);
+  if (chosen) return chosen;
+  let day = localToday();
+  if (minDate && day < minDate) day = minDate;
+  if (maxDate && day > maxDate) day = maxDate;
+  return parseDay(day) ?? new Date();
+}
+
 const monthsList = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
@@ -80,11 +103,8 @@ export const AppDatePicker: React.FC<AppDatePickerProps> = ({
     openUpward: boolean;
   } | null>(null);
 
-  const [viewDate, setViewDate] = useState(() => {
-    if (value) return new Date(`${value}T12:00:00`);
-    if (minDate) return new Date(`${minDate}T12:00:00`);
-    return new Date();
-  });
+  const [viewDate, setViewDate] = useState(() => openingDay(value, minDate, maxDate));
+  const todayStr = localToday();
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
@@ -128,6 +148,9 @@ export const AppDatePicker: React.FC<AppDatePickerProps> = ({
   const toggleOpen = () => {
     const willOpen = !openState;
     if (willOpen) {
+      // Every time it opens: on the chosen date's month, or on today's when nothing is chosen.
+      setViewDate(openingDay(value, minDate, maxDate));
+      setPickerMode('days');
       const calculated = computePopoverCoords();
       if (calculated) {
         setCoords(calculated);
@@ -187,13 +210,19 @@ export const AppDatePicker: React.FC<AppDatePickerProps> = ({
 
   // Keep viewDate synced if value changes externally
   useEffect(() => {
-    if (value) {
-      const d = new Date(`${value}T12:00:00`);
-      if (!isNaN(d.getTime())) {
-        setViewDate(d);
-      }
-    }
+    const d = parseDay(value);
+    if (d) setViewDate(d);
   }, [value]);
+
+  // On opening, the keyboard cursor is on the chosen date, else on today (when that day is shown and can be picked).
+  useEffect(() => {
+    if (!openState || pickerMode !== 'days') return;
+    const id = window.setTimeout(() => {
+      const target = popoverRef.current?.querySelector<HTMLElement>('[data-cursor="true"]');
+      target?.focus({ preventScroll: true });
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [openState, pickerMode, coords !== null]);
 
   const firstDayOfMonth = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -241,7 +270,11 @@ export const AppDatePicker: React.FC<AppDatePickerProps> = ({
     });
   }
 
-  const selectedDateObj = value ? new Date(`${value}T12:00:00`) : null;
+  const selectedDateObj = parseDay(value);
+  const cursorDate = selectedDateObj ? value : todayStr;
+  const todayCell = calendarCells.find((c) => c.dateStr === todayStr);
+  const todayAllowed = (!minDate || todayStr >= minDate) && (!maxDate || todayStr <= maxDate) && !marks[todayStr]?.blocked
+    && (!restrictToStationLeave || (todayCell ? todayCell.isEligible : true));
   const isSmall = size === 'sm';
 
   // Year range calculation for year selection grid
@@ -460,12 +493,13 @@ export const AppDatePicker: React.FC<AppDatePickerProps> = ({
                   {calendarCells.map((cell, idx) => {
                     if (!cell.isCurrentMonth) return <div key={`empty-${idx}`} className="h-6.5"></div>;
                     const isSelected = cell.dateStr === value;
+                    const isToday = cell.dateStr === todayStr;
                     if (!cell.isEligible) {
                       return (
                         <div
                           key={cell.dateStr}
                           title={cell.mark?.label ?? 'Date Restricted'}
-                          className={`h-6.5 rounded-md flex items-center justify-center text-[10.5px] cursor-not-allowed select-none ${
+                          className={`h-6.5 rounded-md flex items-center justify-center text-[10.5px] cursor-not-allowed select-none ${isToday ? 'ring-1 ring-indigo-300' : ''} ${
                             cell.mark ? `font-bold border ${MARK_TONES[cell.mark.tone]}` : 'text-slate-300 bg-transparent font-normal'
                           }`}
                         >
@@ -478,6 +512,8 @@ export const AppDatePicker: React.FC<AppDatePickerProps> = ({
                       <button
                         type="button"
                         key={cell.dateStr}
+                        data-cursor={cell.dateStr === cursorDate ? 'true' : undefined}
+                        aria-current={isToday ? 'date' : undefined}
                         onClick={() => {
                           onChange(cell.dateStr);
                           if (onToggle) {
@@ -486,7 +522,7 @@ export const AppDatePicker: React.FC<AppDatePickerProps> = ({
                             setInternalIsOpen(false);
                           }
                         }}
-                        className={`h-6.5 rounded-md flex flex-col items-center justify-center text-[10.5px] font-bold transition-all cursor-pointer relative ${
+                        className={`h-6.5 rounded-md flex flex-col items-center justify-center text-[10.5px] font-bold transition-all cursor-pointer relative focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${isToday && !isSelected ? 'ring-2 ring-indigo-500 ring-offset-1' : ''} ${
                           isSelected
                             ? 'bg-indigo-600 text-white font-black shadow-xs scale-105 z-10 border-indigo-600'
                             : cell.mark
@@ -514,13 +550,15 @@ export const AppDatePicker: React.FC<AppDatePickerProps> = ({
             <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[10px]">
               <button
                 type="button"
+                disabled={!todayAllowed}
+                title={todayAllowed ? undefined : 'Today cannot be chosen here'}
                 onClick={() => {
-                  const todayStr = new Date().toISOString().split('T')[0];
+                  if (!todayAllowed) return;
                   onChange(todayStr);
                   if (onToggle) onToggle();
                   else setInternalIsOpen(false);
                 }}
-                className="text-indigo-600 font-bold hover:underline cursor-pointer px-1"
+                className="text-indigo-600 font-bold hover:underline cursor-pointer px-1 disabled:text-slate-300 disabled:no-underline disabled:cursor-not-allowed"
               >
                 Today
               </button>
@@ -529,6 +567,7 @@ export const AppDatePicker: React.FC<AppDatePickerProps> = ({
                   type="button"
                   onClick={() => {
                     onChange('');
+                    setViewDate(openingDay('', minDate, maxDate));
                     if (onToggle) onToggle();
                     else setInternalIsOpen(false);
                   }}
