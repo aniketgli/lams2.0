@@ -68,6 +68,8 @@ const EMPTY_FORM: LeaveInput = { userId: '', leaveTypeId: '', startDate: '', end
 
 /** Paternity Leave (code PAT): taken from 15 days before up to 6 months after the date of delivery, or up to 6 months after the date of adoption. */
 const PATERNITY_CODE = 'PAT';
+const PATERNITY_DAYS = 15;
+const PATERNITY_SPELLS = 2;
 function plusMonths(date: string, n: number): string {
   const [y, m, d] = date.split('-').map(Number);
   const first = new Date(Date.UTC(y, m - 1 + n, 1));
@@ -239,6 +241,14 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
       .then((r) => { if (!cancelled) setCredits(r.credits); }).catch(() => { if (!cancelled) setCredits([]); });
     return () => { cancelled = true; };
   }, [formOpen, isCompOff, isAdmin, form.userId, editing?.id]);
+
+  // Paternity Leave: the From date must fall in the time it can be taken; To is always From + 14 days.
+  const isPat = type?.code === PATERNITY_CODE;
+  const patWindow = isPat && form.childEventDate ? (() => {
+    const from = form.childEvent === 'adoption' ? form.childEventDate : plusDays(form.childEventDate, -15);
+    const to = plusMonths(form.childEventDate, 6);
+    return { from, to, lastStart: plusDays(to, -(PATERNITY_DAYS - 1)) };
+  })() : null;
 
   // Restricted holiday: one day chosen from the restricted holidays added in the Holiday Calendar.
   const isRh = type?.code === 'RH';
@@ -642,6 +652,37 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
                   <AppDatePicker label="Date of compensatory off" required error={formErrors.startDate || formErrors.endDate} value={form.startDate} placeholder="Select date" minDate={localDate(-15)} marks={marks}
                     onChange={(v) => setForm((f) => ({ ...f, startDate: v, endDate: v }))} className="w-full" />
                 </div>
+              ) : isPat ? (
+                <>
+                  {/* Row 2: the birth / adoption and surviving children; row 3: From, and To worked out from it. */}
+                  <div>
+                    <AppDatePicker label={form.childEvent === 'adoption' ? 'Date of adoption' : 'Date of delivery (expected date if not yet)'} required error={formErrors.childEventDate || formErrors.childEvent}
+                      value={form.childEventDate} placeholder="Select date" onChange={(v) => setForm((f) => ({ ...f, childEventDate: v, childEvent: f.childEvent || 'delivery' }))} className="w-full" />
+                    <div className="mt-1.5">
+                      <Checkbox label="Adoption of a child less than one year old" checked={form.childEvent === 'adoption'}
+                        onChange={(e) => setForm((f) => ({ ...f, childEvent: e.target.checked ? 'adoption' : 'delivery', childBirthDate: e.target.checked ? f.childBirthDate : '' }))} />
+                    </div>
+                  </div>
+                  <div>
+                    <Select label="Surviving children (before this child)" required value={form.survivingChildren} searchable={false} placeholder="Select" error={formErrors.survivingChildren}
+                      onChange={(v: string) => setField('survivingChildren', v)} options={[{ value: '0', label: 'None' }, { value: '1', label: 'One' }, { value: '2', label: 'Two or more' }]} />
+                  </div>
+                  {form.childEvent === 'adoption' && (
+                    <div>
+                      <AppDatePicker label="Child's date of birth" required error={formErrors.childBirthDate} value={form.childBirthDate} placeholder="Select date"
+                        maxDate={form.childEventDate || undefined} onChange={(v) => setField('childBirthDate', v)} className="w-full" />
+                    </div>
+                  )}
+                  {form.childEvent === 'adoption' && <div className="hidden sm:block" />}
+                  <div>
+                    <AppDatePicker label="From date (start date)" required error={formErrors.startDate} value={form.startDate} placeholder={patWindow ? 'Select date' : 'Choose the date of delivery first'}
+                      minDate={patWindow?.from} maxDate={patWindow?.lastStart} marks={marks}
+                      onChange={(v) => setForm((f) => ({ ...f, startDate: v, endDate: plusDays(v, PATERNITY_DAYS - 1), startSession: 'full', endSession: 'full' }))} className="w-full" />
+                  </div>
+                  <div>
+                    <Input label={`To date (${PATERNITY_DAYS} days, worked out)`} value={form.endDate ? formatDate(form.endDate) : ''} placeholder="Set by the From date" disabled readOnly error={formErrors.endDate} />
+                  </div>
+                </>
               ) : (
                 <>
                   <div>
@@ -666,34 +707,14 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
                     onChange={(v: string) => setField('purpose', v)} options={type.purposes.map((p) => ({ value: p, label: p }))} />
                 </div>
               )}
-              {type?.code === PATERNITY_CODE && (
-                <>
-                  <div className="sm:col-span-2">
-                    <Select label="Paternity Leave for" required value={form.childEvent} searchable={false} placeholder="Select" error={formErrors.childEvent}
-                      onChange={(v: string) => setForm((f) => ({ ...f, childEvent: v as LeaveInput['childEvent'], childBirthDate: v === 'adoption' ? f.childBirthDate : '' }))}
-                      options={[{ value: 'delivery', label: 'Birth of a child (confinement of wife)' }, { value: 'adoption', label: 'Adoption of a child less than one year old' }]} />
-                  </div>
-                  <div>
-                    <AppDatePicker label={form.childEvent === 'adoption' ? 'Date of adoption' : 'Date of delivery (expected date if not yet)'} required error={formErrors.childEventDate}
-                      value={form.childEventDate} placeholder="Select date" onChange={(v) => setField('childEventDate', v)} className="w-full" />
-                  </div>
-                  {form.childEvent === 'adoption' ? (
-                    <div>
-                      <AppDatePicker label="Child's date of birth" required error={formErrors.childBirthDate} value={form.childBirthDate} placeholder="Select date"
-                        maxDate={form.childEventDate || undefined} onChange={(v) => setField('childBirthDate', v)} className="w-full" />
-                    </div>
-                  ) : <div className="hidden sm:block" />}
-                  <div className="sm:col-span-2">
-                    <Select label="Surviving children (before this child)" required value={form.survivingChildren} searchable={false} placeholder="Select" error={formErrors.survivingChildren}
-                      onChange={(v: string) => setField('survivingChildren', v)} options={[{ value: '0', label: 'None' }, { value: '1', label: 'One' }, { value: '2', label: 'Two or more' }]} />
-                  </div>
-                  <p className="sm:col-span-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-[11px] leading-relaxed text-sky-900">
-                    Paternity Leave is 15 days for one birth / adoption, for a male employee with less than two surviving children. It can be joined with any other leave.
-                    {form.childEvent && form.childEventDate
-                      ? ` Take it between ${formatDate(form.childEvent === 'delivery' ? plusDays(form.childEventDate, -15) : form.childEventDate)} and ${formatDate(plusMonths(form.childEventDate, 6))}; after that it lapses.`
-                      : ' Birth: from 15 days before up to 6 months after the date of delivery. Adoption: up to 6 months after the date of adoption. Not taken in that time, it lapses.'}
-                  </p>
-                </>
+              {isPat && (
+                <p className="sm:col-span-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-[11px] leading-relaxed text-sky-900">
+                  Paternity Leave: {PATERNITY_DAYS} days in one go for one birth / adoption, at most {PATERNITY_SPELLS} times in service, for a male employee with less than two surviving children.
+                  It goes to the HoD (2 stages) and can be joined with any other leave.
+                  {patWindow
+                    ? ` Take it between ${formatDate(patWindow.from)} and ${formatDate(patWindow.to)}; after that it lapses.`
+                    : ' Birth: from 15 days before up to 6 months after the date of delivery. Adoption: up to 6 months after the date of adoption. Not taken in that time, it lapses.'}
+                </p>
               )}
             </div>
 

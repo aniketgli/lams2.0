@@ -78,6 +78,9 @@ const shift = (date: string, days: number): string => {
 
 const dmy = (date: string) => `${date.slice(8, 10)}-${date.slice(5, 7)}-${date.slice(0, 4)}`;
 
+/** Paternity Leave is taken in one go: the last day for a given first day (15 days, holidays included). */
+export const paternityEnd = (startDate: string): string => shift(startDate, PATERNITY_DAYS - 1);
+
 /** The dates a paternity leave for this birth / adoption must fall in. */
 export function paternityWindow(child: Pick<ChildDetails, 'event' | 'eventDate'>): { from: string; to: string } | null {
   if (!child.event || !child.eventDate) return null;

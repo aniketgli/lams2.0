@@ -13,7 +13,7 @@ import type { ActivityScope } from '../employees/activity';
 import { WEEK_DAYS, datesBetween, weekdayOf } from '../attendance/compute';
 import { groupLeaveTypeIds, groupLeaveTypeMap } from './groups';
 import { LOOK_DAYS, type Combine, type Neighbour, combineProblem, toCombine } from './combine';
-import { CHILD_EVENTS, PATERNITY_CODE, type ChildDetails, matchPurpose, parsePurposes, paternityDaysProblem, paternityProblems } from './specialLeave';
+import { CHILD_EVENTS, PATERNITY_CODE, paternityEnd, type ChildDetails, matchPurpose, parsePurposes, paternityDaysProblem, paternityProblems } from './specialLeave';
 import { SESSIONS_END, SESSIONS_START, countLeaveDays, cycleYearOf } from './days';
 import { notifyLeave } from '../notifications/events';
 import { COMP_OFF_CODE, RESTRICTED_CODE, balanceFromCredits, creditsFor, matchCredits, monthlyProblem, personById, takenByMonth } from './compOff';
@@ -628,8 +628,14 @@ async function checkLeave(
   input.stationLeave = input.stationLeave || Boolean(input.prefix || input.suffix) || policy.offDaysOnly;
   // Weekly offs / holidays at the very start or end of a leave are not leave days: the dates move to the first and
   // last working day, and those days become the prefix / suffix.
+  // Paternity Leave is 15 days in one go, holidays included: To is always From + 14 days (worked out here, whatever was
+  // sent), and holidays at its start or end stay leave days.
+  if (policy.code === PATERNITY_CODE) {
+    input.endDate = paternityEnd(input.startDate);
+    input.startSession = 'full'; input.endSession = 'full';
+  }
   const requested = { startDate: input.startDate, endDate: input.endDate };
-  if (!policy.offDaysOnly) {
+  if (!policy.offDaysOnly && policy.code !== PATERNITY_CODE) {
     const edge = await dayRule(q, emp, policy, addDays(input.startDate, -1), addDays(input.endDate, 1));
     const isOff = (d: string) => !edge.workingDays.includes(weekdayOf(d)) || edge.gazetted.has(d);
     let s = input.startDate; let e = input.endDate;
@@ -654,7 +660,8 @@ async function checkLeave(
   else if (!isAdmin && policy.minNotice > 0 && daysBetween(today, input.startDate) - 1 < policy.minNotice) errors.startDate = `${policy.name} needs ${policy.minNotice} days notice.`;
 
   const cycleYear = cycleYearOf(input.startDate, emp.basis);
-  if (cycleYearOf(input.endDate, emp.basis) !== cycleYear) errors.endDate ||= 'A leave cannot run across two leave years. Apply separately for each year.';
+  // (Paternity Leave takes nothing from a yearly balance and is 15 days in one go, so it may run into the next leave year.)
+  if (cycleYearOf(input.endDate, emp.basis) !== cycleYear && policy.code !== PATERNITY_CODE) errors.endDate ||= 'A leave cannot run across two leave years. Apply separately for each year.';
   if (daysBetween(input.startDate, input.endDate) > 366) errors.endDate ||= 'A leave can cover at most one year.';
   if ((input.startSession !== 'full' || input.endSession !== 'full') && !policy.halfDay) errors.startSession = `${policy.name} cannot be taken as a half day.`;
   // A leave type with a purpose list (e.g. Special Casual Leave) is taken only for one of those purposes.
