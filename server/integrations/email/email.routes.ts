@@ -6,7 +6,8 @@ import { asyncHandler } from '../../lib/http';
 const router = Router();
 
 router.use(isAuthenticated, isAdmin);
-router.get('/logs', EmailController.getLogs);
+router.get('/logs', asyncHandler(EmailController.getLogs));
+router.post('/logs/resend', asyncHandler(EmailController.resend));
 router.post('/test-smtp', asyncHandler(EmailController.testSmtp));
 
 export const emailRoutes = router;
