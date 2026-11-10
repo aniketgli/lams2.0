@@ -7,6 +7,7 @@ import { cachedReference } from '../lib/referenceCache';
 import type { RoleId } from '../lib/roles';
 import { MAX_RANGE_DAYS_ONE, sizeProblem } from './limits';
 import { DayRecord, Punch, ShiftRule, buildDay, datesBetween, normalizeEmployeeCode, shiftRule, toMinutes, weekdayOf } from './compute';
+import { historyProblem, monthEnd, monthStart } from '../lib/dateWindow';
 
 /**
  * Attendance read from the biometric punch log (table `Attendance`), which the machine
@@ -53,12 +54,14 @@ function nowTimeInIndia(): string {
   return new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date());
 }
 
-export function parseRange(query: { from?: unknown; to?: unknown }, today = todayInIndia()): { from: string; to: string } {
-  const from = String(query.from ?? today);
-  const to = String(query.to ?? from);
+export function parseRange(query: { from?: unknown; to?: unknown }, today = todayInIndia(), role?: string): { from: string; to: string } {
+  const from = String(query.from ?? monthStart(today));
+  const to = String(query.to ?? monthEnd(today));
   if (!isValidIsoDate(from) || !isValidIsoDate(to)) throw badRequest('Dates must be in YYYY-MM-DD format.');
   if (from > to) throw badRequest('The start date must be on or before the end date.');
   if (datesBetween(from, to).length > MAX_RANGE_DAYS_ONE) throw badRequest(`Choose a range of at most ${MAX_RANGE_DAYS_ONE} days.`);
+  const tooOld = historyProblem(role, from, today);
+  if (tooOld) throw badRequest(tooOld, { from: tooOld });
   return { from, to };
 }
 
@@ -300,7 +303,7 @@ export async function punchGaps(emp: { biometricId: string; shiftId: string | nu
 
 export async function listAttendance(viewer: AttendanceViewer, query: { from?: unknown; to?: unknown; userId?: unknown }): Promise<AttendanceResult> {
   const today = todayInIndia();
-  const { from, to } = parseRange(query, today);
+  const { from, to } = parseRange(query, today, viewer.role);
   const onlyUserId = query.userId ? String(query.userId) : null;
   if (onlyUserId && !/^\d{1,20}$/.test(onlyUserId)) throw badRequest('Invalid employee.');
 

@@ -22,6 +22,7 @@ import { OdInput, OdList, OdRequest, OdStatus, OdType, odApi } from '../odApi';
 import { actionBtn } from '../../../../shared/components/actionStyles';
 import { decidedBy, pendingAtManager, statusPerson } from '../../../../shared/services/statusLine';
 import { KeepDates } from '../../../../shared/components/KeepDates';
+import { earliestViewable, yearEnd, yearStart } from '../../../../shared/services/dateWindow';
 
 /**
  * Outdoor Duty (OD): official work away from the institute.
@@ -85,8 +86,10 @@ export const OutdoorDutyView: React.FC = () => {
 
   // ---- Data ---------------------------------------------------------------------
   const today = localDate();
-  const defaultFrom = localDate(-90);
-  const defaultTo = localDate(60);
+  // Opens on this year; only an administrator may look further back than 1 January of last year.
+  const defaultFrom = yearStart(today);
+  const defaultTo = yearEnd(today);
+  const earliest = earliestViewable(role, today);
   const [from, setFrom] = useState(defaultFrom);
   const [to, setTo] = useState(defaultTo);
   const [data, setData] = useState<OdList | null>(null);
@@ -394,9 +397,9 @@ export const OutdoorDutyView: React.FC = () => {
 
   const dateRange = (
     <div className="flex items-center gap-1.5">
-      <div className="w-36"><AppDatePicker size="sm" placeholder="From date" value={from} onChange={(v) => setFrom(v || defaultFrom)} /></div>
+      <div className="w-36"><AppDatePicker size="sm" placeholder="From date" value={from} minDate={earliest} maxDate={to || undefined} onChange={(v) => setFrom(v || defaultFrom)} /></div>
       <span className="text-slate-300 font-bold">—</span>
-      <div className="w-36"><AppDatePicker size="sm" placeholder="To date" value={to} onChange={(v) => setTo(v || defaultTo)} isRightColumn /></div>
+      <div className="w-36"><AppDatePicker size="sm" placeholder="To date" value={to} minDate={from || earliest} onChange={(v) => setTo(v || defaultTo)} isRightColumn /></div>
     </div>
   );
 

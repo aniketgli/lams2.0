@@ -17,6 +17,7 @@ import { ActivityLogPanel, ActivitySource } from '../../../../shared/components/
 import { activityEndpoints } from '../../../../shared/services/activityApi';
 import { AttendanceDay, AttendanceResponse, attendanceApi } from '../attendanceApi';
 import { KeepDates } from '../../../../shared/components/KeepDates';
+import { earliestViewable, monthEnd, monthStart } from '../../../../shared/services/dateWindow';
 
 /**
  * Biometric Attendance.
@@ -94,10 +95,12 @@ export const AttendanceView: React.FC = () => {
 
   // ---- Dates and data ---------------------------------------------------------
   const today = localToday();
-  const monthStart = `${today.slice(0, 8)}01`;
-  const defaultFrom = teamView ? today : monthStart;
+  // Opens on this month; only an administrator may look further back than 1 January of last year.
+  const defaultFrom = monthStart(today);
+  const defaultTo = monthEnd(today);
+  const earliest = earliestViewable(role, today);
   const [from, setFrom] = useState(defaultFrom);
-  const [to, setTo] = useState(today);
+  const [to, setTo] = useState(defaultTo);
   const [data, setData] = useState<AttendanceResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -154,7 +157,7 @@ export const AttendanceView: React.FC = () => {
   const filtered = Boolean(search.trim()) || filterSets.some((f) => !f.includes('all')) || (viewMode === 'table' && (from !== defaultFrom || to !== today));
   const resetAll = () => {
     setSearch(''); [setStatuses, setEmployees, setDepartments, setDesignations, setTypes, setShiftsFilter, setManagers].forEach((set) => set(['all']));
-    setFrom(defaultFrom); setTo(today);
+    setFrom(defaultFrom); setTo(defaultTo);
   };
 
   const visible = useMemo(() => {
@@ -379,9 +382,9 @@ export const AttendanceView: React.FC = () => {
           <span className="text-xs font-bold text-slate-700">{MONTHS[mm - 1]} {my}</span>
         ) : (
           <div className="flex items-center gap-1.5">
-            <div className="w-36"><AppDatePicker size="sm" placeholder="From date" value={from} onChange={(v) => setFrom(v || defaultFrom)} /></div>
+            <div className="w-36"><AppDatePicker size="sm" placeholder="From date" value={from} minDate={earliest} maxDate={to || undefined} onChange={(v) => setFrom(v || defaultFrom)} /></div>
             <span className="text-slate-300 font-bold">—</span>
-            <div className="w-36"><AppDatePicker size="sm" placeholder="To date" value={to} onChange={(v) => setTo(v || today)} isRightColumn /></div>
+            <div className="w-36"><AppDatePicker size="sm" placeholder="To date" value={to} minDate={from || earliest} onChange={(v) => setTo(v || defaultTo)} isRightColumn /></div>
           </div>
         )}
           </>

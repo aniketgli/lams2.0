@@ -18,6 +18,7 @@ import { SESSIONS_END, SESSIONS_START, countLeaveDays, cycleYearOf } from './day
 import { notifyLeave } from '../notifications/events';
 import { COMP_OFF_CODE, RESTRICTED_CODE, balanceFromCredits, creditsFor, matchCredits, monthlyProblem, personById, takenByMonth } from './compOff';
 import type { Pair } from './compOffRules';
+import { historyProblem, yearEnd, yearStart } from '../lib/dateWindow';
 
 /**
  * Leave requests and balances. Every rule is checked here, never in the browser.
@@ -318,17 +319,19 @@ export function missingTable(error: unknown): never | undefined {
   return undefined;
 }
 
-export function parseRange(query: { from?: unknown; to?: unknown }, today = todayInIndia()): { from: string; to: string } {
-  const from = String(query.from ?? addDays(today, -90));
-  const to = String(query.to ?? addDays(today, 90));
+export function parseRange(query: { from?: unknown; to?: unknown }, today = todayInIndia(), role?: string): { from: string; to: string } {
+  const from = String(query.from ?? yearStart(today));
+  const to = String(query.to ?? yearEnd(today));
   if (!isValidIsoDate(from) || !isValidIsoDate(to)) throw badRequest('Dates must be in YYYY-MM-DD format.');
   if (from > to) throw badRequest('The start date must be on or before the end date.');
   if (daysBetween(from, to) > MAX_RANGE_DAYS) throw badRequest(`Choose a range of at most ${MAX_RANGE_DAYS} days.`);
+  const tooOld = historyProblem(role, from, today);
+  if (tooOld) throw badRequest(tooOld, { from: tooOld });
   return { from, to };
 }
 
 export async function listRequests(viewer: Viewer, query: { from?: unknown; to?: unknown }): Promise<{ from: string; to: string; requests: LeaveRequest[] }> {
-  const { from, to } = parseRange(query);
+  const { from, to } = parseRange(query, todayInIndia(), viewer.role);
   let found: RowDataPacket[];
   try {
     const see = visibilityClause(viewer);

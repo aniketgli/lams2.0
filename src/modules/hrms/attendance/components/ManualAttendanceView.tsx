@@ -22,6 +22,7 @@ import { ManualInput, ManualList, ManualRequest, ManualStatus, PunchGap, manualA
 import { actionBtn } from '../../../../shared/components/actionStyles';
 import { decidedBy, pendingAtManager } from '../../../../shared/services/statusLine';
 import { KeepDates } from '../../../../shared/components/KeepDates';
+import { earliestViewable, yearEnd, yearStart } from '../../../../shared/services/dateWindow';
 
 /**
  * Manual Attendance: a request to correct a missed or wrong punch.
@@ -82,9 +83,12 @@ export const ManualAttendanceView: React.FC = () => {
 
   // ---- Data ---------------------------------------------------------------------
   const today = localDate();
-  const defaultFrom = localDate(-90);
+  // Opens on this year; only an administrator may look further back than 1 January of last year.
+  const defaultFrom = yearStart(today);
+  const defaultTo = yearEnd(today);
+  const earliest = earliestViewable(role, today);
   const [from, setFrom] = useState(defaultFrom);
-  const [to, setTo] = useState(today);
+  const [to, setTo] = useState(defaultTo);
   const [data, setData] = useState<ManualList | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -119,7 +123,7 @@ export const ManualAttendanceView: React.FC = () => {
   const filtered = Boolean(search.trim()) || [statuses, categories, employees, departments].some((f) => !f.includes('all')) || from !== defaultFrom || to !== today;
   const resetAll = () => {
     setSearch(''); [setStatuses, setCategories, setEmployees, setDepartments].forEach((set) => set(['all']));
-    setFrom(defaultFrom); setTo(today);
+    setFrom(defaultFrom); setTo(defaultTo);
   };
 
   const visible = useMemo(() => {
@@ -437,9 +441,9 @@ export const ManualAttendanceView: React.FC = () => {
               <>
                 {auditorSwitch}
               <div className="flex items-center gap-1.5">
-                <div className="w-36"><AppDatePicker size="sm" placeholder="From date" value={from} onChange={(v) => setFrom(v || defaultFrom)} /></div>
+                <div className="w-36"><AppDatePicker size="sm" placeholder="From date" value={from} minDate={earliest} maxDate={to || undefined} onChange={(v) => setFrom(v || defaultFrom)} /></div>
                 <span className="text-slate-300 font-bold">—</span>
-                <div className="w-36"><AppDatePicker size="sm" placeholder="To date" value={to} onChange={(v) => setTo(v || today)} isRightColumn /></div>
+                <div className="w-36"><AppDatePicker size="sm" placeholder="To date" value={to} minDate={from || earliest} onChange={(v) => setTo(v || defaultTo)} isRightColumn /></div>
               </div>
               </>
             )}
