@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { AppDatePicker } from '../../shared/components/AppDatePicker';
 import { PageHeader, Button, Badge, MetricCard, Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableEmpty, TablePagination, Modal, ModalHeader, ModalBody, ModalFooter, FormField, Input } from '../../shared/components';
 import {
   Briefcase,
@@ -455,19 +456,11 @@ export const PMSView: React.FC<PMSViewProps> = ({ onReturnToLobby }) => {
               </FormField>
 
               <FormField label="Start Date">
-                <Input
-                  type="date"
-                  value={newStartDate}
-                  onChange={(e) => setNewStartDate(e.target.value)}
-                />
+                <AppDatePicker value={newStartDate} placeholder="Select date" onChange={setNewStartDate} className="w-full" />
               </FormField>
 
               <FormField label="End Date">
-                <Input
-                  type="date"
-                  value={newEndDate}
-                  onChange={(e) => setNewEndDate(e.target.value)}
-                />
+                <AppDatePicker value={newEndDate} placeholder="Select date" minDate={newStartDate || undefined} onChange={setNewEndDate} className="w-full" isRightColumn />
               </FormField>
             </div>
           </ModalBody>

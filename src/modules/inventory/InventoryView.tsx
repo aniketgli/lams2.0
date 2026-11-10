@@ -509,11 +509,8 @@ export const InventoryView: React.FC<SIMSViewProps> = ({ onReturnToLobby }) => {
               </FormField>
 
               <FormField label="Indent Date">
-                <Input
-                  type="date"
-                  value={new Date().toISOString().split('T')[0]}
-                  disabled
-                />
+                {/* Always today and not editable, so plain text rather than a date picker. */}
+                <Input value={new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} disabled readOnly />
               </FormField>
             </div>
 
