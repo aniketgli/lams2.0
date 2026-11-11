@@ -1,3 +1,4 @@
+import { canSeeEmployee } from '../lib/visibility';
 import type { Request } from 'express';
 import type { RowDataPacket } from 'mysql2/promise';
 import { pool } from '../../src/db';
@@ -123,11 +124,7 @@ const timeOf = (value: unknown): string | null => (value ? String(value).slice(0
 // ---------------------------------------------------------------------------
 
 function canSee(viewer: Viewer, row: RowDataPacket): boolean {
-  if (viewer.role === 'administrator' || viewer.role === 'audit') return true;
-  if (Number(row.user_id) === viewer.id) return true;
-  if (viewer.role !== 'reporting_manager' && viewer.role !== 'reviewing_manager') return false;
-  const m = managersOf(row);
-  return m.reporting === String(viewer.id) || m.reviewing === String(viewer.id);
+  return canSeeEmployee(viewer, row.user_id, managersOf(row));
 }
 
 const reportStatus = (row: RowDataPacket): JoiningStatus | null => (row.report_id ? (String(row.report_status) as JoiningStatus) : null);

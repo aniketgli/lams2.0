@@ -69,11 +69,11 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ initia
   const subtitle = balances
     ? (managesBalances ? 'Leave balance of every employee for the leave year; set or adjust a balance'
       : isAudit ? 'Leave balance of every employee for the leave year'
-      : role === 'general_staff' ? 'Your leave balance for the leave year' : 'Your leave balance, and your team’s for the leave year')
+      : role === 'general_staff' ? 'Your leave balance for the leave year' : 'Your team’s leave balance for the leave year')
     : isAdmin ? 'Apply, approve and reject leave of all employees, and set balances'
     : isAudit ? 'All leave requests and balances, and the log of who did what'
-    : role === 'reporting_manager' ? 'Your leave, and your team’s requests to approve, forward or reject'
-    : role === 'reviewing_manager' ? 'Your leave, and the requests forwarded to you for approval'
+    : role === 'reporting_manager' ? 'Your team’s leave requests to approve, forward or reject (your own are under your User role)'
+    : role === 'reviewing_manager' ? 'Leave requests of the people under you, and those forwarded to you for approval'
     : 'Apply for leave and follow the status of your requests';
 
   return (

@@ -79,7 +79,8 @@ async function employeesInScope(viewer: AttendanceViewer, onlyUserId: string | n
   const params: unknown[] = [];
   if (onlyUserId) { where.push('u.id = ?'); params.push(onlyUserId); }
   if (!all) {
-    if (manager) { where.push('(u.id = ? OR p.reporting_manager_id = ? OR p.reviewing_manager_id = ?)'); params.push(viewer.id, viewer.id, viewer.id); }
+    // A manager sees only the team; their own attendance is under their User role.
+    if (manager) { where.push('(p.reporting_manager_id = ? OR p.reviewing_manager_id = ?) AND u.id <> ?'); params.push(viewer.id, viewer.id, viewer.id); }
     else { where.push('u.id = ?'); params.push(viewer.id); }
   }
   let found: RowDataPacket[];

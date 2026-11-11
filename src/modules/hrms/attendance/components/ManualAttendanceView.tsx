@@ -398,8 +398,8 @@ export const ManualAttendanceView: React.FC = () => {
 
   const subtitle = isAdmin ? 'Apply, edit, approve and reject manual attendance of all employees'
     : isAudit ? 'All manual attendance requests, and the log of who did what'
-    : role === 'reporting_manager' ? 'Your requests, and your team’s requests to approve or reject'
-    : role === 'reviewing_manager' ? 'Your requests, and the requests of the people under you'
+    : role === 'reporting_manager' ? 'Your team’s requests to approve or reject (your own are under your User role)'
+    : role === 'reviewing_manager' ? 'Requests of the people under you (your own are under your User role)'
     : 'Apply for a missed punch and follow the status of your requests';
 
   return (
