@@ -71,3 +71,6 @@ export function pickDefaultRole(roles: RoleId[]): RoleId | null {
   }
   return null;
 }
+
+/** For tests: every spelling normalizeRole accepts (the role catalog must accept the same). */
+export const ROLE_ALIASES_FOR_TEST: Readonly<Record<string, RoleId>> = ROLE_ALIASES;

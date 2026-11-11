@@ -9,9 +9,9 @@ import { brandedMail, portalUrlOf } from '../notifications/notify';
 import { notifyAccountStatus, notifyEmployeeDeleted, notifyEmployeeUpdated, notifyMappingBatch, notifyWelcome } from '../notifications/events';
 import { systemAccountError } from '../lib/systemAccounts';
 import { HttpError, asyncHandler, badRequest, notFound } from '../lib/http';
+import { loadCatalog, validateGrants } from '../lib/roleCatalog';
 import { generateTemporaryPassword, passwordProblem } from '../lib/passwordPolicy';
 import { defaultPasswordHash } from '../masters/accountSettings';
-import { normalizeModule } from '../lib/roles';
 import { destroyUserSessions } from '../lib/sessionStore';
 import { clearAccessCache } from '../services/access.service';
 import { PATTERNS, Validator, todayInIndia } from '../lib/validate';
@@ -248,19 +248,17 @@ router.delete('/employees/:userId', isAdmin, asyncHandler(async (req, res) => {
 }));
 
 /** Older role screen: { moduleRoles: { lams: ['hrms_admin', ...], pms: [...] } }. Same rules as /api/access/users/:id/roles. */
-const ROLE_ID_PATTERN = /^[A-Za-z][A-Za-z0-9 _-]{0,99}$/;
 router.put('/employees/:userId/module-roles', isAdmin, asyncHandler(async (req, res) => {
   const moduleRoles = req.body?.moduleRoles;
   if (!moduleRoles || typeof moduleRoles !== 'object' || Array.isArray(moduleRoles)) throw badRequest('Module roles are missing.');
-  const wanted: Grant[] = [];
+  const requested: Array<{ moduleId: string; roleId: unknown }> = [];
   for (const [rawModule, roles] of Object.entries(moduleRoles as Record<string, unknown>)) {
-    const moduleId = normalizeModule(rawModule);
-    if (!moduleId || !Array.isArray(roles) || roles.length > 30) throw badRequest('Module roles contain an unknown module.');
-    for (const roleId of roles) {
-      if (typeof roleId !== 'string' || !ROLE_ID_PATTERN.test(roleId.trim())) throw badRequest('Module roles contain an invalid role.');
-      wanted.push({ moduleId, roleId: roleId.trim() });
-    }
+    if (!Array.isArray(roles) || roles.length > 30) throw badRequest('Module roles contain an unknown module.');
+    for (const roleId of roles) requested.push({ moduleId: rawModule, roleId });
   }
+  if (requested.length > 100) throw badRequest('Too many roles.');
+  // Only roles of the role catalog (database) can be given.
+  const wanted: Grant[] = validateGrants(await loadCatalog(), requested);
   if (wanted.length > 100) throw badRequest('Too many roles.');
   const [target] = await db.select({ biometricId: users.biometricId }).from(users).where(eq(users.id, accountId(req.params.userId))).limit(1);
   if (!target) throw notFound('User account not found.');
