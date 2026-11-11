@@ -47,6 +47,8 @@ const REQUIRED: Record<string, string[]> = {
   email_outbox: ['status', 'next_attempt_at', 'queued_at', 'body_html'],
   // The latest columns for leave purposes / paternity details (20261130_scl_paternity.sql).
   leave_types: ['purposes'],
+  // Roles that can be given and used (20261203_role_catalog.sql). Without it the built-in list is used.
+  role_catalog: ['module_id', 'role_id', 'name', 'access_role', 'aliases', 'is_active'],
 };
 
 /** Indexes that keep the hot queries fast: table -> index name. */
@@ -93,6 +95,17 @@ async function main(): Promise<void> {
       const invalid = await one(c, 'SELECT COUNT(*) AS n FROM employee_profiles WHERE NOT JSON_VALID(profile_data)');
       report(Number(invalid?.n) === 0 ? 'PASS' : 'WARN', 'profile_data is valid JSON everywhere', `${invalid?.n} invalid`);
     } catch (e) { report('FAIL', 'Generated manager columns', (e as Error).message); }
+
+    // 3b. Every active role grant names a role of the role catalog (otherwise it gives no access) ----
+    try {
+      const { catalogFromRows, BUILT_IN_CATALOG, findRole } = await import('../server/lib/roleCatalog');
+      const fromTable = await rows(c, 'SELECT module_id, role_id, name, access_role, aliases, description, sort_order FROM role_catalog WHERE is_active = 1').catch(() => null);
+      const catalog = fromTable ? catalogFromRows(fromTable) : BUILT_IN_CATALOG;
+      const grants = await rows(c, "SELECT biometric_id, module_id, role_id FROM user_module_roles WHERE LOWER(status) = 'active'");
+      const orphans = grants.filter((g) => !findRole(catalog, g.module_id, g.role_id));
+      report(orphans.length ? 'WARN' : 'PASS', 'Role grants match the role catalog',
+        orphans.length ? `${orphans.length} grant(s) give no access: ${orphans.slice(0, 10).map((g) => `${g.biometric_id} ${g.module_id}/${g.role_id}`).join(', ')}` : `${grants.length} grant(s)`);
+    } catch (e) { report('FAIL', 'Role grants match the role catalog', (e as Error).message); }
 
     // 4. EXPLAIN: hot queries must use an index ---------------------------------------------------
     const sample = await one(c, 'SELECT id, biometric_id FROM users WHERE is_system = 0 ORDER BY id LIMIT 1');

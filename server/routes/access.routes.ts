@@ -6,6 +6,7 @@ import { asyncHandler, badRequest, forbidden, notFound, saveSession } from '../l
 import { ModuleId, RoleId, normalizeModule, normalizeRole, pickDefaultRole } from '../lib/roles';
 import { PATTERNS, Validator } from '../lib/validate';
 import { requireActiveRole, requireAuth } from '../middleware/auth.middleware';
+import { loadCatalog, validateGrants } from '../lib/roleCatalog';
 import { buildSessionPayload } from '../services/session.service';
 import { replaceRoleGrants } from '../employees/store';
 
@@ -72,13 +73,17 @@ function setActive(req: Request, moduleId: ModuleId, role: RoleId) {
 // ---------------------------------------------------------------------------
 
 const requireHrmsAdmin = requireActiveRole('hrms', 'administrator');
-const ROLE_ID_PATTERN = /^[A-Za-z][A-Za-z0-9 _-]{0,99}$/;
 
 function parseTarget(raw: unknown): string {
   const target = String(raw ?? '').trim();
   if (!PATTERNS.biometricId.test(target)) throw badRequest('Invalid biometric ID.');
   return target;
 }
+
+/** The roles that can be given in each module (active rows of role_catalog). */
+router.get('/role-catalog', asyncHandler(async (_req, res) => {
+  res.json({ roles: await loadCatalog() });
+}));
 
 router.get('/users/:biometricId/roles', requireHrmsAdmin, asyncHandler(async (req, res) => {
   const target = parseTarget(req.params.biometricId);
@@ -102,18 +107,13 @@ router.put('/users/:biometricId/roles', requireHrmsAdmin, asyncHandler(async (re
   const requested = v.raw('assignments');
   if (!Array.isArray(requested) || requested.length > 100) throw badRequest('Assignments must be a list of at most 100 items.');
 
-  const wanted = new Map<string, { moduleId: ModuleId; roleId: string }>();
-  for (const item of requested) {
-    const moduleId = normalizeModule(item?.moduleId);
-    const roleId = typeof item?.roleId === 'string' ? item.roleId.trim() : '';
-    if (!moduleId || !ROLE_ID_PATTERN.test(roleId)) throw badRequest('Invalid module-role assignment.');
-    wanted.set(`${moduleId}::${roleId}`, { moduleId, roleId });
-  }
+  // Only roles of the role catalog (database) can be given; stored under their catalog name.
+  const wanted = validateGrants(await loadCatalog(), requested.map((item) => ({ moduleId: item?.moduleId, roleId: item?.roleId })));
 
   // An administrator's own roles are changed by another administrator.
   if (target === actor) throw forbidden('You cannot change your own roles. Ask another administrator.');
 
-  await replaceRoleGrants(req, target, [...wanted.values()]);
+  await replaceRoleGrants(req, target, wanted);
 
   res.json({ success: true });
 }));

@@ -6,6 +6,7 @@ import { pool } from '../../src/db';
 import { HttpError, badRequest, notFound } from '../lib/http';
 import { ModuleId, RoleId, normalizeModule, normalizeRole } from '../lib/roles';
 import { inTransaction } from '../lib/tx';
+import { findRole, loadCatalog } from '../lib/roleCatalog';
 import { todayInIndia } from '../lib/validate';
 import { changedFields, writeMasterAuditSql } from '../masters/audit';
 import { defaultPasswordHash } from '../masters/accountSettings';
@@ -553,13 +554,18 @@ export interface Grant { moduleId: ModuleId; roleId: string }
  */
 async function replaceRoleGrantsImpl(req: Request, biometricId: string, wanted: Grant[]): Promise<void> {
   const actor = req.auth!.account.biometricId;
+  const catalog = await loadCatalog();
   const changed = await inTransaction(async (conn) => {
     const [user] = await rows(conn, 'SELECT id, name, is_system FROM users WHERE biometric_id = ? LIMIT 1', [biometricId]);
     if (!user) throw notFound('User account not found.');
     if (isSystemRow(user)) throw systemAccountError();
 
     const existing = await rows(conn, 'SELECT id, module_id, role_id, status FROM user_module_roles WHERE biometric_id = ? FOR UPDATE', [biometricId]);
-    const keyOf = (moduleId: string, roleId: string) => `${normalizeModule(moduleId) ?? moduleId.toLowerCase()}::${roleId}`;
+    // The same catalog role in another spelling (an older grant "Co-PI" vs "Co-Principal Investigator (Co-PI)") is the same grant.
+    const keyOf = (moduleId: string, roleId: string) => {
+      const entry = findRole(catalog, moduleId, roleId);
+      return entry ? `${entry.moduleId}::${entry.roleId}` : `${normalizeModule(moduleId) ?? moduleId.toLowerCase()}::${roleId}`;
+    };
     const before = existing.filter((r) => String(r.status).toLowerCase() === 'active').map((r) => ({ moduleId: String(r.module_id), roleId: String(r.role_id) }));
     const pending = new Map(wanted.map((g) => [keyOf(g.moduleId, g.roleId), g]));
 

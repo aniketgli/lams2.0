@@ -4,8 +4,9 @@ import type { RowDataPacket } from 'mysql2/promise';
 import { pool } from '../../src/db';
 import { EmailService } from '../integrations/email/email.service';
 import { HttpError, notFound } from '../lib/http';
-import { ROLE_LABELS, normalizeModule, normalizeRole, type RoleId } from '../lib/roles';
+import { ROLE_LABELS, type RoleId } from '../lib/roles';
 import { inTransaction } from '../lib/tx';
+import { loadCatalog, resolveGrant } from '../lib/roleCatalog';
 import { todayInIndia } from '../lib/validate';
 import { changedFields, writeMasterAuditSql } from '../masters/audit';
 import { REPORTS, REPORT_KEYS, findReport } from './catalog';
@@ -257,9 +258,10 @@ export async function resolveRecipients(scheduleId: number): Promise<{ email: st
   const roles = new Set(chosen.filter((c) => c.kind === 'role').map((c) => String(c.role_id)));
   if (roles.size) {
     const grants = await rows("SELECT u.id, g.module_id, g.role_id FROM user_module_roles g JOIN users u ON u.biometric_id = g.biometric_id WHERE LOWER(g.status) = 'active'");
+    const catalog = await loadCatalog();
     for (const g of grants) {
-      const role = normalizeRole(g.role_id);
-      if (normalizeModule(g.module_id) === 'hrms' && role && roles.has(role)) userIds.add(Number(g.id));
+      const resolved = resolveGrant(catalog, g.module_id, g.role_id);
+      if (resolved?.moduleId === 'hrms' && roles.has(resolved.role)) userIds.add(Number(g.id));
     }
   }
   if (!userIds.size) return [];

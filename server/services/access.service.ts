@@ -1,7 +1,8 @@
 import { and, eq } from 'drizzle-orm';
 import { db } from '../../src/db';
 import { employee_profiles, user_module_roles, users } from '../../src/db/schema';
-import { ModuleId, RoleId, normalizeModule, normalizeRole } from '../lib/roles';
+import { ModuleId, RoleId } from '../lib/roles';
+import { clearCatalogCache, loadCatalog, resolveGrant } from '../lib/roleCatalog';
 import { accountBlockReason } from './accountBlock';
 import { TtlCache } from '../lib/ttlCache';
 
@@ -53,26 +54,28 @@ export const cachedActiveGrants = (biometricId: string) => grantsCache.getOrLoad
 export function clearAccessCache(): void {
   accountCache.clear();
   grantsCache.clear();
+  clearCatalogCache();
 }
 
 export { accountBlockReason };
 
-/** Only grants with status = 'active' count. Inactive (revoked) grants are ignored everywhere. */
+/**
+ * Only grants with status = 'active' count, and only through an active row of the role catalog
+ * (table role_catalog): a role that is not in the catalog, or is switched off there, gives nothing.
+ */
 export async function loadActiveGrants(biometricId: string): Promise<ModuleGrants> {
   const rows = await db
     .select({ moduleId: user_module_roles.moduleId, roleId: user_module_roles.roleId, status: user_module_roles.status })
     .from(user_module_roles)
     .where(and(eq(user_module_roles.biometricId, biometricId), eq(user_module_roles.status, 'active')));
 
+  const catalog = await loadCatalog();
   const grants: ModuleGrants = {};
   for (const row of rows) {
-    const moduleId = normalizeModule(row.moduleId);
-    if (!moduleId) continue; // unknown module IDs grant nothing
-    // The module is listed even if its role names are module-specific (e.g. future
-    // PMS roles) so it still appears in the lobby; only recognised roles can be activated.
-    const list = (grants[moduleId] ||= []);
-    const roleId = normalizeRole(row.roleId);
-    if (roleId && !list.includes(roleId)) list.push(roleId);
+    const resolved = resolveGrant(catalog, row.moduleId, row.roleId);
+    if (!resolved) continue; // not a catalog role: grants nothing
+    const list = (grants[resolved.moduleId] ||= []);
+    if (!list.includes(resolved.role)) list.push(resolved.role);
   }
   return grants;
 }
