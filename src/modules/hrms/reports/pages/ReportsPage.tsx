@@ -304,7 +304,7 @@ export const ReportsPage: React.FC = () => {
                 options={data.reports.map((r) => ({ label: r.label, value: r.key }))} />
               {chosenReport && <p className="text-[11px] text-slate-500 mt-1.5">{chosenReport.description} {chosenReport.snapshot ? 'Shows the position on the day it is sent.' : 'Covers the day, the 7 days or the month before it is sent.'}</p>}
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className={`grid grid-cols-1 gap-4 ${form.frequency === 'daily' ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
               <Select label="How often" required value={form.frequency} searchable={false} error={errors.frequency} onChange={(v: string) => set('frequency', v as ScheduleInput['frequency'])} options={FREQUENCIES} />
               {form.frequency === 'weekly' && (
                 <Select label="Day of the week" required value={String(form.weekday ?? '')} searchable={false} error={errors.weekday} onChange={(v: string) => set('weekday', Number(v))}
@@ -327,12 +327,19 @@ export const ReportsPage: React.FC = () => {
               </div>
               {errors.formats && <p className="text-[11px] font-semibold text-error mt-1.5">{errors.formats}</p>}
             </div>
-            <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
-              <Select label="Send to roles" isMulti value={form.roles} placeholder="Everyone who holds the role" onChange={(v: string[]) => set('roles', v)} options={data.roles.map((r) => ({ label: r.label, value: r.id }))} />
-              <Select label="Send to people" isMulti value={form.userIds} placeholder="Select people" onChange={(v: string[]) => set('userIds', v)}
-                options={data.people.map((p) => ({ label: `${p.name} (${p.biometricId})${p.designation ? ` · ${p.designation}` : ''}`, value: p.id }))} />
+            <fieldset className="space-y-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+              <legend className="px-1 text-xs font-semibold text-slate-700">Send to <span className="text-rose-500">*</span> <span className="font-normal text-slate-500">(roles, people or both)</span></legend>
+              <div>
+                <Select label="Roles" isMulti value={form.roles} placeholder="Select roles" onChange={(v: string[]) => set('roles', v)} options={data.roles.map((r) => ({ label: r.label, value: r.id }))} />
+                <p className="text-[11px] text-slate-500 mt-1.5">Everyone who holds the role gets the report of the employees under them: a Reporting Manager / HoD their team, Administrator and Auditor everyone, a User only their own.</p>
+              </div>
+              <div>
+                <Select label="People" isMulti value={form.userIds} placeholder="Select people" onChange={(v: string[]) => set('userIds', v)}
+                  options={data.people.map((p) => ({ label: `${p.name} (${p.biometricId})${p.designation ? ` · ${p.designation}` : ''}`, value: p.id }))} />
+                <p className="text-[11px] text-slate-500 mt-1.5">Each person chosen here gets the report of all employees.</p>
+              </div>
               {errors.recipients && <p className="text-[11px] font-semibold text-error">{errors.recipients}</p>}
-            </div>
+            </fieldset>
             <Select label="Status" required value={form.status} searchable={false} error={errors.status} onChange={(v: string) => set('status', v as 'active' | 'paused')}
               options={[{ label: 'Active', value: 'active' }, { label: 'Paused', value: 'paused' }]} />
           </form>

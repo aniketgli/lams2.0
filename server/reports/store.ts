@@ -7,6 +7,7 @@ import { HttpError, notFound } from '../lib/http';
 import { ROLE_LABELS, type RoleId } from '../lib/roles';
 import { inTransaction } from '../lib/tx';
 import { loadCatalog, resolveGrant } from '../lib/roleCatalog';
+import { audienceKey, planAudience, type Recipient, type RoleHolder } from './audience';
 import { todayInIndia } from '../lib/validate';
 import { changedFields, writeMasterAuditSql } from '../masters/audit';
 import { REPORTS, REPORT_KEYS, findReport } from './catalog';
@@ -251,23 +252,38 @@ export async function listRuns(id: number): Promise<RunView[]> {
 // Sending
 // ---------------------------------------------------------------------------
 
-/** Registered emails of the chosen people and of everyone who holds a chosen HRMS role, without repeats. */
-export async function resolveRecipients(scheduleId: number): Promise<{ email: string; name: string }[]> {
+export interface ReportRecipient extends Recipient { email: string; name: string }
+
+/**
+ * Who gets the report and which version (see audience.ts): the chosen people get every employee, the holders of a
+ * chosen HRMS role the employees under them. Active accounts with a registered email only, each email once.
+ */
+export async function resolveRecipients(scheduleId: number): Promise<ReportRecipient[]> {
   const chosen = await rows('SELECT kind, user_id, role_id FROM report_schedule_recipients WHERE schedule_id = ?', [scheduleId]);
-  const userIds = new Set(chosen.filter((c) => c.kind === 'user').map((c) => Number(c.user_id)));
+  const people = chosen.filter((c) => c.kind === 'user').map((c) => Number(c.user_id));
   const roles = new Set(chosen.filter((c) => c.kind === 'role').map((c) => String(c.role_id)));
+  const holders: RoleHolder[] = [];
   if (roles.size) {
     const grants = await rows("SELECT u.id, g.module_id, g.role_id FROM user_module_roles g JOIN users u ON u.biometric_id = g.biometric_id WHERE LOWER(g.status) = 'active'");
     const catalog = await loadCatalog();
     for (const g of grants) {
       const resolved = resolveGrant(catalog, g.module_id, g.role_id);
-      if (resolved?.moduleId === 'hrms' && roles.has(resolved.role)) userIds.add(Number(g.id));
+      if (resolved?.moduleId === 'hrms') holders.push({ userId: Number(g.id), role: resolved.role });
     }
   }
-  if (!userIds.size) return [];
-  const people = await rows(`SELECT name, email FROM users WHERE id IN (${[...userIds].map(() => '?').join(',')}) AND LOWER(status) = 'active' AND email <> '' ORDER BY name`, [...userIds]);
+  const plan = planAudience(people, holders, roles);
+  if (!plan.size) return [];
+  const ids = [...plan.keys()];
+  const found = await rows(`SELECT id, name, email FROM users WHERE id IN (${ids.map(() => '?').join(',')}) AND LOWER(status) = 'active' AND email <> '' ORDER BY name`, ids);
   const seen = new Set<string>();
-  return people.filter((p) => { const k = String(p.email).toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; }).map((p) => ({ email: String(p.email), name: String(p.name) }));
+  const out: ReportRecipient[] = [];
+  for (const p of found) {
+    const key = String(p.email).toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ ...plan.get(Number(p.id))!, email: String(p.email), name: String(p.name) });
+  }
+  return out;
 }
 
 /** The scheduler acts for nobody: the audit log shows it as the "Report scheduler". */
@@ -285,31 +301,50 @@ export async function runSchedule(row: RowDataPacket, trigger: 'schedule' | 'man
   let result: RunResult;
   try {
     if (!def) throw new Error('This report no longer exists.');
-    const recipients = await resolveRecipients(id);
+    const all = await resolveRecipients(id);
+    // Activity logs are not split by team: only people who see everyone get them.
+    const recipients = def.everyoneOnly ? all.filter((r) => r.everyone) : all;
+    const skipped = all.length - recipients.length;
     if (!recipients.length) {
-      result = { status: 'no_recipients', sent: 0, message: 'There is nobody with a registered email to send it to.' };
+      result = { status: 'no_recipients', sent: 0, message: skipped ? 'This report goes only to Administrators, Auditors and people chosen by name.' : 'There is nobody with a registered email to send it to.' };
     } else {
-      const table = await def.build(period, systemRequest);
       const periodText = def.snapshot ? `as on ${pretty(today)}` : period.from === period.to ? pretty(period.from) : `${pretty(period.from)} to ${pretty(period.to)}`;
       const formats = String(row.formats).split(',').filter(Boolean) as ReportFormat[];
-      const attachments = renderReport(table, formats, `${def.label}_${def.snapshot ? today : period.from}${!def.snapshot && period.from !== period.to ? `_to_${period.to}` : ''}`,
-        [`${def.label} · ${periodText}`, `Sent automatically by WII Portal on ${pretty(today)}`]);
+      const baseName = `${def.label}_${def.snapshot ? today : period.from}${!def.snapshot && period.from !== period.to ? `_to_${period.to}` : ''}`;
+      // One table per audience: the full report once, a team report once per manager.
+      const builds = new Map<string, Promise<{ rows: number; attachments: ReturnType<typeof renderReport> }>>();
+      const versionFor = (r: ReportRecipient) => {
+        const key = audienceKey(r);
+        if (!builds.has(key)) {
+          builds.set(key, def.build(period, systemRequest, r.viewer).then((table) => ({
+            rows: table.rows.length,
+            attachments: renderReport(table, formats, baseName, [`${def.label} · ${periodText}${r.everyone ? '' : ` · ${r.name}'s team`}`, `Sent automatically by WII Portal on ${pretty(today)}`]),
+          })));
+        }
+        return builds.get(key)!;
+      };
       let sent = 0;
       const failures: string[] = [];
       for (const to of recipients) {
-        const letter = await brandedMail({
-          title: 'Scheduled report', name: to.name,
-          intro: `Please find the ${def.label} report attached.`,
-          details: [['Report', def.label], ['Period', periodText], ['Rows', table.rows.length]],
-        });
-        const mail = await EmailService.sendEmail({
-          to: to.email, toName: to.name, subject: `${String(row.name)} — ${periodText}`, category: 'REPORT', eventType: 'SCHEDULED_REPORT', referenceId: `report-${id}`, attachments: [...attachments, ...letter.logo],
-          html: letter.html, text: letter.text,
-        });
-        if (mail.status === 'delivered') sent += 1;
-        else failures.push(mail.message);
+        try {
+          const version = await versionFor(to);
+          const letter = await brandedMail({
+            title: 'Scheduled report', name: to.name,
+            intro: `Please find the ${def.label} report attached${to.everyone ? '' : ' for the employees under you'}.`,
+            details: [['Report', def.label], ['Period', periodText], ['Covers', to.everyone ? 'All employees' : 'Employees under you'], ['Rows', version.rows]],
+          });
+          const mail = await EmailService.sendEmail({
+            to: to.email, toName: to.name, subject: `${String(row.name)} — ${periodText}`, category: 'REPORT', eventType: 'SCHEDULED_REPORT', referenceId: `report-${id}`, attachments: [...version.attachments, ...letter.logo],
+            html: letter.html, text: letter.text,
+          });
+          if (mail.status === 'delivered') sent += 1;
+          else failures.push(mail.message);
+        } catch (error) {
+          failures.push(error instanceof Error ? error.message : 'The report could not be made.');
+        }
       }
-      result = sent === recipients.length ? { status: 'sent', sent, message: `Sent to ${sent} ${sent === 1 ? 'person' : 'people'}.` }
+      const note = skipped ? ` ${skipped} role holder(s) left out: this report goes only to people who see everyone.` : '';
+      result = sent === recipients.length ? { status: 'sent', sent, message: `Sent to ${sent} ${sent === 1 ? 'person' : 'people'}.${note}`.slice(0, 450) }
         : sent === 0 ? { status: 'failed', sent, message: (failures[0] ?? 'The email could not be sent.').slice(0, 450) }
         : { status: 'partial', sent, message: `Sent to ${sent} of ${recipients.length}. ${failures[0] ?? ''}`.trim().slice(0, 450) };
     }
