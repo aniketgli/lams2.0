@@ -38,6 +38,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // Which links appear comes from the same page map the router enforces.
   const show = (pageId: string) => canOpenPage(pageId, currentUser.role);
+  const onlyBalance = currentUser.role === 'leave_balance_manager';
 
   const handleNavClick = (id: string) => {
     setActiveTab(id);
@@ -82,7 +83,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex-1 flex flex-col min-h-0 overflow-y-auto">
           <nav className="p-3 space-y-1 flex-1 overflow-y-auto">
             {/* If in LAMS: show LAMS 2.0 navigation items */}
-            {activeModule === 'lams' && (
+            {/* Leave Balance Manager: that one page only, as a single link. */}
+            {activeModule === 'lams' && onlyBalance && (
+              <button
+                onClick={() => {
+                  setExpandedGroup(null);
+                  handleNavClick('leave_balance');
+                }}
+                className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-medium transition-all text-left cursor-pointer ${
+                  activeTab === 'leave_balance' || activeTab === 'leave_matrix'
+                    ? 'bg-primary/10 text-primary font-bold border-l-3 border-primary shadow-2xs'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                }`}
+              >
+                <PageIcon id="leave_balance" className={`w-4 h-4 shrink-0 ${activeTab === 'leave_balance' || activeTab === 'leave_matrix' ? 'text-primary' : 'text-slate-400'}`} />
+                <span>Leave Balance</span>
+              </button>
+            )}
+            {activeModule === 'lams' && !onlyBalance && (
               <>
               
 
