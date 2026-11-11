@@ -29,7 +29,14 @@ if (!process.execArgv.some(arg => arg.includes('tsx')) && !process.env.TSX_SPAWN
     const listenHost = '0.0.0.0';
 
     httpServer.listen(port, listenHost, async () => {
-      console.log(`Server listening on http://${listenHost}:${port}`);
+      // 0.0.0.0 means "every network card": print the addresses people actually open.
+      const { networkInterfaces } = await import('node:os');
+      const lan = Object.values(networkInterfaces()).flat()
+        .filter((a): a is NonNullable<typeof a> => Boolean(a) && a!.family === 'IPv4' && !a!.internal)
+        .map((a) => a.address);
+      console.log('Server is running. Open it at:');
+      console.log(`  This computer:  http://localhost:${port}`);
+      for (const ip of lan) console.log(`  On the network: http://${ip}:${port}`);
       // Background jobs. (This file is what `npm run dev` / `npm start` run; without these lines queued notification
       // emails waited forever and scheduled reports were never sent.)
       const { startReportScheduler } = await import('./server/reports/scheduler.ts');
