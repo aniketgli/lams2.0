@@ -6,7 +6,7 @@ import { asyncHandler, badRequest, forbidden, notFound, saveSession } from '../l
 import { ModuleId, ROLE_LABELS, RoleId, normalizeModule, normalizeRole, pickDefaultRole } from '../lib/roles';
 import { PATTERNS, Validator } from '../lib/validate';
 import { requireActiveRole, requireAuth } from '../middleware/auth.middleware';
-import { buildSessionPayload } from '../services/session.service';
+import { buildSessionPayload } from './session.service';
 import { replaceRoleGrants } from '../employees/store';
 
 const router = Router();

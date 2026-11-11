@@ -1,5 +1,5 @@
 import { notifyRolesChanged } from '../notifications/events';
-import { clearAccessCache } from '../services/access.service';
+import { clearAccessCache } from '../auth/access.service';
 import type { Request } from 'express';
 import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
 import { pool } from '../../src/db';
