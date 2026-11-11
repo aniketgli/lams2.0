@@ -983,9 +983,12 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
   // Toast State
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastIsError, setToastIsError] = useState(false);
   const [statusChangeError, setStatusChangeError] = useState<string | null>(null);
 
-  const showToast = (msg: string) => {
+  /** kind 'error' shows a red cross instead of the green tick. */
+  const showToast = (msg: string, kind: 'ok' | 'error' = 'ok') => {
+    setToastIsError(kind === 'error');
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
   };
@@ -1213,11 +1216,11 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
     if (resetPassForm.mode === 'custom') {
       if (!resetPassForm.customPassword || resetPassForm.customPassword.length < 8) {
-        showToast('Custom password must be at least 8 characters, with a letter and a number.');
+        showToast('Custom password must be at least 8 characters, with a letter and a number.', 'error');
         return;
       }
       if (resetPassForm.customPassword !== resetPassForm.confirmPassword) {
-        showToast('Passwords do not match. Please re-enter.');
+        showToast('Passwords do not match. Please re-enter.', 'error');
         return;
       }
     }
@@ -1225,7 +1228,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     const biometricId = String((userToResetPasswordForm as UserType & { biometricId?: string; biometric_id?: string }).biometricId ??
       (userToResetPasswordForm as UserType & { biometric_id?: string }).biometric_id ?? '').trim();
     if (!/^\d{4}$/.test(biometricId)) {
-      showToast('Cannot reset password: this user has no valid biometric ID.');
+      showToast('Cannot reset password: this user has no valid biometric ID.', 'error');
       return;
     }
 
@@ -1242,7 +1245,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result?.success) {
-        showToast(result?.message || result?.error || 'Password reset failed.');
+        showToast(result?.message || result?.error || 'Password reset failed.', 'error');
         return;
       }
       const target = userToResetPasswordForm;
@@ -1255,7 +1258,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       showToast(result.message || `Password successfully reset for ${target.name}`);
     } catch (error) {
       console.error('Password reset request failed:', error);
-      showToast('Unable to reach the server. Password was not confirmed as reset.');
+      showToast('Unable to reach the server. Password was not confirmed as reset.', 'error');
     }
   };
 
@@ -1586,7 +1589,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-5 right-5 z-[100] bg-slate-900 text-white px-4 py-3 rounded-lg shadow-xl text-xs font-semibold flex items-center space-x-2 animate-in fade-in slide-in-from-bottom-2 border border-slate-700">
-          <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+          {toastIsError ? <X className="w-4 h-4 text-rose-400 shrink-0" /> : <Check className="w-4 h-4 text-emerald-400 shrink-0" />}
           <span>{toastMessage}</span>
         </div>
       )}
