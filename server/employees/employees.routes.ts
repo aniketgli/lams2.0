@@ -13,6 +13,7 @@ import { generateTemporaryPassword, passwordProblem } from '../lib/passwordPolic
 import { defaultPasswordHash } from '../masters/accountSettings';
 import { normalizeModule } from '../lib/roles';
 import { destroyUserSessions } from '../lib/sessionStore';
+import { clearAccessCache } from '../services/access.service';
 import { PATTERNS, Validator, todayInIndia } from '../lib/validate';
 import {
   Grant, Viewer, auditPasswordReset, createEmployee, deleteEmployee, getEmployee, listEmployees,
