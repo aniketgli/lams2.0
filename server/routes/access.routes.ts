@@ -3,7 +3,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '../../src/db';
 import { user_module_roles, users } from '../../src/db/schema';
 import { asyncHandler, badRequest, forbidden, notFound, saveSession } from '../lib/http';
-import { ModuleId, ROLE_LABELS, RoleId, normalizeModule, normalizeRole, pickDefaultRole } from '../lib/roles';
+import { ModuleId, RoleId, normalizeModule, normalizeRole, pickDefaultRole } from '../lib/roles';
 import { PATTERNS, Validator } from '../lib/validate';
 import { requireActiveRole, requireAuth } from '../middleware/auth.middleware';
 import { buildSessionPayload } from '../services/session.service';
@@ -110,11 +110,8 @@ router.put('/users/:biometricId/roles', requireHrmsAdmin, asyncHandler(async (re
     wanted.set(`${moduleId}::${roleId}`, { moduleId, roleId });
   }
 
-  // Do not let an administrator lock themselves out of HRMS administration.
-  if (target === actor) {
-    const keepsAdmin = [...wanted.values()].some((a) => a.moduleId === 'hrms' && normalizeRole(a.roleId) === 'administrator');
-    if (!keepsAdmin) throw badRequest(`You cannot remove your own HRMS ${ROLE_LABELS.administrator} role.`);
-  }
+  // An administrator's own roles are changed by another administrator.
+  if (target === actor) throw forbidden('You cannot change your own roles. Ask another administrator.');
 
   await replaceRoleGrants(req, target, [...wanted.values()]);
 

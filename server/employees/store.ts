@@ -395,6 +395,8 @@ async function updateEmployeeImpl(req: Request, id: number, body: unknown): Prom
       if (!existing) throw notFound('Employee account not found.');
       const before = existing.record;
       if (before.isSystem) throw systemAccountError();
+      // An administrator's own profile is edited by another administrator.
+      if (before.biometricId === actor) throw new HttpError(403, 'You cannot edit your own profile. Ask another administrator.', 'SELF');
 
       const sentId = body && typeof body === 'object' ? String((body as Record<string, unknown>).biometricId ?? '').trim() : '';
       if (sentId && sentId !== before.biometricId) {

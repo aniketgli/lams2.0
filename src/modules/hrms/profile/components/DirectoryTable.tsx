@@ -19,13 +19,15 @@ export interface DirectoryTableProps {
   onView: (u: User) => void;
   /** Administrators only. */
   onEdit?: (u: User) => void;
+  /** Rows the edit button is shown on (e.g. not the administrator's own). Default: all. */
+  canEdit?: (u: User) => boolean;
   onHistory?: (u: User) => void;
 }
 
 import { actionBtn } from '../../../../shared/components/actionStyles';
 const iconButton = actionBtn('neutral');
 
-export const DirectoryTable: React.FC<DirectoryTableProps> = ({ rows, typeLabel, instituteName, managerName, onView, onEdit, onHistory }) => {
+export const DirectoryTable: React.FC<DirectoryTableProps> = ({ rows, typeLabel, instituteName, managerName, onView, onEdit, canEdit, onHistory }) => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   useEffect(() => setPage(1), [rows]);
@@ -88,7 +90,7 @@ export const DirectoryTable: React.FC<DirectoryTableProps> = ({ rows, typeLabel,
               <Briefcase className="w-3.5 h-3.5" />
             </button>
           )}
-          {onEdit && !u.isSystem && (
+          {onEdit && !u.isSystem && (!canEdit || canEdit(u)) && (
             <button type="button" className={iconButton} onClick={() => onEdit(u)} title="Edit profile" aria-label={`Edit ${u.name}`}>
               <Edit3 className="w-3.5 h-3.5" />
             </button>

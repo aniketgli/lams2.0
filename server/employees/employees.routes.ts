@@ -43,6 +43,16 @@ function accountId(raw: unknown): number {
 // ---------------------------------------------------------------------------
 // The signed-in employee's own profile and photo (any role).
 // ---------------------------------------------------------------------------
+/**
+ * An administrator cannot change their own roles or password from the admin screens; another
+ * administrator does it. (Their own photo, and changing their own password at sign-in / from the
+ * account menu, are not affected.)
+ */
+function selfChangeError(what: 'roles' | 'password'): HttpError {
+  const text = what === 'roles' ? 'your own roles' : 'your own password from User Controls';
+  return new HttpError(403, `You cannot change ${text}. Ask another administrator.`, 'SELF');
+}
+
 router.get('/me/profile', isAuthenticated, asyncHandler(async (req, res) => {
   res.json(await getMyProfile(viewerOf(req)));
 }));
@@ -254,10 +264,7 @@ router.put('/employees/:userId/module-roles', isAdmin, asyncHandler(async (req, 
   if (wanted.length > 100) throw badRequest('Too many roles.');
   const [target] = await db.select({ biometricId: users.biometricId }).from(users).where(eq(users.id, accountId(req.params.userId))).limit(1);
   if (!target) throw notFound('User account not found.');
-  if (target.biometricId === req.auth!.account.biometricId) {
-    const keepsAdmin = wanted.some((g) => g.moduleId === 'hrms' && /admin/i.test(g.roleId));
-    if (!keepsAdmin) throw badRequest('You cannot remove your own HRMS Administrator role.');
-  }
+  if (target.biometricId === req.auth!.account.biometricId) throw selfChangeError('roles');
   await replaceRoleGrants(req, target.biometricId, wanted);
   res.json({ success: true, moduleRoles });
 }));
@@ -279,7 +286,7 @@ router.post('/employees/:biometricId/reset-password', isAdmin, asyncHandler(asyn
   if (!PATTERNS.biometricId.test(biometricId)) throw badRequest('A valid 4-digit biometric ID is required.');
   const mode = req.body?.mode === 'custom' ? 'custom' : req.body?.mode === 'default' ? 'default' : 'auto';
   const reason = String(req.body?.reason || '').trim().slice(0, 500);
-  if (req.auth!.account.biometricId === biometricId) throw badRequest('You cannot reset your own password from User Controls.');
+  if (req.auth!.account.biometricId === biometricId) throw selfChangeError('password');
 
   const [target] = await db.select({ id: users.id, name: users.name, email: users.email, biometricId: users.biometricId, isSystem: users.isSystem })
     .from(users).where(eq(users.biometricId, biometricId)).limit(1);
