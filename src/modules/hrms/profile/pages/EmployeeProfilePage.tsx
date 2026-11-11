@@ -762,7 +762,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
   const handleOpenEditRoles = async (u: UserType) => {
     if (u.id === currentUser.id) {
-      showToast('Administrators cannot edit their own roles.');
+      showToast('You cannot change your own roles. Ask another administrator.', 'error');
       return;
     }
 
@@ -1003,6 +1003,10 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
   /** Opens the same form used for new employees, filled with the saved profile. */
   const openEditEmployee = (u: UserType) => {
+    if (u.id === currentUser.id) {
+      showToast('You cannot edit your own profile. Ask another administrator.', 'error');
+      return;
+    }
     const saved = u as UserType & { permanentEmploymentType?: 'Direct' | 'Deputation'; enrolledThrough?: string };
     setNewUserForm({
       name: u.name || '',
@@ -1197,7 +1201,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
   const handleTriggerResetPassword = (u: UserType) => {
     if (u.id === currentUser.id) {
-      showToast('Administrators cannot reset their own password from user controls.');
+      showToast('You cannot reset your own password here. Ask another administrator.', 'error');
       return;
     }
     setUserToResetPasswordForm(u);
@@ -1708,6 +1712,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                   managerName={(id) => (id && users.find((m) => m.id === id)?.name) || '—'}
                   onView={(u) => { setSelectedUserId(u.id); setDirectoryViewMode('detail'); }}
                   onEdit={isAdmin ? (u) => openEditEmployee(u) : undefined}
+                  canEdit={(u) => u.id !== currentUser.id}
                   onHistory={isAdmin ? (u) => setHistoryUser(u) : undefined}
                 />
               ) : (
@@ -1857,7 +1862,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             </button>
                           )}
 
-                          {isAdmin && !u.isSystem && (
+                          {/* An administrator's own profile is edited by another administrator. */}
+                          {isAdmin && !u.isSystem && u.id !== currentUser.id && (
                             <button
                               onClick={() => {
                                 openEditEmployee(u);
@@ -2015,9 +2021,9 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
                         {/* 2. Role & Module Column - Clean, Compact Inline Module Display */}
                         <td
-                          onClick={() => handleOpenEditRoles(u)}
-                          title="Click to view/edit Role & Module Matrix"
-                          className="px-3.5 py-3 align-middle cursor-pointer hover:bg-slate-100/60 transition-colors group"
+                          onClick={isSelf ? undefined : () => handleOpenEditRoles(u)}
+                          title={isSelf ? 'Your own roles are changed by another administrator' : 'Click to view/edit Role & Module Matrix'}
+                          className={`px-3.5 py-3 align-middle transition-colors group ${isSelf ? '' : 'cursor-pointer hover:bg-slate-100/60'}`}
                         >
                           <div className="flex flex-wrap items-center gap-1.5 max-w-full">
                             {(() => {
@@ -2100,8 +2106,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                               <Briefcase className="w-3.5 h-3.5" />
                             </button>
 
-                            {/* Edit User Roles & 2D Matrix Button */}
-                            {isAdmin && (
+                            {/* Edit User Roles & 2D Matrix Button: not on one's own account */}
+                            {isAdmin && !isSelf && (
                               <button
                                 onClick={() => handleOpenEditRoles(u)}
                                 title="Configure User Roles & 2D Matrix Permissions"
@@ -2111,14 +2117,16 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                               </button>
                             )}
 
-                            {/* Reset Password */}
-                            <button
-                              onClick={() => handleTriggerResetPassword(u)}
-                              title="Reset User Password"
-                              className={actionBtn('neutral')}
-                            >
-                              <KeyRound className="w-3.5 h-3.5" />
-                            </button>
+                            {/* Reset Password: not on one's own account */}
+                            {!isSelf && (
+                              <button
+                                onClick={() => handleTriggerResetPassword(u)}
+                                title="Reset User Password"
+                                className={actionBtn('neutral')}
+                              >
+                                <KeyRound className="w-3.5 h-3.5" />
+                              </button>
+                            )}
 
                             {/* Toggle Active/Deactive */}
                             {isAdmin && !isSelf && (
