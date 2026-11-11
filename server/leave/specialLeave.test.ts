@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { addMonths, matchPurpose, paternityEnd, parsePurposes, paternityDaysProblem, paternityProblems, paternityWindow, purposesProblem } from './specialLeave';
+import { addMonths, childCareProblems, childCareSpells, matchPurpose, maternityDaysProblem, maternityEnd, maternityProblems, paternityEnd, parsePurposes, paternityDaysProblem, paternityProblems, paternityWindow, purposesProblem } from './specialLeave';
 
 describe('purposes', () => {
   test('one per line, trimmed, blanks and repeats dropped', () => {
@@ -64,5 +64,66 @@ describe('paternity leave', () => {
     expect(paternityDaysProblem(0, 15)).toBeNull();
     expect(paternityDaysProblem(10, 5)).toBeNull();
     expect(paternityDaysProblem(10, 6)).toContain('5 left');
+  });
+});
+
+describe('maternity leave', () => {
+  const today = '2026-11-11';
+  const birth = { event: 'delivery' as const, eventDate: '2026-12-10', birthDate: null, survivingChildren: 1 };
+
+  test('birth: 180 days in one go, less than two surviving children', () => {
+    expect(maternityEnd('2026-12-01')).toBe('2027-05-29');
+    expect(maternityProblems(birth, '2026-12-01', '2027-05-29', today)).toEqual({});
+    expect(maternityProblems({ ...birth, survivingChildren: 2 }, '2026-12-01', '2027-05-29', today).survivingChildren).toContain('less than two');
+    expect(maternityProblems({ ...birth, survivingChildren: null }, '2026-12-01', '2027-05-29', today).survivingChildren).toBeDefined();
+  });
+
+  test('adoption: child under one year, starts on the date of adoption', () => {
+    const adoption = { event: 'adoption' as const, eventDate: '2026-12-01', birthDate: '2026-06-01', survivingChildren: 0 };
+    expect(maternityProblems(adoption, '2026-12-01', maternityEnd('2026-12-01'), today)).toEqual({});
+    expect(maternityProblems(adoption, '2026-12-03', maternityEnd('2026-12-03'), today).startDate).toContain('date of adoption');
+    expect(maternityProblems({ ...adoption, birthDate: '2025-11-01' }, '2026-12-01', '2027-05-29', today).childBirthDate).toContain('less than one year');
+  });
+
+  test('abortion / miscarriage: after it happened, at most 45 days; surviving children not asked', () => {
+    const loss = { event: 'loss' as const, eventDate: '2026-11-05', birthDate: null, survivingChildren: null };
+    expect(maternityProblems(loss, '2026-11-05', '2026-12-19', today)).toEqual({});
+    expect(maternityProblems(loss, '2026-11-05', '2026-12-20', today).endDate).toContain('45');
+    expect(maternityProblems(loss, '2026-11-04', '2026-11-20', today).startDate).toContain('on or after');
+    expect(maternityProblems({ ...loss, eventDate: '2026-11-20' }, '2026-11-20', '2026-11-30', today).childEventDate).toContain('after');
+  });
+
+  test('the kind must be chosen', () => {
+    expect(maternityProblems({ event: null, eventDate: null, birthDate: null, survivingChildren: null }, '2026-12-01', '2026-12-10', today).childEvent).toBeDefined();
+  });
+
+  test('180 days for one birth / adoption', () => {
+    expect(maternityDaysProblem(0, 180)).toBeNull();
+    expect(maternityDaysProblem(10, 180)).toContain('170 left');
+  });
+});
+
+describe('child care leave', () => {
+  const today = '2026-11-11';
+  const care = { event: 'care' as const, eventDate: null, birthDate: '2015-03-10', survivingChildren: null, childOrder: 1 as const, childDisabled: false, singleParent: false };
+
+  test('two eldest children below 18 years', () => {
+    expect(childCareProblems(care, '2026-12-01', today, false)).toEqual({});
+    expect(childCareProblems({ ...care, childOrder: null }, '2026-12-01', today, false).childOrder).toContain('two eldest');
+    expect(childCareProblems({ ...care, birthDate: '2008-11-30' }, '2026-12-01', today, false).childBirthDate).toContain('18');
+  });
+
+  test('a child with a disability: no age limit', () => {
+    expect(childCareProblems({ ...care, birthDate: '2000-01-01', childDisabled: true }, '2026-12-01', today, false)).toEqual({});
+  });
+
+  test('only with prior approval: not today or earlier (the administrator may enter an old one)', () => {
+    expect(childCareProblems(care, today, today, false).startDate).toContain('after today');
+    expect(childCareProblems(care, today, today, true)).toEqual({});
+  });
+
+  test('3 spells a year, 6 for a single mother', () => {
+    expect(childCareSpells(false)).toBe(3);
+    expect(childCareSpells(true)).toBe(6);
   });
 });

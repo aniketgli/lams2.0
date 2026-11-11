@@ -65,11 +65,17 @@ const statusBy = (r: LeaveRequest) =>
 
 const EMPTY_FORM: LeaveInput = { userId: '', leaveTypeId: '', startDate: '', endDate: '', startSession: 'full', endSession: 'full', reason: '', stationLeave: false,
   ltcType: 'none', encashLtc: false, encashDays: 10, contactAddress: '', compOffDates: [], availPrefix: false, prefixFrom: '', prefixTo: '', availSuffix: false, suffixFrom: '', suffixTo: '', certificateFile: null,
-  purpose: '', childEvent: '', childEventDate: '', childBirthDate: '', survivingChildren: '' };
+  purpose: '', childEvent: '', childEventDate: '', childBirthDate: '', survivingChildren: '', childOrder: '', childDisabled: false, singleParent: false };
 
 /** Paternity Leave (code PAT): taken from 15 days before up to 6 months after the date of delivery, or up to 6 months after the date of adoption. */
 const PATERNITY_CODE = 'PAT';
 const PATERNITY_DAYS = 15;
+/** Maternity Leave (code MAT): 180 days in one go for a birth / adoption; up to 45 days for abortion / miscarriage. Child Care Leave: code CCL. */
+const MATERNITY_CODE = 'MAT';
+const MATERNITY_DAYS = 180;
+const MATERNITY_LOSS_DAYS = 45;
+const CHILD_CARE_CODE = 'CCL';
+const NO_CHILD = { childEvent: '' as const, childEventDate: '', childBirthDate: '', survivingChildren: '', childOrder: '', childDisabled: false, singleParent: false };
 function plusMonths(date: string, n: number): string {
   const [y, m, d] = date.split('-').map(Number);
   const first = new Date(Date.UTC(y, m - 1 + n, 1));
@@ -186,7 +192,8 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
     setForm({ userId: r.userId, leaveTypeId: r.leaveTypeId, startDate: r.startDate, endDate: r.endDate, startSession: r.startSession, endSession: r.endSession, reason: r.reason, stationLeave: r.stationLeave,
       ltcType: r.ltcType, encashLtc: r.encashDays > 0, encashDays: r.encashDays || 10, contactAddress: r.contactAddress, compOffDates: r.compOffDates,
       availPrefix: Boolean(r.prefixFrom), prefixFrom: r.prefixFrom ?? '', prefixTo: r.prefixTo ?? '', availSuffix: Boolean(r.suffixFrom), suffixFrom: r.suffixFrom ?? '', suffixTo: r.suffixTo ?? '', certificateFile: null,
-      purpose: r.purpose ?? '', childEvent: r.childEvent ?? '', childEventDate: r.childEventDate ?? '', childBirthDate: r.childBirthDate ?? '', survivingChildren: r.survivingChildren === null ? '' : String(r.survivingChildren) });
+      purpose: r.purpose ?? '', childEvent: r.childEvent ?? '', childEventDate: r.childEventDate ?? '', childBirthDate: r.childBirthDate ?? '', survivingChildren: r.survivingChildren === null ? '' : String(r.survivingChildren),
+      childOrder: r.childOrder ? String(r.childOrder) : '', childDisabled: r.childDisabled, singleParent: r.singleParent });
     setFormErrors({}); setFormMessage(null); setPreview(null); setFormOpen(true);
   };
 
@@ -252,6 +259,12 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
     return { from, to, lastStart: plusDays(to, -(PATERNITY_DAYS - 1)) };
   })() : null;
 
+  // Maternity Leave: birth / adoption is 180 days in one go (To worked out); abortion / miscarriage up to 45 days.
+  const isMat = type?.code === MATERNITY_CODE;
+  const matFixed = isMat && (form.childEvent === 'delivery' || form.childEvent === 'adoption');
+  // Child Care Leave: which of the two eldest children; it cannot start today or earlier (prior approval).
+  const isCcl = type?.code === CHILD_CARE_CODE;
+
   // Restricted holiday: one day chosen from the restricted holidays added in the Holiday Calendar.
   const isRh = type?.code === 'RH';
   const [rhList, setRhList] = useState<Array<{ date: string; name: string }>>([]);
@@ -271,7 +284,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
       leaveApi.preview({ ...form, exceptId: editing?.id }).then((p) => { if (!cancelled) setPreview(p); }).catch(() => { if (!cancelled) setPreview(null); });
     }, 300);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [formOpen, isAdmin, editing?.id, form.userId, form.leaveTypeId, form.startDate, form.endDate, form.startSession, form.endSession, form.compOffDates.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [formOpen, isAdmin, editing?.id, form.userId, form.leaveTypeId, form.startDate, form.endDate, form.startSession, form.endSession, form.compOffDates.join(','), form.childEvent]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The server moves the dates off weekly offs / holidays at the start or end of the leave; those days become the prefix / suffix.
   useEffect(() => {
@@ -302,7 +315,8 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
   }, [preview]);
 
   const encashing = form.ltcType === 'ltc' && form.encashLtc && Number.isInteger(form.encashDays) && form.encashDays > 0 ? form.encashDays : 0;
-  const needsCertificate = Boolean(type && (type.certificateRequired || (type.medicalCertDays > 0 && preview && preview.days > type.medicalCertDays)));
+  const needsCertificate = Boolean(type && (type.certificateRequired || (type.medicalCertDays > 0 && preview && preview.days > type.medicalCertDays)
+    || (type.code === MATERNITY_CODE && form.childEvent === 'loss')));
   const certInput = React.useRef<HTMLInputElement>(null);
   const pickCertificate = (file: File | undefined) => {
     if (!file) return;
@@ -625,7 +639,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
               <div className="sm:col-span-2 relative">
                 <Select label="Leave type" required value={baseType?.id ?? ''} searchable placeholder="Select leave type" error={formErrors.leaveTypeId}
                   onChange={(v: string) => {
-                    setForm((f) => ({ ...f, leaveTypeId: v, ltcType: 'none', encashLtc: false, availPrefix: false, availSuffix: false, stationLeave: false, compOffDates: [], purpose: '', childEvent: '', childEventDate: '', childBirthDate: '', survivingChildren: '', ...(isRh || data?.types.find((t) => t.id === v)?.code === 'RH' ? { startDate: '', endDate: '' } : {}) }));
+                    setForm((f) => ({ ...f, leaveTypeId: v, ltcType: 'none', encashLtc: false, availPrefix: false, availSuffix: false, stationLeave: false, compOffDates: [], purpose: '', ...NO_CHILD, ...(data?.types.find((t) => t.id === v)?.code === CHILD_CARE_CODE ? { childEvent: 'care' as const } : {}), ...(isRh || data?.types.find((t) => t.id === v)?.code === 'RH' ? { startDate: '', endDate: '' } : {}) }));
                     setFormErrors({});
                     setFormMessage(null);
                   }}
@@ -683,6 +697,94 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
                   </div>
                   <div>
                     <Input label={`To date (${PATERNITY_DAYS} days, worked out)`} value={form.endDate ? formatDate(form.endDate) : ''} placeholder="Set by the From date" disabled readOnly error={formErrors.endDate} />
+                  </div>
+                </>
+              ) : isMat ? (
+                <>
+                  {/* Row 2: what the leave is for; then its date and the surviving children; then From and To. */}
+                  <div className="sm:col-span-2">
+                    <Select label="Maternity Leave for" required value={form.childEvent} searchable={false} placeholder="Select" error={formErrors.childEvent}
+                      onChange={(v: string) => setForm((f) => ({ ...f, ...NO_CHILD, childEvent: v as LeaveInput['childEvent'], startDate: '', endDate: '', startSession: 'full', endSession: 'full' }))}
+                      options={[
+                        { value: 'delivery', label: `Birth of a child (${MATERNITY_DAYS} days)` },
+                        { value: 'adoption', label: `Adoption of a child below one year (${MATERNITY_DAYS} days)` },
+                        { value: 'loss', label: `Abortion / miscarriage (up to ${MATERNITY_LOSS_DAYS} days, once in service, medical certificate)` },
+                      ]} />
+                  </div>
+                  {form.childEvent && (
+                    <div>
+                      <AppDatePicker label={form.childEvent === 'adoption' ? 'Date of adoption' : form.childEvent === 'loss' ? 'Date of abortion / miscarriage' : 'Date of delivery (expected date if not yet)'} required
+                        error={formErrors.childEventDate} value={form.childEventDate} placeholder="Select date" maxDate={form.childEvent === 'loss' ? localDate(0) : undefined}
+                        onChange={(v) => setForm((f) => ({ ...f, childEventDate: v, ...(f.childEvent === 'adoption' && v ? { startDate: v, endDate: plusDays(v, MATERNITY_DAYS - 1) } : {}) }))} className="w-full" />
+                    </div>
+                  )}
+                  {(form.childEvent === 'delivery' || form.childEvent === 'adoption') && (
+                    <div>
+                      <Select label="Surviving children (before this child)" required value={form.survivingChildren} searchable={false} placeholder="Select" error={formErrors.survivingChildren}
+                        onChange={(v: string) => setField('survivingChildren', v)} options={[{ value: '0', label: 'None' }, { value: '1', label: 'One' }, { value: '2', label: 'Two or more' }]} />
+                    </div>
+                  )}
+                  {form.childEvent === 'loss' && <div className="hidden sm:block" />}
+                  {form.childEvent === 'adoption' && (
+                    <>
+                      <div>
+                        <AppDatePicker label="Child's date of birth" required error={formErrors.childBirthDate} value={form.childBirthDate} placeholder="Select date"
+                          maxDate={form.childEventDate || undefined} onChange={(v) => setField('childBirthDate', v)} className="w-full" />
+                      </div>
+                      <div className="hidden sm:block" />
+                    </>
+                  )}
+                  {form.childEvent && (
+                    matFixed ? (
+                      <>
+                        <div>
+                          <AppDatePicker label="From date (start date)" required error={formErrors.startDate} value={form.startDate} marks={marks}
+                            placeholder={form.childEvent === 'adoption' ? 'The date of adoption' : 'Select date'} disabled={form.childEvent === 'adoption'}
+                            onChange={(v) => setForm((f) => ({ ...f, startDate: v, endDate: v ? plusDays(v, MATERNITY_DAYS - 1) : '', startSession: 'full', endSession: 'full' }))} className="w-full" />
+                        </div>
+                        <div>
+                          <Input label={`To date (${MATERNITY_DAYS} days, worked out)`} value={form.endDate ? formatDate(form.endDate) : ''} placeholder="Set by the From date" disabled readOnly error={formErrors.endDate} />
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div>
+                          <AppDatePicker label="From date (start date)" required error={formErrors.startDate} value={form.startDate} placeholder="Select date"
+                            minDate={form.childEventDate || undefined} marks={marks}
+                            onChange={(v) => setForm((f) => ({ ...f, startDate: v, endDate: !f.endDate || f.endDate < v ? v : f.endDate }))} className="w-full" />
+                        </div>
+                        <div>
+                          <AppDatePicker label={`To date (at most ${MATERNITY_LOSS_DAYS} days)`} required error={formErrors.endDate} value={form.endDate} placeholder="Select date"
+                            minDate={form.startDate || undefined} maxDate={form.startDate ? plusDays(form.startDate, MATERNITY_LOSS_DAYS - 1) : undefined} marks={marks}
+                            onChange={(v) => setField('endDate', v)} className="w-full" />
+                        </div>
+                      </>
+                    )
+                  )}
+                </>
+              ) : isCcl ? (
+                <>
+                  {/* Row 2: the child; row 3: From and To (it cannot start today or earlier). */}
+                  <div>
+                    <Select label="For which child" required value={form.childOrder} searchable={false} placeholder="Select" error={formErrors.childOrder}
+                      onChange={(v: string) => setForm((f) => ({ ...f, childOrder: v, childEvent: 'care' }))}
+                      options={[{ value: '1', label: 'Eldest surviving child' }, { value: '2', label: 'Second eldest surviving child' }]} />
+                  </div>
+                  <div>
+                    <AppDatePicker label="Child's date of birth" required error={formErrors.childBirthDate} value={form.childBirthDate} placeholder="Select date" maxDate={localDate(0)}
+                      onChange={(v) => setForm((f) => ({ ...f, childBirthDate: v, childEvent: 'care' }))} className="w-full" />
+                  </div>
+                  <div className="sm:col-span-2 flex flex-wrap items-center gap-x-6 gap-y-2">
+                    <Checkbox label="The child has a disability (no age limit)" checked={form.childDisabled} onChange={(e) => setForm((f) => ({ ...f, childDisabled: e.target.checked, childEvent: 'care' }))} />
+                    <Checkbox label="I am a single mother (6 spells a year)" checked={form.singleParent} onChange={(e) => setForm((f) => ({ ...f, singleParent: e.target.checked, childEvent: 'care' }))} />
+                  </div>
+                  <div>
+                    <AppDatePicker label="From date (start date)" required error={formErrors.startDate} value={form.startDate} placeholder="Select date" minDate={isAdmin ? undefined : localDate(1)} marks={marks}
+                      onChange={(v) => { setField('startDate', v); if (!form.endDate || form.endDate < v) setField('endDate', v); }} className="w-full" />
+                  </div>
+                  <div>
+                    <AppDatePicker label="To date (end date)" required error={formErrors.endDate} value={form.endDate} placeholder="Select date" minDate={form.startDate || undefined} marks={marks}
+                      onChange={(v) => setField('endDate', v)} className="w-full" />
                   </div>
                 </>
               ) : (
@@ -901,11 +1003,17 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
             ))}
             {viewing.purpose && <div className="sm:col-span-2"><dt className="font-semibold text-slate-500">Purpose</dt><dd className="text-slate-900 font-medium">{viewing.purpose}</dd></div>}
             {viewing.childEvent && (
-              <div className="sm:col-span-2"><dt className="font-semibold text-slate-500">Paternity Leave for</dt><dd className="text-slate-900 font-medium">
-                {viewing.childEvent === 'delivery' ? 'Birth of a child' : 'Adoption of a child'}
-                {viewing.childEventDate ? ` · ${viewing.childEvent === 'delivery' ? 'date of delivery' : 'date of adoption'} ${formatDate(viewing.childEventDate)}` : ''}
-                {viewing.childBirthDate ? ` · child born ${formatDate(viewing.childBirthDate)}` : ''}
-                {viewing.survivingChildren !== null ? ` · surviving children before: ${viewing.survivingChildren}` : ''}
+              <div className="sm:col-span-2"><dt className="font-semibold text-slate-500">{viewing.leaveTypeCode === MATERNITY_CODE ? 'Maternity Leave for' : viewing.childEvent === 'care' ? 'Child Care Leave for' : 'Paternity Leave for'}</dt><dd className="text-slate-900 font-medium">
+                {viewing.childEvent === 'care'
+                  ? `${viewing.childOrder === 2 ? 'Second eldest' : 'Eldest'} surviving child${viewing.childBirthDate ? ` · born ${formatDate(viewing.childBirthDate)}` : ''}${viewing.childDisabled ? ' · with a disability' : ''}${viewing.singleParent ? ' · single mother' : ''}`
+                  : viewing.childEvent === 'loss'
+                    ? `Abortion / miscarriage${viewing.childEventDate ? ` on ${formatDate(viewing.childEventDate)}` : ''}`
+                    : <>
+                      {viewing.childEvent === 'delivery' ? 'Birth of a child' : 'Adoption of a child'}
+                      {viewing.childEventDate ? ` · ${viewing.childEvent === 'delivery' ? 'date of delivery' : 'date of adoption'} ${formatDate(viewing.childEventDate)}` : ''}
+                      {viewing.childBirthDate ? ` · child born ${formatDate(viewing.childBirthDate)}` : ''}
+                      {viewing.survivingChildren !== null ? ` · surviving children before: ${viewing.survivingChildren}` : ''}
+                    </>}
               </dd></div>
             )}
             <div className="sm:col-span-2"><dt className="font-semibold text-slate-500">Reason</dt><dd className="text-slate-900 font-medium whitespace-pre-wrap">{viewing.reason}</dd></div>

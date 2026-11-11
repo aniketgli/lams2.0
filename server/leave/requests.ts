@@ -13,7 +13,10 @@ import type { ActivityScope } from '../employees/activity';
 import { WEEK_DAYS, datesBetween, weekdayOf } from '../attendance/compute';
 import { groupLeaveTypeIds, groupLeaveTypeMap } from './groups';
 import { LOOK_DAYS, type Combine, type Neighbour, combineProblem, toCombine } from './combine';
-import { CHILD_EVENTS, PATERNITY_CODE, paternityEnd, type ChildDetails, matchPurpose, parsePurposes, paternityDaysProblem, paternityProblems } from './specialLeave';
+import {
+  CHILD_CARE_CODE, CHILD_EVENTS, MATERNITY_CODE, PATERNITY_CODE, childCareProblems, childCareSpells, maternityDaysProblem, maternityEnd, maternityProblems,
+  paternityEnd, type ChildDetails, matchPurpose, parsePurposes, paternityDaysProblem, paternityProblems,
+} from './specialLeave';
 import { SESSIONS_END, SESSIONS_START, countLeaveDays, cycleYearOf } from './days';
 import { notifyLeave } from '../notifications/events';
 import { COMP_OFF_CODE, RESTRICTED_CODE, balanceFromCredits, creditsFor, matchCredits, monthlyProblem, personById, takenByMonth } from './compOff';
@@ -89,11 +92,17 @@ export interface LeaveRequest {
   compOffDates: string[];
   /** One of the leave type's purposes (e.g. Special Casual Leave), else null. */
   purpose: string | null;
-  /** Paternity Leave: birth or adoption, its date, the adopted child's date of birth, surviving children before this child. */
-  childEvent: 'delivery' | 'adoption' | null;
+  /**
+   * Paternity / Maternity Leave: birth, adoption or (maternity) abortion / miscarriage, its date, the adopted child's date of
+   * birth, surviving children before this child. Child Care Leave: 'care', with the child's date of birth, which child and flags.
+   */
+  childEvent: 'delivery' | 'adoption' | 'loss' | 'care' | null;
   childEventDate: string | null;
   childBirthDate: string | null;
   survivingChildren: number | null;
+  childOrder: 1 | 2 | null;
+  childDisabled: boolean;
+  singleParent: boolean;
   prefixFrom: string | null;
   prefixTo: string | null;
   suffixFrom: string | null;
@@ -270,10 +279,13 @@ function toRequest(viewer: Viewer, row: RowDataPacket): LeaveRequest {
     contactAddress: row.contact_address ? String(row.contact_address) : '',
     compOffDates: row.comp_off_days ? String(row.comp_off_days).split(',') : [],
     purpose: row.purpose ? String(row.purpose) : null,
-    childEvent: row.child_event === 'delivery' || row.child_event === 'adoption' ? row.child_event : null,
+    childEvent: (CHILD_EVENTS as readonly string[]).includes(String(row.child_event)) ? (String(row.child_event) as LeaveRequest['childEvent']) : null,
     childEventDate: row.child_event_date ? isoDate(row.child_event_date) : null,
     childBirthDate: row.child_birth_date ? isoDate(row.child_birth_date) : null,
     survivingChildren: row.surviving_children === null || row.surviving_children === undefined ? null : Number(row.surviving_children),
+    childOrder: Number(row.child_order) === 1 ? 1 : Number(row.child_order) === 2 ? 2 : null,
+    childDisabled: Boolean(row.child_disabled),
+    singleParent: Boolean(row.single_parent),
     prefixFrom: row.prefix_from ? isoDate(row.prefix_from) : null,
     prefixTo: row.prefix_to ? isoDate(row.prefix_to) : null,
     suffixFrom: row.suffix_from ? isoDate(row.suffix_from) : null,
@@ -300,11 +312,21 @@ function toRequest(viewer: Viewer, row: RowDataPacket): LeaveRequest {
   };
 }
 
+/** One line on the child for the audit log. */
+function childText(r: LeaveRequest): string | null {
+  if (!r.childEvent) return null;
+  if (r.childEvent === 'care') {
+    return `${r.childOrder === 2 ? 'Second eldest' : 'Eldest'} child, born ${r.childBirthDate ?? '-'}${r.childDisabled ? ', with a disability' : ''}${r.singleParent ? ', single mother' : ''}`;
+  }
+  if (r.childEvent === 'loss') return `Abortion / miscarriage on ${r.childEventDate}`;
+  return `${r.childEvent === 'delivery' ? 'Delivery' : 'Adoption'} on ${r.childEventDate}${r.childBirthDate ? `, child born ${r.childBirthDate}` : ''}, surviving children ${r.survivingChildren ?? '-'}`;
+}
+
 function auditView(r: LeaveRequest): Record<string, unknown> {
   return {
     employee: `${r.name} (${r.biometricId})`, leaveType: `${r.leaveTypeName} (${r.leaveTypeCode})`, startDate: r.startDate, endDate: r.endDate,
     startSession: r.startSession, endSession: r.endSession, days: r.daysCount, reason: r.reason, certificate: r.certificateName ?? (r.certificate ? 'Yes' : 'No'), stationPermission: r.stationLeave ? 'Required' : 'Not required', ltc: r.ltcType, encashDays: r.encashDays, contactAddress: r.contactAddress, compOffDays: r.compOffDates.join(', ') || null, purpose: r.purpose,
-    child: r.childEvent ? `${r.childEvent === 'delivery' ? 'Delivery' : 'Adoption'} on ${r.childEventDate}${r.childBirthDate ? `, child born ${r.childBirthDate}` : ''}, surviving children ${r.survivingChildren ?? '-'}` : null, prefix: r.prefixFrom ? `${r.prefixFrom} to ${r.prefixTo}` : null, suffix: r.suffixFrom ? `${r.suffixFrom} to ${r.suffixTo}` : null, status: r.status,
+    child: childText(r), prefix: r.prefixFrom ? `${r.prefixFrom} to ${r.prefixTo}` : null, suffix: r.suffixFrom ? `${r.suffixFrom} to ${r.suffixTo}` : null, status: r.status,
     forwardedBy: r.forwardedByName, comment: r.comment,
   };
 }
@@ -587,10 +609,24 @@ export function parseLeaveInput(body: unknown): LeaveInput {
     survivingChildren = Number(rawChildren);
     if (!Number.isInteger(survivingChildren) || survivingChildren < 0 || survivingChildren > 20) { v.errors.survivingChildren ||= 'Enter a whole number.'; survivingChildren = null; }
   }
-  const child: ChildDetails = { event, eventDate: optionalDate('childEventDate'), birthDate: event === 'adoption' ? optionalDate('childBirthDate') : null, survivingChildren };
+  const order = Number(raw.childOrder);
+  const child: ChildDetails = {
+    event, eventDate: event === 'care' ? null : optionalDate('childEventDate'), birthDate: event === 'adoption' || event === 'care' ? optionalDate('childBirthDate') : null,
+    survivingChildren: event === 'care' || event === 'loss' ? null : survivingChildren,
+    childOrder: event === 'care' && (order === 1 || order === 2) ? order : null,
+    childDisabled: event === 'care' && raw.childDisabled === true,
+    singleParent: event === 'care' && raw.singleParent === true,
+  };
   v.assert();
   return { purpose, child, compOffDates, userId, leaveTypeId, startDate: startDate!, endDate: endDate!, startSession, endSession, reason: reason.replace(/\s+/g, ' '), certificate: Boolean(file), stationLeave: raw.stationLeave === true, ltcType, encashDays, contactAddress, prefix, suffix, file };
 }
+
+/** Paternity Leave, and Maternity Leave for a birth / adoption, can be joined with any other kind of leave. */
+const joinsAny = (policy: Pick<Policy, 'code'>, input: Pick<LeaveInput, 'child'>): boolean =>
+  policy.code === PATERNITY_CODE || (policy.code === MATERNITY_CODE && input.child.event !== 'loss');
+/** Taken in one go, holidays included, whatever dates were sent: To is worked out from From. */
+const fixedLength = (policy: Pick<Policy, 'code'>, input: Pick<LeaveInput, 'child'>): boolean =>
+  policy.code === PATERNITY_CODE || (policy.code === MATERNITY_CODE && (input.child.event === 'delivery' || input.child.event === 'adoption'));
 
 /** Looks at the employee's other leaves around the new one: see ./combine. */
 async function joinProblem(q: { query: typeof pool.query }, emp: Employee, policy: Policy, input: LeaveInput, targetId: number, exceptId: number): Promise<string | null> {
@@ -600,9 +636,9 @@ async function joinProblem(q: { query: typeof pool.query }, emp: Employee, polic
     `SELECT r.leave_type_id, r.start_date, r.end_date, t.name, t.approval_stages, t.combine_with FROM leave_requests r
        JOIN leave_types t ON t.id = r.leave_type_id
       WHERE r.user_id = ? AND r.status <> 'rejected' AND r.id <> ? AND r.end_date >= ? AND r.start_date <= ? AND (r.linked_to IS NULL OR r.linked_to <> ?)
-        AND t.code <> ?`, // Paternity Leave can be joined with any other kind of leave
-    [targetId, exceptId, from, to, exceptId, PATERNITY_CODE]);
-  if (!found.length || policy.code === PATERNITY_CODE) return null;
+        AND t.code <> ? AND NOT (t.code = ? AND COALESCE(r.child_event, '') <> 'loss')`, // Paternity and birth / adoption Maternity Leave join any leave
+    [targetId, exceptId, from, to, exceptId, PATERNITY_CODE, MATERNITY_CODE]);
+  if (!found.length || joinsAny(policy, input)) return null;
   const others: Neighbour[] = found.map((r) => ({
     id: Number(r.leave_type_id), name: String(r.name), stages: Number(r.approval_stages) === 2 ? 2 : 1, combineWith: toCombine(r.combine_with), start: isoDate(r.start_date), end: isoDate(r.end_date),
   }));
@@ -632,12 +668,13 @@ async function checkLeave(
   // last working day, and those days become the prefix / suffix.
   // Paternity Leave is 15 days in one go, holidays included: To is always From + 14 days (worked out here, whatever was
   // sent), and holidays at its start or end stay leave days.
-  if (policy.code === PATERNITY_CODE) {
-    input.endDate = paternityEnd(input.startDate);
+  // Maternity Leave for a birth / adoption is the same: 180 days in one go.
+  if (fixedLength(policy, input)) {
+    input.endDate = policy.code === PATERNITY_CODE ? paternityEnd(input.startDate) : maternityEnd(input.startDate);
     input.startSession = 'full'; input.endSession = 'full';
   }
   const requested = { startDate: input.startDate, endDate: input.endDate };
-  if (!policy.offDaysOnly && policy.code !== PATERNITY_CODE) {
+  if (!policy.offDaysOnly && !fixedLength(policy, input)) {
     const edge = await dayRule(q, emp, policy, addDays(input.startDate, -1), addDays(input.endDate, 1));
     const isOff = (d: string) => !edge.workingDays.includes(weekdayOf(d)) || edge.gazetted.has(d);
     let s = input.startDate; let e = input.endDate;
@@ -663,7 +700,7 @@ async function checkLeave(
 
   const cycleYear = cycleYearOf(input.startDate, emp.basis);
   // (Paternity Leave takes nothing from a yearly balance and is 15 days in one go, so it may run into the next leave year.)
-  if (cycleYearOf(input.endDate, emp.basis) !== cycleYear && policy.code !== PATERNITY_CODE) errors.endDate ||= 'A leave cannot run across two leave years. Apply separately for each year.';
+  if (cycleYearOf(input.endDate, emp.basis) !== cycleYear && policy.code !== PATERNITY_CODE && policy.code !== MATERNITY_CODE) errors.endDate ||= 'A leave cannot run across two leave years. Apply separately for each year.';
   if (daysBetween(input.startDate, input.endDate) > 366) errors.endDate ||= 'A leave can cover at most one year.';
   if ((input.startSession !== 'full' || input.endSession !== 'full') && !policy.halfDay) errors.startSession = `${policy.name} cannot be taken as a half day.`;
   // A leave type with a purpose list (e.g. Special Casual Leave) is taken only for one of those purposes.
@@ -673,8 +710,16 @@ async function checkLeave(
     else if (!soft) errors.purpose = input.purpose ? 'Choose a purpose from the list.' : `Choose the purpose of the ${policy.name}.`;
   } else input.purpose = '';
   // Paternity Leave: birth / adoption details and the time it must be taken in (see ./specialLeave).
+  // Maternity Leave: birth / adoption / abortion or miscarriage; Child Care Leave: which child (see ./specialLeave).
   if (policy.code === PATERNITY_CODE) {
+    if (input.child.event !== 'delivery' && input.child.event !== 'adoption') input.child = { ...input.child, event: null };
     if (!soft) for (const [key, message] of Object.entries(paternityProblems(input.child, input.startDate, input.endDate))) errors[key] ||= message;
+  } else if (policy.code === MATERNITY_CODE) {
+    if (input.child.event === 'care') input.child = { ...input.child, event: null };
+    if (!soft) for (const [key, message] of Object.entries(maternityProblems(input.child, input.startDate, input.endDate, today))) errors[key] ||= message;
+  } else if (policy.code === CHILD_CARE_CODE) {
+    input.child = { ...input.child, event: 'care', eventDate: null, survivingChildren: null };
+    if (!soft) for (const [key, message] of Object.entries(childCareProblems(input.child, input.startDate, today, viewer.role === 'administrator'))) errors[key] ||= message;
   } else input.child = { event: null, eventDate: null, birthDate: null, survivingChildren: null };
   if (policy.afterExhaustedId && !errors.leaveTypeId) {
     const base = await loadPolicy(q, policy.afterExhaustedId);
@@ -697,6 +742,26 @@ async function checkLeave(
       [targetId, policy.id, input.child.event, input.child.eventDate, exceptId]);
     const tooMany = paternityDaysProblem(Number(taken?.n ?? 0), days);
     if (tooMany) errors.endDate = tooMany;
+  }
+  if (policy.code === MATERNITY_CODE && !soft && input.child.eventDate && !errors.endDate) {
+    if (input.child.event === 'delivery' || input.child.event === 'adoption') {
+      const [taken] = await rows(q,
+        "SELECT COALESCE(SUM(days_count), 0) AS n FROM leave_requests WHERE user_id = ? AND leave_type_id = ? AND child_event = ? AND child_event_date = ? AND status <> 'rejected' AND id <> ?",
+        [targetId, policy.id, input.child.event, input.child.eventDate, exceptId]);
+      const tooMany = maternityDaysProblem(Number(taken?.n ?? 0), days);
+      if (tooMany) errors.endDate = tooMany;
+    } else if (input.child.event === 'loss') {
+      // Abortion / miscarriage: once in the whole service, with a medical certificate.
+      const [before] = await rows(q, "SELECT COUNT(*) AS n FROM leave_requests WHERE user_id = ? AND leave_type_id = ? AND child_event = 'loss' AND status <> 'rejected' AND id <> ?", [targetId, policy.id, exceptId]);
+      if (Number(before?.n ?? 0) > 0) errors.childEvent = 'Maternity Leave for abortion / miscarriage is given once in the whole service.';
+      if (!input.certificate) errors.certificate = 'Upload the medical certificate: it is needed for abortion / miscarriage.';
+    }
+  }
+  if (policy.code === CHILD_CARE_CODE && !soft && !errors.startDate) {
+    // At most 3 spells in a calendar year (6 for a single mother).
+    const allowed = childCareSpells(input.child.singleParent);
+    const [spells] = await rows(q, "SELECT COUNT(*) AS n FROM leave_requests WHERE user_id = ? AND leave_type_id = ? AND YEAR(start_date) = ? AND status <> 'rejected' AND id <> ?", [targetId, policy.id, Number(input.startDate.slice(0, 4)), exceptId]);
+    if (Number(spells?.n ?? 0) >= allowed) errors.startDate = `Child Care Leave can be taken at most ${allowed} times in a calendar year${input.child.singleParent ? ' (single mother)' : ''}.`;
   }
   if (policy.code === COMP_OFF_CODE) {
     // One worked weekly off / holiday (biometric punches only) pays for each leave day; the monthly limit counts days by month of the leave day.
@@ -752,7 +817,7 @@ async function checkLeave(
 
   // The employee's own leaves straight before / after this one (only weekly offs and holidays in between).
   const around = await rows(q,
-    `SELECT r.id, r.leave_type_id, r.start_date, r.end_date, r.days_count, t.name, t.code, t.approval_stages, t.max_consecutive_days, t.off_days_only
+    `SELECT r.id, r.leave_type_id, r.start_date, r.end_date, r.days_count, r.child_event, t.name, t.code, t.approval_stages, t.max_consecutive_days, t.off_days_only
        FROM leave_requests r JOIN leave_types t ON t.id = r.leave_type_id
       WHERE r.user_id = ? AND r.status <> 'rejected' AND r.id <> ? AND r.end_date >= ? AND r.start_date <= ? AND (r.linked_to IS NULL OR r.linked_to <> ?) ORDER BY r.start_date`,
     [targetId, exceptId, addDays(input.startDate, -46), addDays(input.endDate, 46), exceptId]);
@@ -774,7 +839,8 @@ async function checkLeave(
     const otherStages = Number(other.approval_stages) === 2 ? 2 : 1;
     const range = `${isoDate(other.start_date)} to ${isoDate(other.end_date)}`;
     // Paternity Leave can be joined with any other kind of leave.
-    if (otherStages !== policy.stages && policy.code !== PATERNITY_CODE && String(other.code) !== PATERNITY_CODE) {
+    const otherJoinsAny = String(other.code) === PATERNITY_CODE || (String(other.code) === MATERNITY_CODE && String(other.child_event ?? '') !== 'loss');
+    if (otherStages !== policy.stages && !joinsAny(policy, input) && !otherJoinsAny) {
       throw new HttpError(409, 'This leave cannot be joined with the leave next to it.', 'COMBINE', {
         startDate: `A ${policy.stages}-stage leave cannot be joined with a ${otherStages}-stage leave.`,
       });
@@ -1087,6 +1153,24 @@ async function saveCompOffUses(conn: { query: typeof pool.query }, requestId: nu
   }
 }
 
+/**
+ * Child Care Leave details (columns of migrations/20261204_maternity_child_care.sql). Written only for a Child Care Leave,
+ * so every other leave works before that migration is run.
+ */
+async function saveChildCare(conn: { query: typeof pool.query }, id: number, input: LeaveInput, previous: RowDataPacket | null = null): Promise<void> {
+  const isCare = input.child.event === 'care';
+  if (!isCare && !(previous && previous.child_order !== undefined && previous.child_order !== null)) return;
+  try {
+    await conn.query('UPDATE leave_requests SET child_order = ?, child_disabled = ?, single_parent = ? WHERE id = ?',
+      [isCare ? input.child.childOrder ?? null : null, isCare && input.child.childDisabled ? 1 : 0, isCare && input.child.singleParent ? 1 : 0, id]);
+  } catch (error) {
+    if ((error as { code?: string })?.code === 'ER_BAD_FIELD_ERROR') {
+      throw new HttpError(409, 'Child Care Leave needs a database update. Ask the administrator to run migrations/20261204_maternity_child_care.sql.', 'MIGRATION_NEEDED');
+    }
+    throw error;
+  }
+}
+
 /** purpose, child_event, child_event_date, child_birth_date, surviving_children (checkLeave has already cleared what does not apply). */
 const specialValues = (input: LeaveInput): unknown[] => [
   input.purpose || null, input.child.event, input.child.event ? input.child.eventDate : null, input.child.event ? input.child.birthDate : null, input.child.event ? input.child.survivingChildren : null,
@@ -1119,6 +1203,7 @@ export async function createRequest(req: Request, viewer: Viewer, body: unknown)
           c.stages, viewer.id, c.emp.reportingManagerId, c.emp.reviewingManagerId, ...specialValues(input)],
       );
       const id = Number((result as { insertId: number }).insertId);
+      await saveChildCare(conn, id, input);
       await saveCompOffUses(conn, id, targetId, c.compOffPairs);
       if (input.file) await saveCertificate(conn, id, input.file, viewer.id);
       await applyJoins(conn, req, viewer, c.joins);
@@ -1159,6 +1244,7 @@ export async function updateRequest(req: Request, viewer: Viewer, id: number, bo
           input.ltcType, input.encashDays, input.contactAddress || null, input.prefix?.from ?? null, input.prefix?.to ?? null, input.suffix?.from ?? null, input.suffix?.to ?? null,
           c.stages, c.emp.reportingManagerId, c.emp.reviewingManagerId, ...specialValues(input), id],
       );
+      await saveChildCare(conn, id, input, row);
       await saveCompOffUses(conn, id, Number(row.user_id), c.compOffPairs);
       if (input.file) await saveCertificate(conn, id, input.file, viewer.id);
       await applyJoins(conn, req, viewer, c.joins);

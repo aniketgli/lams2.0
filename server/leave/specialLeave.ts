@@ -11,6 +11,18 @@
  *    At most 15 days for one birth / adoption. Not taken in that time, it lapses. It can be joined
  *    with any other kind of leave.
  *
+ *  - Maternity Leave (code MAT), for a female employee:
+ *      birth of a child / adoption of a child less than one year old, with less than two surviving children:
+ *        180 days in one go (holidays included). An adoption leave starts on the date of adoption.
+ *      abortion / miscarriage: up to 45 days, after it has happened, with a medical certificate, once in the
+ *        whole service.
+ *    Birth / adoption maternity leave can be joined with any other kind of leave.
+ *
+ *  - Child Care Leave (code CCL), for a female employee, for one of her two eldest surviving children below
+ *    18 years (any age for a child with a disability): at most 730 days in the whole service, at most 3 spells
+ *    in a calendar year (6 for a single mother), counted like Earned Leave (holidays inside count), only with
+ *    prior approval (it cannot start today or in the past).
+ *
  * Pure functions only (no database), so they are unit tested in specialLeave.test.ts.
  */
 
@@ -18,7 +30,17 @@ export const PATERNITY_CODE = 'PAT';
 export const PATERNITY_DAYS = 15;
 export const PATERNITY_DAYS_BEFORE = 15;
 export const PATERNITY_MONTHS_AFTER = 6;
-export const CHILD_EVENTS = ['delivery', 'adoption'] as const;
+/** delivery / adoption: birth or adoption; loss: abortion / miscarriage (Maternity Leave); care: Child Care Leave. */
+export const CHILD_EVENTS = ['delivery', 'adoption', 'loss', 'care'] as const;
+
+export const MATERNITY_CODE = 'MAT';
+export const MATERNITY_DAYS = 180;
+export const MATERNITY_LOSS_DAYS = 45;
+export const CHILD_CARE_CODE = 'CCL';
+export const CHILD_CARE_LIFETIME_DAYS = 730;
+export const CHILD_CARE_SPELLS = 3;
+export const CHILD_CARE_SPELLS_SINGLE_MOTHER = 6;
+export const CHILD_CARE_AGE_LIMIT = 18;
 export type ChildEvent = (typeof CHILD_EVENTS)[number];
 
 export const MAX_PURPOSES = 20;
@@ -32,6 +54,12 @@ export interface ChildDetails {
   birthDate: string | null;
   /** Surviving children before this child. */
   survivingChildren: number | null;
+  /** Child Care Leave: 1 = eldest, 2 = second eldest surviving child. */
+  childOrder?: 1 | 2 | null;
+  /** Child Care Leave: the child has a disability (no age limit). */
+  childDisabled?: boolean;
+  /** Child Care Leave: the employee is a single mother (6 spells a year). */
+  singleParent?: boolean;
 }
 
 /** The purpose list as stored (one per line), cleaned: trimmed, no blanks, no repeats. */
@@ -120,3 +148,65 @@ export function paternityDaysProblem(taken: number, days: number): string | null
   const left = Math.max(0, PATERNITY_DAYS - taken);
   return `Paternity Leave is ${PATERNITY_DAYS} days for one birth / adoption: ${taken} already applied for, ${left} left.`;
 }
+
+// ---------------------------------------------------------------------------
+// Maternity Leave
+// ---------------------------------------------------------------------------
+
+/** Birth / adoption maternity leave is taken in one go: the last day for a given first day (180 days, holidays included). */
+export const maternityEnd = (startDate: string): string => shift(startDate, MATERNITY_DAYS - 1);
+
+const daysIn = (from: string, to: string) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000) + 1;
+
+/** Field errors of a maternity leave application (empty when it is allowed). `today` for the abortion / miscarriage date. */
+export function maternityProblems(child: ChildDetails, startDate: string, endDate: string, today: string): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (child.event !== 'delivery' && child.event !== 'adoption' && child.event !== 'loss') {
+    errors.childEvent = 'Choose: birth of a child, adoption of a child, or abortion / miscarriage.';
+    return errors;
+  }
+  if (!child.eventDate) {
+    errors.childEventDate = child.event === 'adoption' ? 'Enter the date of adoption.' : child.event === 'loss' ? 'Enter the date of the abortion / miscarriage.' : 'Enter the date of delivery (expected date if not yet).';
+  }
+  if (child.event === 'loss') {
+    if (child.eventDate && child.eventDate > today) errors.childEventDate = 'This leave is given after the abortion / miscarriage has happened.';
+    else if (child.eventDate && startDate < child.eventDate) errors.startDate = `The leave can start on or after the date of the abortion / miscarriage (${dmy(child.eventDate)}).`;
+    if (daysIn(startDate, endDate) > MATERNITY_LOSS_DAYS) errors.endDate = `Maternity Leave for abortion / miscarriage is at most ${MATERNITY_LOSS_DAYS} days.`;
+    return errors;
+  }
+  if (child.survivingChildren === null) errors.survivingChildren = 'Enter the number of surviving children.';
+  else if (child.survivingChildren >= 2) errors.survivingChildren = 'Maternity Leave is only for an employee with less than two surviving children.';
+  if (child.event === 'adoption') {
+    if (!child.birthDate) errors.childBirthDate = "Enter the child's date of birth.";
+    else if (child.eventDate && child.birthDate > child.eventDate) errors.childBirthDate = 'The date of birth cannot be after the date of adoption.';
+    else if (child.eventDate && child.eventDate >= addMonths(child.birthDate, 12)) errors.childBirthDate = 'The child must be less than one year old on the date of adoption.';
+    if (child.eventDate && startDate !== child.eventDate) errors.startDate = `Maternity Leave on adoption starts on the date of adoption (${dmy(child.eventDate)}).`;
+  }
+  return errors;
+}
+
+/** Why `days` more cannot be taken for this birth / adoption when `taken` days are already applied for, or null. */
+export function maternityDaysProblem(taken: number, days: number): string | null {
+  if (taken + days <= MATERNITY_DAYS) return null;
+  return `Maternity Leave is ${MATERNITY_DAYS} days for one birth / adoption: ${taken} already applied for, ${Math.max(0, MATERNITY_DAYS - taken)} left.`;
+}
+
+// ---------------------------------------------------------------------------
+// Child Care Leave
+// ---------------------------------------------------------------------------
+
+/** Field errors of a child care leave application (empty when it is allowed). */
+export function childCareProblems(child: ChildDetails, startDate: string, today: string, isAdmin: boolean): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (child.childOrder !== 1 && child.childOrder !== 2) errors.childOrder = 'Child Care Leave is for the two eldest surviving children only: choose which one.';
+  if (!child.birthDate) errors.childBirthDate = "Enter the child's date of birth.";
+  else if (child.birthDate > startDate) errors.childBirthDate = 'The date of birth cannot be after the start of the leave.';
+  else if (!child.childDisabled && startDate >= addMonths(child.birthDate, CHILD_CARE_AGE_LIMIT * 12)) {
+    errors.childBirthDate = `The child is ${CHILD_CARE_AGE_LIMIT} or older on the first day of leave. (There is no age limit for a child with a disability.)`;
+  }
+  if (!isAdmin && startDate <= today) errors.startDate = 'Child Care Leave needs approval before it starts: choose a date after today.';
+  return errors;
+}
+
+/** Spells allowed in a calendar year. */
+export const childCareSpells = (singleParent: boolean | undefined): number => (singleParent ? CHILD_CARE_SPELLS_SINGLE_MOTHER : CHILD_CARE_SPELLS);
