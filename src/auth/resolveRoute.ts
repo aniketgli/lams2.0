@@ -1,6 +1,6 @@
 import type { EnterpriseModuleId } from '../types';
 import { SessionPayload, toUiModule } from './access';
-import { HRMS_HOME, canOpenPage, findPageBySlug, hrmsPath } from '../modules/hrms/hrmsPages';
+import { canOpenPage, findPageBySlug, homePageFor, hrmsPath } from '../modules/hrms/hrmsPages';
 
 export const CHANGE_PASSWORD_PATH = '/change-password';
 
@@ -40,7 +40,7 @@ export function resolveRoute(
   const [, moduleSegment, pageSegment] = rawPath.split('/');
   if (session.activeModule === 'hrms') {
     const page = moduleSegment === 'hrms' && pageSegment ? findPageBySlug(pageSegment) : undefined;
-    const pageId = page && canOpenPage(page.id, session.activeRole) ? page.id : HRMS_HOME;
+    const pageId = page && canOpenPage(page.id, session.activeRole) ? page.id : homePageFor(session.activeRole);
     return { screen: { kind: 'hrms', page: pageId }, path: hrmsPath(pageId) };
   }
   const module = toUiModule(session.activeModule) as Exclude<EnterpriseModuleId, 'lams'>;

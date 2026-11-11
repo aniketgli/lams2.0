@@ -51,6 +51,8 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ initia
   const isAudit = role === 'audit';
   const canApply = isAdmin || role === 'general_staff';
   const balances = initialTab === 'leave_balance';
+  // Administrator and Leave Balance Manager set balances on the Leave Balance page.
+  const managesBalances = isAdmin || role === 'leave_balance_manager';
   const [view, setView] = useState<LeaveView>('requests');
   const [balanceView, setBalanceView] = useState<'balances' | 'activity'>('balances');
   const balanceSwitch = isAudit
@@ -65,7 +67,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ initia
   const [importSignal, setImportSignal] = useState(0);
 
   const subtitle = balances
-    ? (isAdmin ? 'Leave balance of every employee for the leave year; set or adjust a balance'
+    ? (managesBalances ? 'Leave balance of every employee for the leave year; set or adjust a balance'
       : isAudit ? 'Leave balance of every employee for the leave year'
       : role === 'general_staff' ? 'Your leave balance for the leave year' : 'Your leave balance, and your team’s for the leave year')
     : isAdmin ? 'Apply, approve and reject leave of all employees, and set balances'
@@ -80,7 +82,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ initia
         icon={balances ? PAGE_ICONS.leave_balance : PAGE_ICONS.leave}
         title={balances ? 'Leave Balance' : 'Leave Management'}
         subtitle={subtitle}
-        rightAction={balances && isAdmin ? (
+        rightAction={balances && managesBalances ? (
           <PageHeaderButton icon={Upload} onClick={() => setImportSignal((n) => n + 1)}>Import leave</PageHeaderButton>
         ) : canApply && !balances && view === 'requests' ? (
           <PageHeaderButton icon={Plus} onClick={() => setApplySignal((n) => n + 1)}>Apply leave</PageHeaderButton>

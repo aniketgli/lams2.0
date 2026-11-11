@@ -213,7 +213,7 @@ function missingTable(error: unknown): never | undefined {
   return undefined;
 }
 
-export function parseRange(query: { from?: unknown; to?: unknown }, today = todayInIndia(), role?: string): { from: string; to: string } {
+export function parseRange(query: { from?: unknown; to?: unknown }, today = todayInIndia(), role?: string | null): { from: string; to: string } {
   const from = String(query.from ?? yearStart(today));
   const to = String(query.to ?? yearEnd(today));
   if (!isValidIsoDate(from) || !isValidIsoDate(to)) throw badRequest('Dates must be in YYYY-MM-DD format.');

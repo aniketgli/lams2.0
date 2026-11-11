@@ -8,7 +8,7 @@ import { HttpError, badRequest, forbidden, notFound } from '../lib/http';
 import { inTransaction } from '../lib/tx';
 import { MAX_BACKDATE_DAYS, TOO_OLD_MESSAGE, Validator, isValidIsoDate, oldestApplicationDate, todayInIndia } from '../lib/validate';
 import { changedFields, writeMasterAuditSql } from '../masters/audit';
-import type { RoleId } from '../lib/roles';
+import { canManageBalances, type RoleId } from '../lib/roles';
 import type { ActivityScope } from '../employees/activity';
 import { WEEK_DAYS, datesBetween, weekdayOf } from '../attendance/compute';
 import { groupLeaveTypeIds, groupLeaveTypeMap } from './groups';
@@ -207,6 +207,9 @@ function canSee(viewer: Viewer, row: RowDataPacket): boolean {
   return m.reporting === String(viewer.id) || m.reviewing === String(viewer.id);
 }
 
+/** Whose balance the viewer may see: as for requests, plus everyone for a Leave Balance Manager (balances only, not requests). */
+const canSeeBalance = (viewer: Viewer, row: RowDataPacket): boolean => canSee(viewer, row) || viewer.role === 'leave_balance_manager';
+
 const isDecided = (row: RowDataPacket) => ['approved', 'rejected'].includes(String(row.status));
 
 function canDecide(viewer: Viewer, row: RowDataPacket): boolean {
@@ -319,7 +322,7 @@ export function missingTable(error: unknown): never | undefined {
   return undefined;
 }
 
-export function parseRange(query: { from?: unknown; to?: unknown }, today = todayInIndia(), role?: string): { from: string; to: string } {
+export function parseRange(query: { from?: unknown; to?: unknown }, today = todayInIndia(), role?: string | null): { from: string; to: string } {
   const from = String(query.from ?? yearStart(today));
   const to = String(query.to ?? yearEnd(today));
   if (!isValidIsoDate(from) || !isValidIsoDate(to)) throw badRequest('Dates must be in YYYY-MM-DD format.');
@@ -1316,9 +1319,9 @@ export interface BalanceRow {
 }
 
 /** Balances of the people the viewer may see (self; managers their team; administrator and auditor everyone) for one leave year. */
-/** The Leave Balance page: administrators and auditors only. (The dashboard and the apply form read a person's own balance through listBalances.) */
+/** The Leave Balance page: administrators, auditors and Leave Balance Managers. (The dashboard and the apply form read a person's own balance through listBalances.) */
 export async function listBalancesPage(viewer: Viewer, yearRaw: unknown): ReturnType<typeof listBalances> {
-  if (viewer.role !== 'administrator' && viewer.role !== 'audit') throw forbidden('Only an administrator or auditor can see leave balances.');
+  if (!canManageBalances(viewer.role) && viewer.role !== 'audit') throw forbidden('Only an administrator, auditor or Leave Balance Manager can see leave balances.');
   return listBalances(viewer, yearRaw);
 }
 
@@ -1331,7 +1334,7 @@ export async function listBalances(viewer: Viewer, yearRaw: unknown): Promise<{ 
     const people = await rows(pool,
       `SELECT u.id, u.biometric_id, u.name, p.designation, p.department, p.employment_type, p.joining_date, p.shift_id, p.profile_data
          FROM users u LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE LOWER(u.status) = 'active' AND u.is_system = 0 ORDER BY u.name`);
-    const visible = people.filter((r) => canSee(viewer, { ...r, user_id: r.id }));
+    const visible = people.filter((r) => canSeeBalance(viewer, { ...r, user_id: r.id }));
     // Compensatory off is counted from the days worked on weekly offs / holidays that are still valid today.
     const credits = policies.some((p) => p.code === COMP_OFF_CODE)
       ? await creditsFor(visible.map((r) => ({ userId: Number(r.id), biometricId: String(r.biometric_id), shiftId: r.shift_id ? String(r.shift_id) : null, joining: r.joining_date ? isoDate(r.joining_date) : null })), todayInIndia())
@@ -1395,7 +1398,7 @@ export async function leaveHistory(viewer: Viewer, userIdRaw: unknown): Promise<
     const [person] = await rows(pool,
       `SELECT u.id, u.biometric_id, u.name, p.employment_type, p.joining_date, p.profile_data
          FROM users u LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE u.id = ? LIMIT 1`, [userId]);
-    if (!person || !canSee(viewer, { ...person, user_id: person.id })) throw notFound('Employee not found.');
+    if (!person || !canSeeBalance(viewer, { ...person, user_id: person.id })) throw notFound('Employee not found.');
     const data = profileData(person.profile_data);
     const basis: 'CY' | 'FY' = data.leaveCycle === 'FY' ? 'FY' : 'CY';
     const policies = await attachQuotas(pool, (await rows(pool, 'SELECT * FROM leave_types ORDER BY name')).map(toPolicy));
@@ -1439,7 +1442,7 @@ export async function leaveHistory(viewer: Viewer, userIdRaw: unknown): Promise<
 
 /** Administrator sets the days granted (and carried forward) for one employee, leave type and year. */
 export async function setBalance(req: Request, viewer: Viewer, body: unknown): Promise<Balance> {
-  if (viewer.role !== 'administrator') throw forbidden('Only an administrator can change leave balances.');
+  if (!canManageBalances(viewer.role)) throw forbidden('Only an administrator or Leave Balance Manager can change leave balances.');
   const v = new Validator(body);
   const userId = v.string('userId', { pattern: /^\d{1,20}$/, patternMessage: 'Choose an employee.' });
   const leaveTypeId = v.string('leaveTypeId', { pattern: /^\d{1,20}$/, patternMessage: 'Choose a leave type.' });

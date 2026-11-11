@@ -10,7 +10,7 @@
 export const MODULE_IDS = ['hrms', 'pms', 'stock', 'facility', 'finance'] as const;
 export type ModuleId = (typeof MODULE_IDS)[number];
 
-export const ROLE_IDS = ['administrator', 'audit', 'reviewing_manager', 'reporting_manager', 'general_staff'] as const;
+export const ROLE_IDS = ['administrator', 'audit', 'reviewing_manager', 'reporting_manager', 'general_staff', 'leave_balance_manager'] as const;
 export type RoleId = (typeof ROLE_IDS)[number];
 
 /** Display labels used by the UI. */
@@ -20,14 +20,22 @@ export const ROLE_LABELS: Record<RoleId, string> = {
   reviewing_manager: 'HoD',
   reporting_manager: 'Reporting Manager',
   general_staff: 'User',
+  leave_balance_manager: 'Leave Balance Manager',
 };
+
+/**
+ * Leave Balance Manager: sees and sets the leave balance of every employee (Leave Balance page, import), and nothing
+ * else. It can be given to any user next to their own role.
+ */
+export const BALANCE_MANAGER_ROLES: readonly RoleId[] = ['administrator', 'leave_balance_manager'];
+export const canManageBalances = (role: string | null | undefined): boolean => (BALANCE_MANAGER_ROLES as readonly string[]).includes(String(role));
 
 /**
  * Default role chosen when a user enters a module without a previous choice.
  * Lower index wins. Staff first keeps the least-privileged view as the default;
  * users switch up to a manager/admin role explicitly.
  */
-const DEFAULT_ROLE_ORDER: RoleId[] = ['general_staff', 'reporting_manager', 'reviewing_manager', 'audit', 'administrator'];
+const DEFAULT_ROLE_ORDER: RoleId[] = ['general_staff', 'reporting_manager', 'reviewing_manager', 'leave_balance_manager', 'audit', 'administrator'];
 
 const MODULE_ALIASES: Record<string, ModuleId> = {
   hrms: 'hrms', lams: 'hrms',
@@ -43,6 +51,7 @@ const ROLE_ALIASES: Record<string, RoleId> = {
   reviewingmanager: 'reviewing_manager', hod: 'reviewing_manager', hrmsreviewing: 'reviewing_manager',
   reportingmanager: 'reporting_manager', hrmsreporting: 'reporting_manager', manager: 'reporting_manager',
   generalstaff: 'general_staff', user: 'general_staff', staff: 'general_staff', hrmsstaff: 'general_staff',
+  leavebalancemanager: 'leave_balance_manager', hrmsleavebalance: 'leave_balance_manager', leavebalance: 'leave_balance_manager',
 };
 
 export function normalizeModule(value: unknown): ModuleId | null {

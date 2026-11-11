@@ -5,7 +5,7 @@ import { SessionTimeoutGuard } from './auth/SessionTimeoutGuard';
 import { toUiModule } from './auth/access';
 import { resolveRoute } from './auth/resolveRoute';
 import { navigate, usePath } from './shared/router';
-import { HRMS_HOME, hrmsPath } from './modules/hrms/hrmsPages';
+import { homePageFor, hrmsPath } from './modules/hrms/hrmsPages';
 import { AppLayout } from './shared/layout';
 import { DashboardPage } from './modules/hrms/dashboard/pages/DashboardPage';
 import { AttendanceManagementPage } from './modules/hrms/attendance/pages/AttendanceManagementPage';
@@ -50,7 +50,7 @@ const AppContent: React.FC = () => {
     const before = previousRole.current;
     previousRole.current = activeRole;
     if (before && activeRole && before !== activeRole && session?.activeModule === 'hrms') {
-      navigate(hrmsPath(HRMS_HOME), { replace: true });
+      navigate(hrmsPath(homePageFor(activeRole)), { replace: true });
     }
   }, [activeRole, session?.activeModule]);
 
@@ -82,7 +82,7 @@ const AppContent: React.FC = () => {
   }
 
   const activeModule: EnterpriseModuleId = screen.kind === 'hrms' ? 'lams' : screen.module;
-  const tab = screen.kind === 'hrms' ? screen.page : HRMS_HOME;
+  const tab = screen.kind === 'hrms' ? screen.page : homePageFor(activeRole);
   const goTo = (pageId: string) => navigate(hrmsPath(pageId));
 
   return (
@@ -94,7 +94,7 @@ const AppContent: React.FC = () => {
         setActiveModule={setActiveModule}
         isOpenMobile={isOpenMobile}
         setIsOpenMobile={setIsOpenMobile}
-        onRoleChangedGoDashboard={() => goTo(HRMS_HOME)}
+        onRoleChangedGoDashboard={() => goTo(homePageFor(activeRole))}
         onOpenSlackModal={() => setIsSlackModalOpen(true)}
       >
         {screen.kind === 'hrms' && (
