@@ -10,6 +10,7 @@ import { logThenDownload } from '../../../../shared/services/downloadAudit';
 import { NoticeBar, useNotice } from '../../master/components/masterUi';
 import { BalanceList, BalanceRow, leaveApi } from '../leaveApi';
 import { LeaveImportModal } from './LeaveImportModal';
+import { UserAvatar } from '../../../../shared/components/UserAvatar';
 
 /**
  * Leave balances for one leave year. Used and pending days come from the requests; the
@@ -20,7 +21,8 @@ const PAGE_SIZES = [25, 50, 100];
 const days = (n: number) => String(Math.round(n * 10) / 10);
 
 export const LeaveBalancesView: React.FC<{ importSignal?: number; toolbarStart?: React.ReactNode }> = ({ importSignal = 0, toolbarStart }) => {
-  const { currentUser } = useApp();
+  const { currentUser, users } = useApp();
+  const avatarOf = useMemo(() => new Map(users.map((u) => [String(u.id), (u as { avatar?: string }).avatar || null])), [users]);
   const role = currentUser.role;
   // Administrator and Leave Balance Manager set balances (import); the auditor only reads.
   const isAdmin = role === 'administrator' || role === 'leave_balance_manager';
@@ -70,25 +72,29 @@ export const LeaveBalancesView: React.FC<{ importSignal?: number; toolbarStart?:
 
   const columns: ColumnDef<BalanceRow>[] = [
     {
-      key: 'employee', header: 'Employee', width: '20%', sortValue: (r) => r.name,
+      // Fixed widths only: with many leave types a percentage width was squeezed to nothing.
+      key: 'employee', header: 'Employee', width: '15rem', sortValue: (r) => r.name,
       render: (r) => (
-        <div className="leading-tight min-w-0">
-          <div className="font-semibold text-slate-900 truncate">{r.name}</div>
-          <div className="text-[11px] text-slate-500 truncate">B.I. {r.biometricId}</div>
-          <div className="text-[11px] text-slate-400 truncate">Balance as on {r.asOn}</div>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <UserAvatar name={r.name} src={avatarOf.get(r.userId) ?? null} className="w-8 h-8 rounded-full shrink-0" />
+          <div className="leading-tight min-w-0">
+            <div className="font-semibold text-slate-900 truncate" title={r.name}>{r.name}</div>
+            <div className="text-[11px] text-slate-500 truncate" title={r.designation}>B.I. {r.biometricId}{r.designation ? ` · ${r.designation}` : ''}</div>
+            <div className="text-[11px] text-slate-400 truncate">Balance as on {r.asOn}</div>
+          </div>
         </div>
       ),
     },
     {
-      key: 'labels', header: '', width: '64px',
+      key: 'labels', header: '', width: '4.5rem',
       render: () => (
-        <div className="text-[11px] leading-5 text-slate-500">
+        <div className="text-[11px] leading-5 text-slate-500 whitespace-nowrap">
           <div>Given</div><div>Used</div><div className="font-bold text-slate-700">Balance</div>
         </div>
       ),
     },
     ...types.map((t) => ({
-      key: `t${t.id}`, header: <span title={t.name}>{t.code}</span>, align: 'center' as const, width: '3rem',
+      key: `t${t.id}`, header: <span title={t.name} className="whitespace-nowrap">{t.code}</span>, align: 'center' as const, width: '3.5rem',
       render: (r: BalanceRow) => {
         const b = r.balances[t.id];
         if (!b) return <span className="text-slate-300">—</span>;
