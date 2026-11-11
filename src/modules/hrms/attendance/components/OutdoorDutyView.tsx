@@ -391,8 +391,8 @@ export const OutdoorDutyView: React.FC = () => {
 
   const subtitle = isAdmin ? 'Apply, edit, approve and reject outdoor duty of all employees'
     : isAudit ? 'All outdoor duty requests, and the log of who did what'
-    : role === 'reporting_manager' ? 'Your outdoor duty, and your team’s requests to approve or reject'
-    : role === 'reviewing_manager' ? 'Your outdoor duty, and the requests of the people under you'
+    : role === 'reporting_manager' ? 'Your team’s outdoor duty requests to approve or reject (your own are under your User role)'
+    : role === 'reviewing_manager' ? 'Outdoor duty requests of the people under you (your own are under your User role)'
     : 'Apply for outdoor duty and follow the status of your requests';
 
   const dateRange = (

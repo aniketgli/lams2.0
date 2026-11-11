@@ -1,4 +1,4 @@
-import { MAX_LIST_ROWS, listLimitProblem, visibilityClause } from '../lib/visibility';
+import { MAX_LIST_ROWS, listLimitProblem, visibilityClause, canSeeEmployee } from '../lib/visibility';
 import { UNDO_WINDOW_MINUTES, withinUndoWindow } from './undoWindow';
 import type { Request } from 'express';
 import type { RowDataPacket } from 'mysql2/promise';
@@ -200,11 +200,7 @@ export function managersOf(row: RowDataPacket): { reporting: string; reviewing: 
 }
 
 function canSee(viewer: Viewer, row: RowDataPacket): boolean {
-  if (viewer.role === 'administrator' || viewer.role === 'audit') return true;
-  if (Number(row.user_id) === viewer.id) return true;
-  if (viewer.role !== 'reporting_manager' && viewer.role !== 'reviewing_manager') return false;
-  const m = managersOf(row);
-  return m.reporting === String(viewer.id) || m.reviewing === String(viewer.id);
+  return canSeeEmployee(viewer, row.user_id, managersOf(row));
 }
 
 /** Whose balance the viewer may see: as for requests, plus everyone for a Leave Balance Manager (balances only, not requests). */

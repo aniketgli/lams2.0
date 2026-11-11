@@ -348,7 +348,7 @@ export const AttendanceView: React.FC = () => {
         icon={PAGE_ICONS.attendance}
         title="Biometric Attendance"
         subtitle={isAdminOrAudit ? 'Daily attendance of all employees from the biometric machines'
-          : isManager ? 'Your attendance and your team’s, from the biometric machines' : 'Your daily attendance from the biometric machines'}
+          : isManager ? 'Your team’s attendance from the biometric machines (your own is under your User role)' : 'Your daily attendance from the biometric machines'}
       />
 
       {isAudit && auditorView === 'activity' ? (

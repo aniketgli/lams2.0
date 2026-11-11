@@ -1,4 +1,4 @@
-import { MAX_LIST_ROWS, listLimitProblem, visibilityClause } from '../lib/visibility';
+import { MAX_LIST_ROWS, listLimitProblem, visibilityClause, canSeeEmployee } from '../lib/visibility';
 import type { Request } from 'express';
 import type { RowDataPacket } from 'mysql2/promise';
 import { pool } from '../../src/db';
@@ -131,11 +131,7 @@ function managersOf(row: RowDataPacket): { reporting: string; reviewing: string 
 
 /** Whether `viewer` may see this employee's requests. */
 function canSee(viewer: Viewer, row: RowDataPacket): boolean {
-  if (viewer.role === 'administrator' || viewer.role === 'audit') return true;
-  if (Number(row.user_id) === viewer.id) return true;
-  if (viewer.role !== 'reporting_manager' && viewer.role !== 'reviewing_manager') return false;
-  const m = managersOf(row);
-  return m.reporting === String(viewer.id) || m.reviewing === String(viewer.id);
+  return canSeeEmployee(viewer, row.user_id, managersOf(row));
 }
 
 /** Only the reporting manager decides; an administrator does only when the employee has no reporting manager. */
