@@ -129,11 +129,15 @@ export interface LeaveRequest {
   /** Compensatory off: the worked weekly offs / holidays it uses, one per leave day. */
   compOffDates: string[];
   purpose: string | null;
-  /** Paternity Leave: birth or adoption, its date, the adopted child's date of birth, surviving children before this child. */
-  childEvent: 'delivery' | 'adoption' | null;
+  /** Paternity / Maternity Leave: birth, adoption or abortion / miscarriage ('loss'); Child Care Leave: 'care'. */
+  childEvent: 'delivery' | 'adoption' | 'loss' | 'care' | null;
   childEventDate: string | null;
   childBirthDate: string | null;
   survivingChildren: number | null;
+  /** Child Care Leave: 1 eldest / 2 second eldest child, child with a disability, single mother. */
+  childOrder: 1 | 2 | null;
+  childDisabled: boolean;
+  singleParent: boolean;
   prefixFrom: string | null;
   prefixTo: string | null;
   suffixFrom: string | null;
@@ -187,11 +191,15 @@ export interface LeaveInput {
   compOffDates: string[];
   /** One of the leave type's purposes, when it has a list. */
   purpose: string;
-  /** Paternity Leave only. */
-  childEvent: '' | 'delivery' | 'adoption';
+  /** Paternity / Maternity / Child Care Leave only. */
+  childEvent: '' | 'delivery' | 'adoption' | 'loss' | 'care';
   childEventDate: string;
   childBirthDate: string;
   survivingChildren: string;
+  /** Child Care Leave: '1' eldest, '2' second eldest. */
+  childOrder: string;
+  childDisabled: boolean;
+  singleParent: boolean;
   availPrefix: boolean;
   prefixFrom: string;
   prefixTo: string;
