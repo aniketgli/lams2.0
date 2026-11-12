@@ -345,3 +345,55 @@ export function eolProblems(c: EolCase): Record<string, string> {
   }
   return errors;
 }
+
+// ---------------------------------------------------------------------------
+// Rules built into the portal, shown with the leave type (Leave Types page)
+// ---------------------------------------------------------------------------
+
+/** Plain-language list of the rules the server checks for a leave type beyond its master settings. */
+export function specialRulesOf(code: string): string[] {
+  switch (code) {
+    case PATERNITY_CODE:
+      return [
+        'Male employee with less than two surviving children.',
+        `${PATERNITY_DAYS} days in one go for one birth / adoption: the To date is worked out from the From date (holidays included).`,
+        `Birth: from ${PATERNITY_DAYS_BEFORE} days before up to ${PATERNITY_MONTHS_AFTER} months after the date of delivery. Adoption (child below one year): up to ${PATERNITY_MONTHS_AFTER} months after the date of adoption. Not taken in that time, it lapses.`,
+        'At most 2 times in the whole service.',
+        'Can be joined with any other kind of leave; may run across two leave years.',
+      ];
+    case MATERNITY_CODE:
+      return [
+        'Female employee.',
+        `Birth / adoption (child below one year), with less than two surviving children: ${MATERNITY_DAYS} days in one go (To worked out, holidays included); adoption leave starts on the date of adoption.`,
+        `Abortion / miscarriage: up to ${MATERNITY_LOSS_DAYS} days, after it has happened, on a medical certificate, once in the whole service.`,
+        'Birth / adoption maternity leave can be joined with any other kind of leave; may run across two leave years.',
+      ];
+    case CHILD_CARE_CODE:
+      return [
+        'Female employee, for one of her two eldest surviving children below 18 years (any age for a child with a disability).',
+        `At most ${CHILD_CARE_LIFETIME_DAYS} days in the whole service.`,
+        `At most ${CHILD_CARE_SPELLS} spells in a calendar year (${CHILD_CARE_SPELLS_SINGLE_MOTHER} for a single mother).`,
+        'Treated like Earned Leave: holidays inside it count.',
+        'Only with prior approval: it cannot start today or earlier (the administrator can still enter one).',
+      ];
+    case LND_CODE:
+      return [
+        'Permanent employees; a temporary employee only after one year of service and only for TB, leprosy, cancer or mental illness.',
+        'Only on a medical certificate, except in continuation of a Maternity Leave for child birth / adoption.',
+        `At most ${LND_LIFETIME_DAYS} days in the whole service.`,
+      ];
+    case EOL_CODE:
+      return [
+        'Taken when no other leave is admissible, or when the employee applies for it in writing.',
+        'Permanent employee: at most 5 years of continuous absence.',
+        'Temporary employee: 3 months on one occasion; 6 months on a medical certificate and 18 months for treatment in a recognised sanatorium (after one year of service); 24 months for studies certified in public interest (after three years of service).',
+        'EOL spells with other leave between them count as one continuous spell for these limits.',
+      ];
+    case 'C-OFF':
+      return ['Each leave day is paid for by a weekly off or holiday on which the employee worked (biometric punches).'];
+    case 'RH':
+      return ['One day, chosen from the restricted holidays of the Holiday Calendar.'];
+    default:
+      return [];
+  }
+}

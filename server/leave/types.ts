@@ -7,7 +7,7 @@ import { Validator } from '../lib/validate';
 import { changedFields, writeMasterAuditSql } from '../masters/audit';
 import type { ActivityScope } from '../employees/activity';
 import { COMBINES, type Combine, toCombine } from './combine';
-import { fixedPurposes, parsePurposes, purposesProblem } from './specialLeave';
+import { fixedPurposes, parsePurposes, purposesProblem, specialRulesOf } from './specialLeave';
 
 /**
  * Leave types (the Leave Policy master, table `leave_types`). Everyone signed in reads
@@ -74,12 +74,14 @@ export interface LeaveType {
   fitnessCertificate: boolean;
   /** Purposes the leave can be taken for; the apply form asks for one when the list is not empty. */
   purposes: string[];
+  /** Rules the portal checks beyond the master settings (specialLeave.ts), shown on the Leave Types page. */
+  specialRules: string[];
   quotas: Array<{ employeeType: string; quota: number }>;
   status: 'active' | 'inactive';
   updatedAt: string | null;
 }
 
-export type LeaveTypeInput = Omit<LeaveType, 'id' | 'updatedAt'>;
+export type LeaveTypeInput = Omit<LeaveType, 'id' | 'updatedAt' | 'specialRules'>;
 
 export function toLeaveType(row: RowDataPacket): LeaveType {
   return {
@@ -124,6 +126,7 @@ export function toLeaveType(row: RowDataPacket): LeaveType {
     offDaysOnly: Boolean(row.off_days_only),
     fitnessCertificate: Boolean(row.fitness_certificate),
     purposes: fixedPurposes(String(row.code), parsePurposes(row.purposes)),
+    specialRules: specialRulesOf(String(row.code)),
     quotas: [],
     status: String(row.status) === 'inactive' ? 'inactive' : 'active',
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : null,
