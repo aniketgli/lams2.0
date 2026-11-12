@@ -316,7 +316,10 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
 
   const encashing = form.ltcType === 'ltc' && form.encashLtc && Number.isInteger(form.encashDays) && form.encashDays > 0 ? form.encashDays : 0;
   const needsCertificate = Boolean(type && (type.certificateRequired || (type.medicalCertDays > 0 && preview && preview.days > type.medicalCertDays)
-    || (type.code === MATERNITY_CODE && form.childEvent === 'loss')));
+    || (type.code === MATERNITY_CODE && form.childEvent === 'loss')
+    // Leave Not Due: on a medical certificate, except after a Maternity Leave; EOL: medical / sanatorium / studies grounds.
+    || (type.code === 'LND' && form.purpose !== '' && !/maternity/i.test(form.purpose))
+    || (type.code === 'EOL' && /medical certificate|sanatorium|studies/i.test(form.purpose))));
   const certInput = React.useRef<HTMLInputElement>(null);
   const pickCertificate = (file: File | undefined) => {
     if (!file) return;
@@ -807,7 +810,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
               )}
               {type && type.purposes.length > 0 && (
                 <div className="sm:col-span-2">
-                  <Select label={`Purpose of ${type.code}`} required value={form.purpose} searchable={false} placeholder="Select the purpose" error={formErrors.purpose}
+                  <Select label={type.code === 'LND' || type.code === 'EOL' ? `Ground for ${type.name}` : `Purpose of ${type.code}`} required value={form.purpose} searchable={false} placeholder={type.code === 'LND' || type.code === 'EOL' ? 'Select the ground' : 'Select the purpose'} error={formErrors.purpose}
                     onChange={(v: string) => setField('purpose', v)} options={type.purposes.map((p) => ({ value: p, label: p }))} />
                 </div>
               )}

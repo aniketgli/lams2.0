@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { addMonths, childCareProblems, childCareSpells, matchPurpose, maternityDaysProblem, maternityEnd, maternityProblems, paternityEnd, parsePurposes, paternityDaysProblem, paternityProblems, paternityWindow, purposesProblem } from './specialLeave';
+import { EOL_GROUNDS, LND_GROUNDS, continuousEol, eolLimitMonths, eolProblems, fixedPurposes, lndProblems, serviceMonths, addMonths, childCareProblems, childCareSpells, matchPurpose, maternityDaysProblem, maternityEnd, maternityProblems, paternityEnd, parsePurposes, paternityDaysProblem, paternityProblems, paternityWindow, purposesProblem } from './specialLeave';
 
 describe('purposes', () => {
   test('one per line, trimmed, blanks and repeats dropped', () => {
@@ -125,5 +125,68 @@ describe('child care leave', () => {
   test('3 spells a year, 6 for a single mother', () => {
     expect(childCareSpells(false)).toBe(3);
     expect(childCareSpells(true)).toBe(6);
+  });
+});
+
+describe('leave not due', () => {
+  const base = { permanent: true, serviceMonths: 60, ground: LND_GROUNDS[0], hasCertificate: true, followsMaternity: false };
+  test('permanent: on a medical certificate', () => {
+    expect(lndProblems(base)).toEqual({});
+    expect(lndProblems({ ...base, hasCertificate: false }).certificate).toContain('medical certificate');
+  });
+  test('temporary: one year of service and TB / leprosy / cancer / mental illness only', () => {
+    expect(lndProblems({ ...base, permanent: false, ground: LND_GROUNDS[1] })).toEqual({});
+    expect(lndProblems({ ...base, permanent: false }).purpose).toContain('TB');
+    expect(lndProblems({ ...base, permanent: false, serviceMonths: 11, ground: LND_GROUNDS[1] }).leaveTypeId).toContain('one year');
+  });
+  test('after maternity leave: no certificate, but it must follow one', () => {
+    expect(lndProblems({ ...base, ground: LND_GROUNDS[2], hasCertificate: false, followsMaternity: true })).toEqual({});
+    expect(lndProblems({ ...base, ground: LND_GROUNDS[2], hasCertificate: false }).purpose).toContain('day after');
+  });
+  test('the grounds come from the rules, not the master', () => {
+    expect(fixedPurposes('LND', ['x'])).toEqual([...LND_GROUNDS]);
+    expect(fixedPurposes('EOL', [])).toEqual([...EOL_GROUNDS]);
+    expect(fixedPurposes('SCL', ['Bandh'])).toEqual(['Bandh']);
+  });
+});
+
+describe('extraordinary leave', () => {
+  test('service months', () => {
+    expect(serviceMonths('2025-11-12', '2026-11-12')).toBe(12);
+    expect(serviceMonths('2025-11-13', '2026-11-12')).toBe(11);
+    expect(serviceMonths(null, '2026-11-12')).toBe(0);
+  });
+
+  test('limits by ground and service', () => {
+    expect(eolLimitMonths({ permanent: true, serviceMonths: 1, ground: EOL_GROUNDS[0] }).months).toBe(60);
+    expect(eolLimitMonths({ permanent: false, serviceMonths: 1, ground: EOL_GROUNDS[0] }).months).toBe(3);
+    expect(eolLimitMonths({ permanent: false, serviceMonths: 12, ground: EOL_GROUNDS[2] }).months).toBe(6);
+    expect(eolLimitMonths({ permanent: false, serviceMonths: 12, ground: EOL_GROUNDS[3] }).months).toBe(18);
+    expect(eolLimitMonths({ permanent: false, serviceMonths: 36, ground: EOL_GROUNDS[4] }).months).toBe(24);
+  });
+
+  test('temporary: 3 months on one occasion', () => {
+    const c = { permanent: false, serviceMonths: 2, ground: EOL_GROUNDS[0], hasCertificate: false };
+    expect(eolProblems({ ...c, spells: [{ start: '2026-01-01', end: '2026-03-31', eol: true }] })).toEqual({});
+    expect(eolProblems({ ...c, spells: [{ start: '2026-01-01', end: '2026-04-01', eol: true }] }).endDate).toContain('3 months');
+  });
+
+  test('grounds need service and a certificate', () => {
+    const spells = [{ start: '2026-01-01', end: '2026-01-10', eol: true }];
+    expect(eolProblems({ permanent: false, serviceMonths: 6, ground: EOL_GROUNDS[2], hasCertificate: true, spells }).purpose).toContain('one year');
+    expect(eolProblems({ permanent: false, serviceMonths: 24, ground: EOL_GROUNDS[4], hasCertificate: true, spells }).purpose).toContain('three years');
+    expect(eolProblems({ permanent: false, serviceMonths: 24, ground: EOL_GROUNDS[2], hasCertificate: false, spells }).certificate).toBeDefined();
+  });
+
+  test('two EOL spells with other leave between them are one spell', () => {
+    const others = [
+      { start: '2026-01-01', end: '2026-02-28', eol: true },
+      { start: '2026-03-01', end: '2026-03-10', eol: false }, // EL in between
+      { start: '2026-06-01', end: '2026-06-05', eol: true }, // not touching
+    ];
+    const chain = continuousEol(others, { start: '2026-03-11', end: '2026-04-15', eol: true });
+    expect(chain.map((s) => s.start)).toEqual(['2026-01-01', '2026-03-11']);
+    const c = { permanent: false, serviceMonths: 2, ground: EOL_GROUNDS[0], hasCertificate: false };
+    expect(eolProblems({ ...c, spells: chain }).endDate).toContain('count as one');
   });
 });

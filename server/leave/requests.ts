@@ -14,9 +14,10 @@ import { WEEK_DAYS, datesBetween, weekdayOf } from '../attendance/compute';
 import { groupLeaveTypeIds, groupLeaveTypeMap } from './groups';
 import { LOOK_DAYS, type Combine, type Neighbour, combineProblem, toCombine } from './combine';
 import {
-  CHILD_CARE_CODE, CHILD_EVENTS, MATERNITY_CODE, PATERNITY_CODE, childCareProblems, childCareSpells, maternityDaysProblem, maternityEnd, maternityProblems,
+  CHILD_CARE_CODE, CHILD_EVENTS, EOL_CODE, LND_CODE, continuousEol, eolProblems, fixedPurposes, lndProblems, serviceMonths, MATERNITY_CODE, PATERNITY_CODE, childCareProblems, childCareSpells, maternityDaysProblem, maternityEnd, maternityProblems,
   paternityEnd, type ChildDetails, matchPurpose, parsePurposes, paternityDaysProblem, paternityProblems,
 } from './specialLeave';
+import { layoutOfEmployeeType } from '../employees/references';
 import { SESSIONS_END, SESSIONS_START, countLeaveDays, cycleYearOf } from './days';
 import { notifyLeave } from '../notifications/events';
 import { COMP_OFF_CODE, RESTRICTED_CODE, balanceFromCredits, creditsFor, matchCredits, monthlyProblem, personById, takenByMonth } from './compOff';
@@ -430,7 +431,7 @@ function toPolicy(r: RowDataPacket): Policy {
     debitFromId: Number(r.debit_from_type_id ?? 0), debitFactor: Number(r.debit_factor ?? 1),
     lifetimeMax: Number(r.lifetime_max ?? 0), maxSpells: Number(r.max_spells_per_year ?? 0), minDays: Number(r.min_days_per_application ?? 0), maxSpellsMonth: Number(r.max_spells_per_month ?? 0), maxSpellsLifetime: Number(r.max_spells_lifetime ?? 0), quotas: {},
     needsContact: Boolean(r.needs_contact), ltcAllowed: Boolean(r.ltc_allowed), prefixSuffix: Boolean(r.prefix_suffix), hodAfterDays: Number(r.hod_after_days ?? 0), certificateRequired: Boolean(r.certificate_required), offDaysOnly: Boolean(r.off_days_only),
-    purposes: parsePurposes(r.purposes),
+    purposes: fixedPurposes(String(r.code), parsePurposes(r.purposes)),
   };
 }
 
@@ -762,6 +763,31 @@ async function checkLeave(
     const allowed = childCareSpells(input.child.singleParent);
     const [spells] = await rows(q, "SELECT COUNT(*) AS n FROM leave_requests WHERE user_id = ? AND leave_type_id = ? AND YEAR(start_date) = ? AND status <> 'rejected' AND id <> ?", [targetId, policy.id, Number(input.startDate.slice(0, 4)), exceptId]);
     if (Number(spells?.n ?? 0) >= allowed) errors.startDate = `Child Care Leave can be taken at most ${allowed} times in a calendar year${input.child.singleParent ? ' (single mother)' : ''}.`;
+  }
+  if ((policy.code === LND_CODE || policy.code === EOL_CODE) && !soft && !errors.purpose) {
+    // Leave Not Due (Rule 31) / Extraordinary Leave (Rule 32): see ./specialLeave.
+    const permanent = (await layoutOfEmployeeType(q, emp.employmentType)) === 'permanent';
+    const months = serviceMonths(emp.joining, input.startDate);
+    if (policy.code === LND_CODE) {
+      const dayBefore = new Date(`${input.startDate}T00:00:00Z`); dayBefore.setUTCDate(dayBefore.getUTCDate() - 1);
+      const [maternity] = await rows(q,
+        `SELECT r.id FROM leave_requests r JOIN leave_types t ON t.id = r.leave_type_id
+          WHERE r.user_id = ? AND t.code = ? AND r.child_event IN ('delivery', 'adoption') AND r.end_date = ? AND r.status <> 'rejected' AND r.id <> ? LIMIT 1`,
+        [targetId, MATERNITY_CODE, dayBefore.toISOString().slice(0, 10), exceptId]);
+      const found = lndProblems({ permanent, serviceMonths: months, ground: input.purpose, hasCertificate: Boolean(input.certificate), followsMaternity: Boolean(maternity) });
+      for (const [key, message] of Object.entries(found)) errors[key] ||= message;
+    } else {
+      // Spells of any leave that touch this one, to join EOL spells with other leave between them.
+      const around = await rows(q,
+        `SELECT r.start_date, r.end_date, t.code FROM leave_requests r JOIN leave_types t ON t.id = r.leave_type_id
+          WHERE r.user_id = ? AND r.status <> 'rejected' AND r.id <> ? AND r.end_date >= DATE_SUB(?, INTERVAL 6 YEAR) AND r.start_date <= DATE_ADD(?, INTERVAL 6 YEAR)`,
+        [targetId, exceptId, input.startDate, input.endDate]);
+      const spells = continuousEol(
+        around.map((a) => ({ start: isoDate(a.start_date), end: isoDate(a.end_date), eol: String(a.code) === EOL_CODE })),
+        { start: input.startDate, end: input.endDate, eol: true });
+      const found = eolProblems({ permanent, serviceMonths: months, ground: input.purpose, hasCertificate: Boolean(input.certificate), spells });
+      for (const [key, message] of Object.entries(found)) errors[key] ||= message;
+    }
   }
   if (policy.code === COMP_OFF_CODE) {
     // One worked weekly off / holiday (biometric punches only) pays for each leave day; the monthly limit counts days by month of the leave day.
