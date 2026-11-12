@@ -704,6 +704,8 @@ async function checkLeave(
   if (cycleYearOf(input.endDate, emp.basis) !== cycleYear && policy.code !== PATERNITY_CODE && policy.code !== MATERNITY_CODE) errors.endDate ||= 'A leave cannot run across two leave years. Apply separately for each year.';
   if (daysBetween(input.startDate, input.endDate) > 366) errors.endDate ||= 'A leave can cover at most one year.';
   if ((input.startSession !== 'full' || input.endSession !== 'full') && !policy.halfDay) errors.startSession = `${policy.name} cannot be taken as a half day.`;
+  // One day: the 1st half or the 2nd half, not both (that is a full day).
+  else if (input.startDate === input.endDate && input.startSession === 'second_half' && input.endSession === 'first_half') errors.startSession = 'Choose Full day, 1st half or 2nd half.';
   // A leave type with a purpose list (e.g. Special Casual Leave) is taken only for one of those purposes.
   if (policy.purposes.length) {
     const matched = matchPurpose(policy.purposes, input.purpose);
