@@ -85,7 +85,8 @@ router.get('/role-catalog', asyncHandler(async (_req, res) => {
   res.json({ roles: await loadCatalog() });
 }));
 
-router.get('/users/:biometricId/roles', requireHrmsAdmin, asyncHandler(async (req, res) => {
+// Reading someone's roles: administrator and auditor (User Controls); changing them: administrator only.
+router.get('/users/:biometricId/roles', requireActiveRole('hrms', 'administrator', 'audit'), asyncHandler(async (req, res) => {
   const target = parseTarget(req.params.biometricId);
   const assignments = await db
     .select({ moduleId: user_module_roles.moduleId, roleId: user_module_roles.roleId, status: user_module_roles.status })

@@ -762,7 +762,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const [isRoleMatrixLoading, setIsRoleMatrixLoading] = useState(false);
 
   const handleOpenEditRoles = async (u: UserType) => {
-    if (u.id === currentUser.id) {
+    // The auditor opens the matrix read-only (any account, their own too).
+    if (u.id === currentUser.id && !isAudit) {
       showToast('You cannot change your own roles. Ask another administrator.', 'error');
       return;
     }
@@ -905,7 +906,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
   const handleSaveRoleChangesInProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!userToEditRoles) return;
+    if (!userToEditRoles || isAudit) return; // the auditor's matrix is read only
 
     // Role Matrix save must only update module-role assignments.
     // Do not update employee profile, employment type, manager hierarchy, or core user role here.
@@ -2026,9 +2027,9 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
                         {/* 2. Role & Module Column - Clean, Compact Inline Module Display */}
                         <td
-                          onClick={isSelf ? undefined : () => handleOpenEditRoles(u)}
-                          title={isSelf ? 'Your own roles are changed by another administrator' : 'Click to view/edit Role & Module Matrix'}
-                          className={`px-3.5 py-3 align-middle transition-colors group ${isSelf ? '' : 'cursor-pointer hover:bg-slate-100/60'}`}
+                          onClick={isSelf && !isAudit ? undefined : () => handleOpenEditRoles(u)}
+                          title={isAudit ? 'Click to view all roles' : isSelf ? 'Your own roles are changed by another administrator' : 'Click to view/edit Role & Module Matrix'}
+                          className={`px-3.5 py-3 align-middle transition-colors group ${isSelf && !isAudit ? '' : 'cursor-pointer hover:bg-slate-100/60'}`}
                         >
                           <div className="flex flex-wrap items-center gap-1.5 max-w-full">
                             {(() => {
@@ -2111,6 +2112,17 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                               <Briefcase className="w-3.5 h-3.5" />
                             </button>
 
+                            {/* Auditor: view every role of the account (read-only matrix). */}
+                            {isAudit && (
+                              <button
+                                onClick={() => handleOpenEditRoles(u)}
+                                title="View all roles"
+                                aria-label={`View all roles of ${u.name}`}
+                                className={actionBtn('neutral')}
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                             {/* Edit User Roles & 2D Matrix Button: not on one's own account */}
                             {isAdmin && !isSelf && (
                               <button
@@ -3563,7 +3575,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
               <div className="p-3.5 sm:p-4 space-y-3 text-xs overflow-y-auto bg-slate-50/50">
                 {/* 2D ROLE MATRIX TABLE (Columns: Modules, Rows: Roles) */}
                 <RoleMatrixTable
-                  mode={isRoleMatrixLoading ? 'view' : 'edit'}
+                  mode={isRoleMatrixLoading || isAudit ? 'view' : 'edit'}
                   systemRoles={editUserRolesState}
                   moduleRoles={editUserModuleRolesState}
                   onToggleSystemRole={handleToggleSystemRoleInMatrix}
@@ -3573,10 +3585,10 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
               {/* PINNED FIXED FOOTER */}
               <div className="px-4 sm:px-5 py-2.5 border-t border-slate-200 flex items-center justify-between shrink-0 bg-slate-50 z-30">
-                <div className="text-[11px] text-slate-500 font-medium min-w-0">Configuring permissions for <strong className="text-slate-800">{userToEditRoles.name}</strong></div>
+                <div className="text-[11px] text-slate-500 font-medium min-w-0">{isAudit ? 'Roles of' : 'Configuring permissions for'} <strong className="text-slate-800">{userToEditRoles.name}</strong>{isAudit ? ' (read only)' : ''}</div>
                 <div className="flex items-center space-x-2 shrink-0">
-                  <Button type="button" variant="outline" size="sm" onClick={() => setUserToEditRoles(null)}>Cancel</Button>
-                  <Button type="submit" variant="primary" size="sm" disabled={isRoleMatrixLoading}>Save</Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setUserToEditRoles(null)}>{isAudit ? 'Close' : 'Cancel'}</Button>
+                  {!isAudit && <Button type="submit" variant="primary" size="sm" disabled={isRoleMatrixLoading}>Save</Button>}
                 </div>
               </div>
             </form>
