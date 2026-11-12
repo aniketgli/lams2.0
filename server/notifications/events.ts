@@ -224,10 +224,11 @@ function notifyTeam(...args: Parameters<typeof teamNotices>): void {
 }
 
 /** A new employee: their sign-in details, and a "new team member" note to their reporting manager and HoD. */
-export function notifyWelcome(e: EmployeeView, signIn: SignIn): void {
+export function notifyWelcome(e: EmployeeView, signIn: SignIn, options: { team?: boolean } = {}): void {
   signInMail(e, signIn, 'EMPLOYEE_CREATED', `Welcome to the WII Portal, ${e.name}`, 'Welcome to the WII Portal',
     'Your WII Portal account has been created. Sign in with the login ID and temporary password below; you will be asked to choose your own password.');
-  notifyTeam('added', e, managersInProfile(e), signIn.portalUrl);
+  // A bulk import does not mail every manager once per new team member.
+  if (options.team !== false) notifyTeam('added', e, managersInProfile(e), signIn.portalUrl);
 }
 
 /** An account was switched on (with a new temporary password) or off; the reporting manager and HoD are told too. */
