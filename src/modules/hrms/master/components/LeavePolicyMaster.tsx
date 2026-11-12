@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { FileText, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Eye, FileText, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Button, DataTable, Input, Modal, Select } from '../../../../shared/components';
 import type { ColumnDef } from '../../../../shared/components';
 import { Textarea } from '../../../../shared/components/forms/Textarea';
@@ -22,6 +22,70 @@ const blank = (): LeaveTypeInput => ({
 });
 
 const flag = (b: boolean) => (b ? 'yes' : 'no');
+
+/** Every rule of a leave type in plain words, grouped, for the "Rules" window (everyone who can see the page). */
+function ruleGroups(t: LeaveTypeRecord, typeName: (code: string) => string, nameOf: (id: string) => string): { title: string; lines: string[] }[] {
+  const yes = (b: boolean, text: string) => (b ? text : null);
+  const groups = [
+    {
+      title: 'Quota and balance',
+      lines: [
+        t.isDebited ? `Yearly quota: ${t.defaultQuota} days` : 'No yearly balance (not debited)',
+        t.isDebited && t.pwdQuota !== null ? `Quota for a person with disability: ${t.pwdQuota} days` : null,
+        ...(t.isDebited ? t.quotas.map((q) => `Quota for ${typeName(q.employeeType)}: ${q.quota} days`) : []),
+        t.isDebited ? (t.accrual === 'half_yearly' ? 'Credited every half-year' : 'Credited once a year') : null,
+        t.maxAccumulation ? `At most ${t.maxAccumulation} days can be accumulated` : null,
+        t.carryForward ? `Carried forward to the next leave year: up to ${t.maxCarryForward} days` : 'Not carried forward: lapses at the end of the leave year',
+        yes(t.encashmentAllowed, 'Can be encashed'),
+        t.isPaid ? 'Paid leave' : 'Unpaid leave',
+        t.debitFromTypeId ? `Each day uses ${t.debitFactor} day(s) of ${nameOf(t.debitFromTypeId)}` : null,
+        t.afterExhaustedTypeId ? `Only after ${nameOf(t.afterExhaustedTypeId)} is used up` : null,
+        t.lifetimeMax ? `At most ${t.lifetimeMax} days in the whole service` : null,
+      ],
+    },
+    {
+      title: 'Who can take it',
+      lines: [
+        t.employeeTypes.length ? `Employee types: ${t.employeeTypes.map(typeName).join(', ')}` : 'All employee types',
+        t.gender === 'female_only' ? 'Female employees only' : t.gender === 'male_only' ? 'Male employees only' : null,
+        yes(t.pwdOnly, 'Persons with disability only'),
+        t.minServiceMonths ? `After ${t.minServiceMonths} months of service` : null,
+      ],
+    },
+    {
+      title: 'Applying and approval',
+      lines: [
+        t.approvalStages === 2
+          ? `Approved by the Reporting Manager, then the HoD${t.hodAfterDays ? ` (HoD only above ${t.hodAfterDays} days)` : ''}`
+          : 'Approved by the Reporting Manager',
+        t.approvalStages === 2 ? 'Holidays and weekly offs inside the leave are counted' : 'Holidays and weekly offs are not counted',
+        t.minNoticeDays ? `Apply at least ${t.minNoticeDays} days before` : null,
+        t.halfDayAllowed ? 'Half day allowed' : 'No half day',
+        t.minDaysPerApplication ? `At least ${t.minDaysPerApplication} days per application` : null,
+        t.maxConsecutiveDays ? `At most ${t.maxConsecutiveDays} days per application` : null,
+        t.maxSpellsPerMonth ? `At most ${t.maxSpellsPerMonth} times a month` : null,
+        t.maxSpellsPerYear ? `At most ${t.maxSpellsPerYear} times a leave year` : null,
+        t.maxSpellsLifetime ? `At most ${t.maxSpellsLifetime} times in the whole service` : null,
+        t.combineWith === 'none' ? 'Cannot be joined with other leaves' : t.combineWith === 'both' ? 'Can be joined with 1-stage and 2-stage leaves' : `Can be joined with ${t.combineWith === 'single' ? '1-stage' : '2-stage'} leaves only`,
+        yes(t.prefixSuffix, 'Holidays before / after can be prefixed / suffixed'),
+        yes(t.offDaysOnly, 'Only on weekly offs and holidays'),
+        t.purposes.length ? `Taken only for: ${t.purposes.join('; ')}` : null,
+      ],
+    },
+    {
+      title: 'Documents and details',
+      lines: [
+        t.certificateRequired ? 'Medical certificate always needed' : t.medicalCertDays ? `Medical certificate needed above ${t.medicalCertDays} days` : null,
+        yes(t.fitnessCertificate, 'Fitness certificate on joining back'),
+        yes(t.joiningRequired, 'Joining report needed after the leave'),
+        yes(t.needsContact, 'Address during leave needed'),
+        yes(t.ltcAllowed, 'LTC / Ex-India leave can be asked for'),
+      ],
+    },
+    { title: 'Also checked by the portal', lines: t.specialRules ?? [] },
+  ];
+  return groups.map((g) => ({ title: g.title, lines: g.lines.filter((l): l is string => Boolean(l)) })).filter((g) => g.lines.length);
+}
 
 /** One numbered block of the leave type form; shows how many of its fields the server rejected. */
 const FormSection: React.FC<{ step: number; title: string; errorCount: number; children: React.ReactNode }> = ({ step, title, errorCount, children }) => (
@@ -47,6 +111,7 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
   const [formMessage, setFormMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const [viewing, setViewing] = useState<LeaveTypeRecord | null>(null);
   const [deleting, setDeleting] = useState<LeaveTypeRecord | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -176,20 +241,24 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
             t.maxSpellsLifetime ? `${t.maxSpellsLifetime} times in service` : null,
             t.carryForward ? null : 'Lapses at year end',
           ].filter(Boolean).join(' · ') || '—'}
+          {(t.specialRules?.length ?? 0) > 0 && <div className="text-primary font-semibold mt-0.5">+ {t.specialRules.length} built-in rule{t.specialRules.length === 1 ? '' : 's'}</div>}
         </div>
       ),
     },
     { key: 'status', header: 'Status', width: '9%', sortValue: (t) => t.status, render: (t) => <StatusPill active={t.status === 'active'} /> },
-    ...(readOnly ? [] : [{
-      key: 'actions', header: 'Actions', width: '100px', align: 'right' as const,
+    {
+      key: 'actions', header: 'Actions', width: readOnly ? '70px' : '130px', align: 'right' as const,
       render: (t: LeaveTypeRecord) => (
         <div className="flex justify-end gap-1.5">
+          <Button variant="icon" size="sm" leftIcon={Eye} title="All rules" aria-label={`All rules of ${t.name}`} onClick={() => setViewing(t)} />
+          {!readOnly && <>
           <Button variant="icon" size="sm" leftIcon={Pencil} title="Edit" aria-label={`Edit ${t.name}`} onClick={() => open(t)} />
           <Button variant="icon" size="sm" leftIcon={Trash2} title="Delete" aria-label={`Delete ${t.name}`} tone="danger"
             onClick={() => { setDeleteError(null); setDeleting(t); }} />
+          </>}
         </div>
       ),
-    }]),
+    },
   ];
 
   return (
@@ -265,6 +334,25 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
               )}
             </FormSection>
           </form>
+        )}
+      </Modal>
+
+      <Modal isOpen={Boolean(viewing)} onClose={() => setViewing(null)} size="lg" icon={FileText}
+        title={viewing ? `${viewing.name} (${viewing.code}) · rules` : 'Rules'}
+        footer={<div className="flex justify-end"><Button variant="outline" size="sm" onClick={() => setViewing(null)}>Close</Button></div>}>
+        {viewing && (
+          <div className="space-y-4">
+            {viewing.description && <p className="text-xs text-slate-600">{viewing.description}</p>}
+            {ruleGroups(viewing, typeName, nameOf).map((g) => (
+              <section key={g.title} className="rounded-xl border border-slate-200">
+                <h3 className="px-4 py-2 border-b border-slate-200 bg-slate-50 rounded-t-xl text-xs font-bold text-slate-800">{g.title}</h3>
+                <ul className="px-4 py-3 space-y-1.5 text-xs text-slate-700 list-disc pl-8">
+                  {g.lines.map((line) => <li key={line}>{line}</li>)}
+                </ul>
+              </section>
+            ))}
+            <p className="text-[11px] text-slate-500">Status: {viewing.status === 'active' ? 'Active' : 'Inactive'}</p>
+          </div>
         )}
       </Modal>
 

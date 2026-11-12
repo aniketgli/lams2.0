@@ -50,12 +50,14 @@ export interface LeaveTypeRecord {
   fitnessCertificate: boolean;
   /** Purposes the leave can be taken for (e.g. Special Casual Leave); the apply form asks for one when not empty. */
   purposes: string[];
+  /** Rules the portal checks beyond these settings (Paternity, Maternity, CCL, LND, EOL, …). */
+  specialRules: string[];
   quotas: Array<{ employeeType: string; quota: number }>;
   status: 'active' | 'inactive';
   updatedAt: string | null;
 }
 
-export type LeaveTypeInput = Omit<LeaveTypeRecord, 'id' | 'updatedAt'> & { reason?: string };
+export type LeaveTypeInput = Omit<LeaveTypeRecord, 'id' | 'updatedAt' | 'specialRules'> & { reason?: string };
 
 export interface LeaveTypeList {
   types: LeaveTypeRecord[];
