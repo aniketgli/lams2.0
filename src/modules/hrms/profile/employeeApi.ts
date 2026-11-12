@@ -99,6 +99,30 @@ export function toSaveError(error: unknown, fallback: string): SaveResult {
   return { success: false, message: fallback };
 }
 
+export interface EmployeeImportType { code: string; name: string; layout: string }
+export interface EmployeeImportRow { line: number; biometricId: string; name: string; status: 'ok' | 'error'; error: string | null }
+export interface EmployeeImportReview {
+  type: { code: string; name: string };
+  summary: { rows: number; ok: number; errors: number };
+  rows: EmployeeImportRow[];
+}
+export interface EmployeeImportTemplate {
+  type: EmployeeImportType;
+  headers: string[];
+  hints: string[];
+  values: Record<string, string[]>;
+  maxRows: number;
+}
+export interface EmployeeImportInput { employmentType: string; csv: string; sendWelcome: boolean }
+
+/** Bulk import of new employees, one employee type per file. */
+export const employeeImportApi = {
+  types: () => api<{ types: EmployeeImportType[] }>('/hrms/employees/import/types'),
+  template: (type: string) => api<EmployeeImportTemplate>(`/hrms/employees/import/template?type=${encodeURIComponent(type)}`),
+  review: (input: EmployeeImportInput) => api<EmployeeImportReview>('/hrms/employees/import/review', { method: 'POST', body: input }),
+  apply: (input: EmployeeImportInput) => api<EmployeeImportReview & { message: string }>('/hrms/employees/import', { method: 'POST', body: input }),
+};
+
 export const employeeApi = {
   list: () => api<EmployeeRow[]>('/hrms/employees', { passive: true }),
   /** The fixed system accounts: only the Profiles table shows these (administrator and auditor only; others get an empty list). */

@@ -10,6 +10,7 @@ import {
   getUserModuleRoles
 } from '../../../../types';
 import { PageHeader } from '../../../../shared/components/PageHeader';
+import { EmployeeImportModal } from '../components/EmployeeImportModal';
 import { TablePagination } from '../../../../shared/components/TablePagination';
 import { UserProjectHistoryModal } from '../components/UserProjectHistoryModal';
 import { EmployeeProfileView, MyProfileView } from '../components/MyProfileView';
@@ -30,7 +31,7 @@ import { AppSelect } from '../../../../shared/components/AppSelect';
 import { AppDatePicker } from '../../../../shared/components/AppDatePicker';
 import { api } from '../../../../shared/services/api';
 import { LeaveGroupRecord, leaveGroupApi } from '../../leave/leaveApi';
-import { User as UserIcon, Briefcase, Edit3, Check, X, Shield, KeyRound, UserCheck, UserX, Trash2, Plus, ArrowLeftRight, ArrowUp, ArrowDown, ArrowUpDown, RefreshCw, UserPlus, Eye, EyeOff, GraduationCap, BookOpen, Microscope, Building2, Award, Sparkles, LayoutGrid, List } from 'lucide-react';
+import { User as UserIcon, Briefcase, Edit3, Check, X, Shield, KeyRound, UserCheck, UserX, Trash2, Plus, ArrowLeftRight, ArrowUp, ArrowDown, ArrowUpDown, RefreshCw, UserPlus, Upload, Eye, EyeOff, GraduationCap, BookOpen, Microscope, Building2, Award, Sparkles, LayoutGrid, List } from 'lucide-react';
 import { RoleMatrixTable } from '../../master/components/RoleMatrixTable';
 import { exportHRMSToCSV, exportHRMSToPDF, HRMSExportColumn, HRMSFilterTag } from '../../utils/hrmsExportUtils';
 import { UserAvatar } from '../../../../shared/components/UserAvatar';
@@ -984,6 +985,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   // Toast State
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [toastIsError, setToastIsError] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [statusChangeError, setStatusChangeError] = useState<string | null>(null);
 
   /** kind 'error' shows a red cross instead of the green tick. */
@@ -1579,7 +1581,10 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
         rightAction={
           isAdmin && !isAudit ? (
             activeTab === 'profile' || !activeTab ? (
-              <PageHeaderButton icon={Plus} onClick={handleOpenCreateEmployeeModal}>New employee</PageHeaderButton>
+              <>
+                <PageHeaderButton icon={Upload} onClick={() => setImportOpen(true)}>Import employees</PageHeaderButton>
+                <PageHeaderButton icon={Plus} onClick={handleOpenCreateEmployeeModal}>New employee</PageHeaderButton>
+              </>
             ) : activeTab === 'transfers' ? (
               <>
                 <PageHeaderButton icon={ArrowLeftRight} onClick={() => setMappingOrder((o) => ({ kind: 'transfer', n: o.n + 1 }))}>Employee transfer</PageHeaderButton>
@@ -3891,6 +3896,10 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
           </div>
         </div>
       )}
+      {/* Bulk import of new employees */}
+      <EmployeeImportModal open={importOpen} onClose={() => setImportOpen(false)}
+        onImported={(message) => { setImportOpen(false); showToast(message); void reloadEmployees(); }} />
+
       {/* User Project & Career Posting History Modal */}
       <UserProjectHistoryModal
         user={historyUser}

@@ -10,6 +10,7 @@ import { notifyAccountStatus, notifyEmployeeDeleted, notifyEmployeeUpdated, noti
 import { systemAccountError } from '../lib/systemAccounts';
 import { HttpError, asyncHandler, badRequest, notFound } from '../lib/http';
 import { loadCatalog, validateGrants } from '../lib/roleCatalog';
+import { applyEmployeeImport, importTemplate, importTypes, reviewEmployeeImport, type ImportedAccount } from './bulkImport';
 import { generateTemporaryPassword, passwordProblem } from '../lib/passwordPolicy';
 import { defaultPasswordHash } from '../masters/accountSettings';
 import { destroyUserSessions } from '../lib/sessionStore';
@@ -17,7 +18,7 @@ import { clearAccessCache } from '../services/access.service';
 import { PATTERNS, Validator, todayInIndia } from '../lib/validate';
 import {
   Grant, Viewer, auditPasswordReset, createEmployee, deleteEmployee, getEmployee, listEmployees,
-  replaceRoleGrants, setEmployeeStatus, updateEmployee,
+  employeeById, replaceRoleGrants, setEmployeeStatus, updateEmployee,
 } from './store';
 import { deleteOwnPhoto, deletePhotoFor, loadPhoto, saveOwnPhoto, savePhotoFor } from './photos';
 import { activityCsv, activityTable, employeeDirectoryCsv, employeeDirectoryTable, listActivity, parseActivityFilter } from './activity';
@@ -181,6 +182,49 @@ router.get('/employees', isAuthenticated, asyncHandler(async (req, res) => {
   const system = req.query.system === '1' && (viewer.role === 'administrator' || viewer.role === 'audit');
   res.json(system ? await listEmployees(viewer, 'system') : req.query.system === '1' ? [] : await listEmployees(viewer));
 }));
+
+// ---- Bulk import of new employees (one employee type per file) --------------------------------------
+// Before /employees/:userId so "import" is never read as an ID.
+router.get('/employees/import/types', isAdmin, asyncHandler(async (_req, res) => {
+  res.json({ types: await importTypes() });
+}));
+
+router.get('/employees/import/template', isAdmin, asyncHandler(async (req, res) => {
+  res.json(await importTemplate((req.query as Record<string, unknown>).type));
+}));
+
+router.post('/employees/import/review', isAdmin, asyncHandler(async (req, res) => {
+  res.json(await reviewEmployeeImport(req, req.body));
+}));
+
+router.post('/employees/import', isAdmin, asyncHandler(async (req, res) => {
+  const { review, accounts, sendWelcome } = await applyEmployeeImport(req, req.body);
+  clearAccessCache();
+  if (sendWelcome) welcomeInTurn(accounts, portalUrlOf(req));
+  res.status(201).json({
+    ...review,
+    message: `${review.summary.ok} employee(s) added with the HRMS User role. ${sendWelcome
+      ? 'Each one is being emailed a temporary password (one email every 2 seconds).'
+      : 'They sign in with the default password of Master Settings → Organization and must change it.'}`,
+  });
+}));
+
+/** Welcome emails after a bulk import, one at a time so the mail server is not flooded. */
+function welcomeInTurn(accounts: ImportedAccount[], portalUrl: string): void {
+  let i = 0;
+  const next = async () => {
+    const a = accounts[i++];
+    if (!a) return;
+    try {
+      const employee = await employeeById(a.id);
+      if (employee) notifyWelcome(employee, { temporaryPassword: a.temporaryPassword, portalUrl }, { team: false });
+    } catch (error) {
+      console.error('[import] welcome email not sent:', error instanceof Error ? error.message : error);
+    }
+    setTimeout(() => void next(), 2000);
+  };
+  void next();
+}
 
 router.get('/employees/:userId', isAuthenticated, asyncHandler(async (req, res) => {
   res.json(await getEmployee(viewerOf(req), accountId(req.params.userId)));

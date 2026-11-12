@@ -330,7 +330,6 @@ function isDuplicateKey(error: unknown): boolean {
 }
 
 async function createEmployeeImpl(req: Request, body: unknown, temporaryPasswordHash?: string): Promise<EmployeeRecord> {
-  const actor = req.auth!.account.biometricId;
   // Every new account starts with its own temporary password (emailed to it; the route makes it) or, when none
   // is given, the default password, and is asked to choose its own password at first sign-in.
   const passwordHash = temporaryPasswordHash ?? await defaultPasswordHash();
@@ -339,47 +338,7 @@ async function createEmployeeImpl(req: Request, body: unknown, temporaryPassword
   }
 
   try {
-    const id = await inTransaction(async (conn) => {
-      const { layout, input, refs } = await prepare(conn, body, null);
-      await assertUnique(conn, input, null);
-
-      const [result] = await conn.query(
-        `INSERT INTO users (biometric_id, name, email, password_hash, must_change_password, status, valid_upto, last_updated_by, last_updated_at, last_update_summary)
-         VALUES (?, ?, ?, ?, 1, 'active', ?, ?, NOW(), ?)`,
-        [input.biometricId, input.name, input.email, passwordHash, accountValidUpto(input, layout), actor, 'Employee profile created'],
-      );
-      const userId = Number((result as { insertId: number }).insertId);
-
-      const columns = profileColumns(input, profileDataFor(input, layout, refs, {}));
-      await conn.query(
-        `INSERT INTO employee_profiles (biometric_id, ${Object.keys(columns).join(', ')}) VALUES (?, ${Object.keys(columns).map(() => '?').join(', ')})`,
-        [input.biometricId, ...Object.values(columns)],
-      );
-
-      // A new employee holds exactly one role: HRMS User. Rows left behind for this
-      // biometric ID (e.g. imported data) are switched off, never reused.
-      await conn.query(
-        `UPDATE user_module_roles SET status = 'inactive', last_updated_by = ?
-          WHERE biometric_id = ? AND LOWER(status) = 'active' AND NOT (module_id = ? AND role_id = ?)`,
-        [actor, input.biometricId, NEW_EMPLOYEE_GRANT.moduleId, NEW_EMPLOYEE_GRANT.roleId],
-      );
-      const [existingGrant] = await rows(conn,
-        'SELECT id FROM user_module_roles WHERE biometric_id = ? AND module_id = ? AND role_id = ? LIMIT 1',
-        [input.biometricId, NEW_EMPLOYEE_GRANT.moduleId, NEW_EMPLOYEE_GRANT.roleId]);
-      if (existingGrant) {
-        await conn.query("UPDATE user_module_roles SET status = 'active', last_updated_by = ? WHERE id = ?", [actor, existingGrant.id]);
-      } else {
-        await conn.query(
-          "INSERT INTO user_module_roles (biometric_id, module_id, role_id, status, last_updated_by) VALUES (?, ?, ?, 'active', ?)",
-          [input.biometricId, NEW_EMPLOYEE_GRANT.moduleId, NEW_EMPLOYEE_GRANT.roleId, actor],
-        );
-      }
-
-      const created = (await findEmployee(conn, userId))!.record;
-      await writeMasterAuditSql(conn, req, { masterKey: AUDIT_EMPLOYEE, recordId: input.biometricId, recordLabel: input.name, action: 'CREATE', after: { ...auditView(created), password: 'default (must be changed at first sign-in)' } });
-      await writeMasterAuditSql(conn, req, { masterKey: AUDIT_ROLES, recordId: input.biometricId, recordLabel: input.name, action: 'CREATE', after: grantsView([NEW_EMPLOYEE_GRANT]) });
-      return userId;
-    });
+    const id = await inTransaction((conn) => insertEmployee(conn, req, body, passwordHash, 'default (must be changed at first sign-in)'));
     return (await findEmployee(pool, id))!.record;
   } catch (error) {
     if (isDuplicateKey(error)) throw new HttpError(409, 'An account with this email or biometric ID already exists.', 'DUPLICATE');
@@ -387,6 +346,58 @@ async function createEmployeeImpl(req: Request, body: unknown, temporaryPassword
   }
 }
 export const createEmployee = freshAccess(createEmployeeImpl);
+
+/**
+ * Creates one account + profile + HRMS User role inside the caller's transaction, with every check of the
+ * employee form (also used by the bulk import, row by row). Returns the new account id.
+ */
+export async function insertEmployee(conn: PoolConnection, req: Request, body: unknown, passwordHash: string, passwordNote: string): Promise<number> {
+  const actor = req.auth!.account.biometricId;
+  const { layout, input, refs } = await prepare(conn, body, null);
+  await assertUnique(conn, input, null);
+
+  const [result] = await conn.query(
+    `INSERT INTO users (biometric_id, name, email, password_hash, must_change_password, status, valid_upto, last_updated_by, last_updated_at, last_update_summary)
+     VALUES (?, ?, ?, ?, 1, 'active', ?, ?, NOW(), ?)`,
+    [input.biometricId, input.name, input.email, passwordHash, accountValidUpto(input, layout), actor, 'Employee profile created'],
+  );
+  const userId = Number((result as { insertId: number }).insertId);
+
+  const columns = profileColumns(input, profileDataFor(input, layout, refs, {}));
+  await conn.query(
+    `INSERT INTO employee_profiles (biometric_id, ${Object.keys(columns).join(', ')}) VALUES (?, ${Object.keys(columns).map(() => '?').join(', ')})`,
+    [input.biometricId, ...Object.values(columns)],
+  );
+
+  // A new employee holds exactly one role: HRMS User. Rows left behind for this
+  // biometric ID (e.g. imported data) are switched off, never reused.
+  await conn.query(
+    `UPDATE user_module_roles SET status = 'inactive', last_updated_by = ?
+      WHERE biometric_id = ? AND LOWER(status) = 'active' AND NOT (module_id = ? AND role_id = ?)`,
+    [actor, input.biometricId, NEW_EMPLOYEE_GRANT.moduleId, NEW_EMPLOYEE_GRANT.roleId],
+  );
+  const [existingGrant] = await rows(conn,
+    'SELECT id FROM user_module_roles WHERE biometric_id = ? AND module_id = ? AND role_id = ? LIMIT 1',
+    [input.biometricId, NEW_EMPLOYEE_GRANT.moduleId, NEW_EMPLOYEE_GRANT.roleId]);
+  if (existingGrant) {
+    await conn.query("UPDATE user_module_roles SET status = 'active', last_updated_by = ? WHERE id = ?", [actor, existingGrant.id]);
+  } else {
+    await conn.query(
+      "INSERT INTO user_module_roles (biometric_id, module_id, role_id, status, last_updated_by) VALUES (?, ?, ?, 'active', ?)",
+      [input.biometricId, NEW_EMPLOYEE_GRANT.moduleId, NEW_EMPLOYEE_GRANT.roleId, actor],
+    );
+  }
+
+  const created = (await findEmployee(conn, userId))!.record;
+  await writeMasterAuditSql(conn, req, { masterKey: AUDIT_EMPLOYEE, recordId: input.biometricId, recordLabel: input.name, action: 'CREATE', after: { ...auditView(created), password: passwordNote } });
+  await writeMasterAuditSql(conn, req, { masterKey: AUDIT_ROLES, recordId: input.biometricId, recordLabel: input.name, action: 'CREATE', after: grantsView([NEW_EMPLOYEE_GRANT]) });
+  return userId;
+}
+
+/** Reads one account with its profile (for the bulk import's answer). */
+export async function employeeById(id: number): Promise<EmployeeRecord | null> {
+  return (await findEmployee(pool, id))?.record ?? null;
+}
 
 async function updateEmployeeImpl(req: Request, id: number, body: unknown): Promise<{ record: EmployeeRecord; changed: string[] }> {
   const actor = req.auth!.account.biometricId;
