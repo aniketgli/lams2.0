@@ -210,3 +210,138 @@ export function childCareProblems(child: ChildDetails, startDate: string, today:
 
 /** Spells allowed in a calendar year. */
 export const childCareSpells = (singleParent: boolean | undefined): number => (singleParent ? CHILD_CARE_SPELLS_SINGLE_MOTHER : CHILD_CARE_SPELLS);
+
+// ---------------------------------------------------------------------------
+// Leave Not Due (Rule 31) and Extraordinary Leave (Rule 32)
+// ---------------------------------------------------------------------------
+
+export const LND_CODE = 'LND';
+export const EOL_CODE = 'EOL';
+export const LND_LIFETIME_DAYS = 360;
+
+/** The ground of a Leave Not Due: asked on the form (stored as its purpose). */
+export const LND_GROUNDS = [
+  'Illness, with a medical certificate',
+  'TB / Leprosy / Cancer / Mental illness, with a medical certificate',
+  'In continuation of Maternity Leave for child birth / adoption',
+] as const;
+const [LND_ILLNESS, LND_SERIOUS, LND_AFTER_MATERNITY] = LND_GROUNDS;
+
+/** The ground of an Extraordinary Leave: it decides the limit for a temporary employee. */
+export const EOL_GROUNDS = [
+  'No other leave is admissible',
+  'Other leave is admissible, but I apply for EOL in writing',
+  'On a medical certificate',
+  'Treatment in a recognised sanatorium (TB, tubercular pleurisy, leprosy, cancer, mental illness)',
+  'Studies certified to be in public interest',
+] as const;
+const [, , EOL_MEDICAL, EOL_SANATORIUM, EOL_STUDIES] = EOL_GROUNDS;
+
+/** LND and EOL take their purpose list from these rules, not from the Leave Types master. */
+export function fixedPurposes(code: string, fromMaster: string[]): string[] {
+  if (code === LND_CODE) return [...LND_GROUNDS];
+  if (code === EOL_CODE) return [...EOL_GROUNDS];
+  return fromMaster;
+}
+
+/** Whole months of service from the date of joining to `onDate`. */
+export function serviceMonths(joining: string | null, onDate: string): number {
+  if (!joining || joining > onDate) return 0;
+  const [y1, m1, d1] = joining.split('-').map(Number);
+  const [y2, m2, d2] = onDate.split('-').map(Number);
+  return (y2 - y1) * 12 + (m2 - m1) - (d2 < d1 ? 1 : 0);
+}
+
+export interface LndCase {
+  permanent: boolean;
+  serviceMonths: number;
+  ground: string;
+  hasCertificate: boolean;
+  /** A birth / adoption Maternity Leave ends the day before this leave starts. */
+  followsMaternity: boolean;
+}
+
+/** Field errors of a Leave Not Due application (empty when it is allowed). */
+export function lndProblems(c: LndCase): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (!c.permanent) {
+    if (c.serviceMonths < 12) errors.leaveTypeId = 'Leave Not Due is for a temporary employee only after one year of service.';
+    else if (c.ground !== LND_SERIOUS) errors.purpose = 'A temporary employee gets Leave Not Due only for TB, leprosy, cancer or mental illness.';
+  }
+  if (c.ground === LND_AFTER_MATERNITY) {
+    if (!c.followsMaternity) errors.purpose = 'This Leave Not Due must start the day after a Maternity Leave for child birth / adoption ends.';
+  } else if ((c.ground === LND_ILLNESS || c.ground === LND_SERIOUS) && !c.hasCertificate) {
+    errors.certificate = 'Upload the medical certificate: Leave Not Due is given only on one.';
+  }
+  return errors;
+}
+
+/** Days from `from` to `to`, both counted. */
+export const spanDays = (from: string, to: string): number =>
+  Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000) + 1;
+
+export interface Spell { start: string; end: string; eol: boolean }
+
+/**
+ * The EOL spells that count as one continuous spell with the new one: leaves that follow each other without a gap,
+ * of any kind ("two spells of EOL intervened by any other kind of leave are one continuous spell").
+ */
+export function continuousEol(others: readonly Spell[], spell: Spell): Spell[] {
+  const all = [...others, spell].sort((a, b) => a.start.localeCompare(b.start));
+  const next = (date: string) => { const d = new Date(`${date}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); };
+  // Grow the block from the new spell both ways while the leaves touch.
+  let from = spell.start, to = spell.end, grew = true;
+  const inBlock = new Set<Spell>([spell]);
+  while (grew) {
+    grew = false;
+    for (const s of all) {
+      if (inBlock.has(s)) continue;
+      if (s.start <= next(to) && next(s.end) >= from) {
+        inBlock.add(s); grew = true;
+        if (s.start < from) from = s.start;
+        if (s.end > to) to = s.end;
+      }
+    }
+  }
+  return [...inBlock].filter((s) => s.eol).sort((a, b) => a.start.localeCompare(b.start));
+}
+
+export interface EolCase {
+  permanent: boolean;
+  serviceMonths: number;
+  ground: string;
+  hasCertificate: boolean;
+  /** The EOL spells of one continuous spell, the new one included (continuousEol). */
+  spells: Spell[];
+}
+
+/** The longest EOL a case allows, in months (Infinity: no limit). */
+export function eolLimitMonths(c: Pick<EolCase, 'permanent' | 'serviceMonths' | 'ground'>): { months: number; why: string } {
+  if (c.permanent) return { months: 60, why: 'continuous absence of a permanent employee' };
+  if (c.ground === EOL_SANATORIUM && c.serviceMonths >= 12) return { months: 18, why: 'sanatorium treatment, one year of service' };
+  if (c.ground === EOL_STUDIES && c.serviceMonths >= 36) return { months: 24, why: 'studies in public interest, three years of service' };
+  if (c.ground === EOL_MEDICAL && c.serviceMonths >= 12) return { months: 6, why: 'medical certificate, one year of service' };
+  return { months: 3, why: 'a temporary employee on one occasion' };
+}
+
+/** Field errors of an Extraordinary Leave application (empty when it is allowed). */
+export function eolProblems(c: EolCase): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (!c.permanent) {
+    if ((c.ground === EOL_MEDICAL || c.ground === EOL_SANATORIUM) && c.serviceMonths < 12) errors.purpose = 'This ground needs one year of continuous service. Choose another ground (up to 3 months).';
+    if (c.ground === EOL_STUDIES && c.serviceMonths < 36) errors.purpose = 'EOL for studies needs three years of continuous service. Choose another ground (up to 3 months).';
+  }
+  if ((c.ground === EOL_MEDICAL || c.ground === EOL_SANATORIUM) && !c.hasCertificate) errors.certificate = 'Upload the medical certificate for this ground.';
+  if (c.ground === EOL_STUDIES && !c.hasCertificate) errors.certificate = 'Upload the certificate that the studies are in public interest.';
+  if (errors.purpose || !c.spells.length) return errors;
+  const { months, why } = eolLimitMonths(c);
+  const first = c.spells[0].start;
+  const allowedEnd = addMonths(first, months);
+  const days = c.spells.reduce((n, s) => n + spanDays(s.start, s.end), 0);
+  const limit = spanDays(first, allowedEnd) - 1;
+  if (days > limit) {
+    const joined = c.spells.length > 1 ? ` (${c.spells.length} EOL spells joined by other leave count as one)` : '';
+    errors.endDate = `EOL can be at most ${months} months at a stretch for ${why}: ${days} days asked${joined}, ${limit} allowed.`;
+  }
+  return errors;
+}

@@ -7,7 +7,7 @@ import { Validator } from '../lib/validate';
 import { changedFields, writeMasterAuditSql } from '../masters/audit';
 import type { ActivityScope } from '../employees/activity';
 import { COMBINES, type Combine, toCombine } from './combine';
-import { parsePurposes, purposesProblem } from './specialLeave';
+import { fixedPurposes, parsePurposes, purposesProblem } from './specialLeave';
 
 /**
  * Leave types (the Leave Policy master, table `leave_types`). Everyone signed in reads
@@ -123,7 +123,7 @@ export function toLeaveType(row: RowDataPacket): LeaveType {
     certificateRequired: Boolean(row.certificate_required),
     offDaysOnly: Boolean(row.off_days_only),
     fitnessCertificate: Boolean(row.fitness_certificate),
-    purposes: parsePurposes(row.purposes),
+    purposes: fixedPurposes(String(row.code), parsePurposes(row.purposes)),
     quotas: [],
     status: String(row.status) === 'inactive' ? 'inactive' : 'active',
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : null,
