@@ -75,7 +75,7 @@ const FILTERS: Array<{ value: string; label: string }> = [
 ];
 
 /** Every mail the portal sent or tried to send, with the reason when one did not go out, and "Send again". */
-const RecentMails: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
+const RecentMails: React.FC<{ refreshKey: number; readOnly?: boolean }> = ({ refreshKey, readOnly = false }) => {
   const [rows, setRows] = useState<MailRow[]>([]);
   const [source, setSource] = useState<'database' | 'memory'>('database');
   const [status, setStatus] = useState('');
@@ -126,7 +126,7 @@ const RecentMails: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
     {
       key: 'action', header: '', width: '110px', align: 'right',
       render: (m) => m.canResend
-        ? <Button variant="outline" size="sm" leftIcon={Send} loading={busy === m.id} onClick={() => void sendAgain({ ids: [m.id] }, m.id)}>Send again</Button>
+        ? (readOnly ? null : <Button variant="outline" size="sm" leftIcon={Send} loading={busy === m.id} onClick={() => void sendAgain({ ids: [m.id] }, m.id)}>Send again</Button>)
         : null,
     },
   ];
@@ -140,7 +140,7 @@ const RecentMails: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <Select value={status} searchable={false} onChange={(v: string) => setStatus(v)} options={FILTERS} />
-          {source === 'database' && failedCount > 0 && (
+          {!readOnly && source === 'database' && failedCount > 0 && (
             <Button variant="outline" size="sm" leftIcon={Send} loading={busy === 'all'} onClick={() => void sendAgain({ all: true }, 'all')}>Send again: all of last day</Button>
           )}
           <Button variant="outline" size="sm" leftIcon={RefreshCw} loading={loading} onClick={load}>Refresh</Button>
@@ -310,7 +310,8 @@ export const EmailSettingsCard: React.FC<{ readOnly: boolean }> = ({ readOnly })
           </fieldset>
         </form>
       </PanelCard>
-      {!readOnly && <RecentMails refreshKey={logKey} />}
+      {/* The auditor reads the log too, without "Send again". */}
+      <RecentMails refreshKey={logKey} readOnly={readOnly} />
     </div>
   );
 };
