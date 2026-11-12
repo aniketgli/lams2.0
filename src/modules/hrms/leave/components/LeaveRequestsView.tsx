@@ -50,7 +50,9 @@ function formatDate(date: string): string {
 }
 const formatStamp = (iso: string | null) => (iso ? new Date(iso).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '');
 const duration = (r: LeaveRequest) => (r.startDate === r.endDate ? formatDate(r.startDate) : `${formatDate(r.startDate)} – ${formatDate(r.endDate)}`);
-const halves = (r: LeaveRequest) => [r.startSession === 'second_half' ? 'starts after lunch' : '', r.endSession === 'first_half' ? 'ends before lunch' : ''].filter(Boolean).join(', ');
+const halves = (r: LeaveRequest) => r.startDate === r.endDate
+  ? (r.endSession === 'first_half' ? '1st half' : r.startSession === 'second_half' ? '2nd half' : '')
+  : [r.startSession === 'second_half' ? 'starts 2nd half' : '', r.endSession === 'first_half' ? 'ends 1st half' : ''].filter(Boolean).join(', ');
 const daysText = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`;
 
 const StatusPill: React.FC<{ status: LeaveStatus }> = ({ status }) => (
@@ -549,10 +551,14 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
     </div>
   );
 
+  // Half days. One day: full day, 1st half or 2nd half. Several days: the first day may be the 2nd half only
+  // (leave starts after lunch) and the last day the 1st half only (back after lunch), so the leave has no gap.
   const sessionOptions = {
-    start: [{ label: 'Full day', value: 'full' }, { label: 'Second half only (after lunch)', value: 'second_half' }],
-    end: [{ label: 'Full day', value: 'full' }, { label: 'First half only (before lunch)', value: 'first_half' }],
+    start: [{ label: 'Full day', value: 'full' }, { label: '2nd half (after lunch)', value: 'second_half' }],
+    end: [{ label: 'Full day', value: 'full' }, { label: '1st half (before lunch)', value: 'first_half' }],
+    oneDay: [{ label: 'Full day', value: 'full' }, { label: '1st half (before lunch)', value: 'first_half' }, { label: '2nd half (after lunch)', value: 'second_half' }],
   };
+  const oneDayValue = form.endSession === 'first_half' ? 'first_half' : form.startSession === 'second_half' ? 'second_half' : 'full';
 
   return (
     <div className="space-y-5">
@@ -802,12 +808,19 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
                   </div>
                 </>
               )}
-              {type?.halfDayAllowed && !isCompOff && !isRh && (
+              {type?.halfDayAllowed && !isCompOff && !isRh && (form.startDate && form.startDate === form.endDate ? (
+                <>
+                  <Select label="Day" error={formErrors.startSession || formErrors.endSession} value={oneDayValue} searchable={false}
+                    onChange={(v: string) => setForm((f) => ({ ...f, startSession: v === 'second_half' ? 'second_half' : 'full', endSession: v === 'first_half' ? 'first_half' : 'full' }))}
+                    options={sessionOptions.oneDay} />
+                  <div className="hidden sm:block" />
+                </>
+              ) : (
                 <>
                   <Select label="Start day" error={formErrors.startSession} value={form.startSession} searchable={false} onChange={(v: string) => setField('startSession', v as LeaveInput['startSession'])} options={sessionOptions.start} />
                   <Select label="End day" error={formErrors.endSession} value={form.endSession} searchable={false} onChange={(v: string) => setField('endSession', v as LeaveInput['endSession'])} options={sessionOptions.end} />
                 </>
-              )}
+              ))}
               {type && type.purposes.length > 0 && (
                 <div className="sm:col-span-2">
                   <Select label={type.code === 'LND' || type.code === 'EOL' ? `Ground for ${type.name}` : `Purpose of ${type.code}`} required value={form.purpose} searchable={false} placeholder={type.code === 'LND' || type.code === 'EOL' ? 'Select the ground' : 'Select the purpose'} error={formErrors.purpose}

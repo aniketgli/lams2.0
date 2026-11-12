@@ -30,7 +30,7 @@ function ruleGroups(t: LeaveTypeRecord, typeName: (code: string) => string, name
     {
       title: 'Quota and balance',
       lines: [
-        t.isDebited ? `Yearly quota: ${t.defaultQuota} days` : 'No yearly balance (not debited)',
+        t.isDebited ? `Quota: ${t.defaultQuota} days a year` : !t.isPaid ? 'No balance: can be taken for any number of days' : 'No yearly balance (not debited)',
         t.isDebited && t.pwdQuota !== null ? `Quota for a person with disability: ${t.pwdQuota} days` : null,
         ...(t.isDebited ? t.quotas.map((q) => `Quota for ${typeName(q.employeeType)}: ${q.quota} days`) : []),
         t.isDebited ? (t.accrual === 'half_yearly' ? 'Credited every half-year' : 'Credited once a year') : null,
@@ -193,11 +193,13 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
       ),
     },
     {
-      key: 'quota', header: 'Yearly quota', width: '14%', sortValue: (t) => t.defaultQuota,
+      key: 'quota', header: 'Quota', width: '14%', sortValue: (t) => (t.isDebited ? t.defaultQuota : -1),
       render: (t) => (
         <div className="whitespace-normal leading-snug">
-          <div className="font-semibold">{t.isDebited ? `${t.defaultQuota} days` : 'No limit'}</div>
-          {t.isDebited && t.pwdQuota !== null && <div className="text-[11px] text-slate-600">PwD: {t.pwdQuota}</div>}
+          <div className="font-semibold">{t.isDebited
+            ? `${t.defaultQuota} days a year`
+            : !t.isPaid ? 'No balance · any number of days' : t.lifetimeMax ? `${t.lifetimeMax} days in service` : 'No yearly balance'}</div>
+          {t.isDebited && t.pwdQuota !== null && <div className="text-[11px] text-slate-600">PwD: {t.pwdQuota} days</div>}
           {t.isDebited && t.quotas.map((q) => <div key={q.employeeType} className="text-[11px] text-slate-600">{typeName(q.employeeType)}: {q.quota}</div>)}
         </div>
       ),
@@ -247,7 +249,7 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
     },
     { key: 'status', header: 'Status', width: '9%', sortValue: (t) => t.status, render: (t) => <StatusPill active={t.status === 'active'} /> },
     {
-      key: 'actions', header: 'Actions', width: readOnly ? '70px' : '130px', align: 'right' as const,
+      key: 'actions', header: 'Actions', width: readOnly ? '96px' : '136px', align: 'right' as const,
       render: (t: LeaveTypeRecord) => (
         <div className="flex justify-end gap-1.5">
           <Button variant="icon" size="sm" leftIcon={Eye} title="All rules" aria-label={`All rules of ${t.name}`} onClick={() => setViewing(t)} />
