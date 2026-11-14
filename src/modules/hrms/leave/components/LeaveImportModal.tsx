@@ -7,7 +7,8 @@ import { downloadCsvText, toCsvText } from '../../../../shared/services/printTab
 import { ImportReview, ImportRow, ImportStrategy, leaveApi } from '../leaveApi';
 
 /**
- * Import leave quotas from a CSV (Biometric_ID, Leave_Year, Leave_Code, Total_Quota).
+ * Import leave quotas from a CSV (Biometric_ID, Leave_Year, Leave_Code, Total_Quota and, optionally, As_On).
+ * "Set" makes Total_Quota the balance as on As_On (empty = today): leaves before that date are not deducted again.
  * Step 1 picks a template / strategy and the file; step 2 shows what the server found in every
  * row (nothing is written yet); importing writes all rows, or none when one has a problem.
  * The template is made by the server from the database, so nothing here is hard-coded.
@@ -19,8 +20,8 @@ const TEMPLATES = [
   { cycle: 'FY' as const, label: 'Project (FY)', tone: 'text-emerald-700 border-emerald-200 bg-emerald-50' },
 ];
 const STRATEGIES: { value: ImportStrategy; label: string; icon: React.ElementType; note: string }[] = [
-  { value: 'set', label: 'Set Quota', icon: RefreshCw, note: 'Total_Quota becomes the new total' },
-  { value: 'add', label: 'Add (+)', icon: Plus, note: 'Total_Quota is added to the current total' },
+  { value: 'set', label: 'Set Quota', icon: RefreshCw, note: 'Total_Quota becomes the balance as on As_On (empty = today); leaves before that date are not deducted again' },
+  { value: 'add', label: 'Add (+)', icon: Plus, note: 'Total_Quota is added to the current total (e.g. the half-yearly credit); As_On is not used' },
   { value: 'deduct', label: 'Deduct (-)', icon: Minus, note: 'Total_Quota is taken off the current total' },
 ];
 const days = (n: number | null) => (n === null ? '—' : String(Math.round(n * 10) / 10));
@@ -176,7 +177,7 @@ export const LeaveImportModal: React.FC<Props> = ({ open, year, onClose, onImpor
               <div className="mx-auto mb-3 w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">{fileName ? <FileSpreadsheet className="w-5 h-5 text-blue-600" /> : <Upload className="w-5 h-5 text-blue-600" />}</div>
               <p className="text-sm font-bold text-slate-900">{fileName || 'Click to upload or drag & drop CSV file'}</p>
               <p className="text-[11px] text-slate-500 mt-1">{fileName ? 'Click to choose another file' : 'Accepts standard CSV or Tab-delimited files (.csv, .tsv, .txt)'}</p>
-              <p className="inline-block mt-3 text-[11px] text-slate-600 border border-slate-200 rounded-md px-2 py-1 bg-white">Required Headers: {HEADERS.join(', ')}</p>
+              <p className="inline-block mt-3 text-[11px] text-slate-600 border border-slate-200 rounded-md px-2 py-1 bg-white">Required Headers: {HEADERS.join(', ')} · optional: As_On (DD-MM-YYYY)</p>
               <input ref={input} type="file" accept=".csv,.tsv,.txt,text/csv,text/plain" className="hidden" onChange={(e) => { void readFile(e.target.files?.[0]); e.target.value = ''; }} />
             </div>
           </section>

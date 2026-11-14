@@ -100,7 +100,7 @@ export const LeaveBalancesView: React.FC<{ importSignal?: number; toolbarStart?:
         if (!b) return <span className="text-slate-300">—</span>;
         const dash = <span className="text-slate-300">—</span>;
         return (
-          <div className="text-[11px] leading-5 text-center" title={`${t.name}${b.pending ? `: ${days(b.pending)} pending` : ''}`}>
+          <div className="text-[11px] leading-5 text-center" title={`${t.name}${b.asOf ? ` · balance set as on ${b.asOf.split('-').reverse().join('-')}` : ''}${b.pending ? `: ${days(b.pending)} pending` : ''}`}>
             <div className="font-medium text-slate-700">{t.isDebited ? days(b.total + b.carryForward) : dash}</div>
             <div className="font-medium text-slate-700">{days(b.used)}</div>
             <div className={`font-bold ${t.isDebited && b.available <= 0 ? 'text-rose-600' : 'text-slate-900'}`}>{t.isDebited ? days(b.available) : dash}</div>
