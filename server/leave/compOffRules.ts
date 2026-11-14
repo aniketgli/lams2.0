@@ -13,8 +13,22 @@ export function creditValidUntil(workDate: string): string {
   return shift(sameDay, 1);
 }
 
+/**
+ * Not taken within the month, a worked day can still be taken up to the end of the next calendar month after that
+ * (CCS rules: "in the subsequent calendar month ... a maximum of two compensatory off", with permission).
+ */
+export function creditLateUntil(workDate: string): string {
+  const [y, m] = creditValidUntil(workDate).split('-').map(Number);
+  return new Date(Date.UTC(y, m + 1, 0)).toISOString().slice(0, 10); // last day of the month after
+}
+
+/** At most this many late compensatory offs (taken after the month) in one calendar month. */
+export const LATE_COMP_OFF_PER_MONTH = 2;
+
 export interface Credit {
   date: string; in: string; out: string; hours: number; reason: string; validUntil: string;
+  /** Last day it can be taken late (after validUntil, at most 2 such a month). */
+  lateUntil?: string;
   /** The leave request that uses it, when one does. */
   usedBy: number | null; usedStatus: 'pending' | 'approved' | null;
 }
@@ -27,7 +41,7 @@ export function balanceFromCredits(credits: Credit[]) {
   return { total, carryForward: 0, used, pending, available: total - used - pending };
 }
 
-export interface Pair { work: string; leave: string }
+export interface Pair { work: string; leave: string; /** Taken after the month: counts towards 2 a month. */ late?: boolean }
 
 /**
  * Matches the chosen worked days to the leave days, earliest with earliest. Every chosen day must be an unused credit,
@@ -48,20 +62,24 @@ export function matchCredits(credits: Credit[], chosen: string[], leaveDays: str
   for (let i = 0; i < picks.length; i++) {
     const c = mine[i]!;
     if (days[i] <= c.date) return { ...none, problem: `Take ${days[i]} after the day you worked (${c.date}).` };
-    if (days[i] > c.validUntil) return { ...none, problem: `The day worked on ${c.date} is valid up to ${c.validUntil}; it cannot cover ${days[i]}.` };
-    pairs.push({ work: c.date, leave: days[i] });
+    const lateUntil = c.lateUntil ?? c.validUntil;
+    if (days[i] > lateUntil) return { ...none, problem: `The day worked on ${c.date} could be taken up to ${lateUntil}; it has lapsed for ${days[i]}.` };
+    pairs.push({ work: c.date, leave: days[i], late: days[i] > c.validUntil });
   }
   return { problem: null, pairs };
 }
 
-/** Days of compensatory off per month (of the leave day): taken already + this leave must stay within the monthly limit. */
+/**
+ * Late compensatory offs per month (of the leave day): taken already + this leave must stay within the limit.
+ * Within a month of the worked day there is no limit, so only late days are passed in.
+ */
 export function monthlyProblem(leaveDays: string[], takenByMonth: Record<string, number>, limit: number): string | null {
   if (!limit) return null;
   const add: Record<string, number> = {};
   for (const d of leaveDays) add[d.slice(0, 7)] = (add[d.slice(0, 7)] ?? 0) + 1;
   for (const [month, n] of Object.entries(add).sort()) {
     const before = takenByMonth[month] ?? 0;
-    if (before + n > limit) return `At most ${limit} compensatory off days a month: ${before} already taken or waiting in ${month}, ${n} asked.`;
+    if (before + n > limit) return `A compensatory off not taken within a month of the day worked: at most ${limit} in a calendar month. ${before} already taken or waiting in ${month}, ${n} asked.`;
   }
   return null;
 }

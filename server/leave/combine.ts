@@ -17,7 +17,14 @@ export const toCombine = (raw: unknown): Combine => (COMBINES as readonly string
 export const allowsStages = (combine: Combine, stages: 1 | 2): boolean =>
   combine === 'both' || (combine === 'single' && stages === 1) || (combine === 'double' && stages === 2);
 
-export interface CombinePolicy { id: number; name: string; stages: 1 | 2; combineWith: Combine }
+export interface CombinePolicy {
+  id: number; name: string; stages: 1 | 2; combineWith: Combine;
+  /** Casual Leave (CL, CL20, CL30): never in one chain with a regular (2-stage) leave, even with SCL / RH / C-OFF between. */
+  casual?: boolean;
+}
+
+/** Casual Leave codes: CCS rules keep them apart from regular leave. */
+export const CASUAL_CODES = ['CL', 'CL20', 'CL30'];
 export interface Neighbour extends CombinePolicy { start: string; end: string }
 
 const shift = (date: string, n: number): string => {
@@ -52,6 +59,23 @@ export function combineProblem(
     if (!other || other.id === policy.id) continue;
     if (allowsStages(policy.combineWith, other.stages) && allowsStages(other.combineWith, policy.stages)) continue;
     return `${policy.name} cannot be taken ${where} ${other.name} (${other.start === other.end ? other.start : `${other.start} to ${other.end}`}). The employee must work at least one day, with a punch, in between.`;
+  }
+  // The whole chain of straight leaves: Special Casual Leave / RH / compensatory off may join Casual Leave or a regular
+  // leave, but not both, so one chain never holds Casual Leave and a 2-stage leave together.
+  const chain: CombinePolicy[] = [policy];
+  const seen = new Set<Neighbour>();
+  for (const [first, step] of [[before, -1], [after, 1]] as const) {
+    let cur = first;
+    while (cur && !seen.has(cur)) {
+      seen.add(cur);
+      chain.push(cur);
+      cur = find(step === -1 ? shift(cur.start, -1) : shift(cur.end, 1), step);
+    }
+  }
+  const casual = chain.find((c) => c.casual);
+  const regular = chain.find((c) => c.stages === 2 && !c.casual);
+  if (casual && regular) {
+    return `${casual.name} and ${regular.name} would be one continuous absence. Casual Leave cannot be combined with regular leave, also not through Special Casual Leave, RH or compensatory off: SCL / RH can join one of them, not both.`;
   }
   return null;
 }

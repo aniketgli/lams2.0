@@ -1,9 +1,9 @@
 import type { RowDataPacket } from 'mysql2/promise';
 import { pool } from '../../src/db';
 import { workedOffDays } from '../attendance/store';
-import { type Credit, creditValidUntil, shift } from './compOffRules';
+import { type Credit, creditLateUntil, creditValidUntil, shift } from './compOffRules';
 
-export { COMP_OFF_CODE, RESTRICTED_CODE, balanceFromCredits, creditValidUntil, matchCredits, monthlyProblem } from './compOffRules';
+export { COMP_OFF_CODE, LATE_COMP_OFF_PER_MONTH, RESTRICTED_CODE, balanceFromCredits, creditLateUntil, creditValidUntil, matchCredits, monthlyProblem } from './compOffRules';
 export type { Credit } from './compOffRules';
 
 /**
@@ -38,9 +38,10 @@ export async function creditsFor(people: CreditPerson[], today: string, exceptRe
     const list: Credit[] = [];
     for (const w of worked.get(p.biometricId) ?? []) {
       const validUntil = creditValidUntil(w.date);
-      if (validUntil < today) continue;
+      const lateUntil = creditLateUntil(w.date);
+      if (lateUntil < today) continue;
       const use = usedOf.get(`${p.userId}:${w.date}`);
-      list.push({ ...w, validUntil, usedBy: use ? Number(use.id) : null, usedStatus: use ? (String(use.status) === 'approved' ? 'approved' : 'pending') : null });
+      list.push({ ...w, validUntil, lateUntil, usedBy: use ? Number(use.id) : null, usedStatus: use ? (String(use.status) === 'approved' ? 'approved' : 'pending') : null });
     }
     out.set(p.userId, list.sort((a, b) => a.date.localeCompare(b.date)));
   }
@@ -56,10 +57,14 @@ export async function personById(userId: number): Promise<CreditPerson | null> {
 }
 
 
-/** Compensatory off days already taken or waiting, by month of the leave day (the leave being edited is left out). */
+/**
+ * Late compensatory off days (taken after the month from the day worked) already taken or waiting, by month of the leave
+ * day (the leave being edited is left out).
+ */
 export async function takenByMonth(userId: number, exceptRequestId: number): Promise<Record<string, number>> {
   const [found] = await pool.query<RowDataPacket[]>(
     `SELECT DATE_FORMAT(c.leave_date, '%Y-%m') AS m, COUNT(*) AS n FROM leave_comp_off_uses c JOIN leave_requests r ON r.id = c.request_id
-      WHERE c.user_id = ? AND r.status <> 'rejected' AND c.request_id <> ? GROUP BY m`, [userId, exceptRequestId]);
+      WHERE c.user_id = ? AND r.status <> 'rejected' AND c.request_id <> ?
+        AND c.leave_date > DATE_ADD(DATE_ADD(c.work_date, INTERVAL 1 MONTH), INTERVAL 1 DAY) GROUP BY m`, [userId, exceptRequestId]);
   return Object.fromEntries(found.map((r) => [String(r.m), Number(r.n)]));
 }

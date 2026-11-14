@@ -12,7 +12,7 @@ import { canManageBalances, type RoleId } from '../lib/roles';
 import type { ActivityScope } from '../employees/activity';
 import { WEEK_DAYS, datesBetween, weekdayOf } from '../attendance/compute';
 import { groupLeaveTypeIds, groupLeaveTypeMap } from './groups';
-import { LOOK_DAYS, type Combine, type Neighbour, combineProblem, toCombine } from './combine';
+import { CASUAL_CODES, LOOK_DAYS, type Combine, type Neighbour, combineProblem, toCombine } from './combine';
 import {
   CHILD_CARE_CODE, CHILD_EVENTS, EOL_CODE, LND_CODE, continuousEol, eolProblems, fixedPurposes, lndProblems, serviceMonths, MATERNITY_CODE, PATERNITY_CODE, childCareProblems, childCareSpells, maternityDaysProblem, maternityEnd, maternityProblems,
   paternityEnd, type ChildDetails, matchPurpose, parsePurposes, paternityDaysProblem, paternityProblems,
@@ -20,7 +20,7 @@ import {
 import { layoutOfEmployeeType } from '../employees/references';
 import { SESSIONS_END, SESSIONS_START, countLeaveDays, cycleYearOf } from './days';
 import { notifyLeave } from '../notifications/events';
-import { COMP_OFF_CODE, RESTRICTED_CODE, balanceFromCredits, creditsFor, matchCredits, monthlyProblem, personById, takenByMonth } from './compOff';
+import { COMP_OFF_CODE, LATE_COMP_OFF_PER_MONTH, RESTRICTED_CODE, balanceFromCredits, creditsFor, matchCredits, monthlyProblem, personById, takenByMonth } from './compOff';
 import type { Pair } from './compOffRules';
 import { historyProblem, yearEnd, yearStart } from '../lib/dateWindow';
 
@@ -48,8 +48,12 @@ export const BALANCE_KEY = 'leave_balance';
 export const EMPLOYEE_BACKDATE_DAYS = MAX_BACKDATE_DAYS;
 /** Most days of leave encashment that can be taken with one LTC. */
 export const LTC_ENCASH_MAX = 10;
-/** Leave encashment with LTC needs at least this many days of balance. */
+/** After the leave and the encashment, at least this many days must stay in the balance. */
 export const LTC_ENCASH_MIN_BALANCE = 30;
+/** Leave encashment with LTC: at most this many days in the whole service. */
+export const LTC_ENCASH_LIFETIME = 60;
+export const COMMUTED_CODE = 'COMM';
+export const COMMUTED_AFTER_MATERNITY_DAYS = 60;
 export const MAX_RANGE_DAYS = 400;
 
 export const LEAVE_SCOPE: ActivityScope = {
@@ -634,7 +638,7 @@ async function joinProblem(q: { query: typeof pool.query }, emp: Employee, polic
   const from = addDays(input.startDate, -LOOK_DAYS);
   const to = addDays(input.endDate, LOOK_DAYS);
   const found = await rows(q,
-    `SELECT r.leave_type_id, r.start_date, r.end_date, t.name, t.approval_stages, t.combine_with FROM leave_requests r
+    `SELECT r.leave_type_id, r.start_date, r.end_date, t.code, t.name, t.approval_stages, t.combine_with FROM leave_requests r
        JOIN leave_types t ON t.id = r.leave_type_id
       WHERE r.user_id = ? AND r.status <> 'rejected' AND r.id <> ? AND r.end_date >= ? AND r.start_date <= ? AND (r.linked_to IS NULL OR r.linked_to <> ?)
         AND t.code <> ? AND NOT (t.code = ? AND COALESCE(r.child_event, '') <> 'loss')`, // Paternity and birth / adoption Maternity Leave join any leave
@@ -642,10 +646,11 @@ async function joinProblem(q: { query: typeof pool.query }, emp: Employee, polic
   if (!found.length || joinsAny(policy, input)) return null;
   const others: Neighbour[] = found.map((r) => ({
     id: Number(r.leave_type_id), name: String(r.name), stages: Number(r.approval_stages) === 2 ? 2 : 1, combineWith: toCombine(r.combine_with), start: isoDate(r.start_date), end: isoDate(r.end_date),
+    casual: CASUAL_CODES.includes(String(r.code)),
   }));
   const { punchDates } = await import('../attendance/store'); // loaded here: the attendance module itself imports this one
   const [rule, worked] = await Promise.all([dayRule(q, emp, policy, from, to), punchDates(emp.biometricId, from, to)]);
-  return combineProblem({ id: policy.id, name: policy.name, stages: policy.stages, combineWith: policy.combineWith }, input.startDate, input.endDate, others, rule.workingDays, rule.gazetted, worked);
+  return combineProblem({ id: policy.id, name: policy.name, stages: policy.stages, combineWith: policy.combineWith, casual: CASUAL_CODES.includes(policy.code) }, input.startDate, input.endDate, others, rule.workingDays, rule.gazetted, worked);
 }
 
 export interface HolidayBlock { from: string; to: string; days: number }
@@ -792,14 +797,16 @@ async function checkLeave(
     }
   }
   if (policy.code === COMP_OFF_CODE) {
-    // One worked weekly off / holiday (biometric punches only) pays for each leave day; the monthly limit counts days by month of the leave day.
+    // One worked weekly off / holiday (biometric punches only) pays for each leave day. Within a month of the day worked
+    // there is no limit; taken later (up to the end of the next calendar month) at most 2 a calendar month.
     const person = await personById(targetId);
     const credits = person ? (await creditsFor([person], today, exceptId)).get(targetId) ?? [] : [];
     const matched = matchCredits(credits, input.compOffDates, counted);
     if (matched.problem) errors.compOffDates = matched.problem;
     else {
       compOffPairs = matched.pairs;
-      const bad = monthlyProblem(counted, await takenByMonth(targetId, exceptId), policy.maxSpellsMonth);
+      const late = matched.pairs.filter((pair) => pair.late).map((pair) => pair.leave);
+      const bad = late.length ? monthlyProblem(late, await takenByMonth(targetId, exceptId), LATE_COMP_OFF_PER_MONTH) : null;
       if (bad) errors.compOffDates = bad;
     }
   } else if (input.compOffDates.length) errors.compOffDates = 'Only a compensatory off uses worked days.';
@@ -808,7 +815,20 @@ async function checkLeave(
     const [rh] = input.startDate === input.endDate ? await rows(q, "SELECT id FROM holidays WHERE type = 'restricted' AND holiday_date = ? LIMIT 1", [input.startDate]) : [];
     if (!rh) errors.startDate = 'Choose a restricted holiday from the list.';
   }
-  if (policy.certificateRequired && !input.certificate) errors.certificate = `Upload a medical certificate: ${policy.name} needs one.`;
+  // Commuted Leave in continuation of a Maternity Leave for child birth / adoption: up to 60 days without a medical certificate.
+  let afterMaternity = false;
+  if (policy.code === COMMUTED_CODE && policy.certificateRequired && !input.certificate && !soft) {
+    const dayBefore = addDays(input.startDate, -1);
+    const [mat] = await rows(q,
+      `SELECT r.id FROM leave_requests r JOIN leave_types t ON t.id = r.leave_type_id
+        WHERE r.user_id = ? AND t.code = ? AND r.child_event IN ('delivery', 'adoption') AND r.end_date = ? AND r.status <> 'rejected' AND r.id <> ? LIMIT 1`,
+      [targetId, MATERNITY_CODE, dayBefore, exceptId]);
+    if (mat) {
+      afterMaternity = true;
+      if (days > COMMUTED_AFTER_MATERNITY_DAYS) errors.endDate = `Without a medical certificate, Commuted Leave after Maternity Leave is at most ${COMMUTED_AFTER_MATERNITY_DAYS} days. Upload a certificate for more.`;
+    }
+  }
+  if (policy.certificateRequired && !input.certificate && !afterMaternity) errors.certificate = `Upload a medical certificate: ${policy.name} needs one.`;
   else if (policy.certDays && days > policy.certDays && !input.certificate) errors.certificate = `Medical certificate needed above ${policy.certDays} days.`;
   if (policy.lifetimeMax) {
     const [taken] = await rows(q, "SELECT COALESCE(SUM(days_count), 0) AS n FROM leave_requests WHERE user_id = ? AND leave_type_id = ? AND status <> 'rejected' AND id <> ?", [targetId, policy.id, exceptId]);
@@ -920,8 +940,15 @@ async function checkLeave(
   const extra = input.ltcType === 'ltc' ? input.encashDays : 0;
   if (extra > 0 && !soft) {
     if (!policy.debited) throw badRequest('Please correct the highlighted fields.', { encashDays: `Leave encashment is not available with ${policy.name}.` });
-    if (balance.available < LTC_ENCASH_MIN_BALANCE) {
-      throw badRequest('Please correct the highlighted fields.', { encashDays: `Leave encashment needs a balance of at least ${LTC_ENCASH_MIN_BALANCE} days. ${num(Math.max(0, balance.available))} available.` });
+    // CCS rules: at least 30 days must stay after the leave and the encashment; 60 days in the whole service.
+    const leftAfter = num(balance.available - days - extra);
+    if (leftAfter < LTC_ENCASH_MIN_BALANCE) {
+      throw badRequest('Please correct the highlighted fields.', { encashDays: `After this leave and the encashment at least ${LTC_ENCASH_MIN_BALANCE} days must stay in the balance: ${num(Math.max(0, leftAfter))} would stay.` });
+    }
+    const [enc] = await rows(q, "SELECT COALESCE(SUM(encash_days), 0) AS n FROM leave_requests WHERE user_id = ? AND leave_type_id = ? AND status <> 'rejected' AND id <> ?", [targetId, policy.id, exceptId]);
+    const before = Number(enc?.n ?? 0);
+    if (before + extra > LTC_ENCASH_LIFETIME) {
+      throw badRequest('Please correct the highlighted fields.', { encashDays: `Leave encashment with LTC is at most ${LTC_ENCASH_LIFETIME} days in the whole service: ${num(before)} already taken, ${num(Math.max(0, LTC_ENCASH_LIFETIME - before))} left.` });
     }
   }
   // Days of holidays that now count with an earlier leave of the same type come off the same balance.
@@ -941,7 +968,8 @@ async function checkLeave(
     if (base) {
       const left = await balanceOf(q, targetId, { id: base.id, quota: creditedQuota(base, emp.employmentType, cycleYear, emp.basis, input.startDate, emp.isPwd) }, cycleYear, exceptId);
       const need = num((days + extra + carry) * policy.debitFactor);
-      if (need > left.available && !soft) {
+      // Leave Not Due is debited to the Half Pay Leave account even when that goes below zero (it is earned back later).
+      if (need > left.available && !soft && policy.code !== LND_CODE) {
         throw new HttpError(409, 'Not enough leave balance.', 'NO_BALANCE', { endDate: `${policy.name} uses ${policy.debitFactor} day(s) of ${base.name} for each day: ${need} needed, ${Math.max(0, left.available)} available for ${cycleLabel(cycleYear, emp.basis)}.` });
       }
       return { requested, days, cycleYear, policy, emp, balance: left, stages, prefix, suffix, stationOk, joins, compOffPairs };
