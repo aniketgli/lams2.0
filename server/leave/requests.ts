@@ -12,6 +12,7 @@ import { canManageBalances, type RoleId } from '../lib/roles';
 import type { ActivityScope } from '../employees/activity';
 import { WEEK_DAYS, datesBetween, weekdayOf } from '../attendance/compute';
 import { groupLeaveTypeIds, groupLeaveTypeMap } from './groups';
+import { genderKey } from './gender';
 import { CASUAL_CODES, LOOK_DAYS, type Combine, type Neighbour, combineProblem, toCombine } from './combine';
 import {
   CHILD_CARE_CODE, CHILD_EVENTS, EOL_CODE, LND_CODE, continuousEol, eolProblems, fixedPurposes, lndProblems, serviceMonths, MATERNITY_CODE, PATERNITY_CODE, childCareProblems, childCareSpells, maternityDaysProblem, maternityEnd, maternityProblems,
@@ -499,8 +500,8 @@ export function eligibilityProblem(policy: Policy, emp: Pick<Employee, 'employme
   if (emp.groupTypeIds && !emp.groupTypeIds.has(policy.id)) return `${policy.name} is not part of this employee’s leave group.`;
   if (policy.pwdOnly && !emp.isPwd) return `${policy.name} is for persons with disability only.`;
   if (policy.employeeTypes.length && !policy.employeeTypes.includes(emp.employmentType)) return `${policy.name} is not available for this employee type.`;
-  if (policy.gender === 'female_only' && emp.gender.toLowerCase() !== 'female') return `${policy.name} is for female employees only.`;
-  if (policy.gender === 'male_only' && emp.gender.toLowerCase() !== 'male') return `${policy.name} is for male employees only.`;
+  if (policy.gender === 'female_only' && genderKey(emp.gender) !== 'female') return `${policy.name} is for female employees only.`;
+  if (policy.gender === 'male_only' && genderKey(emp.gender) !== 'male') return `${policy.name} is for male employees only.`;
   if (policy.minServiceMonths && emp.joining && monthsBetween(emp.joining, onDate) < policy.minServiceMonths) return `${policy.name} needs at least ${policy.minServiceMonths} months of service.`;
   return null;
 }
@@ -1471,13 +1472,35 @@ export function requestId(raw: unknown): number {
 }
 
 /** Active employees an administrator can apply for. */
-export async function applicableEmployees(viewer: Viewer): Promise<{ id: string; biometricId: string; name: string; designation: string; isPwd: boolean }[]> {
+export async function applicableEmployees(viewer: Viewer): Promise<{ id: string; biometricId: string; name: string; designation: string; isPwd: boolean; leaveTypeIds: string[] }[]> {
   if (viewer.role !== 'administrator') return [];
   const found = await rows(pool,
     `SELECT u.id, u.biometric_id, u.name, p.designation, p.profile_data FROM users u
        LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id
       WHERE LOWER(u.status) = 'active' AND u.is_system = 0 ORDER BY u.name`);
-  return found.map((r) => ({ id: String(r.id), biometricId: String(r.biometric_id), name: String(r.name), designation: String(r.designation ?? ''), isPwd: profileData(r.profile_data).isPwd === true || profileData(r.profile_data).isPwd === 'true' }));
+  const allowed = await applyTypeIds(found.map((r) => Number(r.id)));
+  return found.map((r) => ({ id: String(r.id), biometricId: String(r.biometric_id), name: String(r.name), designation: String(r.designation ?? ''), isPwd: profileData(r.profile_data).isPwd === true || profileData(r.profile_data).isPwd === 'true', leaveTypeIds: allowed.get(Number(r.id)) ?? [] }));
+}
+
+/**
+ * The leave types each of these users may apply for: those of their leave group that also fit their gender
+ * (Maternity / Child Care for women, Paternity for men), employee type and disability. Months of service are
+ * checked on submit, against the leave's dates.
+ */
+export async function applyTypeIds(userIds: number[]): Promise<Map<number, string[]>> {
+  const out = new Map<number, string[]>();
+  if (!userIds.length) return out;
+  const policies = (await rows(pool, "SELECT * FROM leave_types WHERE status = 'active'")).map(toPolicy);
+  const people = await rows(pool,
+    `SELECT u.id, p.employment_type, p.profile_data FROM users u LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE u.id IN (${userIds.map(() => '?').join(',')})`, userIds);
+  const groupMap = await groupLeaveTypeMap(pool);
+  for (const r of people) {
+    const data = profileData(r.profile_data);
+    const groupCode = typeof data.leaveGroup === 'string' ? data.leaveGroup : '';
+    const emp = { employmentType: String(r.employment_type ?? ''), gender: String(data.gender ?? ''), joining: null, isPwd: data.isPwd === true || data.isPwd === 'true', groupTypeIds: groupCode ? groupMap.get(groupCode) ?? null : null };
+    out.set(Number(r.id), policies.filter((p) => eligibilityProblem(p, emp, todayInIndia()) === null).map((p) => String(p.id)));
+  }
+  return out;
 }
 
 /** Whether this user is a person with disability: only they are offered the PwD-only leave types (Special Casual Leave). */

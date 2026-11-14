@@ -171,8 +171,10 @@ export interface LeaveList {
   to: string;
   requests: LeaveRequest[];
   /** Employees an administrator can apply for (empty for everyone else). */
-  employees: { id: string; biometricId: string; name: string; designation: string; isPwd: boolean }[];
+  employees: { id: string; biometricId: string; name: string; designation: string; isPwd: boolean; /** Leave types this employee may apply for. */ leaveTypeIds: string[] }[];
   types: LeaveTypeRecord[];
+  /** Leave types the signed-in user may apply for (leave group, gender, employee type, disability). */
+  applyTypeIds: string[];
 }
 
 export interface LeaveInput {

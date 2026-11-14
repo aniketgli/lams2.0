@@ -202,7 +202,10 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
   const type = data?.types.find((t) => t.id === form.leaveTypeId) ?? null;
   // A leave type that takes its days from another type (Commuted from Half Pay) is a conversion option of that type.
   const baseType = type?.debitFromTypeId ? data?.types.find((t) => t.id === type.debitFromTypeId) ?? type : type;
-  const variants = baseType ? (data?.types ?? []).filter((t) => t.debitFromTypeId === baseType.id) : [];
+  // Leave types this person may apply for: their leave group, gender (MAT / CCL for women, PAT for men), employee type, disability.
+  const allowedIds = new Set(isAdmin && form.userId ? data?.employees.find((e) => e.id === form.userId)?.leaveTypeIds ?? [] : data?.applyTypeIds ?? []);
+  const mayTake = (t: { id: string }) => allowedIds.has(t.id) || t.id === editing?.leaveTypeId;
+  const variants = baseType ? (data?.types ?? []).filter((t) => t.debitFromTypeId === baseType.id && mayTake(t)) : [];
   const charge = type?.debitFromTypeId ? type.debitFactor : 1;
 
   // Days of the calendar that already hold a leave (and days that cannot be joined with one), coloured and blocked in the pickers.
@@ -639,8 +642,8 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
                   <Select label="Employee" required value={form.userId} disabled={Boolean(editing)} searchable placeholder="Select employee" error={formErrors.userId}
                     onChange={(v: string) => {
                       setField('userId', v);
-                      // Special leave for persons with disability does not carry over to an employee who is not one.
-                      if (type?.pwdOnly && !data?.employees.find((e) => e.id === v)?.isPwd) setField('leaveTypeId', '');
+                      // A leave type the new employee cannot take (leave group, gender, disability) is cleared.
+                      if (form.leaveTypeId && !data?.employees.find((e) => e.id === v)?.leaveTypeIds.includes(form.leaveTypeId)) setField('leaveTypeId', '');
                     }}
                     options={(data?.employees ?? []).map((e) => ({ label: `${e.name} (${e.biometricId})${e.designation ? ` · ${e.designation}` : ''}`, value: e.id }))} />
                 </div>
@@ -652,7 +655,7 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
                     setFormErrors({});
                     setFormMessage(null);
                   }}
-                  options={(data?.types ?? []).filter((t) => !t.debitFromTypeId && (!t.pwdOnly || !isAdmin || Boolean(data?.employees.find((e) => e.id === form.userId)?.isPwd))).map((t) => ({ label: `${t.name} (${t.code})`, value: t.id }))} />
+                  options={(data?.types ?? []).filter((t) => !t.debitFromTypeId && mayTake(t)).map((t) => ({ label: `${t.name} (${t.code})`, value: t.id }))} />
                 {balanceBadge?.balance && !type?.offDaysOnly && (
                   <span className={`absolute right-0 top-0 inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${balanceBadge.balance.available > 0 ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-rose-200 bg-rose-50 text-rose-700'}`}>
                     Balance: {balanceBadge.balance.available} {balanceBadge.balance.available === 1 ? 'Day' : 'Days'}

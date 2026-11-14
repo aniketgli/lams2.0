@@ -1,6 +1,5 @@
 import { applyImport, importTemplate, reviewImport } from './balanceImport';
 import { Router, type Request, type Response } from 'express';
-import { pool } from '../../src/db';
 import { asyncHandler } from '../lib/http';
 import { Validator } from '../lib/validate';
 import { requireActiveRole, requireAuth, isAuditor } from '../middleware/auth.middleware';
@@ -9,11 +8,11 @@ import {
   LEAVE_TYPE_SCOPE, createLeaveType, deleteLeaveType, leaveTypeId, leaveTypeOptions, listLeaveTypes, updateLeaveType,
 } from './types';
 import {
-  LEAVE_GROUP_SCOPE, createLeaveGroup, deleteLeaveGroup, groupLeaveTypeIdsOfUser, listLeaveGroups, updateLeaveGroup,
+  LEAVE_GROUP_SCOPE, createLeaveGroup, deleteLeaveGroup, listLeaveGroups, updateLeaveGroup,
 } from './groups';
 import { correctJoining, decideJoining, fitnessOf, listJoining, prepareJoining, submitJoining } from './joining';
 import {
-  LEAVE_SCOPE, applicableEmployees, isPwdUser, certificateOf, createRequest, decideRequest, deleteRequest, leaveHistory, listBalancesPage, listRequests, previewLeave, balancePreview, compOffOptions, occupiedDates, restrictedHolidayOptions, requestId, setBalance,
+  LEAVE_SCOPE, applicableEmployees, applyTypeIds, certificateOf, createRequest, decideRequest, deleteRequest, leaveHistory, listBalancesPage, listRequests, previewLeave, balancePreview, compOffOptions, occupiedDates, restrictedHolidayOptions, requestId, setBalance,
   undoDecision, updateRequest,
 } from './requests';
 
@@ -104,12 +103,14 @@ const viewerOf = (req: Request) => ({ id: req.auth!.account.id, role: req.auth!.
 router.get('/leave/requests', requireAuth, asyncHandler(async (req, res) => {
   const q = req.query as Record<string, unknown>;
   const viewer = viewerOf(req);
-  const [list, employees, types] = await Promise.all([listRequests(viewer, { from: q.from, to: q.to }), applicableEmployees(viewer), listLeaveTypes()]);
-  // A staff member applies only for the leave types of their own leave group.
-  const own = viewer.role === 'general_staff' ? await groupLeaveTypeIdsOfUser(pool, viewer.id) : null;
-  // A leave type marked for persons with disability only is not shown to anyone else, whatever their leave group.
-  const pwd = viewer.role === 'general_staff' ? await isPwdUser(viewer.id) : true;
-  res.json({ ...list, employees, types: types.filter((t) => t.status === 'active' && (!own || own.has(Number(t.id))) && (pwd || !t.pwdOnly)) });
+  const [list, employees, types, allowed] = await Promise.all([listRequests(viewer, { from: q.from, to: q.to }), applicableEmployees(viewer), listLeaveTypes(), applyTypeIds([viewer.id])]);
+  // The leave types the signed-in user may apply for: their leave group, gender (MAT / CCL for women, PAT for men),
+  // employee type and disability. An administrator applying for someone else uses that employee's leaveTypeIds.
+  const applyIds = allowed.get(viewer.id) ?? [];
+  // A staff member sees only their own types, plus the types of the requests they already have.
+  const keep = new Set([...applyIds, ...list.requests.map((r) => r.leaveTypeId)]);
+  const active = types.filter((t) => t.status === 'active');
+  res.json({ ...list, employees, applyTypeIds: applyIds, types: viewer.role === 'general_staff' ? active.filter((t) => keep.has(t.id)) : active });
 }));
 
 router.get('/leave/balance-preview', requireAuth, asyncHandler(async (req, res) => {
