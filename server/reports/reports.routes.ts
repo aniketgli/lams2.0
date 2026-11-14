@@ -1,5 +1,6 @@
 import { Router, type Response } from 'express';
 import { asyncHandler, badRequest } from '../lib/http';
+import { limitHeavy } from '../middleware/apiRateLimit';
 import { Validator } from '../lib/validate';
 import { requireActiveRole, requireAuth, isAuditor } from '../middleware/auth.middleware';
 import { ActivityScope, activityCsv, activityTable, listActivity, parseActivityFilter } from '../employees/activity';
@@ -82,7 +83,7 @@ router.delete('/reports/schedules/:id', ...isAdmin, asyncHandler(async (req, res
   res.json({ message: 'Report schedule deleted.' });
 }));
 
-router.post('/reports/schedules/:id/send', ...isAdmin, asyncHandler(async (req, res) => {
+router.post('/reports/schedules/:id/send', ...isAdmin, limitHeavy('report-send', 10), asyncHandler(async (req, res) => {
   const { schedule, result } = await sendNow(req, scheduleId(req.params.id));
   res.json({ schedule, result, message: result.status === 'sent' || result.status === 'partial' ? result.message : `Not sent: ${result.message}` });
 }));

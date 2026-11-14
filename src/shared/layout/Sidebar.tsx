@@ -20,7 +20,6 @@ interface SidebarProps {
   setActiveTab: (tab: string) => void;
   activeModule: 'lobby' | 'lams' | 'pms' | 'sims' | 'fms' | 'finance';
   setActiveModule: (module: 'lobby' | 'lams' | 'pms' | 'sims' | 'fms' | 'finance') => void;
-  onOpenSlackModal: () => void;
   isOpenMobile: boolean;
   setIsOpenMobile: (open: boolean) => void;
 }

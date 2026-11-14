@@ -27,7 +27,7 @@ import { insertEmployee } from './store';
  *     the HRMS User role and must choose its own password at first sign-in.
  */
 
-const MAX_CSV_CHARS = 2_000_000;
+const MAX_CSV_CHARS = 1_000_000; // fits inside the 2 MB JSON body limit even after escaping
 
 // ---------------------------------------------------------------------------
 // Database

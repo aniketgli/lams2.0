@@ -12,9 +12,6 @@ export interface HolidayItem {
   month: number; // 1-12
 }
 
-/** Days the office is closed (or optionally closed): every type except official events. */
-export const isDayOff = (h: Pick<HolidayItem, 'type'>): boolean => h.type !== 'event';
-
 // Holidays live in the database (table `holidays`, migration 20261030_holidays.sql) and are
 // loaded through AppContext / holidayApi. There is no built-in list any more.
 

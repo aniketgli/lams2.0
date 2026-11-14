@@ -1,0 +1,69 @@
+name: Security test
+# Starts the portal against a throw-away MySQL database with test accounts and attacks it
+# (scripts/security/pentest.ts). Nothing here touches the live server or its database.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  pentest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: lams2_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -proot" --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/lams2_test
+      SECURITY_TEST_DB: '1'
+      NODE_ENV: production
+      SESSION_SECRET: ci-only-session-secret-0123456789abcdefghijklmnop
+      SETTINGS_ENCRYPTION_KEY: ci-only-settings-key-0123456789abcdefghijkl
+      LOGIN_CAPTCHA: 'off'
+      PORT: '3000'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - name: Create the schema (schema.ts, then every migration in order)
+        run: |
+          bunx drizzle-kit export --dialect=mysql --schema=./src/db/schema.ts | sed -n "/^CREATE TABLE/,\$p" > /tmp/schema.sql
+          head -3 /tmp/schema.sql
+          mysql -h127.0.0.1 -uroot -proot --force lams2_test < /tmp/schema.sql 2>&1 | grep -v "Using a password" || true
+          # File-name order is not dependency order (e.g. 20261031_leave_policy_* alters leave_types before
+          # 20261031_leave_types.sql creates it), so the idempotent migrations are applied in three passes.
+          for pass in 1 2 3; do
+            echo "=== pass $pass"
+            for f in $(ls src/db/migrations/*.sql | sort) $(ls migrations/*.sql | sort); do
+              out=$(mysql -h127.0.0.1 -uroot -proot --force lams2_test < "$f" 2>&1 | grep -v "Using a password" | grep ERROR || true)
+              [ -n "$out" ] && echo "$f: $out" | head -3 || true
+            done
+          done
+      - name: Seed test accounts
+        run: npx tsx scripts/security/seed.ts
+      - name: Read-only database audit
+        run: npx tsx scripts/db-audit.ts || true
+      - name: Build and start the portal
+        run: |
+          bun run build
+          nohup node server.ts > /tmp/server.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf http://127.0.0.1:3000/api/health/ready && break; sleep 1; done
+          curl -sf http://127.0.0.1:3000/api/health/ready
+      - name: Attack it
+        run: SECURITY_REPORT=/tmp/security-report.md bun scripts/security/pentest.ts
+      - name: Server log
+        if: always()
+        run: tail -150 /tmp/server.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-report
+          path: |
+            /tmp/security-report.md
+            /tmp/server.log

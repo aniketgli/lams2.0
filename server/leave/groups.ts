@@ -230,12 +230,3 @@ export async function groupLeaveTypeMap(q: Q): Promise<Map<string, Set<number>>>
   return out;
 }
 
-/** Leave types a signed-in employee can take (null = not restricted: no group). */
-export async function groupLeaveTypeIdsOfUser(q: Q, userId: number): Promise<Set<number> | null> {
-  const [rows] = await q.query<RowDataPacket[]>(
-    'SELECT p.profile_data FROM users u JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE u.id = ? LIMIT 1', [userId]);
-  if (!rows[0]) return null;
-  let code: unknown = null;
-  try { code = JSON.parse(String(rows[0].profile_data || '{}'))?.leaveGroup; } catch { code = null; }
-  return groupLeaveTypeIds(q, code);
-}

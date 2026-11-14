@@ -611,32 +611,9 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     setFormErrors((e) => (e[key as string] ? { ...e, [key as string]: '' } : e));
   };
 
-  // Instant hints while typing. The server repeats every check when saving.
-  const liveErrors = useMemo(() => {
-    const out: Record<string, string> = {};
-    const others = users.filter((u) => u.id !== editingEmployeeId);
-    const email = newUserForm.email.trim().toLowerCase();
-    if (email) {
-      const domain = email.includes('@') ? email.slice(email.lastIndexOf('@') + 1) : '';
-      if (!emailDomains.includes(domain)) out.email = `Only ${emailDomains.map((d) => `@${d}`).join(' or ')} email addresses are accepted.`;
-      else if (others.some((u) => (u.email || '').toLowerCase() === email)) out.email = 'Another employee already uses this email.';
-    }
-    const phoneDigits = newUserForm.phone.replace(/\D/g, '');
-    if (phoneDigits.length >= 10) {
-      const owner = others.find((u) => (u.phone || '').replace(/\D/g, '').slice(-10) === phoneDigits.slice(-10));
-      if (owner) out.phone = `This mobile number is already registered to ${owner.name}.`;
-    } else if (newUserForm.phone.trim()) {
-      out.phone = 'Enter a 10-digit mobile number.';
-    }
-    const bio = newUserForm.biometricId.trim();
-    if (bio && !editingEmployeeId) {
-      if (!/^\d{4}$/.test(bio)) out.biometricId = 'Biometric ID must be exactly 4 digits.';
-      else if (others.some((u) => u.biometricId === bio)) out.biometricId = 'This biometric ID is already in use.';
-    }
-    return out;
-  }, [newUserForm.email, newUserForm.phone, newUserForm.biometricId, users, emailDomains, editingEmployeeId]);
 
-  const errorOf = (key: string): string => liveErrors[key] || formErrors[key] || '';
+  // Every check is made by the server; its field errors are shown here.
+  const errorOf = (key: string): string => formErrors[key] || '';
   const inputClass = (key: string, locked = false) =>
     `w-full px-3 py-2 border rounded-xl focus:outline-none focus:ring-2 text-xs font-medium shadow-2xs transition-all ${
       locked ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white text-slate-900'
@@ -1058,72 +1035,6 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       return;
     }
 
-    const missingFields: string[] = [];
-    if (!newUserForm.suffix?.trim()) missingFields.push('Suffix');
-    if (!newUserForm.name?.trim()) missingFields.push('Full Name');
-    if (!newUserForm.gender?.trim()) missingFields.push('Gender');
-    if (!newUserForm.dob?.trim()) missingFields.push('Date of Birth (DOB)');
-    if (!newUserForm.phone?.trim()) missingFields.push('Mobile Number');
-    if (!newUserForm.email?.trim()) missingFields.push('Email Address');
-    if (!/^\d{4}$/.test(newUserForm.biometricId?.trim() || '')) missingFields.push('Biometric ID (4 digits)');
-    if (!newUserForm.institute) missingFields.push('Organization');
-    if (!newUserForm.employmentType) missingFields.push('Employee Type');
-    if (!newUserForm.shiftId?.trim()) missingFields.push('Shift');
-    if (!newUserForm.leaveGroup) missingFields.push('Leave Group');
-    if (!newUserForm.joiningDate?.trim()) missingFields.push('Date of Joining');
-
-    if (layoutOf(newUserForm.employmentType) === 'permanent') {
-      if (!newUserForm.permanentEmploymentType?.trim()) missingFields.push('Category');
-      if (!newUserForm.employeeCategory?.trim()) missingFields.push('Cadre');
-      if (!newUserForm.designation?.trim()) missingFields.push('Designation');
-      if (!newUserForm.department?.trim()) missingFields.push('Department / Section / Cell');
-      if (!newUserForm.reportingManagerId?.trim()) missingFields.push('Reporting Manager');
-      if (!newUserForm.reviewingManagerId?.trim()) missingFields.push('HoD');
-      if (newUserForm.permanentEmploymentType === 'Deputation' && !newUserForm.validUntilDate?.trim()) {
-        missingFields.push('Valid Up To Date');
-      }
-      if (newUserForm.isOnProbation && !newUserForm.probationEndDate?.trim()) missingFields.push('Tentative Probation End Date');
-    } else if (layoutOf(newUserForm.employmentType) === 'contractual') {
-      if (!newUserForm.employeeCategory?.trim()) missingFields.push('Cadre');
-      if (!newUserForm.designation?.trim()) missingFields.push('Designation');
-      if (!newUserForm.department?.trim()) missingFields.push('Department / Section / Cell');
-      if (!newUserForm.reportingManagerId?.trim()) missingFields.push('Reporting Manager');
-      if (!newUserForm.validUntilDate?.trim()) missingFields.push('Valid Up To Date');
-    } else if (layoutOf(newUserForm.employmentType) === 'researcher') {
-      if (!newUserForm.designation?.trim()) missingFields.push('Designation');
-      if (!newUserForm.department?.trim()) missingFields.push('Project Name');
-      if (!newUserForm.reportingManagerId?.trim()) missingFields.push('Reporting Manager / PI');
-      if (!newUserForm.validUntilDate?.trim()) missingFields.push('Valid Up To Date');
-    } else if (layoutOf(newUserForm.employmentType) === 'diploma_trainee') {
-      if (!newUserForm.courseProgram?.trim()) missingFields.push('Course');
-      if (!newUserForm.courseBatch?.trim()) missingFields.push('Batch');
-      if (!newUserForm.reportingManagerId?.trim()) missingFields.push('Reporting Manager');
-      if (!newUserForm.validUntilDate?.trim()) missingFields.push('Valid Up To Date');
-    } else if (layoutOf(newUserForm.employmentType) === 'bsc_msc_student') {
-      if (!newUserForm.courseProgram?.trim()) missingFields.push('Course');
-      if (!newUserForm.courseBatch?.trim()) missingFields.push('Batch');
-      if (!newUserForm.reportingManagerId?.trim()) missingFields.push('Reporting Manager');
-      if (!newUserForm.validUntilDate?.trim()) missingFields.push('Valid Up To Date');
-    } else if (layoutOf(newUserForm.employmentType) === 'phd_student') {
-      if (!newUserForm.enrolledThrough?.trim()) missingFields.push('Enrolled Through');
-      if (!newUserForm.reportingManagerId?.trim()) missingFields.push('Reporting Manager');
-      if (!newUserForm.validUntilDate?.trim()) missingFields.push('Valid Up To Date');
-    } else if (layoutOf(newUserForm.employmentType) === 'intern') {
-      if (!newUserForm.department?.trim()) missingFields.push('Project / Department / Section / Cell');
-      if (!newUserForm.reportingManagerId?.trim()) missingFields.push('Reporting Manager');
-      if (!newUserForm.validUntilDate?.trim()) missingFields.push('Valid Up To Date');
-    }
-
-    const liveProblems = Object.values(liveErrors).filter(Boolean);
-    if (liveProblems.length > 0) {
-      showToast(liveProblems[0]);
-      return;
-    }
-
-    if (missingFields.length > 0) {
-      showToast(`Mandatory fields required: ${missingFields.slice(0, 3).join(', ')}${missingFields.length > 3 ? ` and ${missingFields.length - 3} more` : ''}`);
-      return;
-    }
 
     // The server re-checks every field and writes users, employee_profiles,
     // the HRMS role and the audit log together. The form only reports its answer.
@@ -1221,16 +1132,6 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     e.preventDefault();
     if (!userToResetPasswordForm) return;
 
-    if (resetPassForm.mode === 'custom') {
-      if (!resetPassForm.customPassword || resetPassForm.customPassword.length < 8) {
-        showToast('Custom password must be at least 8 characters, with a letter and a number.', 'error');
-        return;
-      }
-      if (resetPassForm.customPassword !== resetPassForm.confirmPassword) {
-        showToast('Passwords do not match. Please re-enter.', 'error');
-        return;
-      }
-    }
 
     const biometricId = String((userToResetPasswordForm as UserType & { biometricId?: string; biometric_id?: string }).biometricId ??
       (userToResetPasswordForm as UserType & { biometric_id?: string }).biometric_id ?? '').trim();
@@ -1247,6 +1148,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
         body: JSON.stringify({
           mode: resetPassForm.mode,
           password: resetPassForm.mode === 'custom' ? resetPassForm.customPassword : undefined,
+          confirmPassword: resetPassForm.mode === 'custom' ? resetPassForm.confirmPassword : undefined,
           reason: resetPassForm.reason
         })
       });
@@ -1313,7 +1215,6 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
   const handleConfirmDeleteUser = async () => {
     if (!userToDelete || deleteBusy) return;
-    if (!deleteReason.trim()) { setDeleteError('Deletion reason is required for the audit log.'); return; }
     setDeleteBusy(true);
     setDeleteError('');
     const target = userToDelete;

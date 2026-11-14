@@ -1,5 +1,8 @@
 import { mysqlTable, varchar, text, longtext, timestamp, boolean, int, decimal, bigint, uniqueIndex, date, json, datetime, time, index } from 'drizzle-orm/mysql-core';
 
+// Legacy tables (sessions, profile_master_records and the three old master audit-log tables) are no longer
+// used; migrations/20261212_retire_legacy_tables.sql renames them. Do not run `drizzle-kit push` on the live database.
+
 export const users = mysqlTable('users', {
   // ORM mapping only: the existing MySQL table is not modified by this declaration.
   id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
@@ -33,8 +36,6 @@ export const user_module_roles = mysqlTable('user_module_roles', {
   assignmentUnique: uniqueIndex('user_module_role_biometric_unique').on(table.biometricId, table.moduleId, table.roleId),
 }));
 
-
-
 // Immutable audit trail for permanent user-account deletion. Kept separate from users
 // so the deletion event survives after the account row is removed.
 export const user_account_audit_logs = mysqlTable('user_account_audit_logs', {
@@ -47,13 +48,6 @@ export const user_account_audit_logs = mysqlTable('user_account_audit_logs', {
   reference: varchar('reference', { length: 255 }),
   deletedBy: varchar('deleted_by', { length: 4 }).notNull(),
   deletedAt: timestamp('deleted_at').defaultNow().notNull(),
-});
-
-export const sessions = mysqlTable('sessions', {
-  id: varchar('id', { length: 255 }).primaryKey(),
-  userId: varchar('user_id', { length: 36 }).notNull(),
-  expires: timestamp('expires').notNull(),
-  data: text('data'),
 });
 
 export const employee_profiles = mysqlTable('employee_profiles', {
@@ -89,7 +83,6 @@ export const shifts = mysqlTable('shifts', {
   applicableDays: json('applicable_days').$type<string[]>(),
 });
 
-
 // Biometric device registry. Device ID, short name and serial number are unique.
 export const biometric_machines = mysqlTable('biometric_machines', {
   rowId: bigint('row_id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
@@ -104,21 +97,6 @@ export const biometric_machines = mysqlTable('biometric_machines', {
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });
 
-
-
-// Immutable audit trail for biometric machine master changes.
-export const biometric_machine_audit_logs = mysqlTable('biometric_machine_audit_logs', {
-  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
-  machineId: varchar('machine_id', { length: 64 }).notNull(),
-  action: varchar('action', { length: 16 }).notNull(),
-  changedByBiometricId: varchar('changed_by_biometric_id', { length: 4 }),
-  changedByName: varchar('changed_by_name', { length: 255 }),
-  changedAt: timestamp('changed_at').defaultNow().notNull(),
-  beforeData: longtext('before_data'),
-  afterData: longtext('after_data'),
-  reason: text('reason'),
-});
-
 // One active organization record (id = 'default'). Logo is stored as a validated data URL.
 export const organization_settings = mysqlTable('organization_settings', {
   id: varchar('id', { length: 32 }).primaryKey(),
@@ -128,7 +106,6 @@ export const organization_settings = mysqlTable('organization_settings', {
   copyrightText: varchar('copyright_text', { length: 500 }),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });
-
 
 // Shared organization units used by HRMS Profile Master.
 export const organization_units = mysqlTable('organization_units', {
@@ -144,31 +121,6 @@ export const organization_units = mysqlTable('organization_units', {
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });
-
-// Audit history for Organization Profile Master create, update and delete actions.
-export const organization_unit_audit_logs = mysqlTable('organization_unit_audit_logs', {
-  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
-  organizationId: bigint('organization_id', { mode: 'number', unsigned: true }).notNull(),
-  organizationName: varchar('organization_name', { length: 255 }).notNull(),
-  organizationCode: varchar('organization_code', { length: 80 }),
-  action: varchar('action', { length: 16 }).notNull(),
-  changedByBiometricId: varchar('changed_by_biometric_id', { length: 4 }),
-  changedByName: varchar('changed_by_name', { length: 255 }),
-  changedAt: timestamp('changed_at').defaultNow().notNull(),
-  beforeData: longtext('before_data'),
-  afterData: longtext('after_data'),
-});
-
-export const profile_master_records = mysqlTable('profile_master_records', {
-  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
-  masterKey: varchar('master_key', { length: 40 }).notNull(),
-  name: varchar('name', { length: 255 }).notNull(),
-  code: varchar('code', { length: 100 }).notNull(),
-  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
-  metadata: longtext('metadata'),
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
-}, (table) => ({ masterCodeUnique: uniqueIndex('profile_master_key_code_unique').on(table.masterKey, table.code) }));
 
 /** Dedicated database tables for each Profile Master. */
 export const designations = mysqlTable('designations', {
@@ -220,7 +172,6 @@ export const phd_enrollments = mysqlTable('phd_enrollments', {
   createdAt: timestamp('created_at').defaultNow(), updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });
 
-
 export const user_project_histories = mysqlTable('user_histories', {
   id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
   biometricId: varchar('biometric_id', { length: 4 }).notNull(),
@@ -240,21 +191,6 @@ export const user_project_histories = mysqlTable('user_histories', {
   remarks: longtext('remarks'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
-});
-
-
-/** Audit trail for Shift Master create/update/status/default/delete actions. */
-export const shift_master_audit_logs = mysqlTable('shift_master_audit_logs', {
-  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
-  shiftId: bigint('shift_id', { mode: 'number', unsigned: true }).notNull(),
-  shiftCode: varchar('shift_code', { length: 50 }).notNull(),
-  action: varchar('action', { length: 24 }).notNull(),
-  changedByBiometricId: varchar('changed_by_biometric_id', { length: 4 }),
-  changedByName: varchar('changed_by_name', { length: 255 }),
-  changedAt: timestamp('changed_at').defaultNow(),
-  reason: text('reason'),
-  beforeData: longtext('before_data'),
-  afterData: longtext('after_data'),
 });
 
 // Unified audit trail for every master (migrations/20261029_master_settings.sql).
@@ -362,7 +298,6 @@ export const manual_attendance_requests = mysqlTable('manual_attendance_requests
   createdAt: datetime('created_at', { fsp: 3 }),
   updatedAt: datetime('updated_at', { fsp: 3 }),
 });
-
 
 // Outdoor duty (OD) requests; approved ones show as OD on the Attendance page.
 export const outdoor_duty_requests = mysqlTable('outdoor_duty_requests', {

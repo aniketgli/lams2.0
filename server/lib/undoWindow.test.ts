@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { withinUndoWindow } from './undoWindow';
+import { withinUndoWindow } from './approvalFlow';
 
 describe('withinUndoWindow', () => {
   test('open for 10 minutes', () => {

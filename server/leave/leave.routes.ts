@@ -1,6 +1,7 @@
 import { applyImport, importTemplate, reviewImport } from './balanceImport';
 import { Router, type Request, type Response } from 'express';
 import { asyncHandler, attachmentDisposition } from '../lib/http';
+import { limitHeavy } from '../middleware/apiRateLimit';
 import { Validator } from '../lib/validate';
 import { requireActiveRole, requireAuth, isAuditor, hrmsViewerOf } from '../middleware/auth.middleware';
 import { activityCsv, activityTable, listActivity, parseActivityFilter } from '../employees/activity';
@@ -151,11 +152,11 @@ router.get('/leave/balances/history', requireAuth, asyncHandler(async (req, res)
   res.json(await leaveHistory(viewerOf(req), (req.query as Record<string, unknown>).userId));
 }));
 
-router.post('/leave/balances/import/review', requireAuth, asyncHandler(async (req, res) => {
+router.post('/leave/balances/import/review', requireAuth, limitHeavy('balance-import', 30), asyncHandler(async (req, res) => {
   res.json(await reviewImport(viewerOf(req), req.body));
 }));
 
-router.post('/leave/balances/import', requireAuth, asyncHandler(async (req, res) => {
+router.post('/leave/balances/import', requireAuth, limitHeavy('balance-import-apply', 10), asyncHandler(async (req, res) => {
   const result = await applyImport(req, viewerOf(req), req.body);
   res.json({ ...result, message: `${result.summary.ok} balance(s) updated${result.summary.unchanged ? `, ${result.summary.unchanged} unchanged` : ''}.` });
 }));

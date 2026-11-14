@@ -7,7 +7,6 @@ import type { RowDataPacket } from 'mysql2';
 import { dbTarget, pool } from '../src/db';
 import { describeDatabase } from '../src/db/connection';
 import { emailRoutes } from './integrations/email/email.routes';
-import { slackRoutes } from './integrations/slack/slack.routes';
 import { authRoutes } from './routes/auth.routes';
 import accessRoutes from './routes/access.routes';
 import employeeRoutes from './employees/employees.routes';
@@ -29,6 +28,7 @@ import { SESSION_COOKIE } from './lib/http';
 import { sessionConfig } from './config/session.config';
 import { trustProxySetting } from './config/proxy.config';
 import { requireCurrentContext } from './middleware/auth.middleware';
+import { apiRateLimit, writeRateLimit } from './middleware/apiRateLimit';
 
 
 async function sessionTableExists(): Promise<boolean> {
@@ -93,7 +93,7 @@ export async function createApp(httpServer?: HttpServer) {
   }));
 
   const api = express.Router();
-  api.use(noStore, csrfGuard, requireCurrentContext);
+  api.use(noStore, apiRateLimit, csrfGuard, writeRateLimit, requireCurrentContext);
   api.get('/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
@@ -109,7 +109,6 @@ export async function createApp(httpServer?: HttpServer) {
   api.use('/auth', authRoutes);
   api.use('/access', accessRoutes);
   api.use('/email', emailRoutes);
-  api.use('/slack', slackRoutes);
   api.use('/hrms/masters', mastersRoutes);
   api.use('/hrms', settingsRoutes); // shifts, biometric machines, organization settings
   api.use('/hrms', holidayRoutes); // holiday calendar

@@ -14,7 +14,6 @@ import { HolidayCalendarPage } from './modules/hrms/holidays/pages/HolidayCalend
 import { MasterSettingsPage } from './modules/hrms/master/pages/MasterSettingsPage';
 import { ReportsPage } from './modules/hrms/reports/pages/ReportsPage';
 import { EmployeeProfilePage } from './modules/hrms/profile/pages/EmployeeProfilePage';
-import { SlackHubModal } from './shared/modals/SlackHubModal';
 import { EmailToast } from './shared/components/EmailToast';
 import { LogoViewerModal } from './shared/modals/LogoViewerModal';
 import { LoginPage } from './auth/pages/LoginPage';
@@ -31,7 +30,6 @@ const AppContent: React.FC = () => {
   const { status, session, enterModule, exitModule } = useSession();
   const { currentUser, isLogoViewerOpen, setIsLogoViewerOpen } = useApp();
   const rawPath = usePath();
-  const [isSlackModalOpen, setIsSlackModalOpen] = useState(false);
   const [isOpenMobile, setIsOpenMobile] = useState(false);
 
   const { screen, path } = resolveRoute(rawPath, status, session);
@@ -95,12 +93,11 @@ const AppContent: React.FC = () => {
         isOpenMobile={isOpenMobile}
         setIsOpenMobile={setIsOpenMobile}
         onRoleChangedGoDashboard={() => goTo(homePageFor(activeRole))}
-        onOpenSlackModal={() => setIsSlackModalOpen(true)}
       >
         {screen.kind === 'hrms' && (
           // Keyed by role so every page remounts with fresh state after a role switch.
           <React.Fragment key={activeRole ?? 'none'}>
-            {tab === 'dashboard' && <DashboardPage onNavigate={goTo} onOpenSlackModal={() => setIsSlackModalOpen(true)} />}
+            {tab === 'dashboard' && <DashboardPage onNavigate={goTo} />}
             {(tab === 'attendance' || tab === 'manual_attendance' || tab === 'od') && (
               <AttendanceManagementPage key={tab} initialTab={tab} />
             )}
@@ -123,7 +120,6 @@ const AppContent: React.FC = () => {
       </AppLayout>
 
       <SessionTimeoutGuard />
-      <SlackHubModal isOpen={isSlackModalOpen} onClose={() => setIsSlackModalOpen(false)} />
       <EmailToast />
       <LogoViewerModal
         isOpen={isLogoViewerOpen}
