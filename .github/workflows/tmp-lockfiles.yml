@@ -1,0 +1,21 @@
+name: TEMP regenerate lockfiles
+# Temporary: regenerates package-lock.json and bun.lock after removing unused dependencies. Removed before merge.
+on:
+  push:
+    branches: [qa/cleanup-hardening]
+jobs:
+  lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: oven-sh/setup-bun@v2
+      - run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - run: bun install
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lockfiles
+          path: |
+            package-lock.json
+            bun.lock

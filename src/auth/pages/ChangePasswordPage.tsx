@@ -25,7 +25,9 @@ type FieldErrors = Partial<Record<'currentPassword' | 'newPassword' | 'confirmPa
  */
 export const ChangePasswordPage: React.FC<{ first: boolean }> = ({ first }) => {
   const { orgBranding } = useApp();
-  const { session, changePassword, skipPasswordChange } = useSession();
+  const { session, changePassword, skipPasswordChange, logout: signOut } = useSession();
+  // Fixed system accounts (Administrator / Auditor) cannot skip: the server refuses everything else until they do.
+  const mustSet = Boolean(session?.passwordChangeRequired);
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -98,7 +100,9 @@ export const ChangePasswordPage: React.FC<{ first: boolean }> = ({ first }) => {
 
           {first && (
             <Alert variant="info">
-              You signed in with the default password. You can choose your own password now, or skip and change it later from the lobby.
+              {mustSet
+                ? 'You signed in with the default password. Choose your own password to continue.'
+                : 'You signed in with the default password. You can choose your own password now, or skip and change it later from the lobby.'}
             </Alert>
           )}
           {error && <Alert variant="error" onDismiss={() => setError(null)}>{error}</Alert>}
@@ -162,7 +166,15 @@ export const ChangePasswordPage: React.FC<{ first: boolean }> = ({ first }) => {
           </form>
 
           <div className="pt-1 flex justify-center">
-            {first ? (
+            {first && mustSet ? (
+              <button
+                type="button"
+                onClick={() => void signOut()}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-primary cursor-pointer"
+              >
+                Sign out
+              </button>
+            ) : first ? (
               <button
                 type="button"
                 onClick={() => void skip()}

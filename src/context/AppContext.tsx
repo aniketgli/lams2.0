@@ -2,10 +2,9 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useSession } from '../auth/SessionContext';
 import { MASTERS_CHANGED_EVENT, MasterOptions, masterApi } from '../modules/hrms/master/masterApi';
 import { EmployeeRow, SaveResult, employeeApi, toSaveError } from '../modules/hrms/profile/employeeApi';
-import { User, EmploymentType, OutdoorDutyRequest, SlackConfig, SlackNotification, OrgBranding, UserModuleRoles, EmailDeliveryStatus } from '../types';
+import { User, EmploymentType, OutdoorDutyRequest, OrgBranding, UserModuleRoles, EmailDeliveryStatus } from '../types';
 import { HolidayItem } from '../modules/hrms/holidays/data/holidayData';
 import { holidayApi, toHolidayItem } from '../modules/hrms/holidays/holidayApi';
-import { sendSlackNotification } from '../shared/services/slackService';
 
 interface AppContextType {
   currentUser: User;
@@ -15,8 +14,6 @@ interface AppContextType {
   /** Active values of every master (salutation, gender, employee type, departments, ...). */
   masterOptions: MasterOptions;
   odRequests: OutdoorDutyRequest[];
-  slackConfig: SlackConfig;
-  slackLogs: SlackNotification[];
 
   // Admin / Profile Actions
   updateUserProfile: (userId: string, updatedFields: Partial<User>) => Promise<SaveResult>;
@@ -24,7 +21,6 @@ interface AppContextType {
   reloadEmployees: () => Promise<User[] | null>;
   toggleUserStatus: (userId: string, reason?: string, effectiveDate?: string) => Promise<{ success: boolean; message?: string; temporaryPassword?: string }>;
   deleteUser: (userId: string, reason: string, reference?: string) => Promise<{ success: boolean; message?: string }>;
-  updateSlackConfig: (newConfig: SlackConfig) => void;
 
   // Holiday Management Actions (Admin)
   holidays: HolidayItem[];
@@ -51,17 +47,6 @@ interface AppContextType {
   departmentsMaster: string[];
 }
 
-/** Slack starts switched off with no webhook; the administrator enters the real one in the Slack hub. */
-const DEFAULT_SLACK_CONFIG: SlackConfig = {
-  webhookUrl: '',
-  defaultChannel: '',
-  enableSlackNotifications: false,
-  notifyOnLeaveRequest: false,
-  notifyOnLeaveApproval: false,
-  notifyOnODRequest: false,
-  notifyOnODApproval: false,
-  notifyOnLowAttendance: false,
-};
 const NO_OD_REQUESTS: OutdoorDutyRequest[] = [];
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -162,13 +147,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [isAuthenticated, reloadEmployees]);
 
   const odRequests = NO_OD_REQUESTS; // outdoor duty is served by /api/hrms/outdoor-duty; this legacy list stays empty for the placeholder Finance view
-
-  const [slackConfig, setSlackConfig] = useState<SlackConfig>(() => {
-    const saved = localStorage.getItem('la_hub_slack_config');
-    return saved ? JSON.parse(saved) : DEFAULT_SLACK_CONFIG;
-  });
-
-  const [slackLogs, setSlackLogs] = useState<SlackNotification[]>([]);
 
   // Organization Branding State
   const DEFAULT_ORG_BRANDING: OrgBranding = {
@@ -275,10 +253,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } as User)
     : undefined) as User;
 
-  const addSlackLog = (log: SlackNotification) => {
-    setSlackLogs((prev) => [log, ...prev]);
-  };
-
   // Get attendance visible based on Role Rules:
   // Admin: ALL
   // Reporting / Reviewing Mgr: Team members reporting to them or in sub-team + themselves
@@ -336,18 +310,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Show what the database now holds.
     await reloadEmployees();
-    const actionTitle = isActivating ? '🟢 User Account Reactivated' : '🔴 User Account Deactivated';
-    sendSlackNotification(
-      slackConfig,
-      {
-        channel: '#leave-and-attendance-logs',
-        sender: currentUser.name,
-        title: actionTitle,
-        message: `Admin *${currentUser.name}* ${isActivating ? 'reactivated' : 'deactivated'} account for *${targetUser.name}* (${targetUser.email}).${reason ? `\n*Reason/Remarks:* ${reason}` : ''}${effectiveDate ? ` | *Effective:* ${effectiveDate}` : ''}`,
-        type: 'system'
-      },
-      addSlackLog
-    );
     return { success: true, temporaryPassword };
   };
 
@@ -363,27 +325,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true };
   };
 
-  const updateSlackConfig = (newConfig: SlackConfig) => {
-    setSlackConfig(newConfig);
-    sendSlackNotification(
-      newConfig,
-      {
-        channel: newConfig.defaultChannel,
-        sender: currentUser.name,
-        title: `⚙️ Slack Webhook Settings Updated`,
-        message: `Slack Integration configuration updated by *${currentUser.name}*. Webhooks active: *${newConfig.enableSlackNotifications}*.`,
-        type: 'system'
-      },
-      addSlackLog
-    );
-  };
-
   // The portal used to keep demo attendance, leave and OD data in the browser. Nothing reads it any more, so remove it.
   useEffect(() => {
     try {
       for (let i = localStorage.length - 1; i >= 0; i -= 1) {
         const key = localStorage.key(i);
-        if (key && /^la_hub_(seed|attendance|manual_attendance|od_requests|leave|shifts|project_histories|email|locations|slack_logs)/.test(key)) localStorage.removeItem(key);
+        if (key && /^la_hub_(seed|attendance|manual_attendance|od_requests|leave|shifts|project_histories|email|locations|slack_logs|slack_config)/.test(key)) localStorage.removeItem(key);
       }
     } catch { /* storage unavailable */ }
   }, []);
@@ -412,15 +359,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         users,
         masterOptions,
         odRequests,
-        slackConfig,
-        slackLogs,
         updateUserProfile,
         addUserProfile,
         reloadEmployees,
         systemUsers,
         toggleUserStatus,
         deleteUser,
-        updateSlackConfig,
         holidays,
         reloadHolidays,
         orgBranding,

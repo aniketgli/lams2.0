@@ -13,6 +13,9 @@ import { accountBlockReason, cachedAccountById, cachedActiveGrants, hasGrant } f
  * effect on the very next request, on every device.
  */
 
+import { PASSWORD_CHANGE_PATHS, passwordChangeRequired } from '../lib/passwordGate';
+export { passwordChangeRequired } from '../lib/passwordGate';
+
 const requestPath = (req: Request) => (req.originalUrl || req.url || '').split('?')[0].replace(/\/+$/, '');
 
 export const requireAuth: RequestHandler = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
@@ -49,6 +52,12 @@ export const requireAuth: RequestHandler = asyncHandler(async (req: Request, res
 
   const blocked = accountBlockReason(account!);
   if (blocked) await endSession(403, blocked, 'ACCOUNT_BLOCKED');
+
+  // The fixed Administrator / Auditor accounts are created with a published default password, so until it is
+  // replaced the session may only change the password (or sign out). Employees may still skip the offer.
+  if (passwordChangeRequired(account!) && !PASSWORD_CHANGE_PATHS.has(requestPath(req))) {
+    throw new HttpError(403, 'Set a new password for this account before continuing.', 'PASSWORD_CHANGE_REQUIRED');
+  }
 
   // --- Active module / role -------------------------------------------------
   const grants = await cachedActiveGrants(account!.biometricId);

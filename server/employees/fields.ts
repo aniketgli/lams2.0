@@ -35,9 +35,6 @@ interface LayoutRules {
 
 export { CADRES, RECRUITMENT_CATEGORIES } from './lists';
 
-/** Layouts whose form asks for a designation (designations may be tied to one of these employee types). */
-export const DESIGNATION_LAYOUTS: FormLayout[] = ['permanent', 'contractual', 'researcher'];
-
 /** What each fixed form layout asks for. Mirrors the client form. */
 export const LAYOUT_RULES: Record<FormLayout, LayoutRules> = {
   permanent: { department: 'organizations', designation: true, category: true, hod: true, probation: true, validUntil: 'deputation' },

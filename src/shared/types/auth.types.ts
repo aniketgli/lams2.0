@@ -37,7 +37,6 @@ export interface User {
   designation: string;
   reportingManagerId?: string;
   reviewingManagerId?: string;
-  slackHandle?: string;
   phone?: string;
   gender?: string;
   officeLocation?: string;
@@ -413,13 +412,6 @@ export const getUserModuleRoles = (user?: Partial<User> | null, moduleId?: Enter
   return [];
 };
 
-export const userHasModuleRole = (user: Partial<User> | null | undefined, moduleId: EnterpriseModuleId, roleId: string): boolean => {
-  if (!user) return false;
-  if (user.role === 'administrator') return true;
-  const roles = getUserModuleRoles(user, moduleId);
-  return roles.includes(roleId);
-};
-
 export const getUserRoles = (user?: Partial<User> | null): UserRole[] => {
   if (!user) return ['general_staff'];
   if (user.roles && user.roles.length > 0) return user.roles;
@@ -427,8 +419,3 @@ export const getUserRoles = (user?: Partial<User> | null): UserRole[] => {
   return ['general_staff'];
 };
 
-export const userHasRole = (user?: Partial<User> | null, targetRole?: UserRole): boolean => {
-  if (!user || !targetRole) return false;
-  const userRoles = getUserRoles(user);
-  return userRoles.includes(targetRole);
-};
