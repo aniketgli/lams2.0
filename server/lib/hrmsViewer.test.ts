@@ -35,7 +35,8 @@ describe('HRMS route files read the role through hrmsViewerOf', () => {
   test('no HRMS route builds a viewer from the raw active role', async () => {
     const { readdirSync, readFileSync, statSync } = await import('node:fs');
     const { join } = await import('node:path');
-    const root = join(import.meta.dir, '..');
+    const { fileURLToPath } = await import('node:url');
+    const root = fileURLToPath(new URL('..', import.meta.url)).replace(/[\\/]$/, '');
     const offenders: string[] = [];
     const walk = (dir: string) => {
       for (const name of readdirSync(dir)) {

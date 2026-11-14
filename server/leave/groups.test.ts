@@ -1,8 +1,8 @@
 import { expect, test, mock, describe, beforeEach } from 'bun:test';
-import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // Absolute module paths (mock.module needs the resolved file), built from this file's folder so the test runs in any checkout.
-const root = (file: string) => join(import.meta.dir, '../..', file);
+const root = (file: string) => fileURLToPath(new URL(`../../${file}`, import.meta.url));
 let grp: any[]; let links: any[]; let audits: any[]; let nextId: number; let counts: Record<string, number>;
 const query = async (q: string, p: any[] = []) => {
   q = q.replace(/\s+/g, ' ');

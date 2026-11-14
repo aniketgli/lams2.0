@@ -1,8 +1,8 @@
 import { expect, test, mock, describe } from 'bun:test';
-import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // Absolute module paths (mock.module needs the resolved file), built from this file's folder so the test runs in any checkout.
-const root = (file: string) => join(import.meta.dir, '../..', file);
+const root = (file: string) => fileURLToPath(new URL(`../../${file}`, import.meta.url));
 
 const base = { name: 'Emp', department: 'IT', designation: 'JE', biometricId: '1' };
 const manual = [
