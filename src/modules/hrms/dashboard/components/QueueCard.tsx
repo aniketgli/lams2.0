@@ -20,22 +20,24 @@ const prettyDates = (text: string) => text.replace(/(\d{4})-(\d{2})-(\d{2})/g, (
 
 /**
  * One pending-requests section: the first few requests in the shared table and a link to the full screen.
- * Every section uses the same fixed column widths, so the columns line up from one section to the next;
- * Reason takes the rest of the row.
+ * The columns share the whole width of the card (percentages that add up to the room beside Sr. No.), so the
+ * content is spread across the row and not bunched on the left; sections of the same kind line up.
  */
 export const QueueTable: React.FC<QueueTableProps> = ({ title, icon: Icon, queue, emptyTitle, onViewAll, showPerson = true }) => {
+  // 92% = the room beside Sr. No. (64px of an 800px table): see fittedWidths.
+  const w = showPerson ? { name: '26%', tag: '20%', when: '22%', text: '24%' } : { name: '', tag: '28%', when: '28%', text: '36%' };
   const columns: ColumnDef<QueueItem>[] = [
     ...(showPerson ? [{
-      key: 'name', header: 'Employee', width: '15rem', sortValue: (i: QueueItem) => i.name,
+      key: 'name', header: 'Employee', width: w.name, sortValue: (i: QueueItem) => i.name,
       render: (i: QueueItem) => <div className="min-w-0"><div className="font-semibold text-slate-900 truncate" title={i.name}>{i.name}</div><div className="text-[11px] text-slate-500 truncate" title={`${i.department}${i.designation ? ` · ${i.designation}` : ''}`}>{i.department}{i.designation ? ` · ${i.designation}` : ''}</div></div>,
     }] : []),
-    { key: 'tag', header: 'Type', width: '13rem', sortValue: (i) => i.tag, render: (i) => <span className="inline-flex max-w-full px-2 py-0.5 rounded-full border border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-700 whitespace-normal leading-snug">{i.tag}</span> },
+    { key: 'tag', header: 'Type', width: w.tag, sortValue: (i) => i.tag, render: (i) => <span className="inline-flex max-w-full px-2 py-0.5 rounded-full border border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-700 whitespace-normal leading-snug">{i.tag}</span> },
     {
-      key: 'when', header: 'Date', width: '14rem', sortValue: (i) => i.when,
+      key: 'when', header: 'Date', width: w.when, sortValue: (i) => i.when,
       render: (i) => <div><div className="text-slate-800"><KeepDates text={prettyDates(i.when)} /></div>{(i.where || i.days != null) && <div className="text-[11px] text-slate-500">{[i.where, i.days != null ? `${i.days} ${i.days === 1 ? 'day' : 'days'}` : null].filter(Boolean).join(' · ')}</div>}</div>,
     },
     {
-      key: 'text', header: 'Reason', render: (i) => <div className="text-slate-700 break-words">{i.text}{i.note && <div className="text-[11px] font-semibold text-amber-700 mt-0.5">{i.note}</div>}</div>,
+      key: 'text', header: 'Reason', width: w.text, render: (i) => <div className="text-slate-700 break-words">{i.text}{i.note && <div className="text-[11px] font-semibold text-amber-700 mt-0.5">{i.note}</div>}</div>,
     },
   ];
   return (
