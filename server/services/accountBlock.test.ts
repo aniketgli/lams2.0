@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { todayInIndia } from '../lib/validate';
 
-import { accountBlockReason } from './accountBlock';
+import { accountBlockReason, statusForValidity } from './accountBlock';
 
 const today = todayInIndia();
 const day = (offset: number): string => {
@@ -30,5 +30,21 @@ describe('accountBlockReason (who may sign in)', () => {
   test('a deactivated system account is blocked, an active one needs no date', () => {
     expect(accountBlockReason({ status: 'inactive', validUpto: null, isSystem: true })).not.toBeNull();
     expect(accountBlockReason({ status: 'active', validUpto: null, isSystem: true })).toBeNull();
+  });
+});
+
+describe('statusForValidity (stored status follows the validity date)', () => {
+  const today = '2026-11-14';
+  test('an active account past its validity becomes expired', () => {
+    expect(statusForValidity({ status: 'ACTIVE', validUpto: '2026-11-13' }, today)).toBe('expired');
+    expect(statusForValidity({ status: 'active', validUpto: '2026-11-14' }, today)).toBe('active');
+  });
+  test('extending the validity makes an expired account active again', () => {
+    expect(statusForValidity({ status: 'expired', validUpto: '2027-03-31' }, today)).toBe('active');
+    expect(statusForValidity({ status: 'expired', validUpto: '2026-01-01' }, today)).toBe('expired');
+  });
+  test('inactive and system accounts are left alone', () => {
+    expect(statusForValidity({ status: 'inactive', validUpto: '2020-01-01' }, today)).toBe('inactive');
+    expect(statusForValidity({ status: 'active', validUpto: null, isSystem: true }, today)).toBe('active');
   });
 });

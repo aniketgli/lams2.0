@@ -75,7 +75,7 @@ export const DirectoryTable: React.FC<DirectoryTableProps> = ({ rows, typeLabel,
     {
       key: 'status', header: 'Status', width: '110px', sortValue: (u) => u.status || 'active',
       render: (u) => (u.status === 'deactivated'
-        ? <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600"><span className="w-1.5 h-1.5 rounded-full bg-slate-400" />Inactive</span>
+        ? <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600"><span className="w-1.5 h-1.5 rounded-full bg-slate-400" />{u.expired ? 'Expired' : 'Inactive'}</span>
         : <span className="inline-flex items-center gap-1 rounded-full border border-success-border bg-success-subtle px-2 py-0.5 text-[11px] font-bold text-success"><span className="w-1.5 h-1.5 rounded-full bg-success" />Active</span>),
     },
     {

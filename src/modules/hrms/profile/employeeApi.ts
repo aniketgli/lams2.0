@@ -11,6 +11,8 @@ export interface EmployeeRow {
   name: string;
   email: string;
   status: 'active' | 'inactive';
+  /** Validity date has passed (the account is blocked until it is extended). */
+  expired?: boolean;
   validUpto: string | null;
   suffix: string | null;
   department: string | null;

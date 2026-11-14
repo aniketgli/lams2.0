@@ -1,5 +1,5 @@
 import { MAX_LIST_ROWS, listLimitProblem, visibilityClause, canSeeEmployee } from '../lib/visibility';
-import { UNDO_WINDOW_MINUTES, withinUndoWindow } from './undoWindow';
+import { INCREMENT, NOW, assertUndo, decide, moveStatus, undoProblem, undoTarget, type UndoCheck } from '../lib/approvalFlow';
 import type { Request } from 'express';
 import type { RowDataPacket } from 'mysql2/promise';
 import { pool } from '../../src/db';
@@ -221,7 +221,6 @@ function canSee(viewer: Viewer, row: RowDataPacket): boolean {
 /** Whose balance the viewer may see: as for requests, plus everyone for a Leave Balance Manager (balances only, not requests). */
 const canSeeBalance = (viewer: Viewer, row: RowDataPacket): boolean => canSee(viewer, row) || viewer.role === 'leave_balance_manager';
 
-const isDecided = (row: RowDataPacket) => ['approved', 'rejected'].includes(String(row.status));
 
 function canDecide(viewer: Viewer, row: RowDataPacket): boolean {
   const status = String(row.status);
@@ -241,20 +240,21 @@ function canModify(viewer: Viewer, row: RowDataPacket, today = todayInIndia()): 
   return viewer.role === 'general_staff' && Number(row.user_id) === viewer.id;
 }
 
-function canUndo(viewer: Viewer, row: RowDataPacket): boolean {
-  const status = String(row.status);
-  if (status === 'pending_l1') return false;
-  if (!withinUndoWindow(row.step_age_sec)) return false; // the undo option goes away 10 minutes after the step, for everyone
-  if (viewer.role === 'administrator') return true;
+/** The facts the shared approval flow needs to say whether `viewer` may undo the last step (approvalFlow.undoProblem). */
+function undoCheck(viewer: Viewer, row: RowDataPacket): UndoCheck {
   const m = managersOf(row);
-  if (viewer.role === 'reporting_manager' && m.reporting === String(viewer.id)) {
-    return Number(row.undo_count ?? 0) < 1 && (isDecided(row) && Number(row.decided_stage) === 1 && Number(row.action_by) === viewer.id)
-      || (status === 'pending_l2' && Number(row.l1_by) === viewer.id);
-  }
-  if (viewer.role === 'reviewing_manager' && m.reviewing === String(viewer.id)) {
-    return Number(row.undo2_count ?? 0) < 1 && isDecided(row) && Number(row.decided_stage) === 2 && Number(row.action_by) === viewer.id;
-  }
-  return false;
+  return {
+    status: String(row.status), ageSeconds: row.step_age_sec, viewerId: viewer.id, isAdmin: viewer.role === 'administrator',
+    isReporting: viewer.role === 'reporting_manager' && m.reporting === String(viewer.id),
+    isReviewing: viewer.role === 'reviewing_manager' && m.reviewing === String(viewer.id),
+    decidedStage: row.decided_stage === null || row.decided_stage === undefined ? null : Number(row.decided_stage),
+    actionBy: row.action_by ? Number(row.action_by) : null, forwardedBy: row.l1_by ? Number(row.l1_by) : null,
+    undoCount: Number(row.undo_count ?? 0), undo2Count: Number(row.undo2_count ?? 0),
+  };
+}
+
+function canUndo(viewer: Viewer, row: RowDataPacket): boolean {
+  return undoProblem(undoCheck(viewer, row)) === null;
 }
 
 function toRequest(viewer: Viewer, row: RowDataPacket): LeaveRequest {
@@ -1376,18 +1376,12 @@ export async function decideRequest(req: Request, viewer: Viewer, id: number, bo
           : before.status === 'pending_l2' ? 'Only the HoD or an administrator can decide this request now.'
           : 'Only the reporting manager or an administrator can decide this request now.');
       }
-      const stage = before.status === 'pending_l2' ? 2 : 1;
-      let outcome: 'approved' | 'forwarded' | 'rejected';
-      if (action === 'reject') {
-        outcome = 'rejected';
-        await conn.query("UPDATE leave_requests SET status = 'rejected', decided_stage = ?, action_by = ?, action_at = NOW(3), manager_comment = ? WHERE id = ?", [stage, viewer.id, comment, id]);
-      } else if (stage === 1 && Number(row.stages) === 2 && viewer.role !== 'administrator') {
-        outcome = 'forwarded';
-        await conn.query("UPDATE leave_requests SET status = 'pending_l2', l1_by = ?, l1_at = NOW(3), l1_comment = ? WHERE id = ?", [viewer.id, comment, id]);
-      } else {
-        outcome = 'approved';
-        await conn.query("UPDATE leave_requests SET status = 'approved', decided_stage = ?, action_by = ?, action_at = NOW(3), manager_comment = ? WHERE id = ?", [stage, viewer.id, comment, id]);
-      }
+      const step = decide('two_stage', before.status, action!, { stages: Number(row.stages) === 2 ? 2 : 1, byAdmin: viewer.role === 'administrator' });
+      if (!step) throw new HttpError(409, `This request is already ${before.status}.`, 'NOT_PENDING');
+      const outcome = step.outcome;
+      await moveStatus(conn, 'leave_requests', id, before.status, step.to, outcome === 'forwarded'
+        ? { l1_by: viewer.id, l1_at: NOW, l1_comment: comment }
+        : { decided_stage: step.stage, action_by: viewer.id, action_at: NOW, manager_comment: comment });
       const after = toRequest(viewer, (await fetchOne(conn, id))!);
       await writeMasterAuditSql(conn, req, {
         masterKey: AUDIT_KEY, recordId: id, recordLabel: label(after), action: 'STATUS', before: auditView(before), after: auditView(after),
@@ -1410,19 +1404,13 @@ export async function undoDecision(req: Request, viewer: Viewer, id: number, rea
       const row = await fetchOne(conn, id, true);
       if (!row || !canSee(viewer, row)) throw notFound('Request not found.');
       const before = toRequest(viewer, row);
-      if (before.status === 'pending_l1') throw new HttpError(409, 'This request has nothing to undo.', 'NOT_DECIDED');
-      if (!withinUndoWindow(row.step_age_sec)) throw new HttpError(409, `A step can be undone only within ${UNDO_WINDOW_MINUTES} minutes of it being taken.`, 'UNDO_EXPIRED');
-      if (!canUndo(viewer, row)) {
-        const once = viewer.role === 'reporting_manager' ? Number(row.undo_count ?? 0) >= 1 : viewer.role === 'reviewing_manager' ? Number(row.undo2_count ?? 0) >= 1 : false;
-        throw forbidden(once ? 'You have already undone a step on this request once.' : 'You cannot undo this step.');
-      }
-      if (before.status === 'pending_l2') {
-        await conn.query("UPDATE leave_requests SET status = 'pending_l1', l1_by = NULL, l1_at = NULL, l1_comment = NULL, undo_count = undo_count + 1 WHERE id = ?", [id]);
-      } else if (Number(row.decided_stage) === 2) {
-        await conn.query("UPDATE leave_requests SET status = 'pending_l2', decided_stage = NULL, action_by = NULL, action_at = NULL, manager_comment = NULL, undo2_count = undo2_count + 1 WHERE id = ?", [id]);
-      } else {
-        await conn.query("UPDATE leave_requests SET status = 'pending_l1', decided_stage = NULL, action_by = NULL, action_at = NULL, manager_comment = NULL, l1_by = NULL, l1_at = NULL, l1_comment = NULL, undo_count = undo_count + 1 WHERE id = ?", [id]);
-      }
+      assertUndo(undoCheck(viewer, row));
+      const to = undoTarget('two_stage', before.status, row.decided_stage === null ? null : Number(row.decided_stage))!;
+      const cleared = { decided_stage: null, action_by: null, action_at: null, manager_comment: null };
+      await moveStatus(conn, 'leave_requests', id, before.status, to,
+        before.status === 'pending_l2' ? { l1_by: null, l1_at: null, l1_comment: null, undo_count: INCREMENT }
+          : to === 'pending_l2' ? { ...cleared, undo2_count: INCREMENT }
+          : { ...cleared, l1_by: null, l1_at: null, l1_comment: null, undo_count: INCREMENT });
       const after = toRequest(viewer, (await fetchOne(conn, id))!);
       await writeMasterAuditSql(conn, req, {
         masterKey: AUDIT_KEY, recordId: id, recordLabel: label(after), action: 'STATUS', before: auditView(before), after: auditView(after),

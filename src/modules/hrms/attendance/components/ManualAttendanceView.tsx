@@ -598,7 +598,7 @@ export const ManualAttendanceView: React.FC = () => {
       <ConfirmDialog
         open={Boolean(undoing)}
         title="Undo decision"
-        message={undoing ? <>Take back the {undoing.status} decision on the request of <strong>{undoing.name}</strong> for {formatDate(undoing.date)}? It goes back to pending.{role === 'reporting_manager' ? ' You can undo a decision only once.' : ''} This is recorded in the audit log.</> : ''}
+        message={undoing ? <>Take back the {undoing.status} decision on the request of <strong>{undoing.name}</strong> for {formatDate(undoing.date)}? It goes back to pending. A decision can be undone only within 10 minutes{role === 'reporting_manager' ? ', and only once' : ''}. This is recorded in the audit log.</> : ''}
         confirmLabel="Undo decision"
         busy={undoBusy}
         error={undoError}

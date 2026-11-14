@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronsRight, ClipboardCheck, Fingerprint, Paperclip, Pencil, Send, X } from 'lucide-react';
+import { Check, ChevronsRight, ClipboardCheck, Fingerprint, Paperclip, Pencil, RotateCcw, Send, X } from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
 import { Modal } from '../../../../shared/components';
 import { Textarea } from '../../../../shared/components/forms/Textarea';
@@ -7,6 +7,7 @@ import { ApiError } from '../../../../shared/services/api';
 import { JoiningFile, JoiningItem, leaveApi } from '../leaveApi';
 import { decidedBy, pendingAt, pendingAtManager } from '../../../../shared/services/statusLine';
 import { actionBtn } from '../../../../shared/components/actionStyles';
+import { ConfirmDialog } from '../../master/components/masterUi';
 
 /**
  * Joining report after a 2-stage leave, shown on the leave's own row. The server works out the joining day (the first
@@ -171,6 +172,25 @@ export function useJoining(onDone: (message: string) => void) {
     }
   };
 
+  // ---- Undo the last step (within 10 minutes) -------------------------------------------------------
+  const [undoing, setUndoing] = useState<JoiningItem | null>(null);
+  const [undoBusy, setUndoBusy] = useState(false);
+  const [undoError, setUndoError] = useState<string | null>(null);
+  const confirmUndo = async (reason: string) => {
+    if (!undoing || undoBusy) return;
+    setUndoBusy(true); setUndoError(null);
+    try {
+      const result = await leaveApi.joiningUndo(undoing.requestId, reason.trim());
+      setUndoing(null);
+      onDone(result.message);
+      await reload();
+    } catch (e) {
+      setUndoError(e instanceof ApiError ? e.message : 'The step could not be undone.');
+    } finally {
+      setUndoBusy(false);
+    }
+  };
+
   /** The joining buttons of a leave's row. */
   const actions = (item: JoiningItem | undefined) => item && (
     <>
@@ -187,6 +207,10 @@ export function useJoining(onDone: (message: string) => void) {
           <button type="button" onClick={() => { setDeciding({ item, action: 'reject' }); setComment(''); setDecideError(null); }} title="Reject joining report" aria-label={`Reject joining report of ${item.name}`}
             className={actionBtn('danger')}><X className="w-3.5 h-3.5" /></button>
         </>
+      )}
+      {item.canUndo && (
+        <button type="button" onClick={() => { setUndoing(item); setUndoError(null); }} title="Undo the last step" aria-label={`Undo the last step on the joining report of ${item.name}`}
+          className={actionBtn('warning')}><RotateCcw className="w-3.5 h-3.5" /></button>
       )}
     </>
   );
@@ -281,6 +305,16 @@ export function useJoining(onDone: (message: string) => void) {
         </div>
       </Modal>
 
+      <ConfirmDialog
+        open={Boolean(undoing)}
+        title="Undo the last step"
+        message={undoing ? <>Take back the last step ({undoing.report?.status === 'pending_l2' ? 'forwarded to HoD' : undoing.report?.status}) on the joining report of <strong>{undoing.name}</strong>? It goes back one step. A step can be undone only within 10 minutes, and by a manager only once. This is recorded in the audit log.</> : ''}
+        confirmLabel="Undo"
+        busy={undoBusy}
+        error={undoError}
+        onConfirm={(reason) => void confirmUndo(reason)}
+        onCancel={() => setUndoing(null)}
+      />
     </>
   );
 

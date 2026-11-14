@@ -2090,7 +2090,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                           {u.status === 'deactivated' ? (
                             <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200/80 font-bold text-[10px] uppercase whitespace-nowrap shrink-0">
                               <UserX className="w-3 h-3 text-rose-500 shrink-0" />
-                              <span className="whitespace-nowrap">Deactivated</span>
+                              <span className="whitespace-nowrap">{u.expired ? 'Expired' : 'Deactivated'}</span>
                             </span>
                           ) : (
                             <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/80 font-bold text-[10px] uppercase whitespace-nowrap shrink-0">

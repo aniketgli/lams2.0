@@ -51,6 +51,8 @@ const REQUIRED: Record<string, string[]> = {
   leave_balances: ['as_of'],
   // Roles that can be given and used (20261203_role_catalog.sql). Without it the built-in list is used.
   role_catalog: ['module_id', 'role_id', 'name', 'access_role', 'aliases', 'is_active'],
+  // Undo of a joining report's last step (20261210_joining_undo.sql). Without it the joining report list fails.
+  leave_joining_reports: ['status', 'undo_count', 'undo2_count'],
 };
 
 /** Indexes that keep the hot queries fast: table -> index name. */
