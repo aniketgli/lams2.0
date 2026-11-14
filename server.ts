@@ -45,6 +45,8 @@ if (!process.execArgv.some(arg => arg.includes('tsx')) && !process.env.TSX_SPAWN
       startReportScheduler();      // sends scheduled report emails when they are due
       void logEmailReadiness();    // says in the log whether notification emails can go out, and if not, why
       startOutboxWorker();         // sends queued notification emails and retries failed ones
+      const { startAccountExpiryJob } = await import('./server/services/accountExpiry.ts');
+      startAccountExpiryJob();     // marks accounts past their validity date as expired, so the directory matches sign-in
     });
   };
 

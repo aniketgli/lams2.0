@@ -9,6 +9,7 @@ import { changedFields, writeMasterAuditSql } from '../masters/audit';
 import { biometricDay } from '../attendance/store';
 import { detectCertificateType, parseCertificate } from './certificates';
 import { notifyJoining } from '../notifications/events';
+import { INCREMENT, NOW, assertUndo, decide, moveStatus, undoProblem, undoTarget, type UndoCheck } from '../lib/approvalFlow';
 import {
   addDays, isoDate, isoTime, joiningDateOf, loadEmployee, managersOf, missingTable, rows, type Viewer,
 } from './requests';
@@ -84,6 +85,8 @@ export interface JoiningItem {
   canSubmit: boolean;
   canEdit: boolean;
   canDecide: boolean;
+  /** The last step (forward / approve / reject) can still be taken back, within 10 minutes. */
+  canUndo: boolean;
   decideStep: 'approve' | 'forward';
 }
 
@@ -112,6 +115,7 @@ const SELECT = `
          u.biometric_id, u.name AS user_name, p.designation, p.department, p.profile_data,
          j.id AS report_id, j.joining_date, j.punch_in, j.punch_out, j.status AS report_status, j.manager_id AS j_manager_id, j.reviewer_id AS j_reviewer_id,
          j.submitted_at, j.l1_by, j.l1_at, j.l1_comment, j.decided_stage, j.action_by, j.action_at, j.manager_comment,
+         j.undo_count, j.undo2_count, TIMESTAMPDIFF(SECOND, COALESCE(j.action_at, j.l1_at), NOW(3)) AS step_age_sec,
          sb.name AS submitted_by_name, mg.name AS manager_name, rv.name AS reviewer_name, l1.name AS l1_name, ac.name AS action_by_name,
          (SELECT c.file_name FROM leave_joining_certificates c WHERE c.report_id = j.id) AS fitness_name
   ${FROM}`;
@@ -142,6 +146,20 @@ function canDecide(viewer: Viewer, row: RowDataPacket): boolean {
   if (status === 'pending_l1') return viewer.role === 'reporting_manager' && m.reporting === String(viewer.id);
   return viewer.role === 'reviewing_manager' && m.reviewing === String(viewer.id);
 }
+
+/** The facts the shared approval flow needs to say whether `viewer` may undo the report's last step. */
+function undoCheck(viewer: Viewer, row: RowDataPacket): UndoCheck {
+  const m = managersOf(row);
+  return {
+    status: String(reportStatus(row) ?? ''), ageSeconds: row.step_age_sec, viewerId: viewer.id, isAdmin: isAdmin(viewer),
+    isReporting: viewer.role === 'reporting_manager' && m.reporting === String(viewer.id),
+    isReviewing: viewer.role === 'reviewing_manager' && m.reviewing === String(viewer.id),
+    decidedStage: row.decided_stage === null || row.decided_stage === undefined ? null : Number(row.decided_stage),
+    actionBy: row.action_by ? Number(row.action_by) : null, forwardedBy: row.l1_by ? Number(row.l1_by) : null,
+    undoCount: Number(row.undo_count ?? 0), undo2Count: Number(row.undo2_count ?? 0),
+  };
+}
+const canUndo = (viewer: Viewer, row: RowDataPacket): boolean => Boolean(row.report_id) && undoProblem(undoCheck(viewer, row)) === null;
 
 // ---------------------------------------------------------------------------
 // The joining date
@@ -195,6 +213,7 @@ function toItem(viewer: Viewer, row: RowDataPacket, joiningDate: string, today: 
     canSubmit: !filed && mine && joiningDate <= today,
     canEdit: filed && mine && (status === 'pending_l1' || status === 'rejected'),
     canDecide: canDecide(viewer, row),
+    canUndo: canUndo(viewer, row),
     decideStep: status === 'pending_l1' && Number(row.approval_stages) === 2 && !isAdmin(viewer) ? 'forward' : 'approve',
   };
 }
@@ -344,11 +363,10 @@ export async function correctJoining(req: Request, viewer: Viewer, requestIdRaw:
       const file = parseFitness(raw.certificate, Boolean(row.fitness_certificate));
       const { emp, day } = await joiningPunch(conn, row, isoDate(row.joining_date));
       if (!emp.reviewingManagerId) throw badRequest('Please correct the highlighted fields.', { requestId: 'This employee has no HoD set, which the joining report needs. Ask the administrator.' });
-      await conn.query(
-        `UPDATE leave_joining_reports SET punch_in = ?, punch_out = ?, status = 'pending_l1', manager_id = ?, reviewer_id = ?, submitted_by = ?, submitted_at = NOW(3),
-           l1_by = NULL, l1_at = NULL, l1_comment = NULL, decided_stage = NULL, action_by = NULL, action_at = NULL, manager_comment = NULL WHERE id = ?`,
-        [day.in, null, emp.reportingManagerId, emp.reviewingManagerId, viewer.id, row.report_id],
-      );
+      await moveStatus(conn, 'leave_joining_reports', Number(row.report_id), status, 'pending_l1', {
+        punch_in: day.in, punch_out: null, manager_id: emp.reportingManagerId, reviewer_id: emp.reviewingManagerId, submitted_by: viewer.id, submitted_at: NOW,
+        l1_by: null, l1_at: null, l1_comment: null, decided_stage: null, action_by: null, action_at: null, manager_comment: null,
+      });
       if (file) await saveFitness(conn, Number(row.report_id), file, viewer.id);
       else if (raw.removeCertificate === true) await conn.query('DELETE FROM leave_joining_certificates WHERE report_id = ?', [row.report_id]);
       const after = toItem(viewer, (await fetchLeave(conn, id))!, isoDate(row.joining_date), today);
@@ -391,18 +409,13 @@ export async function decideJoining(req: Request, viewer: Viewer, requestIdRaw: 
           : status === 'pending_l2' ? 'Only the HoD or an administrator can decide this report now.' : 'Only the reporting manager or an administrator can decide this report now.');
       }
       const before = toItem(viewer, row, isoDate(row.joining_date), today);
-      const stage = status === 'pending_l2' ? 2 : 1;
-      let outcome: 'approved' | 'forwarded' | 'rejected';
-      if (action === 'reject') {
-        outcome = 'rejected';
-        await conn.query("UPDATE leave_joining_reports SET status = 'rejected', decided_stage = ?, action_by = ?, action_at = NOW(3), manager_comment = ? WHERE id = ?", [stage, viewer.id, comment, row.report_id]);
-      } else if (stage === 1 && !isAdmin(viewer)) {
-        outcome = 'forwarded';
-        await conn.query("UPDATE leave_joining_reports SET status = 'pending_l2', l1_by = ?, l1_at = NOW(3), l1_comment = ? WHERE id = ?", [viewer.id, comment, row.report_id]);
-      } else {
-        outcome = 'approved';
-        await conn.query("UPDATE leave_joining_reports SET status = 'approved', decided_stage = ?, action_by = ?, action_at = NOW(3), manager_comment = ? WHERE id = ?", [stage, viewer.id, comment, row.report_id]);
-      }
+      // A joining report always goes Reporting Manager → HoD; an administrator's approval is final.
+      const step = decide('two_stage', status, action!, { stages: 2, byAdmin: isAdmin(viewer) });
+      if (!step) throw new HttpError(409, `This report is already ${status}.`, 'NOT_PENDING');
+      const outcome = step.outcome;
+      await moveStatus(conn, 'leave_joining_reports', Number(row.report_id), status, step.to, outcome === 'forwarded'
+        ? { l1_by: viewer.id, l1_at: NOW, l1_comment: comment }
+        : { decided_stage: step.stage, action_by: viewer.id, action_at: NOW, manager_comment: comment });
       const after = toItem(viewer, (await fetchLeave(conn, id))!, isoDate(row.joining_date), today);
       await writeMasterAuditSql(conn, req, {
         masterKey: JOINING_KEY, recordId: Number(row.report_id), recordLabel: label(after), action: 'STATUS', before: auditView(before), after: auditView(after),
@@ -411,6 +424,39 @@ export async function decideJoining(req: Request, viewer: Viewer, requestIdRaw: 
       return { item: after, outcome };
     });
     notifyJoining(done.outcome, done.item, (done.outcome === 'forwarded' ? done.item.report?.forwardedByName : done.item.report?.actionByName) ?? null, comment);
+    return done;
+  } catch (error) {
+    missingTable(error);
+    throw error;
+  }
+}
+
+/** Takes back the last step on a joining report (forward, approve or reject), within 10 minutes; the step stays in the audit log. */
+export async function undoJoining(req: Request, viewer: Viewer, requestIdRaw: unknown, reason: string | null): Promise<JoiningItem> {
+  const id = Number(requestIdRaw);
+  if (!Number.isInteger(id) || id <= 0) throw notFound('Report not found.');
+  const today = todayInIndia();
+  try {
+    const done = await inTransaction(async (conn) => {
+      const row = await fetchLeave(conn, id, true);
+      if (!row || !row.report_id || !canSee(viewer, row)) throw notFound('Report not found.');
+      assertUndo(undoCheck(viewer, row));
+      const status = reportStatus(row)!;
+      const before = toItem(viewer, row, isoDate(row.joining_date), today);
+      const to = undoTarget('two_stage', status, row.decided_stage === null ? null : Number(row.decided_stage))!;
+      const cleared = { decided_stage: null, action_by: null, action_at: null, manager_comment: null };
+      await moveStatus(conn, 'leave_joining_reports', Number(row.report_id), status, to,
+        status === 'pending_l2' ? { l1_by: null, l1_at: null, l1_comment: null, undo_count: INCREMENT }
+          : to === 'pending_l2' ? { ...cleared, undo2_count: INCREMENT }
+          : { ...cleared, l1_by: null, l1_at: null, l1_comment: null, undo_count: INCREMENT });
+      const after = toItem(viewer, (await fetchLeave(conn, id))!, isoDate(row.joining_date), today);
+      await writeMasterAuditSql(conn, req, {
+        masterKey: JOINING_KEY, recordId: Number(row.report_id), recordLabel: label(after), action: 'STATUS', before: auditView(before), after: auditView(after),
+        reason: reason ? `Step undone: ${reason}` : 'Step undone',
+      });
+      return after;
+    });
+    notifyJoining('undone', done, null, reason);
     return done;
   } catch (error) {
     missingTable(error);

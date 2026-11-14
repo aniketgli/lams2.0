@@ -136,6 +136,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Photos are served by the server; old avatar values inside profile_data are ignored.
       avatar: row.photoUrl ?? '',
       status: row.status === 'active' ? 'active' : 'deactivated',
+      expired: row.expired === true,
       leaveBalances: saved.leaveBalances || {},
     };
   };

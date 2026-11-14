@@ -23,3 +23,16 @@ export function accountBlockReason(account: AccountState): string | null {
   return null;
 }
 
+
+/**
+ * The status an account should have in the database: an active account whose validity date has passed becomes
+ * `expired`, and an expired one whose validity was extended is `active` again. Inactive accounts and system
+ * accounts are left as they are. (The sign-in check above and the stored status then always agree.)
+ */
+export function statusForValidity(account: AccountState, today = todayInIndia()): string {
+  const status = String(account.status || '').toLowerCase();
+  if (account.isSystem || !account.validUpto) return status;
+  if (status === 'active' && account.validUpto < today) return 'expired';
+  if (status === 'expired' && account.validUpto >= today) return 'active';
+  return status;
+}

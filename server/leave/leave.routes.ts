@@ -10,7 +10,7 @@ import {
 import {
   LEAVE_GROUP_SCOPE, createLeaveGroup, deleteLeaveGroup, listLeaveGroups, updateLeaveGroup,
 } from './groups';
-import { correctJoining, decideJoining, fitnessOf, listJoining, prepareJoining, submitJoining } from './joining';
+import { correctJoining, decideJoining, fitnessOf, listJoining, prepareJoining, submitJoining, undoJoining } from './joining';
 import {
   LEAVE_SCOPE, applicableEmployees, applyTypeIds, certificateOf, createRequest, decideRequest, deleteRequest, leaveHistory, listBalancesPage, listRequests, previewLeave, balancePreview, compOffOptions, occupiedDates, restrictedHolidayOptions, requestId, setBalance,
   undoDecision, updateRequest,
@@ -198,6 +198,13 @@ router.get('/leave/joining/:requestId/fitness', requireAuth, asyncHandler(async 
 router.post('/leave/joining/:requestId/decision', requireAuth, asyncHandler(async (req, res) => {
   const { item, outcome } = await decideJoining(req, viewerOf(req), req.params.requestId, req.body);
   res.json({ item, outcome, message: outcome === 'approved' ? 'Joining report approved.' : outcome === 'forwarded' ? 'Joining report forwarded to the HoD.' : 'Joining report rejected.' });
+}));
+router.post('/leave/joining/:requestId/undo', requireAuth, asyncHandler(async (req, res) => {
+  const v = new Validator(req.body ?? {});
+  const reason = v.optionalString('reason', { max: 400 });
+  v.assert();
+  const item = await undoJoining(req, viewerOf(req), req.params.requestId, reason);
+  res.json({ item, message: 'The step was undone. The report is pending again.' });
 }));
 
 router.post('/leave/requests', requireAuth, asyncHandler(async (req, res) => {

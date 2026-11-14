@@ -85,6 +85,8 @@ export interface EmployeeRecord {
   /** Fixed system account: shown in the Profiles table only; read-only. */
   isSystem: boolean;
   status: 'active' | 'inactive';
+  /** The account cannot sign in because its validity date has passed (status `expired`; shown as inactive). */
+  expired: boolean;
   validUpto: string | null;
   suffix: string | null;
   department: string | null;
@@ -148,6 +150,7 @@ function toRecord(row: RowDataPacket, grants: { moduleId: string; roleId: string
     email: String(row.email),
     isSystem: Number(row.is_system ?? 0) === 1,
     status: String(row.status).toLowerCase() === 'active' ? 'active' : 'inactive',
+    expired: String(row.status).toLowerCase() === 'expired',
     validUpto: dateText(row.valid_upto),
     suffix: row.suffix ?? null,
     department: row.department || null,
@@ -429,9 +432,15 @@ async function updateEmployeeImpl(req: Request, id: number, body: unknown): Prom
       const changed = changedFields(auditView(before), auditView(preview));
       if (changed.length === 0) return { record: before, changed };
 
+      // A new validity date also moves the account between active and expired (accountBlock.statusForValidity):
+      // extending it lets an expired account sign in again; ending it today or earlier expires an active one.
+      const today = todayInIndia();
       await conn.query(
-        'UPDATE users SET name = ?, email = ?, valid_upto = ?, last_updated_by = ?, last_updated_at = NOW(), last_update_summary = ? WHERE id = ?',
-        [input.name, input.email, validUpto, actor, `Profile updated: ${changed.join(', ')}`.slice(0, 1000), id],
+        `UPDATE users SET name = ?, email = ?, valid_upto = ?, last_updated_by = ?, last_updated_at = NOW(), last_update_summary = ?,
+           status = CASE WHEN is_system = 0 AND LOWER(status) = 'expired' AND ? >= ? THEN 'active'
+                         WHEN is_system = 0 AND LOWER(status) = 'active' AND ? < ? THEN 'expired' ELSE status END
+          WHERE id = ?`,
+        [input.name, input.email, validUpto, actor, `Profile updated: ${changed.join(', ')}`.slice(0, 1000), validUpto, today, validUpto, today, id],
       );
       const [profileRow] = await rows(conn, 'SELECT id FROM employee_profiles WHERE biometric_id = ? LIMIT 1', [before.biometricId]);
       if (profileRow) {
@@ -495,6 +504,10 @@ async function setEmployeeStatusImpl(req: Request, id: number, change: StatusCha
     if (change.status === 'inactive') {
       const block = await responsibilityBlock(conn, before);
       if (block) throw new HttpError(409, `Deactivation blocked: ${block}`, 'IN_USE');
+    }
+
+    if (change.status === 'active' && before.validUpto && before.validUpto < todayInIndia()) {
+      throw new HttpError(409, `The account's validity ended on ${before.validUpto}. Extend "Valid up to" in the profile first; that reactivates it.`, 'VALIDITY_ENDED');
     }
 
     const verb = change.status === 'inactive' ? 'Deactivated' : 'Reactivated';

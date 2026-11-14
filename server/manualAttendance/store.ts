@@ -3,6 +3,7 @@ import type { Request } from 'express';
 import type { RowDataPacket } from 'mysql2/promise';
 import { pool } from '../../src/db';
 import { HttpError, badRequest, forbidden, notFound } from '../lib/http';
+import { INCREMENT, NOW, assertUndo, decide, moveStatus, undoProblem } from '../lib/approvalFlow';
 import { inTransaction } from '../lib/tx';
 import { MAX_BACKDATE_DAYS, PATTERNS, TOO_OLD_MESSAGE, Validator, isValidIsoDate, oldestApplicationDate, todayInIndia } from '../lib/validate';
 import { changedFields, writeMasterAuditSql } from '../masters/audit';
@@ -116,7 +117,8 @@ const isoTime = (value: unknown): string | null => (value ? new Date(value as st
 
 const SELECT = `
   SELECT m.*, u.biometric_id, u.name AS user_name, p.designation, p.department, p.profile_data,
-         ab.name AS applied_by_name, mg.name AS manager_name, ac.name AS action_by_name
+         ab.name AS applied_by_name, mg.name AS manager_name, ac.name AS action_by_name,
+         TIMESTAMPDIFF(SECOND, m.action_at, NOW(3)) AS step_age_sec
     FROM manual_attendance_requests m
     JOIN users u ON u.id = m.user_id
     LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id
@@ -153,11 +155,18 @@ function canModify(viewer: Viewer, row: RowDataPacket, today = todayInIndia()): 
   return viewer.role === 'administrator' || (viewer.role === 'general_staff' && Number(row.user_id) === viewer.id);
 }
 
+/** The facts the shared approval flow needs: one-stage, so only the reporting manager (once) or an administrator, within 10 minutes. */
+function undoCheck(viewer: Viewer, row: RowDataPacket) {
+  return {
+    status: String(row.status), ageSeconds: row.step_age_sec, viewerId: viewer.id, isAdmin: viewer.role === 'administrator',
+    isReporting: viewer.role === 'reporting_manager' && managersOf(row).reporting === String(viewer.id), isReviewing: false,
+    decidedStage: null, actionBy: row.action_by ? Number(row.action_by) : null, forwardedBy: null,
+    undoCount: Number(row.undo_count ?? 0), undo2Count: 0,
+  };
+}
+
 function canUndo(viewer: Viewer, row: RowDataPacket): boolean {
-  if (String(row.status) === 'pending') return false;
-  if (viewer.role === 'administrator') return noManager(row);
-  return viewer.role === 'reporting_manager' && managersOf(row).reporting === String(viewer.id)
-    && Number(row.action_by) === viewer.id && Number(row.undo_count ?? 0) < 1;
+  return undoProblem(undoCheck(viewer, row)) === null;
 }
 
 function toRequest(viewer: Viewer, row: RowDataPacket): ManualRequest {
@@ -402,11 +411,9 @@ export async function decideRequest(req: Request, viewer: Viewer, id: number, bo
       if (!canDecide(viewer, row)) {
         throw forbidden(Number(row.user_id) === viewer.id ? 'You cannot approve or reject your own request. Ask your reporting manager.' : 'Only the reporting manager can approve or reject this request.');
       }
-      const status: RequestStatus = action === 'approve' ? 'approved' : 'rejected';
-      await conn.query(
-        'UPDATE manual_attendance_requests SET status = ?, action_by = ?, action_at = NOW(3), manager_comment = ? WHERE id = ?',
-        [status, viewer.id, comment, id],
-      );
+      const step = decide('one_stage', before.status, action!, { stages: 1, byAdmin: viewer.role === 'administrator' });
+      if (!step) throw new HttpError(409, `This request is already ${before.status}.`, 'NOT_PENDING');
+      await moveStatus(conn, 'manual_attendance_requests', id, before.status, step.to, { action_by: viewer.id, action_at: NOW, manager_comment: comment });
       const after = toRequest(viewer, (await fetchOne(viewer, conn, id))!);
       await writeMasterAuditSql(conn, req, {
         masterKey: AUDIT_KEY, recordId: id, recordLabel: label(after), action: 'STATUS',
@@ -429,15 +436,8 @@ export async function undoDecision(req: Request, viewer: Viewer, id: number, rea
       const row = await fetchOne(viewer, conn, id, true);
       if (!row || !canSee(viewer, row)) throw notFound('Request not found.');
       const before = toRequest(viewer, row);
-      if (before.status === 'pending') throw new HttpError(409, 'This request has no decision to undo.', 'NOT_DECIDED');
-      if (!canUndo(viewer, row)) {
-        throw forbidden(viewer.role === 'reporting_manager' && Number(row.action_by) === viewer.id
-          ? 'You have already undone a decision on this request once.' : 'You cannot undo this decision.');
-      }
-      await conn.query(
-        'UPDATE manual_attendance_requests SET status = \'pending\', action_by = NULL, action_at = NULL, manager_comment = NULL, undo_count = undo_count + 1 WHERE id = ?',
-        [id],
-      );
+      assertUndo(undoCheck(viewer, row));
+      await moveStatus(conn, 'manual_attendance_requests', id, before.status, 'pending', { action_by: null, action_at: null, manager_comment: null, undo_count: INCREMENT });
       const after = toRequest(viewer, (await fetchOne(viewer, conn, id))!);
       await writeMasterAuditSql(conn, req, {
         masterKey: AUDIT_KEY, recordId: id, recordLabel: label(after), action: 'STATUS',

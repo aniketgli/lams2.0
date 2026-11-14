@@ -74,6 +74,8 @@ export interface User {
   leaveCycle?: 'CY' | 'FY'; // Cadre-specific Leave Accounting Cycle ('CY' for Calendar Year, 'FY' for Financial Year)
   leaveCycleBasis?: 'calendar_year' | 'financial_year'; // Descriptive basis for leave cycle
   status?: 'active' | 'deactivated';
+  /** Deactivated because the account's validity date has passed (extend "Valid up to" to reactivate). */
+  expired?: boolean;
   leaveBalances: Record<string, { total: number; used: number; pending: number; carryForward?: number }>;
   yearlyLeaveBalances?: Record<string, Record<string, { total: number; used: number; pending: number; carryForward?: number }>>;
   moduleRoles?: UserModuleRoles;

@@ -320,6 +320,8 @@ export interface JoiningItem {
   canSubmit: boolean;
   canEdit: boolean;
   canDecide: boolean;
+  /** The last step can still be taken back (within 10 minutes). */
+  canUndo: boolean;
   decideStep: 'approve' | 'forward';
 }
 export interface JoiningFile { name: string; data: string }
@@ -376,5 +378,7 @@ export const leaveApi = {
     api<{ item: JoiningItem; message: string }>(`${base}/joining/${encodeURIComponent(requestId)}`, { method: 'PUT', body: { certificate: certificate || undefined, removeCertificate: removeCertificate || undefined } }),
   joiningDecide: (requestId: string, action: 'approve' | 'reject', comment: string) =>
     api<{ item: JoiningItem; outcome: 'approved' | 'forwarded' | 'rejected'; message: string }>(`${base}/joining/${encodeURIComponent(requestId)}/decision`, { method: 'POST', body: { action, comment: comment || undefined } }),
+  joiningUndo: (requestId: string, reason?: string) =>
+    api<{ item: JoiningItem; message: string }>(`${base}/joining/${encodeURIComponent(requestId)}/undo`, { method: 'POST', body: { reason: reason || undefined } }),
   downloadFitness: (requestId: string) => downloadCsv(`${base}/joining/${encodeURIComponent(requestId)}/fitness`, 'fitness-certificate'),
 };
