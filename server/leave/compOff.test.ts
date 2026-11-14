@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { type Credit, balanceFromCredits, creditValidUntil, matchCredits, monthlyProblem } from './compOffRules';
+import { type Credit, balanceFromCredits, creditLateUntil, creditValidUntil, matchCredits, monthlyProblem } from './compOffRules';
 
 const credit = (over: Partial<Credit> = {}): Credit => ({ date: '2026-11-08', in: '09:05', out: '17:30', hours: 8.42, reason: 'Weekly off', validUntil: '2026-12-09', usedBy: null, usedStatus: null, ...over });
 
@@ -19,7 +19,7 @@ describe('matching worked days to leave days', () => {
   test('two days together, earliest with earliest', () => {
     const r = matchCredits(pool, ['2026-11-08', '2026-11-01'], ['2026-11-20', '2026-11-23']);
     expect(r.problem).toBeNull();
-    expect(r.pairs).toEqual([{ work: '2026-11-01', leave: '2026-11-20' }, { work: '2026-11-08', leave: '2026-11-23' }]);
+    expect(r.pairs).toEqual([{ work: '2026-11-01', leave: '2026-11-20', late: false }, { work: '2026-11-08', leave: '2026-11-23', late: false }]);
   });
   test('the number of worked days must equal the leave days', () => {
     expect(matchCredits(pool, ['2026-11-01'], ['2026-11-20', '2026-11-23']).problem).toContain('exactly 2');
@@ -30,7 +30,7 @@ describe('matching worked days to leave days', () => {
     expect(matchCredits([c('2026-11-01', '2026-12-02', { usedBy: 3 })], ['2026-11-01'], ['2026-11-20']).problem).toContain('already used');
     expect(matchCredits(pool, ['2026-11-01', '2026-11-01'], ['2026-11-20', '2026-11-23']).problem).toContain('twice');
     expect(matchCredits(pool, ['2026-11-08'], ['2026-11-08']).problem).toContain('after the day you worked');
-    expect(matchCredits(pool, ['2026-11-01'], ['2026-12-03']).problem).toContain('valid up to 2026-12-02');
+    expect(matchCredits(pool, ['2026-11-01'], ['2026-12-03']).problem).toContain('up to 2026-12-02');
   });
 });
 describe('monthly limit counts days by the month of the leave day', () => {
@@ -43,11 +43,25 @@ describe('monthly limit counts days by the month of the leave day', () => {
     expect(monthlyProblem(['2026-11-30', '2026-12-01'], { '2026-12': 2 }, 2)).toContain('2026-12');
   });
   test('three days in one month are over the limit of two; no limit set means none', () => {
-    expect(monthlyProblem(['2026-11-20', '2026-11-23', '2026-11-24'], {}, 2)).toContain('At most 2');
+    expect(monthlyProblem(['2026-11-20', '2026-11-23', '2026-11-24'], {}, 2)).toContain('at most 2');
     expect(monthlyProblem(['2026-11-20', '2026-11-23', '2026-11-24'], {}, 0)).toBeNull();
   });
 });
 test('balance counts valid credits, taken and waiting', () => {
   const b = balanceFromCredits([credit(), credit({ date: '2026-11-09', usedStatus: 'approved', usedBy: 1 }), credit({ date: '2026-11-15', usedStatus: 'pending', usedBy: 2 })]);
   expect(b).toEqual({ total: 3, carryForward: 0, used: 1, pending: 1, available: 1 });
+});
+
+describe('late compensatory off', () => {
+  const base = { in: '09:00', out: '17:00', hours: 8, reason: 'Worked', usedBy: null, usedStatus: null } as const;
+  test('after the month it can still be taken to the end of the next calendar month', () => {
+    expect(creditLateUntil('2026-11-08')).toBe('2027-01-31');
+    expect(creditLateUntil('2026-01-31')).toBe('2026-04-30');
+  });
+  test('within the month: not late; after it: late; after the late window: lapsed', () => {
+    const credit = { ...base, date: '2026-11-08', validUntil: creditValidUntil('2026-11-08'), lateUntil: creditLateUntil('2026-11-08') };
+    expect(matchCredits([credit], ['2026-11-08'], ['2026-12-01']).pairs[0].late).toBe(false);
+    expect(matchCredits([credit], ['2026-11-08'], ['2026-12-15']).pairs[0].late).toBe(true);
+    expect(matchCredits([credit], ['2026-11-08'], ['2027-02-01']).problem).toContain('lapsed');
+  });
 });

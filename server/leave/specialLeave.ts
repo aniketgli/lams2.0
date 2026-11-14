@@ -381,6 +381,7 @@ export function specialRulesOf(code: string): string[] {
         'Permanent employees; a temporary employee only after one year of service and only for TB, leprosy, cancer or mental illness.',
         'Only on a medical certificate, except in continuation of a Maternity Leave for child birth / adoption.',
         `At most ${LND_LIFETIME_DAYS} days in the whole service.`,
+        'Debited to the Half Pay Leave account, which may go below zero (earned back later).',
       ];
     case EOL_CODE:
       return [
@@ -390,9 +391,27 @@ export function specialRulesOf(code: string): string[] {
         'EOL spells with other leave between them count as one continuous spell for these limits.',
       ];
     case 'C-OFF':
-      return ['Each leave day is paid for by a weekly off or holiday on which the employee worked (biometric punches).'];
+      return [
+        'Each leave day is paid for by a weekly off or holiday on which the employee worked (biometric punches).',
+        'Within a month of the day worked: no limit.',
+        'Not taken in that month: up to the end of the next calendar month, at most 2 such days in a calendar month; after that it lapses.',
+        'Never in one continuous absence with both Casual Leave and a regular leave.',
+      ];
     case 'RH':
-      return ['One day, chosen from the restricted holidays of the Holiday Calendar.'];
+      return [
+        'One day, chosen from the restricted holidays of the Holiday Calendar; at most 2 in a year.',
+        'Can be joined with Casual Leave or with a regular leave, not with both.',
+      ];
+    case 'SCL':
+      return ['Can be joined with Casual Leave or with a regular leave, not with both.'];
+    case 'CL':
+    case 'CL20':
+    case 'CL30':
+      return ['Cannot be combined with a regular leave (EL, HPL, …), also not through SCL, RH or compensatory off.'];
+    case 'COMM':
+      return ['Without a medical certificate only in continuation of a Maternity Leave for child birth / adoption, up to 60 days.'];
+    case 'EL':
+      return ['Leave encashment with LTC: up to 10 days at a time, 60 days in the whole service, and at least 30 days must stay after the leave and the encashment.'];
     default:
       return [];
   }

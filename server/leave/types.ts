@@ -256,7 +256,7 @@ export async function parseLeaveTypeInput(body: unknown, selfId = 0): Promise<Le
     }
     if (isDebited) v.errors.isDebited ||= 'A leave type that uses another leave type’s balance has no balance of its own.';
   }
-  if (carryForward && cf <= 0) v.errors.maxCarryForward ||= 'Enter how many days can be carried forward.';
+  // Carried forward with 0 days as the limit means: no limit (e.g. Half Pay Leave).
   if (maxAccumulation && pwdQuota !== null && pwdQuota > maxAccumulation) v.errors.pwdQuota ||= 'Cannot be more than the maximum balance.';
   if (maxAccumulation && quota > maxAccumulation) v.errors.maxAccumulation ||= 'Cannot be less than the yearly quota.';
   v.assert();

@@ -30,12 +30,12 @@ function ruleGroups(t: LeaveTypeRecord, typeName: (code: string) => string, name
     {
       title: 'Quota and balance',
       lines: [
-        t.isDebited ? `Quota: ${t.defaultQuota} days a year` : !t.isPaid ? 'No balance: can be taken for any number of days' : 'No yearly balance (not debited)',
+        t.isDebited ? (t.defaultQuota > 0 ? `Quota: ${t.defaultQuota} days a year` : 'Quota: set for each employee by the Leave Balance Manager / Administrator') : !t.isPaid ? 'No balance: can be taken for any number of days' : 'No yearly balance (not debited)',
         t.isDebited && t.pwdQuota !== null ? `Quota for a person with disability: ${t.pwdQuota} days` : null,
         ...(t.isDebited ? t.quotas.map((q) => `Quota for ${typeName(q.employeeType)}: ${q.quota} days`) : []),
         t.isDebited ? (t.accrual === 'half_yearly' ? 'Credited every half-year' : 'Credited once a year') : null,
         t.maxAccumulation ? `At most ${t.maxAccumulation} days can be accumulated` : null,
-        t.carryForward ? `Carried forward to the next leave year: up to ${t.maxCarryForward} days` : 'Not carried forward: lapses at the end of the leave year',
+        t.carryForward ? `Carried forward to the next leave year${t.maxCarryForward > 0 ? `: up to ${t.maxCarryForward} days` : ' (no limit)'}` : 'Not carried forward: lapses at the end of the leave year',
         yes(t.encashmentAllowed, 'Can be encashed'),
         t.isPaid ? 'Paid leave' : 'Unpaid leave',
         t.debitFromTypeId ? `Each day uses ${t.debitFactor} day(s) of ${nameOf(t.debitFromTypeId)}` : null,
@@ -197,7 +197,7 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
       render: (t) => (
         <div className="whitespace-normal leading-snug">
           <div className="font-semibold">{t.isDebited
-            ? `${t.defaultQuota} days a year`
+            ? (t.defaultQuota > 0 ? `${t.defaultQuota} days a year` : 'Set by Leave Balance Manager')
             : !t.isPaid ? 'No balance · any number of days' : t.lifetimeMax ? `${t.lifetimeMax} days in service` : 'No yearly balance'}</div>
           {t.isDebited && t.pwdQuota !== null && <div className="text-[11px] text-slate-600">PwD: {t.pwdQuota} days</div>}
           {t.isDebited && t.quotas.map((q) => <div key={q.employeeType} className="text-[11px] text-slate-600">{typeName(q.employeeType)}: {q.quota}</div>)}
