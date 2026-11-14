@@ -33,7 +33,8 @@ jobs:
       - run: bun install
       - name: Create the schema (schema.ts, then every migration in order)
         run: |
-          bunx drizzle-kit export --dialect=mysql --schema=./src/db/schema.ts > /tmp/schema.sql
+          bunx drizzle-kit export --dialect=mysql --schema=./src/db/schema.ts | sed -n "/^CREATE TABLE/,\$p" > /tmp/schema.sql
+          head -3 /tmp/schema.sql
           mysql -h127.0.0.1 -uroot -proot lams2_test < /tmp/schema.sql
           for f in $(ls src/db/migrations/*.sql | sort) $(ls migrations/*.sql | sort); do
             echo "== $f"

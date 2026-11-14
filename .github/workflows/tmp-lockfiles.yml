@@ -1,8 +1,11 @@
 name: TEMP regenerate lockfiles
-# Temporary: regenerates package-lock.json and bun.lock after removing unused dependencies. Removed before merge.
+# Temporary: regenerates package-lock.json and bun.lock after removing unused dependencies, and commits them
+# to this branch. Removed before merge.
 on:
   push:
     branches: [qa/cleanup-hardening]
+permissions:
+  contents: write
 jobs:
   lock:
     runs-on: ubuntu-latest
@@ -13,9 +16,8 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
       - run: bun install
-      - uses: actions/upload-artifact@v4
-        with:
-          name: lockfiles
-          path: |
-            package-lock.json
-            bun.lock
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json bun.lock
+          git diff --cached --quiet || { git commit -m "Regenerate lockfiles without the unused dependencies"; git push; }
