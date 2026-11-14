@@ -181,3 +181,78 @@ Until PR #247 is merged **and the Ubuntu server is updated and restarted**, BUG-
 **NEEDS IMPROVEMENT.** The code changes are small, covered by tests and build cleanly, and are safe to deploy. A **PASS** rating needs the blocked items in §7 to be run: a role-by-role walkthrough with test accounts, the read-only DB queries, and the responsive UI check.
 
 After merging, on the server: `git pull`, `npm ci`, `npm run build`, restart the service. No `.env` change is needed unless a reverse proxy is in use (`TRUST_PROXY`).
+
+---
+
+# Part 2: Cleanup, hardening and penetration test (14 Nov 2026, PR #248)
+
+## 12. Penetration test of a running instance (executed)
+
+`scripts/security/pentest.ts` attacks a **real running portal**. It runs in GitHub Actions (`.github/workflows/security.yml`) against a throw-away MySQL 8 database: the schema is built from `schema.ts` plus every migration, and 11 test accounts are seeded. It never touches the live server or `lams2_db`, and the script refuses any target other than localhost. It now runs on every pull request.
+
+**Result: 54 of 54 attack checks passed. No request produced a server error.**
+
+| Area | What was attacked | Result |
+|---|---|---|
+| Headers / info leak | Security headers, `X-Powered-By`, caching, `/.env`, `/.git/HEAD`, source files, unknown routes | PASS |
+| Authentication | All 14 protected endpoints without a session; wrong password vs unknown user; wrong domain; empty login; SQL and NoSQL injection in login; inactive and expired accounts | PASS |
+| Sessions | Session fixation; HttpOnly and SameSite=Strict cookie; replaying a cookie after logout; forged cookie | PASS |
+| Default password | The fixed Administrator account signed in with `123456` can do nothing except change the password (new gate) | PASS |
+| Vertical escalation | 9 administrator endpoints called as a User; self-promotion to Administrator; entering a module that wasn't granted; a PMS administrator calling HRMS endpoints (fixed in PR #247) | PASS |
+| IDOR | Another employee's profile, full profile and project history; another team's manager approving; a colleague editing or deleting a request | PASS |
+| Auditor | Can read logs but not write | PASS |
+| Business flow (OD) | Apply; apply on someone else's behalf; approve own request; the right RM approves; edit after approval; undo once and not twice; delete; applications older than 15 days; end date before start date | PASS |
+| CSRF | Cross-origin POST; form-encoded POST | PASS |
+| Input | Malformed JSON; 3 MB body; wrong data types; huge or SQL-shaped IDs; path traversal; SQL in filters; stored XSS payload | PASS |
+| Uploads | Photo: HTML posing as PNG, SVG, over 512 KB. Logo: SVG, fake PNG, over 1 MB. Oversized employee CSV | PASS |
+| Rate limits | Password guessing (blocked on attempt 11); password spraying with forged X-Forwarded-For (blocked); heavy actions (blocked); writes per account (blocked) | PASS |
+
+## 13. Findings and fixes in Part 2
+
+| ID | Severity | Finding | Fix |
+|---|---|---|---|
+| BUG-006 | **Critical** | The fixed **Administrator (erp@wii.gov.in) and Auditor accounts are created with password `123456`**, published in `migrations/20261120_bootstrap_users.sql`. The change was skippable, and the server never enforced `must_change_password`. Anyone on the LAN could sign in as Administrator if the password was never changed. | Until a system account replaces its default password, the server allows only `/auth/me`, `/auth/change-password` and `/auth/logout`. Skipping is refused, and the UI hides "Skip" for these accounts. Employees can still skip, as you decided. Test: `passwordGate.test.ts` + pentest A-11. **Run `npm run db:audit` on the server: if it reports "System accounts still on their default password", change those passwords today.** |
+| BUG-007 | Medium | No general API rate limit. Any signed-in script could flood writes, imports, SMTP tests, report sends or email resends. | Per-IP limit of 1200 requests per minute for the whole API. Per-account limit of 60 changes per minute. Separate 10-minute limits for bulk imports, SMTP tests, report "send now", email resend, photo upload and admin password reset. Configurable with `API_RATE_PER_MINUTE` and `API_WRITES_PER_MINUTE`. Test: `apiRateLimit.test.ts` + pentest R-03/R-04. |
+| BUG-008 | Medium | Logo upload checked only the `data:image/png` label, not the file content, and allowed 2 MB. A 2 MB logo is about 2.7 MB as text, which is over the 2 MB request limit, so large logos failed with a generic 413. | The real type is checked from the file's bytes, the limit is 1 MB, and the UI text was updated. Test: `logoRules.test.ts` + pentest U-02. |
+| BUG-009 | Low | The employee import allowed a 2,000,000-character CSV, which can exceed the 2 MB request limit after JSON escaping. | Limit set to 1,000,000 characters (the 300-row cap is unchanged). |
+| BUG-010 | Low | A custom password reset compared the two password fields only in the browser. | The server now checks `confirmPassword`. |
+| VAL-01 | n/a | Client-side validation found in Employee add/edit (live hints and the "Mandatory fields" block), Master records, password reset and the delete-reason check. | Removed. The server already validates every one of these and the forms show its field errors. Kept in the browser: the file-size pre-check before a certificate or photo is read. It stops the browser from reading a 50 MB file; the server enforces the same limit. |
+| DB-02 | Medium | 5 legacy tables (`sessions`, `profile_master_records`, and 3 old master audit-log tables) are no longer used. Their data was copied forward by earlier migrations. | `migrations/20261212_retire_legacy_tables.sql` first checks that nothing is missing, then **renames** them to `zz_retired_*`. It does not drop anything and can be undone. Not run on your database: you run it after a backup. Also removed from `schema.ts`. |
+| DB-03 | Low | The migrations cannot build a fresh database in file-name order (`20261031_leave_policy_*` alters `leave_types` before `20261031_leave_types.sql` creates it). The old `src/db/migrations` files reference `lams2_db` and `user_id` columns that no longer exist. | Documented. The security workflow applies them in 3 passes. No change to the existing database. |
+| DB-04 | Low | `schema.ts` declares `timestamp(3) ... ON UPDATE` columns that `drizzle-kit` turns into invalid SQL. | Documented. **Never run `drizzle-kit push` on the live database.** A note was added at the top of `schema.ts`. |
+| DEP-01 | Medium | `package-lock.json` was out of sync with `package.json`: `drizzle-orm`, `mysql2`, `bcrypt` and `express-session` were missing, so `npm ci` could not work. | Regenerated. **No installed version changed** (checked package by package); only the unused packages were removed. |
+
+## 14. Unused code and files removed (18 files, about 16,000 lines)
+
+- **Root clutter:** `EmployeeProfilePage.local-preserve.tsx` (396 KB), `package-lock.json.backup`, `server.ts.backup`, `metadata.json` (Google AI Studio), `.aistudio/` planning notes.
+- **Dead Slack feature:** nothing could open the Slack hub modal. Removed the frontend modal, the service, the state and its localStorage config, and the server route `POST /api/slack/notify`, which also removes some attack surface.
+- **Old entry point and shim:** `server/server.ts` (superseded by the root `server.ts`) and `server/leave/undoWindow.ts` (its test now imports `approvalFlow`).
+- **Unused UI components:** `DatePicker`, `TimePicker`, `StateFeedback` and `FileUpload` wrappers. Every picker in the app uses `AppDatePicker` / `AppTimePicker`.
+- **Unused functions and types:** `entitledQuota`, `isPwdUser`, `groupLeaveTypeIdsOfUser`, `listRecipients`, `startStatus`, `DESIGNATION_LAYOUTS`, `SmtpConfigPayload`, `formatTime24to12`, `evaluateAttendanceByShift`, `userHasRole`, `userHasModuleRole`, `isDayOff`, `fetchAudit`, the Slack and email-config types.
+- **Unused dependencies:** `@google/genai`, `motion`, `recharts`, `autoprefixer`, `esbuild`.
+- **Kept on purpose:** the PMS, Finance, Facility and Inventory screens (planned modules); design-system pieces such as `CardHeader` and `AlertDialog`; the `attendance_punches` schema entry (the vendor's `Attendance` table).
+
+## 15. New tools
+
+- `npm run db:audit`: a **read-only** database audit. It reports unused tables, tables without a primary key, orphan role grants, duplicate grants, accounts without profiles, profiles without accounts, requests of deleted users, broken manager links, duplicate emails and phones, expired-but-active accounts, and system accounts still on the default password.
+- `scripts/security/pentest.ts` + `.github/workflows/security.yml`: the attack suite above. It runs on every PR.
+
+## 16. Business logic
+
+Checked in code and by executed flows. Correct:
+- 15-day back-dating for leave, OD and manual attendance (server-side, India time zone)
+- Edit and delete locked once approved or after the date
+- No self-approval
+- Only the employee's own RM can decide one-stage requests; RM forwards and HoD decides two-stage requests
+- Undo once within 10 minutes (admin: any time)
+- Row locks against double submission
+- The administrator's date range compared with other roles
+
+**Not yet tested end to end** (they need leave types, groups and balances set up): the leave engine rules (sandwich and holidays for 2-stage leaves, CL half day, comp-off validity and the 2-per-month cap, LTC encashment at 30 days or more, joining reports, paternity window). Their unit tests pass. Extending the security workflow with a leave-setup fixture is the next step.
+
+## 17. Deployment steps for PR #248
+
+1. Merge the PR, then on the server: `git pull`, `npm ci`, `npm run build`, restart.
+2. `npm run db:audit`. Fix any **FAIL**, especially the system account passwords.
+3. Optional, after `mysqldump`: `mysql> source migrations/20261212_retire_legacy_tables.sql`.
+4. If you run more than one server process, or sit many users behind one NAT address, adjust `API_RATE_PER_MINUTE`.
