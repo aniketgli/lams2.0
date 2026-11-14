@@ -214,7 +214,7 @@ export interface LeaveInput {
 
 export interface CompOffCredit { date: string; in: string; out: string; hours: number; reason: string; validUntil: string }
 
-export interface LeaveBalance { total: number; carryForward: number; used: number; pending: number; available: number }
+export interface LeaveBalance { total: number; carryForward: number; used: number; pending: number; available: number; /** Set as on this date: leaves before it are already in the balance. */ asOf?: string | null }
 
 export interface LeavePreview {
   days: number;

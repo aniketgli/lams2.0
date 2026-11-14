@@ -47,6 +47,8 @@ const REQUIRED: Record<string, string[]> = {
   email_outbox: ['status', 'next_attempt_at', 'queued_at', 'body_html'],
   // The latest columns for leave purposes / paternity details (20261130_scl_paternity.sql).
   leave_types: ['purposes'],
+  // A balance set "as on" a date (20261208_balance_as_on.sql). Without it every leave of the year is deducted.
+  leave_balances: ['as_of'],
   // Roles that can be given and used (20261203_role_catalog.sql). Without it the built-in list is used.
   role_catalog: ['module_id', 'role_id', 'name', 'access_role', 'aliases', 'is_active'],
 };

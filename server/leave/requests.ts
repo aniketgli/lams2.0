@@ -458,7 +458,18 @@ export function balanceAsOn(year: number, basis: 'CY' | 'FY', today: string): st
   return today < start ? start : today > end ? end : today;
 }
 
+/**
+ * The days a balance starts with before the Leave Balance Manager / Administrator has set it: none. Every quota is
+ * set (and added to / deducted from) by them, at the frequency of each leave (yearly, half-yearly, …); the leave type's
+ * quota is only the entitlement shown on the Leave Types page. (Kept as a function so the callers stay as they are.)
+ */
 export function creditedQuota(policy: Pick<Policy, 'quota' | 'quotas' | 'pwdQuota' | 'accrual'>, employmentType: string, cycleYear: number, basis: 'CY' | 'FY', asOf: string, isPwd = false): number {
+  void policy; void employmentType; void cycleYear; void basis; void asOf; void isPwd;
+  return 0;
+}
+
+/** The entitlement of a leave type for one employee (shown, never credited on its own). */
+export function entitledQuota(policy: Pick<Policy, 'quota' | 'quotas' | 'pwdQuota' | 'accrual'>, employmentType: string, cycleYear: number, basis: 'CY' | 'FY', asOf: string, isPwd = false): number {
   const yearly = quotaFor(policy, employmentType, isPwd);
   if (policy.accrual !== 'half_yearly') return yearly;
   const start = basis === 'FY' ? 4 : 1;
@@ -494,7 +505,31 @@ export function eligibilityProblem(policy: Policy, emp: Pick<Employee, 'employme
   return null;
 }
 
-export interface Balance { total: number; carryForward: number; used: number; pending: number; available: number }
+export interface Balance { total: number; carryForward: number; used: number; pending: number; available: number; /** The date the balance was set as on (leaves before it are already in it). */ asOf?: string | null }
+
+/**
+ * leave_balances.as_of (migration 20261208_balance_as_on.sql): checked once, so every leave screen keeps working before
+ * that migration is run (then every leave of the year is counted, as before).
+ */
+let asOfColumn: Promise<boolean> | null = null;
+export function hasAsOfColumn(q: { query: typeof pool.query }): Promise<boolean> {
+  asOfColumn ??= rows(q, "SELECT COUNT(*) AS n FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'leave_balances' AND COLUMN_NAME = 'as_of'")
+    .then((r) => Number(r[0]?.n ?? 0) > 0)
+    .catch(() => { asOfColumn = null; return false; });
+  return asOfColumn;
+}
+
+/**
+ * SQL that leaves out leaves taken before the balance's "as on" date: a JOIN on leave_balances (alias b) for the type
+ * whose balance is used (`typeExpr`), and the condition. Empty when the column is not there yet.
+ */
+export async function asOfFilter(q: { query: typeof pool.query }, req: string, typeExpr: string): Promise<{ join: string; where: string }> {
+  if (!(await hasAsOfColumn(q))) return { join: '', where: '' };
+  return {
+    join: ` LEFT JOIN leave_balances b ON b.user_id = ${req}.user_id AND b.leave_type_id = ${typeExpr} AND b.cycle_year = ${req}.cycle_year`,
+    where: ` AND (b.as_of IS NULL OR ${req}.start_date >= b.as_of)`,
+  };
+}
 
 export async function balanceOf(
   q: { query: typeof pool.query }, userId: number, policy: Pick<Policy, 'id' | 'quota'>, cycleYear: number, exceptRequestId = 0,
@@ -506,11 +541,16 @@ export async function balanceOf(
     const credits = person ? (await creditsFor([person], todayInIndia(), exceptRequestId)).get(userId) ?? [] : [];
     return balanceFromCredits(credits);
   }
-  const [grant] = await rows(q, 'SELECT total, carry_forward FROM leave_balances WHERE user_id = ? AND leave_type_id = ? AND cycle_year = ? LIMIT 1', [userId, policy.id, cycleYear]);
+  const withAsOf = await hasAsOfColumn(q);
+  const [grant] = await rows(q, `SELECT total, carry_forward${withAsOf ? ", DATE_FORMAT(as_of, '%Y-%m-%d') AS as_of" : ''} FROM leave_balances WHERE user_id = ? AND leave_type_id = ? AND cycle_year = ? LIMIT 1`, [userId, policy.id, cycleYear]);
+  // A balance set "as on" a date already reflects the leaves before it: only leaves from that date on come off it.
+  const asOf: string | null = grant?.as_of ? String(grant.as_of) : null;
+  const since = asOf ? ' AND start_date >= ?' : '';
+  const sinceParams = asOf ? [asOf] : [];
   const [sums] = await rows(q,
     `SELECT COALESCE(SUM(CASE WHEN status = 'approved' THEN days_count + encash_days ELSE 0 END), 0) AS used,
             COALESCE(SUM(CASE WHEN status IN ('pending_l1', 'pending_l2') THEN days_count + encash_days ELSE 0 END), 0) AS pending
-       FROM leave_requests WHERE user_id = ? AND leave_type_id = ? AND cycle_year = ? AND id <> ?`, [userId, policy.id, cycleYear, exceptRequestId]);
+       FROM leave_requests WHERE user_id = ? AND leave_type_id = ? AND cycle_year = ? AND id <> ?${since}`, [userId, policy.id, cycleYear, exceptRequestId, ...sinceParams]);
   const total = grant ? Number(grant.total) : policy.quota;
   const carryForward = grant ? Number(grant.carry_forward) : 0;
   // Leave types that are debited from this one (commuted leave takes a multiple of its days from half pay leave).
@@ -518,9 +558,9 @@ export async function balanceOf(
     `SELECT COALESCE(SUM(CASE WHEN r.status = 'approved' THEN (r.days_count + r.encash_days) * t.debit_factor ELSE 0 END), 0) AS used,
             COALESCE(SUM(CASE WHEN r.status IN ('pending_l1', 'pending_l2') THEN (r.days_count + r.encash_days) * t.debit_factor ELSE 0 END), 0) AS pending
        FROM leave_requests r JOIN leave_types t ON t.id = r.leave_type_id
-      WHERE r.user_id = ? AND t.debit_from_type_id = ? AND r.cycle_year = ? AND r.id <> ?`, [userId, policy.id, cycleYear, exceptRequestId]);
+      WHERE r.user_id = ? AND t.debit_from_type_id = ? AND r.cycle_year = ? AND r.id <> ?${asOf ? ' AND r.start_date >= ?' : ''}`, [userId, policy.id, cycleYear, exceptRequestId, ...sinceParams]);
   const used = Number(sums?.used ?? 0) + Number(linked?.used ?? 0), pending = Number(sums?.pending ?? 0) + Number(linked?.pending ?? 0);
-  return { total, carryForward, used: num(used), pending: num(pending), available: num(total + carryForward - used - pending) };
+  return { total, carryForward, used: num(used), pending: num(pending), available: num(total + carryForward - used - pending), asOf };
 }
 
 /** Working weekdays of the employee's shift and the gazetted holidays in a range, for counting leave days. */
@@ -1477,18 +1517,21 @@ export async function listBalances(viewer: Viewer, yearRaw: unknown): Promise<{ 
     const credits = policies.some((p) => p.code === COMP_OFF_CODE)
       ? await creditsFor(visible.map((r) => ({ userId: Number(r.id), biometricId: String(r.biometric_id), shiftId: r.shift_id ? String(r.shift_id) : null, joining: r.joining_date ? isoDate(r.joining_date) : null })), todayInIndia())
       : new Map();
-    const grants = await rows(pool, 'SELECT user_id, leave_type_id, total, carry_forward FROM leave_balances WHERE cycle_year = ?', [year]);
+    const grants = await rows(pool, `SELECT user_id, leave_type_id, total, carry_forward${(await hasAsOfColumn(pool)) ? ", DATE_FORMAT(as_of, '%Y-%m-%d') AS as_of" : ''} FROM leave_balances WHERE cycle_year = ?`, [year]);
+    // Leaves before a balance's "as on" date are already in it (asOfFilter).
+    const own = await asOfFilter(pool, 'r', 'r.leave_type_id');
+    const base = await asOfFilter(pool, 'r', 't.debit_from_type_id');
     const sums = await rows(pool,
-      `SELECT user_id, leave_type_id,
-              COALESCE(SUM(CASE WHEN status = 'approved' THEN days_count + encash_days ELSE 0 END), 0) AS used,
-              COALESCE(SUM(CASE WHEN status IN ('pending_l1', 'pending_l2') THEN days_count + encash_days ELSE 0 END), 0) AS pending
-         FROM leave_requests WHERE cycle_year = ? GROUP BY user_id, leave_type_id`, [year]);
+      `SELECT r.user_id, r.leave_type_id,
+              COALESCE(SUM(CASE WHEN r.status = 'approved' THEN r.days_count + r.encash_days ELSE 0 END), 0) AS used,
+              COALESCE(SUM(CASE WHEN r.status IN ('pending_l1', 'pending_l2') THEN r.days_count + r.encash_days ELSE 0 END), 0) AS pending
+         FROM leave_requests r${own.join} WHERE r.cycle_year = ?${own.where} GROUP BY r.user_id, r.leave_type_id`, [year]);
     const linkedRows = await rows(pool,
       `SELECT r.user_id, t.debit_from_type_id AS base_id,
               COALESCE(SUM(CASE WHEN r.status = 'approved' THEN (r.days_count + r.encash_days) * t.debit_factor ELSE 0 END), 0) AS used,
               COALESCE(SUM(CASE WHEN r.status IN ('pending_l1', 'pending_l2') THEN (r.days_count + r.encash_days) * t.debit_factor ELSE 0 END), 0) AS pending
-         FROM leave_requests r JOIN leave_types t ON t.id = r.leave_type_id
-        WHERE t.debit_from_type_id IS NOT NULL AND r.cycle_year = ? GROUP BY r.user_id, t.debit_from_type_id`, [year]);
+         FROM leave_requests r JOIN leave_types t ON t.id = r.leave_type_id${base.join}
+        WHERE t.debit_from_type_id IS NOT NULL AND r.cycle_year = ?${base.where} GROUP BY r.user_id, t.debit_from_type_id`, [year]);
     const linkedOf = new Map(linkedRows.map((l) => [`${l.user_id}:${l.base_id}`, l]));
     const groupMap = await groupLeaveTypeMap(pool);
     const today = todayInIndia();
@@ -1509,7 +1552,7 @@ export async function listBalances(viewer: Viewer, yearRaw: unknown): Promise<{ 
         const total = g ? Number(g.total) : creditedQuota(p, emp.employmentType, year, basis, asOf, emp.isPwd), carryForward = g ? Number(g.carry_forward) : 0;
         const l = linkedOf.get(`${r.id}:${p.id}`);
         const used = Number(s?.used ?? 0) + Number(l?.used ?? 0), pending = Number(s?.pending ?? 0) + Number(l?.pending ?? 0);
-        balances[String(p.id)] = { total, carryForward, used: num(used), pending: num(pending), available: num(total + carryForward - used - pending), eligible };
+        balances[String(p.id)] = { total, carryForward, used: num(used), pending: num(pending), available: num(total + carryForward - used - pending), eligible, asOf: g?.as_of ? String(g.as_of) : null };
       }
       return { userId: String(r.id), biometricId: String(r.biometric_id), name: String(r.name), designation: String(r.designation ?? ''), department: String(r.department ?? ''), employmentType: String(r.employment_type ?? ''), basis, cycle: cycleLabel(year, basis), asOn: balanceAsOn(year, basis, today), balances };
     });
@@ -1541,17 +1584,19 @@ export async function leaveHistory(viewer: Viewer, userIdRaw: unknown): Promise<
     const basis: 'CY' | 'FY' = data.leaveCycle === 'FY' ? 'FY' : 'CY';
     const policies = await attachQuotas(pool, (await rows(pool, 'SELECT * FROM leave_types ORDER BY name')).map(toPolicy));
     const grants = await rows(pool, 'SELECT cycle_year, cycle_type, leave_type_id, total, carry_forward FROM leave_balances WHERE user_id = ?', [userId]);
+    const own = await asOfFilter(pool, 'r', 'r.leave_type_id');
+    const base = await asOfFilter(pool, 'r', 't.debit_from_type_id');
     const sums = await rows(pool,
-      `SELECT cycle_year, leave_type_id,
-              COALESCE(SUM(CASE WHEN status = 'approved' THEN days_count + encash_days ELSE 0 END), 0) AS used,
-              COALESCE(SUM(CASE WHEN status IN ('pending_l1', 'pending_l2') THEN days_count + encash_days ELSE 0 END), 0) AS pending
-         FROM leave_requests WHERE user_id = ? GROUP BY cycle_year, leave_type_id`, [userId]);
+      `SELECT r.cycle_year, r.leave_type_id,
+              COALESCE(SUM(CASE WHEN r.status = 'approved' THEN r.days_count + r.encash_days ELSE 0 END), 0) AS used,
+              COALESCE(SUM(CASE WHEN r.status IN ('pending_l1', 'pending_l2') THEN r.days_count + r.encash_days ELSE 0 END), 0) AS pending
+         FROM leave_requests r${own.join} WHERE r.user_id = ?${own.where} GROUP BY r.cycle_year, r.leave_type_id`, [userId]);
     const linked = await rows(pool,
       `SELECT r.cycle_year, t.debit_from_type_id AS base_id,
               COALESCE(SUM(CASE WHEN r.status = 'approved' THEN (r.days_count + r.encash_days) * t.debit_factor ELSE 0 END), 0) AS used,
               COALESCE(SUM(CASE WHEN r.status IN ('pending_l1', 'pending_l2') THEN (r.days_count + r.encash_days) * t.debit_factor ELSE 0 END), 0) AS pending
-         FROM leave_requests r JOIN leave_types t ON t.id = r.leave_type_id
-        WHERE r.user_id = ? AND t.debit_from_type_id IS NOT NULL GROUP BY r.cycle_year, t.debit_from_type_id`, [userId]);
+         FROM leave_requests r JOIN leave_types t ON t.id = r.leave_type_id${base.join}
+        WHERE r.user_id = ? AND t.debit_from_type_id IS NOT NULL${base.where} GROUP BY r.cycle_year, t.debit_from_type_id`, [userId]);
     const emp = { employmentType: String(person.employment_type ?? ''), isPwd: data.isPwd === true || data.isPwd === 'true' };
     const today = todayInIndia();
     const yearsSeen = [...new Set([...grants, ...sums, ...linked].map((r) => Number(r.cycle_year)))].sort((a, b) => b - a);
@@ -1593,6 +1638,9 @@ export async function setBalance(req: Request, viewer: Viewer, body: unknown): P
   const total = half('total', 400);
   const carryForward = half('carryForward', 1000);
   const reason = v.optionalString('reason', { max: 500 });
+  // The balance is "as on" this date (default today): leaves before it are already in it and are not deducted again.
+  const asOfRaw = v.optionalString('asOf', { max: 10 });
+  if (asOfRaw && !/^\d{4}-\d{2}-\d{2}$/.test(asOfRaw)) v.errors.asOf ||= 'Enter the date as YYYY-MM-DD.';
   v.assert();
   try {
     return await inTransaction(async (conn) => {
@@ -1602,17 +1650,14 @@ export async function setBalance(req: Request, viewer: Viewer, body: unknown): P
       await rows(conn, 'SELECT id FROM users WHERE id = ? FOR UPDATE', [emp.id]);
       const quotaPolicy = { id: policy.id, quota: creditedQuota(policy, emp.employmentType, year!, emp.basis, todayInIndia(), emp.isPwd) };
       const before = await balanceOf(conn, emp.id, quotaPolicy, year!);
-      if (total + carryForward < before.used + before.pending) {
-        throw badRequest('Please correct the highlighted fields.', { total: `Days already used or pending are ${num(before.used + before.pending)}; the grant cannot be lower.` });
-      }
-      await conn.query(
-        `INSERT INTO leave_balances (user_id, leave_type_id, cycle_year, total, carry_forward, cycle_type) VALUES (?, ?, ?, ?, ?, ?)
-           ON DUPLICATE KEY UPDATE total = VALUES(total), carry_forward = VALUES(carry_forward), cycle_type = VALUES(cycle_type)`,
-        [emp.id, policy.id, year, total, carryForward, emp.basis],
-      );
+      const asOf = balanceAsOn(year!, emp.basis, asOfRaw || todayInIndia());
+      await writeGrant(conn, { userId: emp.id, typeId: policy.id, year: year!, total, carryForward, basis: emp.basis, asOf });
       const after = await balanceOf(conn, emp.id, quotaPolicy, year!);
+      if (after.available < 0) {
+        throw badRequest('Please correct the highlighted fields.', { total: `Leaves from ${asOf} on already use or wait for ${num(after.used + after.pending)} days; the balance cannot be lower.` });
+      }
       const [who] = await rows(conn, 'SELECT name, biometric_id FROM users WHERE id = ?', [emp.id]);
-      const view = (b: Balance) => ({ total: b.total, carryForward: b.carryForward });
+      const view = (b: Balance) => ({ total: b.total, carryForward: b.carryForward, asOn: b.asOf ?? null, available: b.available });
       await writeMasterAuditSql(conn, req, {
         masterKey: BALANCE_KEY, recordId: `${emp.id}:${policy.id}:${year}`, recordLabel: `${who?.name} (${who?.biometric_id}) · ${policy.code} · ${year}`,
         action: 'UPDATE', before: view(before), after: view(after), reason,
@@ -1623,6 +1668,38 @@ export async function setBalance(req: Request, viewer: Viewer, body: unknown): P
     missingTable(error);
     throw error;
   }
+}
+
+/** Days of leave (taken or waiting) of one type and leave year from `asOf` on, including leaves debited to it. */
+export async function daysFrom(q: { query: typeof pool.query }, userId: number, typeId: number, year: number, asOf: string): Promise<number> {
+  const [own] = await rows(q,
+    `SELECT COALESCE(SUM(days_count + encash_days), 0) AS n FROM leave_requests
+      WHERE user_id = ? AND leave_type_id = ? AND cycle_year = ? AND start_date >= ? AND status IN ('approved', 'pending_l1', 'pending_l2')`, [userId, typeId, year, asOf]);
+  const [linked] = await rows(q,
+    `SELECT COALESCE(SUM((r.days_count + r.encash_days) * t.debit_factor), 0) AS n FROM leave_requests r JOIN leave_types t ON t.id = r.leave_type_id
+      WHERE r.user_id = ? AND t.debit_from_type_id = ? AND r.cycle_year = ? AND r.start_date >= ? AND r.status IN ('approved', 'pending_l1', 'pending_l2')`, [userId, typeId, year, asOf]);
+  return num(Number(own?.n ?? 0) + Number(linked?.n ?? 0));
+}
+
+/**
+ * Writes a balance. `asOf` set: the balance is as on that date (leaves before it are not deducted again);
+ * undefined: the date already stored stays (adding / deducting days).
+ */
+export async function writeGrant(
+  conn: { query: typeof pool.query },
+  g: { userId: number; typeId: number; year: number; total: number; carryForward: number; basis: 'CY' | 'FY'; asOf?: string },
+): Promise<void> {
+  if (g.asOf !== undefined && (await hasAsOfColumn(conn))) {
+    await conn.query(
+      `INSERT INTO leave_balances (user_id, leave_type_id, cycle_year, total, carry_forward, cycle_type, as_of) VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE total = VALUES(total), carry_forward = VALUES(carry_forward), cycle_type = VALUES(cycle_type), as_of = VALUES(as_of)`,
+      [g.userId, g.typeId, g.year, g.total, g.carryForward, g.basis, g.asOf]);
+    return;
+  }
+  await conn.query(
+    `INSERT INTO leave_balances (user_id, leave_type_id, cycle_year, total, carry_forward, cycle_type) VALUES (?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE total = VALUES(total), carry_forward = VALUES(carry_forward), cycle_type = VALUES(cycle_type)`,
+    [g.userId, g.typeId, g.year, g.total, g.carryForward, g.basis]);
 }
 
 // ---------------------------------------------------------------------------

@@ -6,13 +6,15 @@ import { inTransaction } from '../lib/tx';
 import { Validator, todayInIndia } from '../lib/validate';
 import { writeMasterAuditSql } from '../masters/audit';
 import {
-  BALANCE_KEY, type Employee, type Policy, type Viewer, balanceOf, creditedQuota, cycleLabel, eligibilityProblem, listBalances, loadEmployee, loadPolicy, missingTable, num,
+  BALANCE_KEY, type Employee, type Policy, type Viewer, balanceAsOn, balanceOf, creditedQuota, cycleLabel, daysFrom, eligibilityProblem, listBalances, loadEmployee, loadPolicy, missingTable, num, writeGrant,
 } from './requests';
 import { canManageBalances } from '../lib/roles';
 
 /**
- * Leave quota import (administrator). A CSV with Biometric_ID, Leave_Year (CY 2026 / FY 2026-27), Leave_Code and Total_Quota sets, adds to
- * or deducts from the days granted for the leave year named in each row. The browser first asks for a review (nothing is
+ * Leave quota import (administrator / Leave Balance Manager). A CSV with Biometric_ID, Leave_Year (CY 2026 / FY 2026-27),
+ * Leave_Code, Total_Quota and, optionally, As_On sets, adds to or deducts from the balance of the leave year named in each row.
+ * "Set" makes it the balance as on As_On (default today): leaves before that date are already in it and are not deducted
+ * again. "Add" / "Deduct" keep the date already stored. The browser first asks for a review (nothing is
  * written); importing re-checks every row on the server and writes all of them in one transaction, or
  * none when a single row has a problem. Each changed balance is audited like a manual change.
  */
@@ -21,6 +23,20 @@ export const IMPORT_STRATEGIES = ['set', 'add', 'deduct'] as const;
 export type ImportStrategy = (typeof IMPORT_STRATEGIES)[number];
 export const MAX_IMPORT_ROWS = 3000;
 export const IMPORT_HEADERS = ['Biometric_ID', 'Leave_Year', 'Leave_Code', 'Total_Quota'] as const;
+/** Optional column: the date the balance is set as on (DD-MM-YYYY or YYYY-MM-DD; empty = today). */
+export const AS_ON_HEADER = 'As_On';
+
+/** "31-01-2026", "31/01/2026" or "2026-01-31" → "2026-01-31"; '' when empty; null when it is not a date. */
+export function parseAsOn(text: string): string | null | '' {
+  const t = text.trim();
+  if (!t) return '';
+  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t);
+  const iso = m ? `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`
+    : (m = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/.exec(t)) ? `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` : null;
+  if (!iso) return null;
+  const d = new Date(`${iso}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== iso ? null : iso;
+}
 
 /** "CY 2026" / "FY 2026-27" (or FY 2026-2027) → the cycle and the year it starts; null when the text is neither. */
 export function parseLeaveYear(text: string): { type: 'CY' | 'FY'; year: number } | null {
@@ -70,7 +86,7 @@ export interface ImportReview {
   summary: { rows: number; ok: number; unchanged: number; errors: number };
   rows: ImportRow[];
 }
-interface Planned { row: ImportRow; year: number; emp: Employee; policy: Policy; carryForward: number; total: number; before: { total: number; carryForward: number } }
+interface Planned { row: ImportRow; year: number; emp: Employee; policy: Policy; carryForward: number; total: number; asOf?: string; before: { total: number; carryForward: number } }
 
 function parseInput(body: unknown, admin: boolean): { strategy: ImportStrategy; csv: string } {
   if (!admin) throw forbidden('Only an administrator or Leave Balance Manager can import leave quotas.');
@@ -88,6 +104,7 @@ async function plan(q: Q, input: { strategy: ImportStrategy; csv: string }): Pro
   const heads = table[0].map(key);
   const col = (name: string) => heads.indexOf(key(name));
   const [cBio, cCycle, cCode, cQuota] = IMPORT_HEADERS.map(col);
+  const cAsOn = col(AS_ON_HEADER);
   const missing = IMPORT_HEADERS.filter((_, i) => [cBio, cCycle, cCode, cQuota][i] === -1);
   if (missing.length) throw badRequest(`Missing column: ${missing.join(', ')}.`, { csv: `The first row must have the columns ${IMPORT_HEADERS.join(', ')}. Missing: ${missing.join(', ')}.` });
   const body = table.slice(1);
@@ -144,13 +161,24 @@ async function plan(q: Q, input: { strategy: ImportStrategy; csv: string }): Pro
     const problem = eligibilityProblem(policy, emp, `${when.year}-12-31`);
     if (problem) { fail(problem); continue; }
     const before = await balanceOf(q, emp.id, { id: policy.id, quota: creditedQuota(policy, emp.employmentType, when.year, emp.basis, today, emp.isPwd) }, when.year);
+    // "Set": the balance as on As_On (default today), clamped into the leave year. Leaves before it are already in it.
+    let asOf: string | undefined;
+    if (input.strategy === 'set') {
+      const given = cAsOn >= 0 ? parseAsOn(cells[cAsOn] ?? '') : '';
+      if (given === null) { fail('As_On must be a date like 31-01-2026 (or leave it empty for today).'); continue; }
+      asOf = balanceAsOn(when.year, emp.basis, given || today);
+    }
     const total = input.strategy === 'set' ? quota : input.strategy === 'add' ? before.total + quota : before.total - quota;
     row.before = before.total; row.after = num(total);
     if (total < 0) { fail(`Deducting ${quota} from ${num(before.total)} would go below 0.`); continue; }
     if (total > 400) { fail('The total cannot be more than 400 days.'); continue; }
-    if (total + before.carryForward < before.used + before.pending) { fail(`Days already used or pending are ${num(before.used + before.pending)}; the grant cannot be lower.`); continue; }
-    row.status = num(total) === num(before.total) ? 'unchanged' : 'ok';
-    planned.push({ row, year: when.year, emp, policy, carryForward: before.carryForward, total: num(total), before: { total: before.total, carryForward: before.carryForward } });
+    const counted = asOf ? await daysFrom(q, emp.id, policy.id, when.year, asOf) : before.used + before.pending;
+    if (total + before.carryForward < counted) {
+      fail(asOf ? `Leaves from ${asOf} on already use or wait for ${num(counted)} days; the balance cannot be lower.` : `Days already used or pending are ${num(counted)}; the balance cannot be lower.`);
+      continue;
+    }
+    row.status = num(total) === num(before.total) && (!asOf || asOf === before.asOf) ? 'unchanged' : 'ok';
+    planned.push({ row, year: when.year, emp, policy, carryForward: before.carryForward, total: num(total), asOf, before: { total: before.total, carryForward: before.carryForward } });
   }
   const count = (s: ImportRow['status']) => rowsOut.filter((r) => r.status === s).length;
   return {
@@ -180,15 +208,11 @@ export async function applyImport(req: Request, viewer: { role: string | null },
         throw new HttpError(400, `${review.summary.errors} row(s) have problems. Nothing was imported; fix the file and review again.`, 'IMPORT_INVALID', { csv: `${review.summary.errors} row(s) have problems.` });
       }
       for (const p of planned.filter((x) => x.row.status === 'ok')) {
-        await conn.query(
-          `INSERT INTO leave_balances (user_id, leave_type_id, cycle_year, total, carry_forward, cycle_type) VALUES (?, ?, ?, ?, ?, ?)
-             ON DUPLICATE KEY UPDATE total = VALUES(total), carry_forward = VALUES(carry_forward), cycle_type = VALUES(cycle_type)`,
-          [p.emp.id, p.policy.id, p.year, p.total, p.carryForward, p.emp.basis],
-        );
+        await writeGrant(conn, { userId: p.emp.id, typeId: p.policy.id, year: p.year, total: p.total, carryForward: p.carryForward, basis: p.emp.basis, asOf: p.asOf });
         await writeMasterAuditSql(conn, req, {
           masterKey: BALANCE_KEY, recordId: `${p.emp.id}:${p.policy.id}:${p.year}`,
           recordLabel: `${p.row.employee} (${p.row.biometricId}) · ${p.policy.code} · ${p.row.cycle}`,
-          action: 'UPDATE', before: p.before, after: { total: p.total, carryForward: p.carryForward },
+          action: 'UPDATE', before: p.before, after: { total: p.total, carryForward: p.carryForward, ...(p.asOf ? { asOn: p.asOf } : {}) },
           reason: `CSV import: ${STRATEGY_LABEL[input.strategy]} (line ${p.row.line})`,
         });
       }
@@ -213,6 +237,13 @@ export async function importTemplate(viewer: Viewer, yearRaw: unknown, cycleRaw:
   const list = await listBalances(viewer, yearRaw);
   const types = list.types.filter((t) => t.isDebited);
   const rows = list.rows.filter((r) => cycle === 'all' || r.basis === cycle)
-    .flatMap((r) => types.filter((t) => r.balances[t.id]).map((t) => [r.biometricId, r.basis === 'FY' ? cycleLabel(list.year, 'FY') : `CY ${list.year}`, t.code, r.balances[t.id]!.total]));
-  return { year: list.year, headers: [...IMPORT_HEADERS], rows };
+    // As_On is filled with the date the balance was set as on (or the first day of the leave year when it never was),
+    // so a template sent back unchanged changes nothing. A new balance typed in gets today's date or the date it is as on.
+    .flatMap((r) => types.filter((t) => r.balances[t.id]).map((t) => {
+      const b = r.balances[t.id]!;
+      const start = r.basis === 'FY' ? `${list.year}-04-01` : `${list.year}-01-01`;
+      const asOn = b.asOf ?? start;
+      return [r.biometricId, r.basis === 'FY' ? cycleLabel(list.year, 'FY') : `CY ${list.year}`, t.code, b.total, `${asOn.slice(8, 10)}-${asOn.slice(5, 7)}-${asOn.slice(0, 4)}`];
+    }));
+  return { year: list.year, headers: [...IMPORT_HEADERS, AS_ON_HEADER], rows };
 }
