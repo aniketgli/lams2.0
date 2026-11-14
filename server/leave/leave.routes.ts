@@ -1,8 +1,8 @@
 import { applyImport, importTemplate, reviewImport } from './balanceImport';
 import { Router, type Request, type Response } from 'express';
-import { asyncHandler } from '../lib/http';
+import { asyncHandler, attachmentDisposition } from '../lib/http';
 import { Validator } from '../lib/validate';
-import { requireActiveRole, requireAuth, isAuditor } from '../middleware/auth.middleware';
+import { requireActiveRole, requireAuth, isAuditor, hrmsViewerOf } from '../middleware/auth.middleware';
 import { activityCsv, activityTable, listActivity, parseActivityFilter } from '../employees/activity';
 import {
   LEAVE_TYPE_SCOPE, createLeaveType, deleteLeaveType, leaveTypeId, leaveTypeOptions, listLeaveTypes, updateLeaveType,
@@ -98,7 +98,7 @@ router.delete('/leave-groups/:id', ...isAdmin, asyncHandler(async (req, res) => 
 }));
 
 // ---- Leave requests and balances -------------------------------------------------------------
-const viewerOf = (req: Request) => ({ id: req.auth!.account.id, role: req.auth!.activeRole });
+const viewerOf = (req: Request) => hrmsViewerOf(req);
 
 router.get('/leave/requests', requireAuth, asyncHandler(async (req, res) => {
   const q = req.query as Record<string, unknown>;
@@ -190,7 +190,7 @@ router.put('/leave/joining/:requestId', requireAuth, asyncHandler(async (req, re
 router.get('/leave/joining/:requestId/fitness', requireAuth, asyncHandler(async (req, res) => {
   const file = await fitnessOf(viewerOf(req), req.params.requestId);
   res.setHeader('Content-Type', file.mime);
-  res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`);
+  res.setHeader('Content-Disposition', attachmentDisposition(file.name, 'certificate'));
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Cache-Control', 'private, no-store');
   res.send(file.data);
@@ -220,7 +220,7 @@ router.put('/leave/requests/:id', requireAuth, asyncHandler(async (req, res) => 
 router.get('/leave/requests/:id/certificate', requireAuth, asyncHandler(async (req, res) => {
   const file = await certificateOf(viewerOf(req), requestId(req.params.id));
   res.setHeader('Content-Type', file.mime);
-  res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`);
+  res.setHeader('Content-Disposition', attachmentDisposition(file.name, 'certificate'));
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Cache-Control', 'private, no-store');
   res.send(file.data);

@@ -16,7 +16,7 @@ export const securityHeaders: RequestHandler = (_req, res, next) => {
 /**
  * CSRF protection for the JSON API.
  *
- * The session cookie is SameSite=Lax, and in addition every state-changing
+ * The session cookie is SameSite=Strict, and in addition every state-changing
  * request must (a) come from this site's own origin when the browser says
  * where it came from, and (b) be sent as JSON. Cross-site HTML forms can do
  * neither, and cross-site fetch() with JSON triggers a CORS preflight that

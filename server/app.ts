@@ -27,6 +27,7 @@ import { compressJson } from './middleware/compress';
 import { MySqlSessionStore } from './lib/sessionStore';
 import { SESSION_COOKIE } from './lib/http';
 import { sessionConfig } from './config/session.config';
+import { trustProxySetting } from './config/proxy.config';
 import { requireCurrentContext } from './middleware/auth.middleware';
 
 
@@ -64,7 +65,8 @@ export async function createApp(httpServer?: HttpServer) {
   }
 
   app.disable('x-powered-by');
-  app.set('trust proxy', isProduction ? 1 : false);
+  // Off unless a reverse proxy is configured (see server/config/proxy.config.ts).
+  app.set('trust proxy', trustProxySetting());
   app.use(securityHeaders);
   app.use(compressJson);
   app.use(express.json({ limit: '2mb' }));

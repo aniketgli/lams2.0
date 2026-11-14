@@ -3,7 +3,7 @@ import bcrypt from 'bcrypt';
 import { eq } from 'drizzle-orm';
 import { db } from '../../src/db';
 import { user_project_histories, users } from '../../src/db/schema';
-import { isAdmin, isAuthenticated, requireActiveRole, requireAuth, isAuditor } from '../middleware/auth.middleware';
+import { isAdmin, isAuthenticated, requireActiveRole, requireAuth, isAuditor, hrmsViewerOf } from '../middleware/auth.middleware';
 import { EmailService } from '../integrations/email/email.service';
 import { brandedMail, portalUrlOf } from '../notifications/notify';
 import { notifyAccountStatus, notifyEmployeeDeleted, notifyEmployeeUpdated, notifyMappingBatch, notifyWelcome } from '../notifications/events';
@@ -33,7 +33,7 @@ import { parseLogFilter } from './mappingRules';
  */
 const router = Router();
 
-const viewerOf = (req: Request): Viewer => ({ id: req.auth!.account.id, role: req.auth!.activeRole });
+const viewerOf = (req: Request): Viewer => hrmsViewerOf(req);
 
 function accountId(raw: unknown): number {
   const value = String(raw ?? '').trim();
@@ -394,6 +394,11 @@ router.post('/employees/:biometricId/reset-password', isAdmin, asyncHandler(asyn
 router.get('/employees/:biometricId/project-history', isAuthenticated, asyncHandler(async (req, res) => {
   const biometricId = String(req.params.biometricId || '').trim();
   if (!PATTERNS.biometricId.test(biometricId)) throw badRequest('A valid biometric ID is required.');
+  // Same rule as the profile itself (self, their reporting manager / HoD, administrator, auditor):
+  // the history holds pay and grant details, so a biometric ID alone must not open it.
+  const [owner] = await db.select({ id: users.id }).from(users).where(eq(users.biometricId, biometricId)).limit(1);
+  if (!owner) throw notFound('Employee not found.');
+  await getEmployee(viewerOf(req), owner.id);
   const rows = await db.select().from(user_project_histories)
     .where(eq(user_project_histories.biometricId, biometricId))
     .orderBy(user_project_histories.startDate);
