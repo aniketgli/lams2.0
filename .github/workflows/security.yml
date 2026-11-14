@@ -36,9 +36,14 @@ jobs:
           bunx drizzle-kit export --dialect=mysql --schema=./src/db/schema.ts | sed -n "/^CREATE TABLE/,\$p" > /tmp/schema.sql
           head -3 /tmp/schema.sql
           mysql -h127.0.0.1 -uroot -proot --force lams2_test < /tmp/schema.sql 2>&1 | grep -v "Using a password" || true
-          for f in $(ls src/db/migrations/*.sql | sort) $(ls migrations/*.sql | sort); do
-            echo "== $f"
-            mysql -h127.0.0.1 -uroot -proot --force lams2_test < "$f" 2>&1 | grep -v "Using a password" | tail -3 || true
+          # File-name order is not dependency order (e.g. 20261031_leave_policy_* alters leave_types before
+          # 20261031_leave_types.sql creates it), so the idempotent migrations are applied in three passes.
+          for pass in 1 2 3; do
+            echo "=== pass $pass"
+            for f in $(ls src/db/migrations/*.sql | sort) $(ls migrations/*.sql | sort); do
+              out=$(mysql -h127.0.0.1 -uroot -proot --force lams2_test < "$f" 2>&1 | grep -v "Using a password" | grep ERROR || true)
+              [ -n "$out" ] && echo "$f: $out" | head -3 || true
+            done
           done
       - name: Seed test accounts
         run: npx tsx scripts/security/seed.ts

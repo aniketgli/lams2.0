@@ -51,7 +51,7 @@ async function main(): Promise<void> {
     await c.query(
       `INSERT INTO users (biometric_id, name, email, password_hash, status, valid_upto, must_change_password)
        VALUES (?, ?, ?, ?, ?, ?, 0)`,
-      [p.bio, p.name, p.email, hash, p.status ?? 'active', p.validUpto ?? null],
+      [p.bio, p.name, p.email, hash, p.status ?? 'active', p.validUpto ?? '2099-12-31'],
     );
     const [[row]] = await c.query<mysql.RowDataPacket[]>('SELECT id FROM users WHERE biometric_id = ?', [p.bio]);
     ids.set(p.bio, Number(row.id));
