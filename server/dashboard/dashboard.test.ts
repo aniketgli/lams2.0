@@ -1,4 +1,8 @@
 import { expect, test, mock, describe } from 'bun:test';
+import { fileURLToPath } from 'node:url';
+
+// Absolute module paths (mock.module needs the resolved file), built from this file's folder so the test runs in any checkout.
+const root = (file: string) => fileURLToPath(new URL(`../../${file}`, import.meta.url));
 
 const base = { name: 'Emp', department: 'IT', designation: 'JE', biometricId: '1' };
 const manual = [
@@ -15,17 +19,17 @@ const leave = [
   { ...base, id: '9', userId: '4', status: 'pending_l2', canDecide: true, leaveTypeName: 'Earned Leave', startDate: '2026-11-10', endDate: '2026-11-12', daysCount: 3, reason: 'trip', forwardedByName: 'Mgr', forwardComment: 'ok' },
 ];
 const calls: any[] = [];
-mock.module('/home/claude/lams2.0/server/manualAttendance/store.ts', () => ({ listRequests: async (v: any, q: any) => { calls.push(['manual', v, q]); return { requests: manual }; } }));
-mock.module('/home/claude/lams2.0/server/outdoorDuty/store.ts', () => ({ listRequests: async () => ({ requests: od }) }));
-mock.module('/home/claude/lams2.0/server/leave/requests.ts', () => ({
+mock.module(root('server/manualAttendance/store.ts'), () => ({ listRequests: async (v: any, q: any) => { calls.push(['manual', v, q]); return { requests: manual }; } }));
+mock.module(root('server/outdoorDuty/store.ts'), () => ({ listRequests: async () => ({ requests: od }) }));
+mock.module(root('server/leave/requests.ts'), () => ({
   listRequests: async (v: any) => ({ requests: leave.map((l) => ({ ...l, canDecide: l.status === 'pending_l1' ? ['administrator', 'reporting_manager'].includes(v.role) : l.status === 'pending_l2' && l.userId !== '3' ? ['administrator', 'reviewing_manager'].includes(v.role) : false })) }),
   listBalances: async () => ({ year: 2026, types: [{ id: '1', code: 'CL', name: 'Casual Leave', isDebited: true }, { id: '2', code: 'LWP', name: 'Leave Without Pay', isDebited: false }, { id: '3', code: 'SCL', name: 'Special', isDebited: true }],
     rows: [{ userId: '3', balances: { '1': { total: 8, carryForward: 0, used: 2, pending: 1, available: 5, eligible: true }, '2': { total: 0, carryForward: 0, used: 0, pending: 0, available: 0, eligible: true }, '3': null } }] }),
 }));
-mock.module('/home/claude/lams2.0/server/attendance/store.ts', () => ({
+mock.module(root('server/attendance/store.ts'), () => ({
   listAttendance: async () => ({ records: [{ date: new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10), clockIn: '09:41', clockOut: null }] }),
 }));
-const { buildDashboard } = await import('/home/claude/lams2.0/server/dashboard/store.ts');
+const { buildDashboard } = await import(root('server/dashboard/store.ts'));
 
 describe('dashboard by role', () => {
   test('general staff: own pending requests, punch, balances of types they can take', async () => {

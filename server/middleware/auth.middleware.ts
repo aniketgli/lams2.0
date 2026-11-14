@@ -117,6 +117,8 @@ export function requireActiveRole(moduleId: ModuleId, ...roles: RoleId[]): Reque
   };
 }
 
+export { hrmsRoleOf, hrmsViewerOf } from '../lib/hrmsViewer';
+
 /** Requires an active session in the given module, with any role. */
 export function requireModule(moduleId: ModuleId): RequestHandler {
   return (req, _res, next) => {

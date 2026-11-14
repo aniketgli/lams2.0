@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { asyncHandler } from '../lib/http';
 import { Validator } from '../lib/validate';
-import { requireAuth, isAuditor } from '../middleware/auth.middleware';
+import { requireAuth, isAuditor, hrmsViewerOf } from '../middleware/auth.middleware';
 import { activityCsv, activityTable, listActivity, parseActivityFilter } from '../employees/activity';
 import {
   MANUAL_SCOPE, REASON_CATEGORIES, applicableEmployees, createRequest, decideRequest, deleteRequest, listRequests, missingPunchDates, requestId, undoDecision, updateRequest,
@@ -17,7 +17,7 @@ import {
  *   logs:     auditor, with CSV / PDF downloads that are logged too
  */
 const router = Router();
-const viewerOf = (req: Request) => ({ id: req.auth!.account.id, role: req.auth!.activeRole });
+const viewerOf = (req: Request) => hrmsViewerOf(req);
 
 router.get('/manual-attendance', requireAuth, asyncHandler(async (req, res) => {
   const q = req.query as Record<string, unknown>;

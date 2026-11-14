@@ -1,4 +1,8 @@
 import { expect, test, mock, describe, beforeEach } from 'bun:test';
+import { fileURLToPath } from 'node:url';
+
+// Absolute module paths (mock.module needs the resolved file), built from this file's folder so the test runs in any checkout.
+const root = (file: string) => fileURLToPath(new URL(`../../${file}`, import.meta.url));
 let grp: any[]; let links: any[]; let audits: any[]; let nextId: number; let counts: Record<string, number>;
 const query = async (q: string, p: any[] = []) => {
   q = q.replace(/\s+/g, ' ');
@@ -20,9 +24,9 @@ const query = async (q: string, p: any[] = []) => {
   throw new Error('unexpected SQL ' + q);
 };
 const conn = { query, beginTransaction: async () => {}, commit: async () => {}, rollback: async () => {}, release: () => {} };
-mock.module('/home/claude/lams2.0/src/db/index.ts', () => ({ db: {}, pool: { query, getConnection: async () => conn } }));
-mock.module('/home/claude/lams2.0/src/db/schema.ts', () => ({ master_audit_logs: {} }));
-const G = await import('/home/claude/lams2.0/server/leave/groups.ts');
+mock.module(root('src/db/index.ts'), () => ({ db: {}, pool: { query, getConnection: async () => conn } }));
+mock.module(root('src/db/schema.ts'), () => ({ master_audit_logs: {} }));
+const G = await import(root('server/leave/groups.ts'));
 const req = { auth: { account: { id: 1, biometricId: '0001', name: 'Admin' }, activeRole: 'administrator' }, ip: '1.1.1.1' } as any;
 beforeEach(() => { grp = []; links = []; audits = []; nextId = 1; counts = {}; });
 const body = (o: any = {}) => ({ code: 'perm', name: 'Permanent staff leaves', leaveYear: 'FY', leaveTypeIds: ['1', '2'], status: 'active', ...o });

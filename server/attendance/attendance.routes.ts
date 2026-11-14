@@ -1,6 +1,6 @@
 import { Router, type Response } from 'express';
 import { asyncHandler } from '../lib/http';
-import { requireAuth, isAuditor } from '../middleware/auth.middleware';
+import { requireAuth, isAuditor, hrmsViewerOf } from '../middleware/auth.middleware';
 import { ActivityScope, activityCsv, activityTable, listActivity, parseActivityFilter } from '../employees/activity';
 import { listAttendance } from './store';
 
@@ -31,7 +31,7 @@ function sendCsv(res: Response, file: { filename: string; csv: string }) {
 
 router.get('/attendance', requireAuth, asyncHandler(async (req, res) => {
   const q = req.query as Record<string, unknown>;
-  res.json(await listAttendance({ id: req.auth!.account.id, role: req.auth!.activeRole }, { from: q.from, to: q.to, userId: q.userId }));
+  res.json(await listAttendance(hrmsViewerOf(req), { from: q.from, to: q.to, userId: q.userId }));
 }));
 
 router.get('/attendance/activity', ...isAuditor, asyncHandler(async (req, res) => {
