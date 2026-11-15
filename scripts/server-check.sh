@@ -35,7 +35,7 @@ if [ -f .env ]; then
   perm=$(stat -c '%a' .env)
   if [ "$perm" = "600" ] || [ "$perm" = "400" ]; then ok ".env is readable only by its owner ($perm)"; else bad ".env permissions are $perm: run  chmod 600 .env"; fi
   grep -qE '^SESSION_SECRET=.{32,}' .env && ! grep -qE '^SESSION_SECRET=a_very_secure' .env && ok "SESSION_SECRET is set and long" || bad "SESSION_SECRET is missing, short or the example value: set a new random one (openssl rand -base64 48)"
-  grep -qE '^SETTINGS_ENCRYPTION_KEY=.{32,}' .env && ok "SETTINGS_ENCRYPTION_KEY is set" || note "SETTINGS_ENCRYPTION_KEY is missing or short (the SMTP password in Master Settings is encrypted with it)"
+  grep -qE '^SETTINGS_ENCRYPTION_KEY=.{32,}' .env && ok "SETTINGS_ENCRYPTION_KEY is set" || note "SETTINGS_ENCRYPTION_KEY is missing or short: the SMTP password is then encrypted with SESSION_SECRET, so changing SESSION_SECRET would make it unreadable. Set one (openssl rand -base64 48), the same on the PC"
   grep -qE '^(DATABASE_URL|LAMS_PROD_DB_URL)=mysql://lams2_admin' .env && bad "The app connects as lams2_admin: use the limited lams2_app user in .env"
   grep -qE '^NODE_ENV=production' .env && ok "NODE_ENV=production" || note "NODE_ENV=production is not set in .env (check the service file)"
 else
@@ -54,7 +54,7 @@ else
 fi
 
 # 4. Things that should not live in the app folder
-dumps=$(find . -path ./node_modules -prune -o -path ./.git -prune -o -path ./migrations -prune -o -path ./scripts -prune -o -type f \( -name '*.sql' -o -name '*.sql.gz' -o -name '*.dump' -o -name '*.bak' -o -name '*.backup' -o -name '*.old' -o -name '*.zip' -o -name '*.tar*' \) -print 2>/dev/null | head -20)
+dumps=$(find . \( -path ./node_modules -o -path ./.git -o -path '*/migrations' -o -path ./scripts \) -prune -o -type f \( -name '*.sql' -o -name '*.sql.gz' -o -name '*.dump' -o -name '*.bak' -o -name '*.backup' -o -name '*.old' -o -name '*.zip' -o -name '*.tar*' \) -print 2>/dev/null | head -20)
 [ -n "$dumps" ] && { bad "Backups / dumps inside the app folder (move them to the backup disk):"; echo "$dumps" | sed 's/^/        /'; } || ok "No database dumps or backup copies in the app folder"
 for d in uploads backups logs .vscode .idea .claude .aistudio; do [ -e "$d" ] && note "$d/ is in the app folder: it does not belong here"; done
 
