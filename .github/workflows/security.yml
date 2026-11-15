@@ -45,6 +45,25 @@ jobs:
               [ -n "$out" ] && echo "$f: $out" | head -3 || true
             done
           done
+      - name: Check the cleanup migrations (exact table names, primary key)
+        run: |
+          M="mysql -h127.0.0.1 -uroot -proot lams2_test"
+          # Live-database situation: a lower-case `attendance` next to the real `Attendance`, an empty user_logs,
+          # and employee_profiles with a UNIQUE `id` instead of a PRIMARY KEY.
+          $M -e "CREATE TABLE IF NOT EXISTS \`attendance\` (x INT PRIMARY KEY); CREATE TABLE IF NOT EXISTS user_logs (id INT PRIMARY KEY);
+                 INSERT INTO \`Attendance\` (EmployeeCode, LogDateTime, LogDate) VALUES ('9999','2026-01-01 09:00:00','2026-01-01')" 2>&1 | grep -v "Using a password" || true
+          $M -e "ALTER TABLE employee_profiles DROP PRIMARY KEY, ADD UNIQUE KEY \`id\` (id)" 2>&1 | grep -v "Using a password" || true
+          $M < migrations/20261212_retire_legacy_tables.sql 2>&1 | grep -v "Using a password"
+          $M < migrations/20261213_employee_profiles_primary_key.sql 2>&1 | grep -v "Using a password"
+          $M < migrations/20261213_employee_profiles_primary_key.sql 2>&1 | grep -v "Using a password"   # second run is a no-op
+          T=$($M -N -e "SELECT GROUP_CONCAT(TABLE_NAME ORDER BY BINARY TABLE_NAME) FROM information_schema.TABLES WHERE TABLE_SCHEMA='lams2_test' AND TABLE_NAME IN ('attendance','zz_retired_attendance','user_logs','zz_retired_user_logs')" 2>/dev/null)
+          echo "tables: $T"
+          $M -N -e "SELECT COUNT(*) FROM \`Attendance\`" 2>/dev/null | grep -qx 1 || { echo "Attendance (capital A) was touched"; exit 1; }
+          echo "$T" | grep -q "zz_retired_attendance" || { echo "lower-case attendance not retired"; exit 1; }
+          echo "$T" | grep -q "zz_retired_user_logs" || { echo "user_logs not retired"; exit 1; }
+          $M -N -e "SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA='lams2_test' AND TABLE_NAME='employee_profiles' AND CONSTRAINT_TYPE='PRIMARY KEY'" 2>/dev/null | grep -qx 1 || { echo "no primary key"; exit 1; }
+          $M -e "DELETE FROM \`Attendance\` WHERE EmployeeCode='9999'" 2>/dev/null
+          echo "cleanup migrations OK"
       - name: Seed test accounts
         run: npx tsx scripts/security/seed.ts
       - name: Read-only database audit
