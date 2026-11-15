@@ -24,7 +24,7 @@ import { PAGE_ICONS } from '../../hrmsPages';
 import { logThenDownload } from '../../../../shared/services/downloadAudit';
 import { auditorApi } from '../employeeApi';
 import { FilterToolbar } from '../../../../shared/components/FilterToolbar';
-import { downloadTablePdf, printedAt } from '../../../../shared/services/printTable';
+import { downloadCsvText, downloadTablePdf, toCsvText } from '../../../../shared/services/printTable';
 import { useSession } from '../../../../auth/SessionContext';
 import { MultiSelectFilter, matchesMultiSelect } from '../../../../shared/components/MultiSelectFilter';
 import { AppSelect } from '../../../../shared/components/AppSelect';
@@ -33,7 +33,6 @@ import { api } from '../../../../shared/services/api';
 import { LeaveGroupRecord, leaveGroupApi } from '../../leave/leaveApi';
 import { User as UserIcon, Briefcase, Edit3, Check, X, Shield, KeyRound, UserCheck, UserX, Trash2, Plus, ArrowLeftRight, ArrowUp, ArrowDown, ArrowUpDown, RefreshCw, UserPlus, Upload, Eye, EyeOff, GraduationCap, BookOpen, Microscope, Building2, Award, Sparkles, LayoutGrid, List } from 'lucide-react';
 import { RoleMatrixTable } from '../../master/components/RoleMatrixTable';
-import { exportHRMSToCSV, exportHRMSToPDF, HRMSExportColumn, HRMSFilterTag } from '../../utils/hrmsExportUtils';
 import { UserAvatar } from '../../../../shared/components/UserAvatar';
 import { actionBtn } from '../../../../shared/components/actionStyles';
 
@@ -405,10 +404,11 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       const title = isManager ? 'My team' : 'Employee directory';
       downloadTablePdf({
         title,
-        subtitle: [`Generated ${printedAt(table.generatedAt)}`],
+        subtitle: [isManager ? 'Employees under you' : 'All employees'],
         headers: table.headers,
         rows: table.rows,
-        fileName: `WII_${title.replace(/\s+/g, '_')}_${table.generatedAt.slice(0, 10)}`,
+        fileName: `WII_${title.replace(/\s+/g, '_')}`,
+        meta: { generatedAt: new Date(table.generatedAt) },
       });
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'The PDF could not be prepared.');
@@ -1339,82 +1339,27 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     return sortedUsersForControls.slice(start, start + userControlsPageSize);
   }, [sortedUsersForControls, userControlsPage, userControlsPageSize]);
 
-  // Export Configuration Builder for User Access & Permissions
-  const getUserControlsExportConfig = () => {
-    const activeFiltersList: HRMSFilterTag[] = [];
-
-    if (!userControlsModuleFilter.includes('all')) {
-      activeFiltersList.push({
-        label: 'Module Filter',
-        value: userControlsModuleFilter.join(', ').toUpperCase()
-      });
-    }
-
-    if (!userControlsRoleFilter.includes('all')) {
-      activeFiltersList.push({
-        label: 'Role Filter',
-        value: userControlsRoleFilter.join(', ').replace(/_/g, ' ')
-      });
-    }
-
-    if (!userControlsStatusFilter.includes('all')) {
-      activeFiltersList.push({
-        label: 'Status',
-        value: userControlsStatusFilter.join(', ').toUpperCase()
-      });
-    }
-
-    if (userSearchTerm.trim()) {
-      activeFiltersList.push({
-        label: 'Search Query',
-        value: userSearchTerm.trim()
-      });
-    }
-
-    const columns: HRMSExportColumn[] = [
-      { header: '#', key: 'sno', width: 10, align: 'center' },
-      { header: 'Employee Name', key: 'name', width: 34 },
-      { header: 'Official Email', key: 'email', width: 38 },
-      { header: 'Bio ID', key: 'biometricId', width: 18, align: 'center' },
-      { header: 'Department', key: 'department', width: 28 },
-      { header: 'Designation', key: 'designation', width: 28 },
-      { header: 'System Role', key: 'role', width: 22 },
-      { header: 'Assigned Roles', key: 'assignedRoles', width: 34 },
-      { header: 'Status', key: 'statusStr', width: 16, align: 'center' }
-    ];
-
-    const exportData = filteredUsersForControls.map((u, idx) => ({
-      sno: idx + 1,
-      name: u.name,
-      email: u.email,
-      biometricId: u.biometricId || '-',
-      department: u.department || '-',
-      designation: u.designation || '-',
-      role: u.role.replace(/_/g, ' ').toUpperCase(),
-      assignedRoles: (u.roles || [u.role]).join('; '),
-      statusStr: (u.status || 'active').toUpperCase()
-    }));
-
+  // User Controls export: same report header / footer and file naming as every other download.
+  const userControlsExport = () => {
+    const filters = [
+      !userControlsModuleFilter.includes('all') ? `Module: ${userControlsModuleFilter.join(', ').toUpperCase()}` : null,
+      !userControlsRoleFilter.includes('all') ? `Role: ${userControlsRoleFilter.join(', ').replace(/_/g, ' ')}` : null,
+      !userControlsStatusFilter.includes('all') ? `Status: ${userControlsStatusFilter.join(', ')}` : null,
+      userSearchTerm.trim() ? `Search: “${userSearchTerm.trim()}”` : null,
+    ].filter((f): f is string => Boolean(f));
+    const active = filteredUsersForControls.filter((u) => u.status !== 'inactive').length;
+    const headers = ['Sr. No.', 'Employee', 'Email', 'Biometric ID', 'Department', 'Designation', 'Active role', 'Assigned roles', 'Status'];
+    const rows = filteredUsersForControls.map((u, idx) => [
+      idx + 1, u.name, u.email, u.biometricId || '-', u.department || '-', u.designation || '-',
+      u.role.replace(/_/g, ' '), (u.roles || [u.role]).join('; '), u.status || 'active',
+    ]);
     return {
-      title: 'User Roles & System Access Control Register',
-      subtitle: 'Multi-Module Authorization, Profile Verification and Active Status Audit Matrix',
-      category: 'HRMS • Security & Role-Based Access Control (RBAC)',
-      institution: 'WILDLIFE INSTITUTE OF INDIA (WII)',
-      generatedBy: {
-        name: currentUser.name,
-        designation: currentUser.designation,
-        department: currentUser.department,
-        email: currentUser.email
-      },
-      filters: activeFiltersList,
-      summaryItems: [
-        { label: 'Total Users Monitored', value: filteredUsersForControls.length },
-        { label: 'Active Accounts', value: filteredUsersForControls.filter((u) => u.status !== 'inactive').length },
-        { label: 'Inactive / Suspended', value: filteredUsersForControls.filter((u) => u.status === 'inactive').length }
-      ],
-      columns,
-      data: exportData,
-      fileName: `WII_User_Permissions_Matrix_${new Date().toISOString().split('T')[0]}`
+      title: 'User Roles & Access Register',
+      subtitle: [filters.join(' · ') || 'All users', `Users: ${rows.length} · Active: ${active} · Inactive: ${rows.length - active}`],
+      headers, rows,
+      fileName: 'WII_User_Roles_Access_Register',
+      columnWidths: [4, 14, 18, 7, 12, 12, 10, 16, 7],
+      filterText: filters.join(' · '),
     };
   };
 
@@ -1423,10 +1368,9 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       showToast('No user records match the current filter criteria.');
       return;
     }
-    const config = getUserControlsExportConfig();
-    void logThenDownload('user_controls', 'csv', filteredUsersForControls.length, config.filters.map((f) => `${f.label}: ${f.value}`).join(' · '), () => {
-      exportHRMSToCSV(config);
-      showToast('User Access Matrix exported to CSV successfully!');
+    const report = userControlsExport();
+    void logThenDownload('user_controls', 'csv', report.rows.length, report.filterText, () => {
+      downloadCsvText(toCsvText(report.headers, report.rows), report.fileName, { title: report.title, subtitle: report.subtitle });
     }, showToast);
   };
 
@@ -1435,13 +1379,9 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       showToast('No user records match the current filter criteria.');
       return;
     }
-    const config = getUserControlsExportConfig();
-    void logThenDownload('user_controls', 'pdf', filteredUsersForControls.length, config.filters.map((f) => `${f.label}: ${f.value}`).join(' · '), () => {
-      exportHRMSToPDF({
-        ...config,
-        orientation: 'landscape'
-      });
-      showToast('User Access Matrix exported to PDF successfully!');
+    const report = userControlsExport();
+    void logThenDownload('user_controls', 'pdf', report.rows.length, report.filterText, () => {
+      downloadTablePdf(report);
     }, showToast);
   };
 

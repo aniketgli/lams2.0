@@ -311,6 +311,7 @@ export async function runSchedule(row: RowDataPacket, trigger: 'schedule' | 'man
       const periodText = def.snapshot ? `as on ${pretty(today)}` : period.from === period.to ? pretty(period.from) : `${pretty(period.from)} to ${pretty(period.to)}`;
       const formats = String(row.formats).split(',').filter(Boolean) as ReportFormat[];
       const baseName = `${def.label}_${def.snapshot ? today : period.from}${!def.snapshot && period.from !== period.to ? `_to_${period.to}` : ''}`;
+      const orgName = await import('../masters/organizationStore').then((m) => m.getOrganization()).then((o) => o?.orgName || undefined).catch(() => undefined);
       // One table per audience: the full report once, a team report once per manager.
       const builds = new Map<string, Promise<{ rows: number; attachments: ReturnType<typeof renderReport> }>>();
       const versionFor = (r: ReportRecipient) => {
@@ -318,7 +319,7 @@ export async function runSchedule(row: RowDataPacket, trigger: 'schedule' | 'man
         if (!builds.has(key)) {
           builds.set(key, def.build(period, systemRequest, r.viewer).then((table) => ({
             rows: table.rows.length,
-            attachments: renderReport(table, formats, baseName, [`${def.label} · ${periodText}${r.everyone ? '' : ` · ${r.name}'s team`}`, `Sent automatically by WII Portal on ${pretty(today)}`]),
+            attachments: renderReport(table, formats, baseName, [`${def.label} · ${periodText}${r.everyone ? '' : ` · ${r.name}'s team`}`], { organization: orgName }),
           })));
         }
         return builds.get(key)!;

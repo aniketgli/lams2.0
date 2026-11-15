@@ -5,6 +5,7 @@ import { Validator } from '../lib/validate';
 import { requireActiveRole, requireAuth, isAuditor } from '../middleware/auth.middleware';
 import { ActivityScope, activityCsv, activityTable, listActivity, parseActivityFilter } from '../employees/activity';
 import { createSchedule, deleteSchedule, getSchedule, listRuns, listSchedules, scheduleOptions, sendNow, setScheduleStatus, updateSchedule } from './store';
+import { sendCsvReport } from '../lib/csvResponse';
 
 /**
  * Scheduled report emails (/api/hrms/reports/...). Administrators manage them; the auditor can read the schedules and their
@@ -30,11 +31,6 @@ export const REPORT_SCOPE: ActivityScope = {
   filePrefix: 'WII_Reports_Activity',
 };
 
-function sendCsv(res: Response, file: { filename: string; csv: string }) {
-  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
-  res.send(file.csv);
-}
 
 const scheduleId = (raw: string): number => {
   if (!/^\d{1,18}$/.test(raw)) throw badRequest('Invalid report schedule.');
@@ -47,7 +43,7 @@ router.get('/reports/activity', ...isAuditor, asyncHandler(async (req, res) => {
 }));
 
 router.get('/reports/activity.csv', ...isAuditor, asyncHandler(async (req, res) => {
-  sendCsv(res, await activityCsv(req, parseActivityFilter(req.query as Record<string, unknown>, REPORT_SCOPE), REPORT_SCOPE));
+  await sendCsvReport(res, await activityCsv(req, parseActivityFilter(req.query as Record<string, unknown>, REPORT_SCOPE), REPORT_SCOPE));
 }));
 
 router.get('/reports/activity/export-pdf', ...isAuditor, asyncHandler(async (req, res) => {

@@ -15,6 +15,9 @@ export const PHOTO_MAX_BYTES = 512 * 1024;
 const AUDIT_PHOTO = 'employee_photo';
 
 export { detectImageType, type PhotoMime } from '../lib/fileTypes';
+import { readBlob, storeBlob } from '../lib/fileStore';
+
+const PHOTO_EXT: Record<PhotoMime, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
 import { detectImageType, type PhotoMime } from '../lib/fileTypes';
 
 /**
@@ -62,10 +65,11 @@ export async function photoUrls(biometricIds: string[] | null = null): Promise<M
 
 export async function loadPhoto(biometricId: string): Promise<{ mime: PhotoMime; data: Buffer; updatedAt: number } | null> {
   try {
-    const [rows] = await pool.query<RowDataPacket[]>('SELECT mime_type, data, updated_at FROM employee_photos WHERE biometric_id = ? LIMIT 1', [biometricId]);
+    const [rows] = await pool.query<RowDataPacket[]>('SELECT mime_type, data, storage_path, updated_at FROM employee_photos WHERE biometric_id = ? LIMIT 1', [biometricId]);
     const row = rows[0];
     if (!row) return null;
-    const data = Buffer.isBuffer(row.data) ? row.data : Buffer.from(row.data);
+    const data = await readBlob(row);
+    if (!data) return null;
     // Serve only what the bytes really are, whatever the stored label says.
     const mime = detectImageType(data);
     return mime ? { mime, data, updatedAt: stamp(row.updated_at) } : null;
@@ -95,14 +99,17 @@ export async function savePhotoFor(req: Request, owner: PhotoOwner, body: unknow
   const { bytes, mime } = parsePhotoUpload(body);
   const account = owner;
   const actor = req.auth!.account.biometricId;
+  // Written to the upload disk (UPLOAD_DIR) before the row; the replaced file is swept later.
+  const stored = await storeBlob('photos', account.biometricId, PHOTO_EXT[mime], bytes);
   try {
     return await inTransaction(async (conn) => {
       const [existing] = await conn.query<RowDataPacket[]>('SELECT byte_size, mime_type FROM employee_photos WHERE biometric_id = ? FOR UPDATE', [account.biometricId]);
       const before = existing[0];
       await conn.query(
-        `INSERT INTO employee_photos (biometric_id, mime_type, byte_size, data, updated_by) VALUES (?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE mime_type = VALUES(mime_type), byte_size = VALUES(byte_size), data = VALUES(data), updated_by = VALUES(updated_by)`,
-        [account.biometricId, mime, bytes.length, bytes, actor],
+        `INSERT INTO employee_photos (biometric_id, mime_type, byte_size, data, storage_path, updated_by) VALUES (?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE mime_type = VALUES(mime_type), byte_size = VALUES(byte_size), data = VALUES(data),
+           storage_path = VALUES(storage_path), updated_by = VALUES(updated_by)`,
+        [account.biometricId, mime, bytes.length, stored.data, stored.storagePath, actor],
       );
       // Only a description of the photo is audited, never the image itself.
       await writeMasterAuditSql(conn, req, {

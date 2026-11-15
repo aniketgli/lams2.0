@@ -1,5 +1,6 @@
 import type { RowDataPacket } from 'mysql2/promise';
 import { badRequest } from '../lib/http';
+import { readBlob, storeBlob } from '../lib/fileStore';
 
 /**
  * Medical certificate of a leave request. The browser sends `{ name, data }` where data is a
@@ -42,21 +43,23 @@ export function parseCertificate(raw: unknown): CertificateFile | null {
 export async function saveCertificate(
   conn: { query: (sql: string, params?: unknown[]) => Promise<unknown> }, requestId: number, file: CertificateFile, userId: number,
 ): Promise<void> {
+  const stored = await storeBlob('certificates', `leave-${requestId}`, EXTENSION[file.mime], file.bytes);
   await conn.query(
-    `INSERT INTO leave_certificates (request_id, file_name, mime_type, size_bytes, data, uploaded_by) VALUES (?, ?, ?, ?, ?, ?)
+    `INSERT INTO leave_certificates (request_id, file_name, mime_type, size_bytes, data, storage_path, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE file_name = VALUES(file_name), mime_type = VALUES(mime_type), size_bytes = VALUES(size_bytes), data = VALUES(data),
-       uploaded_by = VALUES(uploaded_by), uploaded_at = CURRENT_TIMESTAMP(3)`,
-    [requestId, file.name, file.mime, file.bytes.length, file.bytes, userId],
+       storage_path = VALUES(storage_path), uploaded_by = VALUES(uploaded_by), uploaded_at = CURRENT_TIMESTAMP(3)`,
+    [requestId, file.name, file.mime, file.bytes.length, stored.data, stored.storagePath, userId],
   );
 }
 
 export async function loadCertificate(
   conn: { query: (sql: string, params?: unknown[]) => Promise<unknown> }, requestId: number,
 ): Promise<{ name: string; mime: CertificateMime; data: Buffer } | null> {
-  const [rows] = (await conn.query('SELECT file_name, data FROM leave_certificates WHERE request_id = ? LIMIT 1', [requestId])) as [RowDataPacket[], unknown];
+  const [rows] = (await conn.query('SELECT file_name, data, storage_path FROM leave_certificates WHERE request_id = ? LIMIT 1', [requestId])) as [RowDataPacket[], unknown];
   const row = rows[0];
   if (!row) return null;
-  const data = Buffer.isBuffer(row.data) ? row.data : Buffer.from(row.data);
+  const data = await readBlob(row);
+  if (!data) return null;
   // Serve only what the bytes really are, whatever the stored label says.
   const mime = detectCertificateType(data);
   return mime ? { name: String(row.file_name), mime, data } : null;

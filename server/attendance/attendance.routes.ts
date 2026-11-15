@@ -3,6 +3,7 @@ import { asyncHandler } from '../lib/http';
 import { requireAuth, isAuditor, hrmsViewerOf } from '../middleware/auth.middleware';
 import { ActivityScope, activityCsv, activityTable, listActivity, parseActivityFilter } from '../employees/activity';
 import { listAttendance } from './store';
+import { sendCsvReport } from '../lib/csvResponse';
 
 /**
  * Biometric attendance (/api/hrms/attendance), read-only.
@@ -23,11 +24,6 @@ export const ATTENDANCE_SCOPE: ActivityScope = {
   filePrefix: 'WII_Attendance_Activity',
 };
 
-function sendCsv(res: Response, file: { filename: string; csv: string }) {
-  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
-  res.send(file.csv);
-}
 
 router.get('/attendance', requireAuth, asyncHandler(async (req, res) => {
   const q = req.query as Record<string, unknown>;
@@ -39,7 +35,7 @@ router.get('/attendance/activity', ...isAuditor, asyncHandler(async (req, res) =
 }));
 
 router.get('/attendance/activity.csv', ...isAuditor, asyncHandler(async (req, res) => {
-  sendCsv(res, await activityCsv(req, parseActivityFilter(req.query as Record<string, unknown>, ATTENDANCE_SCOPE), ATTENDANCE_SCOPE));
+  await sendCsvReport(res, await activityCsv(req, parseActivityFilter(req.query as Record<string, unknown>, ATTENDANCE_SCOPE), ATTENDANCE_SCOPE));
 }));
 
 router.get('/attendance/activity/export-pdf', ...isAuditor, asyncHandler(async (req, res) => {

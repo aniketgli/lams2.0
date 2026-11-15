@@ -6,6 +6,7 @@ import { activityCsv, activityTable, listActivity, parseActivityFilter } from '.
 import {
   MANUAL_SCOPE, REASON_CATEGORIES, applicableEmployees, createRequest, decideRequest, deleteRequest, listRequests, missingPunchDates, requestId, undoDecision, updateRequest,
 } from './store';
+import { sendCsvReport } from '../lib/csvResponse';
 
 /**
  * Manual attendance (/api/hrms/manual-attendance).
@@ -35,14 +36,9 @@ router.get('/manual-attendance/activity', ...isAuditor, asyncHandler(async (req,
   res.json(await listActivity(parseActivityFilter(req.query as Record<string, unknown>, MANUAL_SCOPE), MANUAL_SCOPE));
 }));
 
-function sendCsv(res: Response, file: { filename: string; csv: string }) {
-  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
-  res.send(file.csv);
-}
 
 router.get('/manual-attendance/activity.csv', ...isAuditor, asyncHandler(async (req, res) => {
-  sendCsv(res, await activityCsv(req, parseActivityFilter(req.query as Record<string, unknown>, MANUAL_SCOPE), MANUAL_SCOPE));
+  await sendCsvReport(res, await activityCsv(req, parseActivityFilter(req.query as Record<string, unknown>, MANUAL_SCOPE), MANUAL_SCOPE));
 }));
 
 router.get('/manual-attendance/activity/export-pdf', ...isAuditor, asyncHandler(async (req, res) => {

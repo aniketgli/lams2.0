@@ -276,11 +276,12 @@ export const AttendanceView: React.FC = () => {
     search.trim() ? `Search: “${search.trim()}”` : null,
   ].filter(Boolean).join(' · ');
   const fileName = `WII_Attendance_${start}_to_${end}`;
-  const downloadCsv = () => void logThenDownload('attendance', 'csv', sorted.length, `${range}${filterLine() ? ` · ${filterLine()}` : ''}`, () => downloadCsvText(toCsvText(exportHeaders, exportRows()), fileName), setError);
+  const pdfSubtitle = () => [`Period: ${range}`, filterLine() || (teamView ? 'All employees shown' : `Employee: ${currentUser.name}`)];
+  const downloadCsv = () => void logThenDownload('attendance', 'csv', sorted.length, `${range}${filterLine() ? ` · ${filterLine()}` : ''}`, () => downloadCsvText(toCsvText(exportHeaders, exportRows()), fileName, { title: 'Biometric Attendance', subtitle: pdfSubtitle() }), setError);
   const downloadPdf = () => void logThenDownload('attendance', 'pdf', sorted.length, `${range}${filterLine() ? ` · ${filterLine()}` : ''}`, () => buildPdf(), setError);
   const buildPdf = () => downloadTablePdf({
     title: 'Biometric Attendance',
-    subtitle: [`${range} · Generated ${printedAt(new Date().toISOString())}`, filterLine() || (teamView ? 'All employees shown' : currentUser.name)],
+    subtitle: pdfSubtitle(),
     headers: exportHeaders,
     rows: exportRows(),
     fileName,

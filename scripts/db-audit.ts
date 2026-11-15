@@ -46,6 +46,9 @@ export const LEGACY_TABLES: Record<string, string> = {
   biometric_machine_audit_logs: 'copied into master_audit_logs (20261029_master_settings.sql)',
   organization_unit_audit_logs: 'copied into master_audit_logs (20261029_master_settings.sql)',
   profile_master_records: 'copied into the dedicated master tables (0007_dedicated_profile_master_tables.sql)',
+  attendance: 'old lower-case punch table; the app reads `Attendance` (capital A)',
+  user_logs: 'old activity log; activity is now in user_account_audit_logs',
+  __drizzle_migrations: 'drizzle-kit tracking table; migrations are run by hand',
 };
 
 async function count(c: Connection, sql: string): Promise<number> {
@@ -88,6 +91,12 @@ async function main(): Promise<void> {
       WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_TYPE = 'BASE TABLE' AND k.CONSTRAINT_NAME IS NULL`);
     if (noPk.length) report('WARN', 'Tables without a primary key', noPk.map((r) => r.name).join(', '));
     else report('PASS', 'Every table has a primary key');
+
+    // Biometric punches: the Attendance page and comp-off need them.
+    const punches = await count(c, 'SELECT COUNT(*) AS n FROM `Attendance`');
+    if (punches === -1) report('FAIL', 'Biometric punch table `Attendance`', 'missing: the Attendance page cannot work');
+    else if (punches === 0) report('WARN', 'Biometric punch table `Attendance` is empty', 'check that the vendor export is writing punches into lams2_db.Attendance');
+    else report('PASS', `Biometric punch table \`Attendance\``, `${punches} punches`);
 
     // 3. Data integrity -----------------------------------------------------------------------
     await check(c, 'Role grants of unknown accounts',

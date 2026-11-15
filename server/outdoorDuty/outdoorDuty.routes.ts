@@ -6,6 +6,7 @@ import { activityCsv, activityTable, listActivity, parseActivityFilter } from '.
 import {
   OD_SCOPE, OD_TYPES, applicableEmployees, createRequest, decideRequest, deleteRequest, listRequests, requestId, undoDecision, updateRequest,
 } from './store';
+import { sendCsvReport } from '../lib/csvResponse';
 
 /**
  * Outdoor duty (/api/hrms/outdoor-duty).
@@ -31,14 +32,9 @@ router.get('/outdoor-duty/activity', ...isAuditor, asyncHandler(async (req, res)
   res.json(await listActivity(parseActivityFilter(req.query as Record<string, unknown>, OD_SCOPE), OD_SCOPE));
 }));
 
-function sendCsv(res: Response, file: { filename: string; csv: string }) {
-  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
-  res.send(file.csv);
-}
 
 router.get('/outdoor-duty/activity.csv', ...isAuditor, asyncHandler(async (req, res) => {
-  sendCsv(res, await activityCsv(req, parseActivityFilter(req.query as Record<string, unknown>, OD_SCOPE), OD_SCOPE));
+  await sendCsvReport(res, await activityCsv(req, parseActivityFilter(req.query as Record<string, unknown>, OD_SCOPE), OD_SCOPE));
 }));
 
 router.get('/outdoor-duty/activity/export-pdf', ...isAuditor, asyncHandler(async (req, res) => {

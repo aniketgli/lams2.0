@@ -4,6 +4,7 @@ import type { RowDataPacket } from 'mysql2/promise';
 import { pool } from '../../src/db';
 import { HttpError, badRequest, forbidden, notFound } from '../lib/http';
 import { inTransaction } from '../lib/tx';
+import { readBlob, storeBlob } from '../lib/fileStore';
 import { Validator, todayInIndia } from '../lib/validate';
 import { changedFields, writeMasterAuditSql } from '../masters/audit';
 import { biometricDay } from '../attendance/store';
@@ -290,11 +291,12 @@ function parseFitness(raw: unknown, allowed: boolean) {
 }
 
 async function saveFitness(conn: { query: typeof pool.query }, reportId: number, file: NonNullable<ReturnType<typeof parseFitness>>, userId: number) {
+  const stored = await storeBlob('fitness', `report-${reportId}`, 'pdf', file.bytes);
   await conn.query(
-    `INSERT INTO leave_joining_certificates (report_id, file_name, mime_type, size_bytes, data, uploaded_by) VALUES (?, ?, ?, ?, ?, ?)
+    `INSERT INTO leave_joining_certificates (report_id, file_name, mime_type, size_bytes, data, storage_path, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE file_name = VALUES(file_name), mime_type = VALUES(mime_type), size_bytes = VALUES(size_bytes), data = VALUES(data),
-       uploaded_by = VALUES(uploaded_by), uploaded_at = CURRENT_TIMESTAMP(3)`,
-    [reportId, file.name, file.mime, file.bytes.length, file.bytes, userId],
+       storage_path = VALUES(storage_path), uploaded_by = VALUES(uploaded_by), uploaded_at = CURRENT_TIMESTAMP(3)`,
+    [reportId, file.name, file.mime, file.bytes.length, stored.data, stored.storagePath, userId],
   );
 }
 
@@ -470,12 +472,12 @@ export async function fitnessOf(viewer: Viewer, requestIdRaw: unknown): Promise<
   try {
     const row = await fetchLeave(pool, id);
     if (!row || !row.report_id || !canSee(viewer, row)) throw notFound('Report not found.');
-    const [file] = await rows(pool, 'SELECT file_name, data FROM leave_joining_certificates WHERE report_id = ? LIMIT 1', [row.report_id]);
+    const [file] = await rows(pool, 'SELECT file_name, data, storage_path FROM leave_joining_certificates WHERE report_id = ? LIMIT 1', [row.report_id]);
     if (!file) throw notFound('No fitness certificate is attached to this report.');
-    const data = Buffer.isBuffer(file.data) ? file.data : Buffer.from(file.data);
-    const mime = detectCertificateType(data);
+    const data = await readBlob(file);
+    const mime = data ? detectCertificateType(data) : null;
     if (!mime) throw notFound('No fitness certificate is attached to this report.');
-    return { name: String(file.file_name), mime, data };
+    return { name: String(file.file_name), mime, data: data! };
   } catch (error) {
     missingTable(error);
     throw error;

@@ -404,10 +404,11 @@ export const MappingPanel: React.FC<{
       const line = [q.kind && `Type: ${KIND_OPTIONS.find((k) => k.value === q.kind)?.label}`, q.department && `Department: ${q.department}`, q.from && `From ${q.from}`, q.to && `To ${q.to}`, q.search && `Search: “${q.search}”`].filter(Boolean).join(' · ');
       downloadTablePdf({
         title: 'Employees Mapping Register',
-        subtitle: [`Generated ${printedAt(table.generatedAt)}`, line || 'All transfers and manager changes'],
+        subtitle: [line || 'All transfers and manager changes'],
+        meta: { generatedAt: new Date(table.generatedAt) },
         headers: table.headers.map((h) => (h === 'Recorded at (UTC)' ? 'Recorded at' : h)),
         rows: table.rows.map((r) => [...r.slice(0, -1), printedAt(String(r[r.length - 1]))]),
-        fileName: `WII_Employee_Mapping_Register_${table.generatedAt.slice(0, 10)}`,
+        fileName: 'WII_Employee_Mapping_Register',
         columnWidths: [8, 8, 6, 10, 8, 8, 9, 9, 7, 7, 9, 8, 8],
       });
     } catch (e) {
