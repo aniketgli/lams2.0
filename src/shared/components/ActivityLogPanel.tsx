@@ -147,10 +147,11 @@ export const ActivityLogPanel: React.FC<{ source: ActivitySource; toolbarStart?:
       ].filter(Boolean).join(' · ');
       downloadTablePdf({
         title: source.title,
-        subtitle: [`Generated ${printedAt(table.generatedAt)}`, filterLine || 'All activity'],
+        subtitle: [filterLine || 'All activity'],
+        meta: { generatedAt: new Date(table.generatedAt) },
         headers: table.headers.map((h) => (h === 'When (UTC)' ? 'When' : h)),
         rows: table.rows.map((r) => [printedAt(String(r[0])), ...r.slice(1)]),
-        fileName: `WII_${source.title.replace(/\s+/g, '_')}_${table.generatedAt.slice(0, 10)}`,
+        fileName: `WII_${source.title.replace(/\s+/g, '_')}`,
         columnWidths: [11, 9, 9, 12, 7, 30, 12, 11, 6, 9],
       });
     } catch (e) {

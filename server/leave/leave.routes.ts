@@ -16,6 +16,7 @@ import {
   LEAVE_SCOPE, applicableEmployees, applyTypeIds, certificateOf, createRequest, decideRequest, deleteRequest, leaveHistory, listBalancesPage, listRequests, previewLeave, balancePreview, compOffOptions, occupiedDates, restrictedHolidayOptions, requestId, setBalance,
   undoDecision, updateRequest,
 } from './requests';
+import { sendCsvReport } from '../lib/csvResponse';
 
 /**
  * Leave policy (/api/hrms/leave-types) and leave (/api/hrms/leave/...).
@@ -37,13 +38,8 @@ router.get('/leave-types/activity', ...isAuditor, asyncHandler(async (req, res) 
   res.json(await listActivity(parseActivityFilter(req.query as Record<string, unknown>, LEAVE_TYPE_SCOPE), LEAVE_TYPE_SCOPE));
 }));
 
-function sendCsv(res: Response, file: { filename: string; csv: string }) {
-  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
-  res.send(file.csv);
-}
 router.get('/leave-types/activity.csv', ...isAuditor, asyncHandler(async (req, res) => {
-  sendCsv(res, await activityCsv(req, parseActivityFilter(req.query as Record<string, unknown>, LEAVE_TYPE_SCOPE), LEAVE_TYPE_SCOPE));
+  await sendCsvReport(res, await activityCsv(req, parseActivityFilter(req.query as Record<string, unknown>, LEAVE_TYPE_SCOPE), LEAVE_TYPE_SCOPE));
 }));
 router.get('/leave-types/activity/export-pdf', ...isAuditor, asyncHandler(async (req, res) => {
   const table = await activityTable(req, parseActivityFilter(req.query as Record<string, unknown>, LEAVE_TYPE_SCOPE), 'pdf', LEAVE_TYPE_SCOPE);
@@ -76,7 +72,7 @@ router.get('/leave-groups/activity', ...isAuditor, asyncHandler(async (req, res)
   res.json(await listActivity(parseActivityFilter(req.query as Record<string, unknown>, LEAVE_GROUP_SCOPE), LEAVE_GROUP_SCOPE));
 }));
 router.get('/leave-groups/activity.csv', ...isAuditor, asyncHandler(async (req, res) => {
-  sendCsv(res, await activityCsv(req, parseActivityFilter(req.query as Record<string, unknown>, LEAVE_GROUP_SCOPE), LEAVE_GROUP_SCOPE));
+  await sendCsvReport(res, await activityCsv(req, parseActivityFilter(req.query as Record<string, unknown>, LEAVE_GROUP_SCOPE), LEAVE_GROUP_SCOPE));
 }));
 router.get('/leave-groups/activity/export-pdf', ...isAuditor, asyncHandler(async (req, res) => {
   const table = await activityTable(req, parseActivityFilter(req.query as Record<string, unknown>, LEAVE_GROUP_SCOPE), 'pdf', LEAVE_GROUP_SCOPE);
@@ -166,7 +162,7 @@ router.get('/leave/activity', ...isAuditor, asyncHandler(async (req, res) => {
   res.json(await listActivity(parseActivityFilter(req.query as Record<string, unknown>, LEAVE_SCOPE), LEAVE_SCOPE));
 }));
 router.get('/leave/activity.csv', ...isAuditor, asyncHandler(async (req, res) => {
-  sendCsv(res, await activityCsv(req, parseActivityFilter(req.query as Record<string, unknown>, LEAVE_SCOPE), LEAVE_SCOPE));
+  await sendCsvReport(res, await activityCsv(req, parseActivityFilter(req.query as Record<string, unknown>, LEAVE_SCOPE), LEAVE_SCOPE));
 }));
 router.get('/leave/activity/export-pdf', ...isAuditor, asyncHandler(async (req, res) => {
   const table = await activityTable(req, parseActivityFilter(req.query as Record<string, unknown>, LEAVE_SCOPE), 'pdf', LEAVE_SCOPE);

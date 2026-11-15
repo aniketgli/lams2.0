@@ -1,8 +1,33 @@
+# Dependencies and build output (made on each machine by npm ci / npm run build)
 node_modules/
+dist/
 coverage/
-.DS_Store
-*.log
+
+# Secrets: only .env.example (no real values) belongs in Git
 .env*
 !.env.example
-dist/
+*.pem
+*.key
+*.p12
+*.pfx
+.git-credentials
+.npmrc
+
+# Runtime data that must never be committed: uploads, database dumps, backups, logs
+uploads/
+backups/
+/*.sql
+*.sql.gz
+*.dump
 *.backup
+*.bak
+*.log
+logs/
+
+# Editor / tool / OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.claude/
+.aistudio/

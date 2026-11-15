@@ -25,11 +25,23 @@ import { FMSView } from './modules/fms/FMSView';
 import { FinanceView } from './modules/finance/FinanceView';
 import { EnterpriseModuleId } from './types';
 import { LoadingScreen } from './shared/components/LoadingScreen';
+import { setExportContext } from './shared/services/printTable';
+import { ROLE_LABELS } from './auth/access';
 
 const AppContent: React.FC = () => {
   const { status, session, enterModule, exitModule } = useSession();
-  const { currentUser, isLogoViewerOpen, setIsLogoViewerOpen } = useApp();
+  const { currentUser, isLogoViewerOpen, setIsLogoViewerOpen, orgBranding } = useApp();
   const rawPath = usePath();
+
+  // Report header of every PDF / CSV download: who downloads it, in which role, and for which organization.
+  useEffect(() => {
+    const user = session?.user;
+    const role = session?.activeRole ? ROLE_LABELS[session.activeRole] : null;
+    setExportContext({
+      organization: orgBranding?.orgName || 'Wildlife Institute of India',
+      generatedBy: user ? `${user.name} (${user.biometricId})${role ? ` · ${role}` : ''}` : null,
+    });
+  }, [session?.user, session?.activeRole, orgBranding?.orgName]);
   const [isOpenMobile, setIsOpenMobile] = useState(false);
 
   const { screen, path } = resolveRoute(rawPath, status, session);

@@ -1,4 +1,4 @@
-import { buildTablePdf, toCsvText } from '../../src/shared/services/printTable';
+import { buildTablePdf, reportFileName, toCsvText, withCsvReportFrame, type ReportMeta } from '../../src/shared/services/printTable';
 import type { ReportFormat } from './schedule';
 
 export interface ReportTable {
@@ -11,17 +11,22 @@ export interface ReportTable {
 
 export interface Attachment { filename: string; content: Buffer; contentType: string }
 
-const safeName = (name: string) => name.replace(/[^\w.-]+/g, '_');
 
-/** The report as the files the administrator chose (UTF-8 CSV with a BOM for Excel, and / or the same themed PDF the screens download). */
-export function renderReport(table: ReportTable, formats: readonly ReportFormat[], baseName: string, subtitle: string[]): Attachment[] {
+/**
+ * The report as the files the administrator chose: the same themed PDF and the same framed CSV (report
+ * header, footer, UTF-8 with a BOM for Excel) the screens download, named WII_<Report>_<period>_<sent at>.
+ */
+export function renderReport(table: ReportTable, formats: readonly ReportFormat[], baseName: string, subtitle: string[], meta: Partial<ReportMeta> = {}): Attachment[] {
   const files: Attachment[] = [];
+  const stem = reportFileName(baseName, meta.generatedAt);
+  const fullMeta: Partial<ReportMeta> = { generatedBy: 'Scheduled report (sent automatically)', ...meta };
   if (formats.includes('csv')) {
-    files.push({ filename: `${safeName(baseName)}.csv`, content: Buffer.from(`﻿${toCsvText(table.headers, table.rows)}`, 'utf8'), contentType: 'text/csv; charset=utf-8' });
+    const csv = withCsvReportFrame(toCsvText(table.headers, table.rows), { title: table.title, subtitle, meta: fullMeta });
+    files.push({ filename: `${stem}.csv`, content: Buffer.from(`\uFEFF${csv}`, 'utf8'), contentType: 'text/csv; charset=utf-8' });
   }
   if (formats.includes('pdf')) {
-    const doc = buildTablePdf({ title: table.title, subtitle, headers: table.headers, rows: table.rows, landscape: table.landscape ?? true, columnWidths: table.columnWidths });
-    files.push({ filename: `${safeName(baseName)}.pdf`, content: Buffer.from(doc.output('arraybuffer')), contentType: 'application/pdf' });
+    const doc = buildTablePdf({ title: table.title, subtitle, headers: table.headers, rows: table.rows, landscape: table.landscape ?? true, columnWidths: table.columnWidths, meta: fullMeta });
+    files.push({ filename: `${stem}.pdf`, content: Buffer.from(doc.output('arraybuffer')), contentType: 'application/pdf' });
   }
   return files;
 }

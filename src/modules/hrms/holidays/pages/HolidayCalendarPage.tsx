@@ -121,14 +121,14 @@ export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = () => {
 
   const filtersText = () => `Year ${year}${filterLine() ? ` · ${filterLine()}` : ''}`;
   const onDownloadError = (message: string) => showNotice('error', message);
-  const downloadCsv = () => void logThenDownload('holidays', 'csv', visible.length, filtersText(), () => downloadCsvText(toCsvText(exportHeaders, exportRows()), `WII_Holiday_Calendar_${year}`), onDownloadError);
+  const downloadCsv = () => void logThenDownload('holidays', 'csv', visible.length, filtersText(), () => downloadCsvText(toCsvText(exportHeaders, exportRows()), `WII_Holiday_Calendar_${year}`, { title: `Holiday Calendar ${year}`, subtitle: [filterLine() || 'All holidays'] }), onDownloadError);
   const downloadPdf = () => void logThenDownload('holidays', 'pdf', visible.length, filtersText(), () => buildPdf(), onDownloadError);
   // PDF fonts cannot draw Devanagari, so the Hindi name stays in the CSV only.
   const buildPdf = () => {
     const hindi = exportHeaders.indexOf('Hindi name');
     downloadTablePdf({
       title: `Holiday Calendar ${year}`,
-      subtitle: [`Generated ${printedAt(new Date().toISOString())}`, filterLine() || 'All holidays'],
+      subtitle: [filterLine() || 'All holidays'],
       headers: exportHeaders.filter((_, i) => i !== hindi),
       rows: exportRows().map((r) => r.filter((_, i) => i !== hindi)),
       fileName: `WII_Holiday_Calendar_${year}`,

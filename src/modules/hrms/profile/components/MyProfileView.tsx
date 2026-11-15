@@ -112,11 +112,11 @@ function downloadProfile(profile: MyProfile, format: 'csv' | 'pdf') {
   const headers = ['Section', 'Detail', 'Value'];
   const fileName = `WII_Profile_${profile.biometricId}_${profile.name.replace(/\s+/g, '_')}`;
   if (format === 'csv') {
-    downloadCsvText(toCsvText(headers, rows), fileName);
+    downloadCsvText(toCsvText(headers, rows), fileName, { title: `Employee profile — ${name}`, subtitle: [[`B.I. ${profile.biometricId}`, profile.headline, profile.subline].filter(Boolean).join(' · ')] });
   } else {
     downloadTablePdf({
       title: `Employee profile — ${name}`,
-      subtitle: [[`B.I. ${profile.biometricId}`, profile.headline, profile.subline].filter(Boolean).join(' · '), `Generated ${printedAt(new Date().toISOString())}`],
+      subtitle: [[`B.I. ${profile.biometricId}`, profile.headline, profile.subline].filter(Boolean).join(' · ')],
       headers, rows, fileName, landscape: false, columnWidths: [22, 28, 50],
     });
   }

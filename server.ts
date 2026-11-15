@@ -47,6 +47,8 @@ if (!process.execArgv.some(arg => arg.includes('tsx')) && !process.env.TSX_SPAWN
       startOutboxWorker();         // sends queued notification emails and retries failed ones
       const { startAccountExpiryJob } = await import('./server/services/accountExpiry.ts');
       startAccountExpiryJob();     // marks accounts past their validity date as expired, so the directory matches sign-in
+      const { startUploadStorage } = await import('./server/services/uploadStorage.ts');
+      startUploadStorage();        // checks UPLOAD_DIR (the RAID data disk) and clears files no record uses
     });
   };
 

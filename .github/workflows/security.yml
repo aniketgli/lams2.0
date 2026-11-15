@@ -26,6 +26,7 @@ jobs:
       SESSION_SECRET: ci-only-session-secret-0123456789abcdefghijklmnop
       SETTINGS_ENCRYPTION_KEY: ci-only-settings-key-0123456789abcdefghijkl
       LOGIN_CAPTCHA: 'off'
+      UPLOAD_DIR: /tmp/lams2-uploads
       PORT: '3000'
     steps:
       - uses: actions/checkout@v4
@@ -64,18 +65,26 @@ jobs:
           $M -N -e "SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA='lams2_test' AND TABLE_NAME='employee_profiles' AND CONSTRAINT_TYPE='PRIMARY KEY'" 2>/dev/null | grep -qx 1 || { echo "no primary key"; exit 1; }
           $M -e "DELETE FROM \`Attendance\` WHERE EmployeeCode='9999'" 2>/dev/null
           echo "cleanup migrations OK"
+          # drop_unused_attendance_tables.sql: lists only, then drops only after confirmation, never Attendance
+          $M -e "CREATE TABLE IF NOT EXISTS old_attendance_backup (x INT PRIMARY KEY)" 2>/dev/null
+          $M < scripts/sql/drop_unused_attendance_tables.sql 2>&1 | grep -v "Using a password"
+          $M -N -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='lams2_test' AND TABLE_NAME='old_attendance_backup'" 2>/dev/null | grep -qx 1 || { echo "dropped without confirmation"; exit 1; }
+          ( echo "SET @confirm_drop = 'YES';"; cat scripts/sql/drop_unused_attendance_tables.sql ) | $M 2>&1 | grep -v "Using a password"
+          [ "$($M -N -e "SELECT GROUP_CONCAT(TABLE_NAME ORDER BY BINARY TABLE_NAME) FROM information_schema.TABLES WHERE TABLE_SCHEMA='lams2_test' AND LOWER(TABLE_NAME) LIKE '%atten%'" 2>/dev/null)" = "Attendance,manual_attendance_requests" ] || { echo "attendance tables not as expected"; exit 1; }
+          echo "attendance clean-up OK"
       - name: Seed test accounts
         run: npx tsx scripts/security/seed.ts
       - name: Read-only database audit
         run: npx tsx scripts/db-audit.ts || true
       - name: Build and start the portal
         run: |
+          mkdir -p /tmp/lams2-uploads && chmod 750 /tmp/lams2-uploads
           bun run build
           nohup node server.ts > /tmp/server.log 2>&1 &
           for i in $(seq 1 60); do curl -sf http://127.0.0.1:3000/api/health/ready && break; sleep 1; done
           curl -sf http://127.0.0.1:3000/api/health/ready
       - name: Attack it
-        run: SECURITY_REPORT=/tmp/security-report.md bun scripts/security/pentest.ts
+        run: SECURITY_REPORT=/tmp/security-report.md SECURITY_UPLOAD_DIR=/tmp/lams2-uploads bun scripts/security/pentest.ts
       - name: Check the test-data reset script
         run: |
           M="mysql -h127.0.0.1 -uroot -proot -N lams2_test"

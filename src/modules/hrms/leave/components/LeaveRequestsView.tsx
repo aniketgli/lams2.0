@@ -532,11 +532,12 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
     STATUS_META[r.status].label, statusPerson(statusBy(r)), r.comment ?? '',
   ]);
   const fileName = `WII_Leave_${from}_to_${to}`;
-  const downloadCsv = () => void logThenDownload('leave_requests', 'csv', sorted.length, range, () => downloadCsvText(toCsvText(exportHeaders, exportRows()), fileName), setError);
+  const pdfSubtitle = () => [`Period: ${range}`, teamView ? 'All requests shown' : `Employee: ${currentUser.name}`];
+  const downloadCsv = () => void logThenDownload('leave_requests', 'csv', sorted.length, range, () => downloadCsvText(toCsvText(exportHeaders, exportRows()), fileName, { title: 'Leave requests', subtitle: pdfSubtitle() }), setError);
   const downloadPdf = () => void logThenDownload('leave_requests', 'pdf', sorted.length, range, () => buildPdf(), setError);
   const buildPdf = () => downloadTablePdf({
     title: 'Leave requests',
-    subtitle: [`${range} · Generated ${printedAt(new Date().toISOString())}`, teamView ? 'All requests shown' : currentUser.name],
+    subtitle: pdfSubtitle(),
     headers: exportHeaders,
     rows: exportRows(),
     fileName,

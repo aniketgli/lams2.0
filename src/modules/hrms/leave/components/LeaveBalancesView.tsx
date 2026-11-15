@@ -139,9 +139,9 @@ export const LeaveBalancesView: React.FC<{ importSignal?: number; toolbarStart?:
           </div>
         )}
         exports={cards ? null : {
-          onCsv: () => void logThenDownload('leave_balances', 'csv', visible.length, `Leave year ${year}`, () => downloadCsvText(toCsvText(exportHeaders, exportRows()), fileName), setError),
+          onCsv: () => void logThenDownload('leave_balances', 'csv', visible.length, `Leave year ${year}`, () => downloadCsvText(toCsvText(exportHeaders, exportRows()), fileName, { title: `Leave balances ${year}`, subtitle: [`Leave year ${year}`] }), setError),
           onPdf: () => void logThenDownload('leave_balances', 'pdf', visible.length, `Leave year ${year}`, () => downloadTablePdf({
-            title: `Leave balances ${year}`, subtitle: [`Generated ${printedAt(new Date().toISOString())}`], headers: exportHeaders, rows: exportRows(), fileName,
+            title: `Leave balances ${year}`, subtitle: [`Leave year ${year}`], headers: exportHeaders, rows: exportRows(), fileName,
             columnWidths: [6, 12, 10, 6, ...types.flatMap(() => [4, 4, 4, 4])],
           }), setError),
           disabled: visible.length === 0,

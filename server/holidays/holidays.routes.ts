@@ -5,6 +5,7 @@ import { Validator } from '../lib/validate';
 import { requireActiveRole, requireAuth, isAuditor } from '../middleware/auth.middleware';
 import { activityCsv, activityTable, listActivity, parseActivityFilter } from '../employees/activity';
 import { HOLIDAY_CATEGORIES, HOLIDAY_SCOPE, HOLIDAY_TYPES, createHoliday, deleteHoliday, holidayId, holidayYears, listHolidays, updateHoliday } from './store';
+import { sendCsvReport } from '../lib/csvResponse';
 
 /**
  * Holiday calendar (/api/hrms/holidays).
@@ -30,14 +31,9 @@ router.get('/holidays/activity', ...isAuditor, asyncHandler(async (req, res) => 
   res.json(await listActivity(parseActivityFilter(req.query as Record<string, unknown>, HOLIDAY_SCOPE), HOLIDAY_SCOPE));
 }));
 
-function sendCsv(res: Response, file: { filename: string; csv: string }) {
-  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
-  res.send(file.csv);
-}
 
 router.get('/holidays/activity.csv', ...isAuditor, asyncHandler(async (req, res) => {
-  sendCsv(res, await activityCsv(req, parseActivityFilter(req.query as Record<string, unknown>, HOLIDAY_SCOPE), HOLIDAY_SCOPE));
+  await sendCsvReport(res, await activityCsv(req, parseActivityFilter(req.query as Record<string, unknown>, HOLIDAY_SCOPE), HOLIDAY_SCOPE));
 }));
 
 router.get('/holidays/activity/export-pdf', ...isAuditor, asyncHandler(async (req, res) => {

@@ -7,6 +7,7 @@ import { isValidIsoDate } from '../lib/validate';
 import { requireActiveRole, requireAuth, requireModule } from '../middleware/auth.middleware';
 import { FORM_LAYOUTS, MASTERS, MasterDef, auditMasterLabels, findMaster, masterActivityScope, tabOrder } from './definitions';
 import { activeOptions, createRecord, deleteRecord, listRecords, setStatus, updateRecord } from './store';
+import { sendCsvReport } from '../lib/csvResponse';
 
 /**
  * /api/hrms/masters
@@ -34,18 +35,13 @@ const MASTER_SCOPE: ActivityScope = {
 };
 const isAuditor = requireActiveRole('hrms', 'audit');
 
-function sendCsv(res: Response, file: { filename: string; csv: string }) {
-  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
-  res.send(file.csv);
-}
 
 // Auditor log routes come before /:key so "activity" is never read as a master key.
 router.get('/activity', isAuditor, asyncHandler(async (req, res) => {
   res.json(await listActivity(parseActivityFilter(req.query as Record<string, unknown>, MASTER_SCOPE), MASTER_SCOPE));
 }));
 router.get('/activity.csv', isAuditor, asyncHandler(async (req, res) => {
-  sendCsv(res, await activityCsv(req, parseActivityFilter(req.query as Record<string, unknown>, MASTER_SCOPE), MASTER_SCOPE));
+  await sendCsvReport(res, await activityCsv(req, parseActivityFilter(req.query as Record<string, unknown>, MASTER_SCOPE), MASTER_SCOPE));
 }));
 router.get('/activity/export-pdf', isAuditor, asyncHandler(async (req, res) => {
   const table = await activityTable(req, parseActivityFilter(req.query as Record<string, unknown>, MASTER_SCOPE), 'pdf', MASTER_SCOPE);

@@ -26,6 +26,7 @@ import { activityCsv, activityTable, employeeDirectoryCsv, employeeDirectoryTabl
 import { getMyProfile, getProfileFor } from './myProfile';
 import { listMappingLog, mappingCsv, mappingData, mappingTable, replaceManager, transferEmployees } from './mapping';
 import { parseLogFilter } from './mappingRules';
+import { sendCsvReport } from '../lib/csvResponse';
 
 /**
  * Employee accounts and profiles (/api/hrms/employees). Reading is open to
@@ -94,14 +95,9 @@ const isAdminOrAuditor = [requireAuth, requireActiveRole('hrms', 'administrator'
 /** Directory downloads: everyone who has a directory (each gets only the people they may see). */
 const canExportDirectory = [requireAuth, requireActiveRole('hrms', 'administrator', 'audit', 'reporting_manager', 'reviewing_manager')];
 
-function sendCsv(res: import('express').Response, file: { filename: string; csv: string }) {
-  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
-  res.send(file.csv);
-}
 
 router.get('/employees/export.csv', ...canExportDirectory, asyncHandler(async (req, res) => {
-  sendCsv(res, await employeeDirectoryCsv(req, viewerOf(req)));
+  await sendCsvReport(res, await employeeDirectoryCsv(req, viewerOf(req)));
 }));
 
 /** Rows for a printable PDF (the browser lays it out); logged like the CSV download. */
@@ -118,7 +114,7 @@ router.get('/employees/activity', ...isAuditor, asyncHandler(async (req, res) =>
 }));
 
 router.get('/employees/activity.csv', ...isAuditor, asyncHandler(async (req, res) => {
-  sendCsv(res, await activityCsv(req, parseActivityFilter(req.query as Record<string, unknown>)));
+  await sendCsvReport(res, await activityCsv(req, parseActivityFilter(req.query as Record<string, unknown>)));
 }));
 
 // ---------------------------------------------------------------------------
@@ -133,7 +129,7 @@ router.get('/mapping/log', ...isAdminOrAuditor, asyncHandler(async (req, res) =>
 }));
 
 router.get('/mapping/log.csv', ...isAdminOrAuditor, asyncHandler(async (req, res) => {
-  sendCsv(res, await mappingCsv(req, parseLogFilter(req.query as Record<string, unknown>)));
+  await sendCsvReport(res, await mappingCsv(req, parseLogFilter(req.query as Record<string, unknown>)));
 }));
 
 router.get('/mapping/log/export-pdf', ...isAdminOrAuditor, asyncHandler(async (req, res) => {
