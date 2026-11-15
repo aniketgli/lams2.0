@@ -76,6 +76,32 @@ jobs:
           curl -sf http://127.0.0.1:3000/api/health/ready
       - name: Attack it
         run: SECURITY_REPORT=/tmp/security-report.md bun scripts/security/pentest.ts
+      - name: Check the test-data reset script
+        run: |
+          M="mysql -h127.0.0.1 -uroot -proot -N lams2_test"
+          $M -e "INSERT INTO \`Attendance\` (EmployeeCode, LogDateTime, LogDate) VALUES ('8888','2026-01-01 09:00:00','2026-01-01')" 2>/dev/null
+          BEFORE=$($M -e "SELECT CONCAT(email,'|',password_hash) FROM users WHERE email IN ('erp@wii.gov.in','erpauditor@wii.gov.in') ORDER BY email" 2>/dev/null)
+          PUNCHES=$($M -e "SELECT COUNT(*) FROM \`Attendance\`" 2>/dev/null)
+          echo "users before: $($M -e 'SELECT COUNT(*) FROM users' 2>/dev/null), leave/OD rows: $($M -e 'SELECT (SELECT COUNT(*) FROM leave_requests)+(SELECT COUNT(*) FROM outdoor_duty_requests)+(SELECT COUNT(*) FROM holidays)' 2>/dev/null)"
+          for run in 1 2; do $M < scripts/sql/reset_test_data.sql 2>&1 | grep -v "Using a password" | tail -12; done
+          fail() { echo "RESET CHECK FAILED: $1"; exit 1; }
+          [ "$($M -e "SELECT GROUP_CONCAT(CONCAT(id,':',email) ORDER BY id) FROM users" 2>/dev/null)" = "1:erp@wii.gov.in,2:erpauditor@wii.gov.in" ] || fail "users are not exactly 1 Administrator, 2 Auditor"
+          [ "$($M -e "SELECT CONCAT(email,'|',password_hash) FROM users ORDER BY email" 2>/dev/null)" = "$BEFORE" ] || fail "passwords changed"
+          [ "$($M -e "SELECT COUNT(DISTINCT biometric_id) FROM user_module_roles" 2>/dev/null)" = "2" ] || fail "role grants of the two accounts not kept"
+          for t in leave_requests outdoor_duty_requests manual_attendance_requests holidays leave_types web_sessions master_audit_logs employee_photos; do
+            [ "$($M -e "SELECT COUNT(*) FROM \`$t\`" 2>/dev/null)" = "0" ] || fail "$t not empty"
+          done
+          [ "$($M -e "SELECT COUNT(*) FROM \`Attendance\`" 2>/dev/null)" = "$PUNCHES" ] || fail "Attendance punches touched"
+          [ "$($M -e "SELECT COUNT(*) FROM role_catalog" 2>/dev/null)" -gt 0 ] || fail "role_catalog emptied"
+          [ "$($M -e "SELECT COUNT(*) FROM lookup_values WHERE lookup_type IN ('gender','employee_type','institute')" 2>/dev/null)" = "12" ] || fail "starting lists missing"
+          $M -e "SELECT AUTO_INCREMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA='lams2_test' AND TABLE_NAME='users'" 2>/dev/null | grep -qx 3 || fail "next user id is not 3"
+          # The attack step used up the sign-in limits of this address: restart the server to clear them.
+          pkill -f "server.ts" || true; sleep 2
+          nohup node server.ts >> /tmp/server.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf http://127.0.0.1:3000/api/health/ready >/dev/null && break; sleep 1; done
+          code=$(curl -s -o /tmp/login.json -w '%{http_code}' -H 'Content-Type: application/json' -d '{"email":"erp@wii.gov.in","password":"123456"}' http://127.0.0.1:3000/api/auth/login)
+          [ "$code" = "200" ] || fail "Administrator cannot sign in after the reset ($code $(cat /tmp/login.json))"
+          echo "reset script OK"
       - name: Server log
         if: always()
         run: tail -150 /tmp/server.log
