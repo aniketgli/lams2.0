@@ -76,6 +76,10 @@ jobs:
           [ "$($M -e "SELECT COUNT(*) FROM role_catalog" 2>/dev/null)" -gt 0 ] || fail "role_catalog emptied"
           [ "$($M -e "SELECT COUNT(*) FROM lookup_values WHERE lookup_type IN ('gender','employee_type','institute')" 2>/dev/null)" = "12" ] || fail "starting lists missing"
           $M -e "SELECT AUTO_INCREMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA='lams2_test' AND TABLE_NAME='users'" 2>/dev/null | grep -qx 3 || fail "next user id is not 3"
+          # The attack step used up the sign-in limits of this address: restart the server to clear them.
+          pkill -f "server.ts" || true; sleep 2
+          nohup node server.ts >> /tmp/server.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf http://127.0.0.1:3000/api/health/ready >/dev/null && break; sleep 1; done
           code=$(curl -s -o /tmp/login.json -w '%{http_code}' -H 'Content-Type: application/json' -d '{"email":"erp@wii.gov.in","password":"123456"}' http://127.0.0.1:3000/api/auth/login)
           [ "$code" = "200" ] || fail "Administrator cannot sign in after the reset ($code $(cat /tmp/login.json))"
           echo "reset script OK"
