@@ -11,7 +11,7 @@ import { captchaEnabled, createCaptcha, verifyCaptcha } from '../lib/captcha';
 import { Validator } from '../lib/validate';
 import { accountBlockReason, clearAccessCache, findAccountById, loadActiveGrants } from '../services/access.service';
 import { buildSessionPayload } from '../services/session.service';
-import { requireAuth } from '../middleware/auth.middleware';
+import { passwordChangeRequired, requireAuth } from '../middleware/auth.middleware';
 import { authConfig, normalizeLoginEmail } from '../config/auth.config';
 import { destroyUserSessions } from '../lib/sessionStore';
 import { passwordProblem } from '../lib/passwordPolicy';
@@ -215,6 +215,9 @@ router.post('/change-password', requireAuth, asyncHandler(async (req, res) => {
  */
 router.post('/skip-password-change', requireAuth, asyncHandler(async (req, res) => {
   const account = req.auth!.account;
+  if (passwordChangeRequired(account)) {
+    throw new HttpError(403, 'This account must set its own password; it cannot be skipped.', 'PASSWORD_CHANGE_REQUIRED');
+  }
   if (account.mustChangePassword) {
     await inTransaction(async (conn) => {
       await conn.query('UPDATE users SET must_change_password = 0 WHERE id = ?', [account.id]);

@@ -43,6 +43,8 @@ export interface SessionPayload {
   user: { id: string; biometricId: string; name: string; email: string; salutation: string | null; photoUrl?: string | null };
   /** True until the user replaces the default / temporary password; the server blocks everything else meanwhile. */
   mustChangePassword: boolean;
+  /** A fixed system account on its default password: the change cannot be skipped. */
+  passwordChangeRequired?: boolean;
   modules: { moduleId: ServerModuleId; roles: UserRole[] }[];
   activeModule: ServerModuleId | null;
   activeRole: UserRole | null;

@@ -24,8 +24,6 @@ export const UNDO_WINDOW_MINUTES = 10;
 
 export const isPending = (status: string): boolean => status === 'pending' || status === 'pending_l1' || status === 'pending_l2';
 export const isDecided = (status: string): boolean => status === 'approved' || status === 'rejected';
-/** The status a new (or resubmitted) item starts in. */
-export const startStatus = (flow: Flow): FlowStatus => (flow === 'one_stage' ? 'pending' : 'pending_l1');
 
 /** The stage an item is waiting at: 1 (reporting manager) or 2 (HoD). */
 export const stageOf = (status: string): 1 | 2 => (status === 'pending_l2' ? 2 : 1);

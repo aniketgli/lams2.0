@@ -34,11 +34,6 @@ export function toRecipient(row: typeof notification_recipients.$inferSelect): N
   };
 }
 
-export async function listRecipients(): Promise<NotificationRecipient[]> {
-  const rows = await db.select().from(notification_recipients).orderBy(notification_recipients.recipientType, notification_recipients.email);
-  return rows.map(toRecipient);
-}
-
 const CACHE_MS = 60_000;
 let cache: { at: number; rows: CopyRow[] } | null = null;
 

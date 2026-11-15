@@ -9,6 +9,8 @@ export interface SessionPayload {
   user: { id: string; biometricId: string; name: string; email: string; salutation: string | null; photoUrl: string | null };
   /** True until the user replaces the default / temporary password. The server blocks everything else meanwhile. */
   mustChangePassword: boolean;
+  /** True for a fixed system account still on its default password: the change cannot be skipped. */
+  passwordChangeRequired: boolean;
   modules: { moduleId: ModuleId; roles: RoleId[] }[];
   activeModule: ModuleId | null;
   activeRole: RoleId | null;
@@ -33,6 +35,7 @@ export async function buildSessionPayload(req: Request): Promise<SessionPayload>
       photoUrl: (await photoUrls([auth.account.biometricId])).get(auth.account.biometricId) ?? null,
     },
     mustChangePassword: Boolean(auth.account.mustChangePassword),
+    passwordChangeRequired: Boolean(auth.account.isSystem && auth.account.mustChangePassword),
     modules: MODULE_IDS
       .filter((moduleId) => auth.grants[moduleId] !== undefined)
       .map((moduleId) => ({ moduleId, roles: [...(auth.grants[moduleId] ?? [])] })),

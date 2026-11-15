@@ -180,13 +180,8 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
   async function save(e: React.FormEvent) {
     e.preventDefault();
     if (!form) return;
-    // Quick checks for obvious gaps; the server validates everything again.
-    const errs: Record<string, string> = {};
-    if (!form.name.trim()) errs.name = 'Name is required.';
-    if (!form.code.trim()) errs.code = 'Code is required.';
-    for (const f of shownFields) if (f.required && !form.fields[f.key]) errs[`fields.${f.key}`] = `${f.label} is required.`;
-    setFormErrors(errs);
-    if (Object.keys(errs).length) return;
+    // The server checks every field; its answer fills formErrors.
+    setFormErrors({});
 
     setSaving(true);
     setFormMessage(null);

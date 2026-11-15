@@ -15,16 +15,6 @@ export interface ServerEmailLog {
   eventType?: string;
 }
 
-export interface SmtpConfigPayload {
-  host?: string;
-  port?: number;
-  secure?: boolean;
-  user?: string;
-  pass?: string;
-  fromEmail?: string;
-  fromName?: string;
-}
-
 export interface SendEmailPayload {
   to: string;
   toName?: string;

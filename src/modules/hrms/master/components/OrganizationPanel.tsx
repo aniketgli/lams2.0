@@ -130,7 +130,7 @@ export const OrganizationPanel: React.FC<{ readOnly: boolean }> = ({ readOnly })
                         {form.logoData && <Button variant="outline" size="xs" leftIcon={Trash2} className="text-error" onClick={() => setForm({ ...form, logoData: '' })}>Remove</Button>}
                       </div>
                     )}
-                    <p className={`text-[11px] ${errors.logoData ? 'text-error' : 'text-slate-500'}`}>{errors.logoData || 'PNG, JPG or WEBP, up to 2 MB.'}</p>
+                    <p className={`text-[11px] ${errors.logoData ? 'text-error' : 'text-slate-500'}`}>{errors.logoData || 'PNG, JPG or WEBP, up to 1 MB.'}</p>
                   </div>
                 </div>
               </div>

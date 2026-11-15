@@ -1,5 +1,7 @@
 import { clearOrganizationCache, getOrganization, organizationTag } from './organizationStore';
 import { clearReferenceCacheAfterWrites } from '../lib/referenceCache';
+import { logoProblem } from './logoRules';
+import { limitHeavy } from '../middleware/apiRateLimit';
 import { Router } from 'express';
 import { and, eq, ne, sql } from 'drizzle-orm';
 import { isIP } from 'node:net';
@@ -311,8 +313,6 @@ router.delete('/biometric-machines/:id', ...canEdit, asyncHandler(async (req, re
 // Organization settings (name, logo, address, copyright) — single row "default"
 // ===========================================================================
 
-const LOGO_PREFIXES = ['data:image/png;base64,', 'data:image/jpeg;base64,', 'data:image/webp;base64,'];
-const MAX_LOGO_CHARS = 2_800_000; // ≈ 2 MB image as base64
 
 function toOrganization(row: typeof organization_settings.$inferSelect | undefined) {
   if (!row) return null;
@@ -326,7 +326,7 @@ function toOrganization(row: typeof organization_settings.$inferSelect | undefin
 }
 
 // Public: the login page needs the name, logo and address before sign-in.
-// The logo can be 2 MB, so the browser keeps its copy and only asks "has it changed?" (a tiny 304 answer).
+// The logo can be up to 1 MB, so the browser keeps its copy and only asks "has it changed?" (a tiny 304 answer).
 router.get('/organization', asyncHandler(async (req, res) => {
   const org = await getOrganization();
   if (!org) return res.json(null);
@@ -344,9 +344,8 @@ router.put('/organization', ...canEdit, asyncHandler(async (req, res) => {
   const copyrightText = v.optionalString('copyrightText', { max: 500 }) ?? '';
   const logoRaw = v.raw('logoData');
   const logoData = typeof logoRaw === 'string' && logoRaw ? logoRaw : null;
-  if (logoData && (!LOGO_PREFIXES.some((p) => logoData.startsWith(p)) || logoData.length > MAX_LOGO_CHARS)) {
-    v.errors.logoData = 'Logo must be a PNG, JPG or WEBP image under 2 MB.';
-  }
+  const logoError = logoProblem(logoData);
+  if (logoError) v.errors.logoData = logoError;
   v.assert();
 
   const [beforeRow] = await db.select().from(organization_settings).where(eq(organization_settings.id, 'default'));
@@ -541,7 +540,7 @@ router.put('/organization/default-password', ...canEdit, asyncHandler(async (req
 }));
 
 /** Connects with the saved settings and sends a test email to the signed-in administrator. */
-router.post('/organization/email-settings/test', ...canEdit, asyncHandler(async (req, res) => {
+router.post('/organization/email-settings/test', ...canEdit, limitHeavy('smtp-test', 10), asyncHandler(async (req, res) => {
   const row = await loadEmailSettingsRow();
   if (!row) throw badRequest('Save the email settings first.');
   if (row.smtpUser && row.smtpPasswordEnc && !decryptSecret(row.smtpPasswordEnc)) {

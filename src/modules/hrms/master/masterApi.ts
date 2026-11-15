@@ -113,14 +113,6 @@ export interface AuditQuery {
   pageSize?: number;
 }
 
-export function fetchAudit(query: AuditQuery) {
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(query)) {
-    if (value !== undefined && value !== '' && value !== null) params.set(key, String(value));
-  }
-  return api<{ total: number; page: number; pageSize: number; rows: AuditRow[] }>(`/hrms/masters/audit?${params.toString()}`);
-}
-
 // ---- Shifts ------------------------------------------------------------------
 
 export interface ShiftRecord {

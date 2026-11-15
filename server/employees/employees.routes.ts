@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import { eq } from 'drizzle-orm';
 import { db } from '../../src/db';
 import { user_project_histories, users } from '../../src/db/schema';
+import { limitHeavy } from '../middleware/apiRateLimit';
 import { isAdmin, isAuthenticated, requireActiveRole, requireAuth, isAuditor, hrmsViewerOf } from '../middleware/auth.middleware';
 import { EmailService } from '../integrations/email/email.service';
 import { brandedMail, portalUrlOf } from '../notifications/notify';
@@ -58,7 +59,7 @@ router.get('/me/profile', isAuthenticated, asyncHandler(async (req, res) => {
   res.json(await getMyProfile(viewerOf(req)));
 }));
 
-router.put('/me/photo', isAuthenticated, asyncHandler(async (req, res) => {
+router.put('/me/photo', isAuthenticated, limitHeavy('photo'), asyncHandler(async (req, res) => {
   const photoUrl = await saveOwnPhoto(req, req.body);
   res.json({ photoUrl, message: 'Profile photo saved.' });
 }));
@@ -166,7 +167,7 @@ async function photoOwner(raw: unknown) {
   return target;
 }
 
-router.put('/employees/:biometricId/photo', isAdmin, asyncHandler(async (req, res) => {
+router.put('/employees/:biometricId/photo', isAdmin, limitHeavy('photo', 60), asyncHandler(async (req, res) => {
   const photoUrl = await savePhotoFor(req, await photoOwner(req.params.biometricId), req.body);
   res.json({ photoUrl, message: 'Profile photo saved.' });
 }));
@@ -193,11 +194,11 @@ router.get('/employees/import/template', isAdmin, asyncHandler(async (req, res) 
   res.json(await importTemplate((req.query as Record<string, unknown>).type));
 }));
 
-router.post('/employees/import/review', isAdmin, asyncHandler(async (req, res) => {
+router.post('/employees/import/review', isAdmin, limitHeavy('employee-import', 30), asyncHandler(async (req, res) => {
   res.json(await reviewEmployeeImport(req, req.body));
 }));
 
-router.post('/employees/import', isAdmin, asyncHandler(async (req, res) => {
+router.post('/employees/import', isAdmin, limitHeavy('employee-import-apply', 10), asyncHandler(async (req, res) => {
   const { review, accounts, sendWelcome } = await applyEmployeeImport(req, req.body);
   clearAccessCache();
   if (sendWelcome) welcomeInTurn(accounts, portalUrlOf(req));
@@ -323,7 +324,7 @@ router.put('/employees/:userId/module-roles', isAdmin, asyncHandler(async (req, 
  *   default  back to the default password for new employees
  * In every mode the user must choose their own password at the next sign-in.
  */
-router.post('/employees/:biometricId/reset-password', isAdmin, asyncHandler(async (req, res) => {
+router.post('/employees/:biometricId/reset-password', isAdmin, limitHeavy('password-reset', 30), asyncHandler(async (req, res) => {
   const biometricId = String(req.params.biometricId || '').trim();
   if (!PATTERNS.biometricId.test(biometricId)) throw badRequest('A valid 4-digit biometric ID is required.');
   const mode = req.body?.mode === 'custom' ? 'custom' : req.body?.mode === 'default' ? 'default' : 'auto';
@@ -345,6 +346,10 @@ router.post('/employees/:biometricId/reset-password', isAdmin, asyncHandler(asyn
     temporaryPassword = mode === 'auto' ? generateTemporaryPassword() : String(req.body?.password ?? '');
     const problem = passwordProblem(temporaryPassword, target);
     if (problem) throw badRequest(`Temporary password: ${problem}`, { password: problem });
+    // A typed password must be typed twice the same (checked here, not in the browser).
+    if (mode === 'custom' && req.body?.confirmPassword !== undefined && req.body.confirmPassword !== temporaryPassword) {
+      throw badRequest('The two passwords do not match.', { confirmPassword: 'The two passwords do not match.' });
+    }
     passwordHash = await bcrypt.hash(temporaryPassword, 12);
   }
 

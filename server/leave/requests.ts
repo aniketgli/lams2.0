@@ -221,7 +221,6 @@ function canSee(viewer: Viewer, row: RowDataPacket): boolean {
 /** Whose balance the viewer may see: as for requests, plus everyone for a Leave Balance Manager (balances only, not requests). */
 const canSeeBalance = (viewer: Viewer, row: RowDataPacket): boolean => canSee(viewer, row) || viewer.role === 'leave_balance_manager';
 
-
 function canDecide(viewer: Viewer, row: RowDataPacket): boolean {
   const status = String(row.status);
   if (status !== 'pending_l1' && status !== 'pending_l2') return false;
@@ -469,15 +468,6 @@ export function creditedQuota(policy: Pick<Policy, 'quota' | 'quotas' | 'pwdQuot
   return 0;
 }
 
-/** The entitlement of a leave type for one employee (shown, never credited on its own). */
-export function entitledQuota(policy: Pick<Policy, 'quota' | 'quotas' | 'pwdQuota' | 'accrual'>, employmentType: string, cycleYear: number, basis: 'CY' | 'FY', asOf: string, isPwd = false): number {
-  const yearly = quotaFor(policy, employmentType, isPwd);
-  if (policy.accrual !== 'half_yearly') return yearly;
-  const start = basis === 'FY' ? 4 : 1;
-  const elapsed = (Number(asOf.slice(0, 4)) - cycleYear) * 12 + Number(asOf.slice(5, 7)) - start;
-  return num(elapsed >= 6 ? yearly : yearly / 2);
-}
-
 async function attachQuotas(q: { query: typeof pool.query }, policies: Policy[]): Promise<Policy[]> {
   if (!policies.length) return policies;
   const found = await rows(q, 'SELECT leave_type_id, employee_type, quota FROM leave_type_quotas');
@@ -603,7 +593,6 @@ export async function joiningDateOf(q: { query: typeof pool.query }, row: RowDat
   const rule = await dayRule(q, emp, { sandwich: 'excluded', offDaysOnly: false } as never, addDays(end, 1), addDays(end, 60));
   return firstWorkingDayAfter(end, rule.workingDays, rule.gazetted);
 }
-
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -1489,13 +1478,6 @@ export async function applyTypeIds(userIds: number[]): Promise<Map<number, strin
     out.set(Number(r.id), policies.filter((p) => eligibilityProblem(p, emp, todayInIndia()) === null).map((p) => String(p.id)));
   }
   return out;
-}
-
-/** Whether this user is a person with disability: only they are offered the PwD-only leave types (Special Casual Leave). */
-export async function isPwdUser(userId: number): Promise<boolean> {
-  const [row] = await rows(pool, `SELECT p.profile_data FROM users u LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE u.id = ? LIMIT 1`, [userId]);
-  const data = profileData(row?.profile_data);
-  return data.isPwd === true || data.isPwd === 'true';
 }
 
 // ---------------------------------------------------------------------------

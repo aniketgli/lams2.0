@@ -13,7 +13,6 @@ export interface AppLayoutProps {
   isOpenMobile: boolean;
   setIsOpenMobile: (open: boolean) => void;
   onRoleChangedGoDashboard: () => void;
-  onOpenSlackModal?: () => void;
   pageHeader?: {
     title: string;
     breadcrumb?: BreadcrumbItem[];
@@ -32,7 +31,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   isOpenMobile,
   setIsOpenMobile,
   onRoleChangedGoDashboard,
-  onOpenSlackModal = () => {},
   pageHeader,
   children
 }) => {
@@ -52,7 +50,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         setActiveTab={setActiveTab}
         activeModule={activeModule}
         setActiveModule={setActiveModule}
-        onOpenSlackModal={onOpenSlackModal}
         isOpenMobile={isOpenMobile}
         setIsOpenMobile={setIsOpenMobile}
       />

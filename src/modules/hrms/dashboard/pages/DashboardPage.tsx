@@ -8,7 +8,6 @@ import { StaffDashboard } from '../components/StaffDashboard';
 
 interface DashboardProps {
   onNavigate: (tab: string) => void;
-  onOpenSlackModal?: () => void;
 }
 
 /** Dashboard of the active role. Everything shown is read from the server; the server decides what each role sees. */
