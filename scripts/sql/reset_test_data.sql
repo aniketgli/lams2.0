@@ -265,7 +265,7 @@ SET @sql = IF(@ok = 1, "INSERT IGNORE INTO lookup_values (lookup_type, code, nam
   ('employee_type','phd_student','PhD Scholar',60,'{\"formLayout\":\"phd_student\"}'),
   ('employee_type','intern','Intern',70,'{\"formLayout\":\"intern\"}'),
   ('org_unit_type','Department','Department',10,NULL),('org_unit_type','Cell','Cell',20,NULL),
-  ('org_unit_type','Division','Division',30,NULL),('org_unit_type','Unit','Unit',40,NULL),('org_unit_type','Other','Other',60,NULL),
+  ('org_unit_type','Division','Division',30,NULL),('org_unit_type','Unit','Unit',40,NULL),('org_unit_type','Office','Office',50,NULL),('org_unit_type','Other','Other',60,NULL),
   ('cadre_group','Cadre A','Cadre A (Administrative)',10,NULL),('cadre_group','Research Cadre','Research Cadre (Scientific)',20,NULL),
   ('cadre_group','Technical Staff','Technical Staff',30,NULL),('cadre_group','Faculty / Student','Faculty / Student (Academic)',40,NULL),
   ('cadre_group','Support Staff','Support Staff',50,NULL),
