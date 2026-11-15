@@ -64,7 +64,8 @@ export async function storeBlob(kind: FileKind, prefix: string, ext: string, byt
 }
 
 /** The bytes of a row: from its file when it has a storage_path, otherwise from its data column. */
-export async function readBlob(row: { data?: unknown; storage_path?: unknown }, root = uploadRoot()): Promise<Buffer | null> {
+export async function readBlob(source: object, root = uploadRoot()): Promise<Buffer | null> {
+  const row = source as { data?: unknown; storage_path?: unknown };
   const rel = typeof row.storage_path === 'string' && row.storage_path ? row.storage_path : null;
   if (rel) {
     if (!root) throw new Error('This file is on the upload disk, but UPLOAD_DIR is not set.');
