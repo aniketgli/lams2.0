@@ -151,7 +151,7 @@ export interface EmployeeProfilePageProps {
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
 /** Cadre of permanent / contractual staff (fixed list, no master; same list as the server's CADRES). */
-const CADRES = ['Scientific', 'Technical', 'Support', 'Administrative', 'Finance', 'Stenographer', 'Driver', 'Multi Tasking Staff'];
+const CADRES = ['Scientific', 'Technical', 'Support', 'Administrative', 'Finance', 'Stenographer', 'Driver', 'Cook', 'Multi Tasking Staff'];
 
 export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initialTab = 'profile' }) => {
   const {

@@ -160,22 +160,17 @@ export const UserProjectHistoryModal: React.FC<UserProjectHistoryModalProps> = (
                   />
 
                   {/* Timeline Card */}
-                  <div className="bg-white border border-slate-200 rounded-xl p-3 sm:p-3.5 shadow-2xs hover:border-slate-300 transition-all">
+                  <div className="bg-white border border-slate-200 rounded-xl p-3 sm:p-3.5 shadow-2xs">
                     {/* Row 1: Project Name & Status */}
-                    <div className="border-b border-slate-100 pb-2">
+                    <div className="border-b border-slate-100 pb-2 flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <div className="flex items-center space-x-1.5 flex-wrap gap-y-0.5">
-                          <Badge
-                            variant={item.isOngoing ? 'success' : 'neutral'}
-                            size="sm"
-                          >
-                            {item.isOngoing ? 'Active' : 'Past'}
+                          <Badge variant={item.isOngoing ? 'success' : 'neutral'} size="sm">
+                            {item.isOngoing ? 'Ongoing' : 'Earlier posting'}
                           </Badge>
 
                           {item.projectCode && (
-                            <span className="font-mono text-[10px] font-semibold text-slate-600 bg-slate-50 border border-slate-200 px-1.5 py-0.2 rounded-md">
-                              {item.projectCode}
-                            </span>
+                            <Tag mono>{item.projectCode}</Tag>
                           )}
                         </div>
 
@@ -183,59 +178,15 @@ export const UserProjectHistoryModal: React.FC<UserProjectHistoryModalProps> = (
                           {item.projectName}
                         </h4>
                       </div>
+                      <DurationChip text={durationText} />
                     </div>
 
-                    {/* Row 2: Timeline, Post, Pay, PI Grid */}
+                    {/* Same layout as the current posting card */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 text-xs">
-                      {/* 1. Timeline Duration */}
-                      <div className="bg-slate-50/80 border border-slate-200/80 rounded-lg px-2.5 py-1.5">
-                        <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">
-                          Duration / Timeline
-                        </span>
-                        <div className="font-bold text-slate-800 text-[11px] mt-0.5 flex items-center justify-between gap-1 flex-wrap">
-                          <span>
-                            {formatDateLabel(item.startDate)} → {item.isOngoing ? 'Present' : formatDateLabel(item.endDate || '')}
-                          </span>
-                          <span className="text-[10px] font-semibold text-slate-500 bg-white px-1.5 py-0.2 rounded border border-slate-200">
-                            ⏱️ {durationText}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* 2. Post / Designation */}
-                      <div className="bg-slate-50/80 border border-slate-200/80 rounded-lg px-2.5 py-1.5">
-                        <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">
-                          Post / Designation
-                        </span>
-                        <div className="font-bold text-slate-900 text-[11px] mt-0.5 truncate">
-                          {item.roleInProject || 'Project Staff'}
-                        </div>
-                      </div>
-
-                      {/* 3. Pay / Fellowship */}
-                      <div className="bg-emerald-50/60 border border-emerald-200/70 rounded-lg px-2.5 py-1.5">
-                        <span className="text-[10px] font-bold text-emerald-800 block uppercase tracking-wider">
-                          Pay / Fellowship
-                        </span>
-                        <div className="font-extrabold text-emerald-950 text-[11px] mt-0.5 truncate">
-                          {displayPay ? displayPay : 'As per Project Norms'}
-                        </div>
-                      </div>
-
-                      {/* 4. Principal Investigator */}
-                      <div className="bg-blue-50/60 border border-blue-200/70 rounded-lg px-2.5 py-1.5">
-                        <span className="text-[10px] font-bold text-blue-800 block uppercase tracking-wider">
-                          Principal Investigator (PI)
-                        </span>
-                        <div className="font-bold text-blue-950 text-[11px] mt-0.5 truncate">
-                          {item.piName}
-                          {item.piEmail && (
-                            <span className="text-[10px] font-normal text-blue-700 ml-1">
-                              ({item.piEmail})
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                      <Cell label="Period" value={`${formatDateLabel(item.startDate)} → ${item.isOngoing ? 'Present' : formatDateLabel(item.endDate || '')}`} />
+                      <Cell label="Post / Designation" value={item.roleInProject || 'Project Staff'} />
+                      <Cell label="Pay / Fellowship" value={displayPay ? String(displayPay) : 'As per project norms'} />
+                      <Cell label="Principal Investigator (PI)" value={[item.piName, item.piEmail ? `(${item.piEmail})` : ''].filter(Boolean).join(' ')} />
                     </div>
                   </div>
                 </div>
@@ -263,11 +214,20 @@ export const UserProjectHistoryModal: React.FC<UserProjectHistoryModalProps> = (
   );
 };
 
+/** One labelled value: the same box on every card of this popup. */
 const Cell: React.FC<{ label: string; value: string | null | undefined }> = ({ label, value }) => (
-  <div className="bg-white/80 border border-emerald-200/70 rounded-lg px-2.5 py-1.5 min-w-0">
-    <span className="text-[10px] font-bold text-emerald-800 block uppercase tracking-wider">{label}</span>
+  <div className="bg-slate-50/80 border border-slate-200/80 rounded-lg px-2.5 py-1.5 min-w-0">
+    <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">{label}</span>
     <div className="font-bold text-slate-900 text-[11px] mt-0.5 break-words">{value || 'Not recorded'}</div>
   </div>
+);
+
+const Tag: React.FC<{ children: React.ReactNode; mono?: boolean }> = ({ children, mono }) => (
+  <span className={`${mono ? 'font-mono ' : ''}text-[10px] font-semibold text-slate-600 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded-md`}>{children}</span>
+);
+
+const DurationChip: React.FC<{ text: string }> = ({ text }) => (
+  <span className="shrink-0 text-[10px] font-semibold text-slate-500 bg-slate-50 px-1.5 py-0.5 rounded-md border border-slate-200">{text}</span>
 );
 
 /** The employee's present posting, from the profile: type, place of work, post, period and reporting person. */
@@ -288,17 +248,15 @@ const CurrentPostingCard: React.FC<{
   const managerLabel = current.layout === 'researcher' ? 'Principal Investigator (PI)' : 'Reporting Manager';
   const end = permanentDirect ? undefined : user.validUntilDate;
   return (
-    <div className="bg-emerald-50/50 border border-emerald-200 rounded-xl p-3 sm:p-3.5">
-      <div className="flex items-center justify-between gap-2 flex-wrap border-b border-emerald-100 pb-2">
+    <div className="bg-white border border-slate-200 rounded-xl p-3 sm:p-3.5 shadow-2xs">
+      <div className="flex items-center justify-between gap-2 flex-wrap border-b border-slate-100 pb-2">
         <div className="flex items-center gap-1.5 flex-wrap">
           <Badge variant={active ? 'success' : 'neutral'} size="sm">{active ? 'Current posting' : 'Last posting (inactive)'}</Badge>
-          {current.typeLabel && <span className="text-[10px] font-semibold text-slate-600 bg-white border border-slate-200 px-1.5 rounded-md">{current.typeLabel}</span>}
-          {user.institute && <span className="font-mono text-[10px] font-semibold text-slate-600 bg-white border border-slate-200 px-1.5 rounded-md">{user.institute}</span>}
+          {current.typeLabel && <Tag>{current.typeLabel}</Tag>}
+          {user.institute && <Tag mono>{user.institute}</Tag>}
         </div>
         {user.joiningDate && (
-          <span className="text-[10px] font-semibold text-slate-500 bg-white px-1.5 rounded border border-slate-200">
-            ⏱️ {duration(user.joiningDate, end, !end || end > new Date().toISOString().slice(0, 10))}
-          </span>
+          <DurationChip text={duration(user.joiningDate, end, !end || end > new Date().toISOString().slice(0, 10))} />
         )}
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 text-xs">
