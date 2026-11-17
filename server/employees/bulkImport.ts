@@ -9,7 +9,7 @@ import { Validator } from '../lib/validate';
 import { parseDelimited } from '../leave/balanceImport';
 import { defaultPasswordHash } from '../masters/accountSettings';
 import { CADRES, LAYOUT_RULES, RECRUITMENT_CATEGORIES, type FormLayout } from './fields';
-import { MAX_EMPLOYEE_IMPORT_ROWS, columnsFor, creationOrder, parseDay, parseYesNo, type ImportColumn } from './bulkImportRules';
+import { MAX_EMPLOYEE_IMPORT_ROWS, columnsFor, creationOrder, keyOf, parseDay, parseYesNo, type ImportColumn } from './bulkImportRules';
 
 export { MAX_EMPLOYEE_IMPORT_ROWS } from './bulkImportRules';
 import { layoutOfEmployeeType } from './references';
@@ -158,7 +158,7 @@ async function parseFile(typeCode: string, csv: string): Promise<ParsedFile> {
   };
 }
 
-const keyOf = (text: string) => text.trim().toLowerCase();
+const LEAVE_YEAR_LABELS: Record<string, string[]> = { CY: ['CY', 'Calendar year'], FY: ['FY', 'Financial year'] };
 
 /** Lookups and shifts / leave groups, read once per file; a cell may give the code or the name. */
 async function referenceMaps(q: Q) {
@@ -169,21 +169,26 @@ async function referenceMaps(q: Q) {
     lookup.set(`${l.lookup_type}:${keyOf(String(l.name))}`, String(l.code));
   }
   const shift = new Map<string, string>();
-  for (const s of await rows(q, "SELECT id, name FROM shifts WHERE LOWER(status) = 'active'")) {
-    shift.set(keyOf(String(s.name)), String(s.id));
+  for (const s of await rows(q, "SELECT id, code, name FROM shifts WHERE LOWER(status) = 'active'")) {
+    // Code, name, or the way the form shows it ("GEN - General Shift", "General Shift (GEN)").
+    for (const label of [s.name, s.code, `${s.code} - ${s.name}`, `${s.name} (${s.code})`]) {
+      if (label) shift.set(keyOf(String(label)), String(s.id));
+    }
     shift.set(String(s.id), String(s.id));
   }
   const group = new Map<string, string>();
-  for (const g of await rows(q, "SELECT code, name FROM leave_groups WHERE status = 'active'")) {
-    group.set(keyOf(String(g.code)), String(g.code));
-    group.set(keyOf(String(g.name)), String(g.code));
-    group.set(keyOf(`${g.code} (${g.name})`), String(g.code));
+  for (const g of await rows(q, "SELECT code, name, leave_year FROM leave_groups WHERE status = 'active'")) {
+    // Code, name, "PS (Permanent)", "Permanent (PS)", or with the leave year as the form shows it: "Permanent (CY)".
+    const years = LEAVE_YEAR_LABELS[String(g.leave_year)] ?? [];
+    for (const label of [g.code, g.name, `${g.code} (${g.name})`, `${g.name} (${g.code})`, ...years.map((y) => `${g.name} (${y})`)]) {
+      group.set(keyOf(String(label)), String(g.code));
+    }
   }
   return { lookup, shift, group };
 }
 
 /** The form body for one row, or the problems of its cells (by column header). */
-async function bodyOf(q: Q, file: ParsedFile, cells: Record<string, string>, maps: Awaited<ReturnType<typeof referenceMaps>>) {
+async function bodyOf(q: Q, file: ParsedFile, cells: Record<string, string>, maps: Awaited<ReturnType<typeof referenceMaps>>, failed: ReadonlySet<string> = new Set()) {
   const body: Record<string, unknown> = { employmentType: file.type.code };
   const problems: string[] = [];
   for (const c of file.columns) {
@@ -227,7 +232,10 @@ async function bodyOf(q: Q, file: ParsedFile, cells: Record<string, string>, map
       case 'person': {
         // Looked up inside the transaction, so a manager added on an earlier row of this file is found.
         const [person] = await rows(q, 'SELECT id FROM users WHERE biometric_id = ? LIMIT 1', [text]);
-        if (!person) problems.push(`${c.header}: no employee with B.I. ${text}`); else body[c.key] = String(person.id);
+        if (person) body[c.key] = String(person.id);
+        else if (failed.has(text)) problems.push(`${c.header}: B.I. ${text} is in this file but its own row has a problem; fix that row first`);
+        else if (file.rows.some((r) => r.cells.Biometric_ID === text)) problems.push(`${c.header}: B.I. ${text} is later in this file and could not be added first`);
+        else problems.push(`${c.header}: no employee with B.I. ${text} (not in the portal and not in this file)`);
         break;
       }
       default:
@@ -262,8 +270,10 @@ async function run(req: Request, file: ParsedFile, commit: boolean, hashes: (lin
       bi: r.cells.Biometric_ID,
       managers: [r.cells.Reporting_Manager_BI, r.cells.HoD_BI].filter(Boolean) as string[],
     })));
+    const failed = new Set<string>();
     for (const i of cycle) {
       const r = file.rows[i];
+      failed.add(r.cells.Biometric_ID);
       out.set(r.line, { line: r.line, biometricId: r.cells.Biometric_ID, name: r.cells.Name, status: 'error', error: 'The reporting manager / HoD of these rows point at each other. Add one of them first.' });
     }
     for (const i of order) {
@@ -271,9 +281,9 @@ async function run(req: Request, file: ParsedFile, commit: boolean, hashes: (lin
       const result: EmployeeImportRow = { line: r.line, biometricId: r.cells.Biometric_ID, name: r.cells.Name, status: 'ok', error: null };
       out.set(r.line, result);
       const selfManaged = [r.cells.Reporting_Manager_BI, r.cells.HoD_BI].includes(r.cells.Biometric_ID);
-      const { body, problems } = await bodyOf(conn, file, r.cells, maps);
+      const { body, problems } = await bodyOf(conn, file, r.cells, maps, failed);
       if (selfManaged) problems.push('An employee who is their own reporting manager / HoD is added from "New employee", not by import');
-      if (problems.length) { result.status = 'error'; result.error = problems.join('; '); continue; }
+      if (problems.length) { result.status = 'error'; result.error = problems.join('; '); failed.add(r.cells.Biometric_ID); continue; }
       await conn.query('SAVEPOINT import_row');
       try {
         const id = await insertEmployee(conn, req, body, hashes(r.line), note);
@@ -281,6 +291,7 @@ async function run(req: Request, file: ParsedFile, commit: boolean, hashes: (lin
         await conn.query('RELEASE SAVEPOINT import_row');
       } catch (error) {
         await conn.query('ROLLBACK TO SAVEPOINT import_row');
+        failed.add(r.cells.Biometric_ID);
         if (error instanceof HttpError) {
           result.status = 'error';
           result.error = fieldErrors(file, error.details as Record<string, string> | undefined, error.message);
