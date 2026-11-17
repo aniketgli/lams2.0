@@ -1,6 +1,6 @@
 import { authConfig, normalizeLoginEmail } from '../config/auth.config';
 import { PATTERNS, Validator } from '../lib/validate';
-import { CADRES, RECRUITMENT_CATEGORIES } from './lists';
+import { BLOOD_GROUPS, CADRES, RECRUITMENT_CATEGORIES } from './lists';
 import { type IdentityInput, parseIdentity } from './identity';
 
 /**
@@ -34,7 +34,7 @@ interface LayoutRules {
   validUntil: 'always' | 'deputation';
 }
 
-export { CADRES, RECRUITMENT_CATEGORIES } from './lists';
+export { BLOOD_GROUPS, CADRES, RECRUITMENT_CATEGORIES } from './lists';
 
 /** What each fixed form layout asks for. Mirrors the client form. */
 export const LAYOUT_RULES: Record<FormLayout, LayoutRules> = {
@@ -86,6 +86,8 @@ export interface EmployeeInput {
   courseBatch: string | null;
   enrolledThrough: string | null;
   guideSupervisor: string | null;
+  /** A+, A-, B+, … (fixed list); null when not entered (employees added before the field existed). */
+  bloodGroup: string | null;
   /** Aadhaar, PAN and bank details (identity.ts). */
   identity: IdentityInput;
 }
@@ -131,7 +133,11 @@ function optionalId(v: Validator, field: string): string | null {
  * (looked up by the caller). Fields that do not belong to the layout are
  * dropped so stale values from a previous type are not kept.
  */
-export function parseEmployeeInput(body: unknown, layout: FormLayout | null, today: string, aadhaarRequired = false): EmployeeInput {
+/**
+ * `required`: Aadhaar and blood group are required of a new employee; an employee added before these fields existed
+ * can be saved without them until they are entered (the caller decides).
+ */
+export function parseEmployeeInput(body: unknown, layout: FormLayout | null, today: string, required: { aadhaar?: boolean; bloodGroup?: boolean } = {}): EmployeeInput {
   const v = new Validator(body);
   const rules = layout ? LAYOUT_RULES[layout] : null;
 
@@ -192,7 +198,12 @@ export function parseEmployeeInput(body: unknown, layout: FormLayout | null, tod
   const guideSupervisor = rules?.guide ? v.optionalString('guideSupervisor', { max: 255 }) : null;
 
   const identity = parseIdentity(v, layout);
-  if (aadhaarRequired && !identity.aadhaar) v.errors.aadhaarNumber ||= 'This field is required.';
+  if (required.aadhaar && !identity.aadhaar) v.errors.aadhaarNumber ||= 'This field is required.';
+  const bloodRaw = v.raw('bloodGroup');
+  const bloodText = bloodRaw === undefined || bloodRaw === null ? '' : String(bloodRaw).trim().toUpperCase().replace(/\s+/g, '').replace(/POSITIVE$/, '+').replace(/NEGATIVE$/, '-').replace(/VE$/, '');
+  const bloodGroup = (BLOOD_GROUPS as readonly string[]).includes(bloodText) ? bloodText : null;
+  if (bloodText && !bloodGroup) v.errors.bloodGroup ||= `Choose one of ${BLOOD_GROUPS.join(', ')}.`;
+  else if (required.bloodGroup && !bloodGroup) v.errors.bloodGroup ||= 'This field is required.';
 
   v.assert();
 
@@ -200,7 +211,7 @@ export function parseEmployeeInput(body: unknown, layout: FormLayout | null, tod
     biometricId, salutation, name, email: email!, gender, dob: dob!, phone: phone!, employmentType, shiftId,
     leaveGroup, joiningDate: joiningDate!, institute, department, designation, employeeCategory,
     permanentEmploymentType, reportingManagerId, reviewingManagerId, hodName, validUntilDate, isOnProbation, isPwd,
-    probationEndDate, isPhDEnrolled, piName, courseProgram, courseBatch, enrolledThrough, guideSupervisor, identity,
+    probationEndDate, isPhDEnrolled, piName, courseProgram, courseBatch, enrolledThrough, guideSupervisor, bloodGroup, identity,
   };
 }
 
@@ -212,7 +223,7 @@ export function accountValidUpto(input: EmployeeInput, layout: FormLayout): stri
 
 /** Keys of profile_data that come from the form. Anything else already stored there is kept. */
 export const PROFILE_DATA_KEYS = [
-  'gender', 'dob', 'leaveGroup', 'leaveCycle', 'leaveCycleBasis', 'employeeCategory', 'permanentEmploymentType',
+  'gender', 'dob', 'bloodGroup', 'leaveGroup', 'leaveCycle', 'leaveCycleBasis', 'employeeCategory', 'permanentEmploymentType',
   'reportingManagerId', 'reviewingManagerId', 'hodName', 'validUntilDate', 'isOnProbation', 'isPwd', 'probationEndDate',
   'isPhDEnrolled', 'piName', 'courseProgram', 'courseBatch', 'enrolledThrough', 'guideSupervisor', 'retirementDate',
 ] as const;

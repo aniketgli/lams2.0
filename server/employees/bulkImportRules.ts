@@ -1,5 +1,5 @@
 import { isValidIsoDate } from '../lib/validate';
-import { CADRES, LAYOUT_RULES, RECRUITMENT_CATEGORIES, type FormLayout } from './fields';
+import { BLOOD_GROUPS, CADRES, LAYOUT_RULES, RECRUITMENT_CATEGORIES, type FormLayout } from './fields';
 import { asksBankDetails } from './identity';
 
 /** Employee import: columns of each employee type's template and how cells are read. Pure, tested in bulkImport.test.ts. */
@@ -32,8 +32,10 @@ export function columnsFor(layout: FormLayout): ImportColumn[] {
     col('Name', 'name', true, 'text', 'full name'),
     col('Email', 'email', true, 'text', 'official email (login ID)'),
     col('Mobile', 'phone', true, 'text', '10 digit mobile'),
+    col('Aadhaar', 'aadhaarNumber', true, 'text', '12 digits (format the column as Text)'),
     col('Gender', 'gender', true, 'lookup', 'as in Master Settings', { lookup: 'gender' }),
     col('Date_of_Birth', 'dob', true, 'date', 'DD-MM-YYYY'),
+    col('Blood_Group', 'bloodGroup', true, 'text', BLOOD_GROUPS.join(' / ')),
     col('Date_of_Joining', 'joiningDate', true, 'date', 'DD-MM-YYYY'),
     col('Institute', 'institute', true, 'lookup', 'as in Master Settings', { lookup: 'institute' }),
   ];
@@ -65,8 +67,7 @@ export function columnsFor(layout: FormLayout): ImportColumn[] {
   if (rules.piName) out.push(col('PI_Name', 'piName', false, 'text', 'blank = the reporting manager'));
   if (rules.guide) out.push(col('Guide', 'guideSupervisor', false, 'text', 'guide / supervisor name'));
   out.push(col('PwD', 'isPwd', false, 'bool', 'Yes / No'));
-  // Long numbers: format these columns as Text in Excel, or it turns them into 2.34568E+11.
-  out.push(col('Aadhaar', 'aadhaarNumber', true, 'text', '12 digits (format the column as Text)'));
+  // Long numbers (Aadhaar, account): format these columns as Text in Excel, or it turns them into 2.34568E+11.
   if (asksBankDetails(layout)) {
     out.push(
       col('PAN', 'panNumber', false, 'text', 'e.g. ABCDE1234F'),
