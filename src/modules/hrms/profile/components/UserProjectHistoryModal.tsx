@@ -10,14 +10,19 @@ import {
   Badge
 } from '../../../../shared/components';
 
+/** The present posting, taken from the employee's profile (shown above the history records). */
+export interface CurrentPosting { typeLabel: string | null; layout: string; managerName: string | null }
+
 interface UserProjectHistoryModalProps {
   user: User | null;
+  current?: CurrentPosting | null;
   isOpen: boolean;
   onClose: () => void;
 }
 
 export const UserProjectHistoryModal: React.FC<UserProjectHistoryModalProps> = ({
   user,
+  current,
   isOpen,
   onClose
 }) => {
@@ -118,12 +123,13 @@ export const UserProjectHistoryModal: React.FC<UserProjectHistoryModalProps> = (
     <Modal isOpen={isOpen} onClose={onClose} size="lg">
       <ModalHeader
         title="Project & Posting History"
-        subtitle={`Chronological research project postings for ${user?.name || 'employee'}`}
+        subtitle={`Current posting and earlier project postings of ${user?.name || 'employee'}`}
         icon={Briefcase}
         onClose={onClose}
       />
 
       <ModalBody className="max-h-[65vh] overflow-y-auto space-y-3">
+        {current && <CurrentPostingCard user={user} current={current} formatDate={formatDateLabel} duration={calculateDuration} />}
         {loading ? (
           <div className="text-center py-10 text-xs text-slate-500">Loading project history from database…</div>
         ) : loadError ? (
@@ -131,9 +137,9 @@ export const UserProjectHistoryModal: React.FC<UserProjectHistoryModalProps> = (
         ) : userHistories.length === 0 ? (
           <div className="text-center py-10 bg-slate-50 rounded-xl border border-dashed border-slate-200 p-6">
             <Briefcase className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-            <h4 className="text-xs font-bold text-slate-800">No Project Records Found</h4>
+            <h4 className="text-xs font-bold text-slate-800">No Earlier Postings Recorded</h4>
             <p className="text-[11px] text-slate-500 mt-0.5">
-              No project postings recorded for this employee.
+              No earlier project postings are recorded for this employee.
             </p>
           </div>
         ) : (
@@ -242,7 +248,7 @@ export const UserProjectHistoryModal: React.FC<UserProjectHistoryModalProps> = (
       <ModalFooter>
         <div className="w-full flex items-center justify-between text-xs">
           <span className="text-[11px] text-slate-500">
-            Total {userHistories.length} record(s)
+            {userHistories.length} earlier record(s)
           </span>
           <Button
             variant="outline"
@@ -254,5 +260,56 @@ export const UserProjectHistoryModal: React.FC<UserProjectHistoryModalProps> = (
         </div>
       </ModalFooter>
     </Modal>
+  );
+};
+
+const Cell: React.FC<{ label: string; value: string | null | undefined }> = ({ label, value }) => (
+  <div className="bg-white/80 border border-emerald-200/70 rounded-lg px-2.5 py-1.5 min-w-0">
+    <span className="text-[10px] font-bold text-emerald-800 block uppercase tracking-wider">{label}</span>
+    <div className="font-bold text-slate-900 text-[11px] mt-0.5 break-words">{value || 'Not recorded'}</div>
+  </div>
+);
+
+/** The employee's present posting, from the profile: type, place of work, post, period and reporting person. */
+const CurrentPostingCard: React.FC<{
+  user: User;
+  current: CurrentPosting;
+  formatDate: (d: string) => string;
+  duration: (start: string, end?: string, ongoing?: boolean) => string;
+}> = ({ user, current, formatDate, duration }) => {
+  const student = current.layout === 'diploma_trainee' || current.layout === 'bsc_msc_student';
+  const active = user.status !== 'deactivated';
+  const permanentDirect = current.layout === 'permanent' && (user as { permanentEmploymentType?: string }).permanentEmploymentType !== 'Deputation';
+  const place = student
+    ? [user.courseProgram, user.courseBatch].filter(Boolean).join(' · ')
+    : user.department;
+  const placeLabel = student ? 'Course / Batch' : current.layout === 'researcher' ? 'Project' : current.layout === 'intern' ? 'Project / Department' : 'Department / Section';
+  const post = student ? 'Student' : current.layout === 'phd_student' ? 'PhD Scholar' : user.designation;
+  const managerLabel = current.layout === 'researcher' ? 'Principal Investigator (PI)' : 'Reporting Manager';
+  const end = permanentDirect ? undefined : user.validUntilDate;
+  return (
+    <div className="bg-emerald-50/50 border border-emerald-200 rounded-xl p-3 sm:p-3.5">
+      <div className="flex items-center justify-between gap-2 flex-wrap border-b border-emerald-100 pb-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <Badge variant={active ? 'success' : 'neutral'} size="sm">{active ? 'Current posting' : 'Last posting (inactive)'}</Badge>
+          {current.typeLabel && <span className="text-[10px] font-semibold text-slate-600 bg-white border border-slate-200 px-1.5 rounded-md">{current.typeLabel}</span>}
+          {user.institute && <span className="font-mono text-[10px] font-semibold text-slate-600 bg-white border border-slate-200 px-1.5 rounded-md">{user.institute}</span>}
+        </div>
+        {user.joiningDate && (
+          <span className="text-[10px] font-semibold text-slate-500 bg-white px-1.5 rounded border border-slate-200">
+            ⏱️ {duration(user.joiningDate, end, !end || end > new Date().toISOString().slice(0, 10))}
+          </span>
+        )}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 text-xs">
+        <Cell label={placeLabel} value={place} />
+        <Cell label="Post / Designation" value={post} />
+        <Cell
+          label={permanentDirect ? 'Joined on' : 'Period'}
+          value={user.joiningDate ? (permanentDirect ? formatDate(user.joiningDate) : `${formatDate(user.joiningDate)} → ${end ? formatDate(end) : 'Present'}`) : null}
+        />
+        <Cell label={managerLabel} value={current.managerName} />
+      </div>
+    </div>
   );
 };

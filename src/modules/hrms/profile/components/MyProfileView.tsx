@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft, Briefcase, Camera, CheckCircle2, Clock, Fingerprint, History as HistoryIcon, Building2, Loader2, Mail, Network, Phone,
-  Trash2, Upload, UserRound, XCircle,
+  IdCard, Trash2, Upload, UserRound, XCircle,
 } from 'lucide-react';
 import { Alert } from '../../../../shared/components';
 import { UserAvatar } from '../../../../shared/components/UserAvatar';
@@ -38,6 +38,7 @@ const SECTION_ICONS: Record<string, IconType> = {
   work: Briefcase,
   reporting: Network,
   attendance: Clock,
+  identity: IdCard,
 };
 
 export function formatDate(value: string | null | undefined): string | null {
@@ -347,7 +348,7 @@ const ProfileView: React.FC<{ source: ProfileSource; onBack?: () => void; onPhot
     .map((s) => ({ ...s, fields: s.fields.filter((f) => !CONTACT_KEYS.has(f.key)) }))
     .filter((s) => s.fields.length > 0);
   // Employment first, personal last.
-  const order = ['work', 'reporting', 'attendance', 'personal'];
+  const order = ['work', 'reporting', 'attendance', 'personal', 'identity'];
   sections.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
 
   const displayName = [profile.salutation, profile.name].filter(Boolean).join(' ');

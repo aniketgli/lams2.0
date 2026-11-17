@@ -1,5 +1,6 @@
 import { isValidIsoDate } from '../lib/validate';
 import { CADRES, LAYOUT_RULES, RECRUITMENT_CATEGORIES, type FormLayout } from './fields';
+import { asksBankDetails } from './identity';
 
 /** Employee import: columns of each employee type's template and how cells are read. Pure, tested in bulkImport.test.ts. */
 
@@ -64,6 +65,16 @@ export function columnsFor(layout: FormLayout): ImportColumn[] {
   if (rules.piName) out.push(col('PI_Name', 'piName', false, 'text', 'blank = the reporting manager'));
   if (rules.guide) out.push(col('Guide', 'guideSupervisor', false, 'text', 'guide / supervisor name'));
   out.push(col('PwD', 'isPwd', false, 'bool', 'Yes / No'));
+  // Long numbers: format these columns as Text in Excel, or it turns them into 2.34568E+11.
+  out.push(col('Aadhaar', 'aadhaarNumber', true, 'text', '12 digits (format the column as Text)'));
+  if (asksBankDetails(layout)) {
+    out.push(
+      col('PAN', 'panNumber', false, 'text', 'e.g. ABCDE1234F'),
+      col('Bank_Name', 'bankName', false, 'text', 'bank details: all three or none'),
+      col('IFSC', 'bankIfsc', false, 'text', '11 characters, e.g. SBIN0001234'),
+      col('Account_Number', 'bankAccountNumber', false, 'text', 'digits only (format the column as Text)'),
+    );
+  }
   return out;
 }
 

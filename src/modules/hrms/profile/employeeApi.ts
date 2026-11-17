@@ -72,6 +72,11 @@ export function employeePayload(user: Partial<User>): Record<string, unknown> {
     courseBatch: user.courseBatch,
     enrolledThrough: (user as { enrolledThrough?: string }).enrolledThrough,
     guideSupervisor: user.guideSupervisor,
+    aadhaarNumber: user.aadhaarNumber,
+    panNumber: user.panNumber,
+    bankName: user.bankName,
+    bankIfsc: user.bankIfsc,
+    bankAccountNumber: user.bankAccountNumber,
   };
 }
 
@@ -84,6 +89,7 @@ export const EMPLOYEE_FIELD_LABELS: Record<string, string> = {
   reportingManagerId: 'Reporting manager', reviewingManagerId: 'HoD', validUntilDate: 'Valid up to',
   probationEndDate: 'Probation end date', courseProgram: 'Course', courseBatch: 'Batch', enrolledThrough: 'Enrolled through',
   piName: 'PI name', guideSupervisor: 'Guide / supervisor',
+  aadhaarNumber: 'Aadhaar number', panNumber: 'PAN', bankName: 'Bank name', bankIfsc: 'IFSC', bankAccountNumber: 'Account number',
 };
 
 export function describeFieldErrors(details?: Record<string, string>): string {
@@ -129,6 +135,8 @@ export const employeeApi = {
   list: () => api<EmployeeRow[]>('/hrms/employees', { passive: true }),
   /** The fixed system accounts: only the Profiles table shows these (administrator and auditor only; others get an empty list). */
   listSystem: () => api<EmployeeRow[]>('/hrms/employees?system=1', { passive: true }),
+  /** One employee; administrators get the full Aadhaar / account numbers here (lists carry masked ones). */
+  get: (id: string) => api<EmployeeRow>(`/hrms/employees/${encodeURIComponent(id)}`),
   create: (user: Partial<User>) =>
     api<{ employee: EmployeeRow; message: string; temporaryPassword?: string }>('/hrms/employees', { method: 'POST', body: employeePayload(user) }),
   update: (id: string, user: Partial<User>) =>

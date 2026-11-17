@@ -16,6 +16,7 @@ import {
 } from './fields';
 import { ResolvedReferences, checkReferences, layoutOfEmployeeType } from './references';
 import { isSystemRow, systemAccountError } from '../lib/systemAccounts';
+import { IDENTITY_STORED_KEYS, identityAudit, identityView, storeIdentity } from './identity';
 import { creditProRata, spanForNewEmployee, spansForExtension } from '../leave/proRata';
 
 /**
@@ -130,9 +131,17 @@ async function loadGrants(q: Querier, biometricIds: string[] | null): Promise<Ma
   return out;
 }
 
-function toRecord(row: RowDataPacket, grants: { moduleId: string; roleId: string }[]): EmployeeRecord {
+/** Masked identity of each record, for the audit trail (kept beside the record, never sent to the browser). */
+const identityForAudit = new WeakMap<EmployeeRecord, Record<string, unknown>>();
+
+/** `fullIdentity`: full Aadhaar / account numbers (administrators); otherwise masked. */
+function toRecord(row: RowDataPacket, grants: { moduleId: string; roleId: string }[], fullIdentity = false): EmployeeRecord {
   const data = parseProfileData(row.profile_data);
   for (const key of PROFILE_DATA_FORBIDDEN) delete data[key];
+  const audit = identityAudit(data);
+  const identity = identityView(data, fullIdentity);
+  for (const key of IDENTITY_STORED_KEYS) delete data[key];
+  Object.assign(data, identity);
 
   const moduleRoles: Record<string, string[]> = {};
   const hrmsRoles: RoleId[] = [];
@@ -144,7 +153,7 @@ function toRecord(row: RowDataPacket, grants: { moduleId: string; roleId: string
   }
   hrmsRoles.sort((a, b) => ROLE_RANK.indexOf(a) - ROLE_RANK.indexOf(b));
 
-  return {
+  const record: EmployeeRecord = {
     id: String(row.id),
     biometricId: String(row.biometric_id),
     name: String(row.name),
@@ -168,6 +177,8 @@ function toRecord(row: RowDataPacket, grants: { moduleId: string; roleId: string
     roles: hrmsRoles,
     photoUrl: null,
   };
+  identityForAudit.set(record, audit);
+  return record;
 }
 
 /** Fields of another employee that any signed-in user may see (names for dropdowns, managers, …). */
@@ -199,22 +210,23 @@ export async function listEmployees(viewer: Viewer, which: 'regular' | 'system' 
   const grants = await loadGrants(pool, null);
   const photos = await photoUrls(null);
   return found
+    // Lists always carry masked Aadhaar / account numbers; the administrator's employee form reads one employee in full.
     .map((row) => ({ ...toRecord(row, grants.get(String(row.biometric_id)) ?? []), photoUrl: photos.get(String(row.biometric_id)) ?? null }))
     .map((record) => (canSeeFullProfile(viewer, record) ? record : publicView(record)));
 }
 
-async function findEmployee(q: Querier, id: number, lock = false): Promise<{ record: EmployeeRecord; rawData: Record<string, unknown> } | null> {
+async function findEmployee(q: Querier, id: number, lock = false, fullIdentity = false): Promise<{ record: EmployeeRecord; rawData: Record<string, unknown> } | null> {
   const [row] = await rows(q, `${SELECT_EMPLOYEES} WHERE u.id = ? LIMIT 1${lock ? ' FOR UPDATE' : ''}`, [id]);
   if (!row) return null;
   const grants = await loadGrants(q, [String(row.biometric_id)]);
   return {
-    record: toRecord(row, grants.get(String(row.biometric_id)) ?? []),
+    record: toRecord(row, grants.get(String(row.biometric_id)) ?? [], fullIdentity),
     rawData: parseProfileData(row.profile_data),
   };
 }
 
 export async function getEmployee(viewer: Viewer, id: number): Promise<EmployeeRecord> {
-  const found = await findEmployee(pool, id);
+  const found = await findEmployee(pool, id, false, viewer.role === 'administrator');
   if (!found) throw notFound('Employee not found.');
   if (!canSeeFullProfile(viewer, found.record)) throw new HttpError(403, 'You are not allowed to view this employee profile.', 'FORBIDDEN');
   const photos = await photoUrls([found.record.biometricId]);
@@ -236,6 +248,7 @@ function auditView(record: EmployeeRecord): Record<string, unknown> {
   };
   // Every form key is listed (null when empty) so a cleared field shows up as a change.
   for (const key of PROFILE_DATA_KEYS) view[key] = data[key] === undefined || data[key] === '' ? null : data[key];
+  Object.assign(view, identityForAudit.get(record) ?? {});
   return view;
 }
 
@@ -297,10 +310,12 @@ function profileColumns(input: EmployeeInput, data: Record<string, unknown>) {
   };
 }
 
-async function prepare(conn: PoolConnection, body: unknown, selfId: number | null) {
+async function prepare(conn: PoolConnection, body: unknown, selfId: number | null, previous: Record<string, unknown> = {}) {
   const employmentType = (body && typeof body === 'object' ? (body as Record<string, unknown>).employmentType : undefined);
   const layout = await layoutOfEmployeeType(conn, employmentType);
-  const input = parseEmployeeInput(body, layout, todayInIndia());
+  // Aadhaar: required for a new employee, and once entered it cannot be removed. Employees added before the field
+  // existed can still be saved without it.
+  const input = parseEmployeeInput(body, layout, todayInIndia(), selfId === null || Boolean(previous.aadhaarHash));
   const refs = await checkReferences(conn, input, layout!, selfId);
   return { layout: layout!, input, refs };
 }
@@ -326,6 +341,26 @@ async function assertUnique(conn: PoolConnection, input: EmployeeInput, selfId: 
     if (byId || profile) errors.biometricId = 'This biometric ID is already in use.';
   }
   if (Object.keys(errors).length) throw new HttpError(409, 'This employee already exists.', 'DUPLICATE', errors);
+}
+
+/** Aadhaar, bank account (within a bank) and PAN belong to one employee only. */
+async function assertIdentityUnique(conn: PoolConnection, keys: ReturnType<typeof storeIdentity>, biometricId: string) {
+  const errors: Record<string, string> = {};
+  const owner = async (path: string, value: string | null) => {
+    if (!value) return null;
+    const [found] = await rows(conn,
+      `SELECT u.name, u.biometric_id FROM employee_profiles p JOIN users u ON u.biometric_id = p.biometric_id
+        WHERE p.biometric_id <> ? AND JSON_VALID(p.profile_data) AND JSON_UNQUOTE(JSON_EXTRACT(p.profile_data, '${path}')) = ? LIMIT 1`,
+      [biometricId, value]);
+    return found ? `${found.name} (B.I. ${found.biometric_id})` : null;
+  };
+  const byAadhaar = await owner('$.aadhaarHash', keys.aadhaarHash);
+  if (byAadhaar) errors.aadhaarNumber = `This Aadhaar number is already registered to ${byAadhaar}.`;
+  const byAccount = await owner('$.bankAccountHash', keys.accountHash);
+  if (byAccount) errors.bankAccountNumber = `This bank account is already registered to ${byAccount}.`;
+  const byPan = await owner('$.panNumber', keys.pan);
+  if (byPan) errors.panNumber = `This PAN is already registered to ${byPan}.`;
+  if (Object.keys(errors).length) throw new HttpError(409, 'These details belong to another employee.', 'DUPLICATE', errors);
 }
 
 function isDuplicateKey(error: unknown): boolean {
@@ -367,7 +402,9 @@ export async function insertEmployee(conn: PoolConnection, req: Request, body: u
   );
   const userId = Number((result as { insertId: number }).insertId);
 
-  const columns = profileColumns(input, profileDataFor(input, layout, refs, {}));
+  const newData = profileDataFor(input, layout, refs, {});
+  await assertIdentityUnique(conn, storeIdentity(newData, input.identity, {}, layout), input.biometricId);
+  const columns = profileColumns(input, newData);
   await conn.query(
     `INSERT INTO employee_profiles (biometric_id, ${Object.keys(columns).join(', ')}) VALUES (?, ${Object.keys(columns).map(() => '?').join(', ')})`,
     [input.biometricId, ...Object.values(columns)],
@@ -420,10 +457,11 @@ async function updateEmployeeImpl(req: Request, id: number, body: unknown): Prom
       if (sentId && sentId !== before.biometricId) {
         throw badRequest('Please correct the highlighted fields.', { biometricId: 'Biometric ID cannot be changed once the employee is created.' });
       }
-      const { layout, input, refs } = await prepare(conn, { ...(body as object), biometricId: before.biometricId }, id);
+      const { layout, input, refs } = await prepare(conn, { ...(body as object), biometricId: before.biometricId }, id, existing.rawData);
       await assertUnique(conn, input, id);
 
       const data = profileDataFor(input, layout, refs, existing.rawData);
+      await assertIdentityUnique(conn, storeIdentity(data, input.identity, existing.rawData, layout), before.biometricId);
       const columns = profileColumns(input, data);
       const validUpto = accountValidUpto(input, layout);
 
