@@ -6,7 +6,7 @@
 
 /** Cadre of permanent / contractual staff. Designations and institute units can be tied to cadres. */
 export const CADRES = [
-  'Scientific', 'Technical', 'Support', 'Administrative', 'Finance', 'Stenographer', 'Driver', 'Multi Tasking Staff',
+  'Scientific', 'Technical', 'Support', 'Administrative', 'Finance', 'Stenographer', 'Driver', 'Cook', 'Multi Tasking Staff',
 ] as const;
 
 /** Category (how a permanent employee was recruited). */
