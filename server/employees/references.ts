@@ -1,6 +1,7 @@
 import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
 import { pool } from '../../src/db';
 import { badRequest } from '../lib/http';
+import { normalizeModule, normalizeRole } from '../lib/roles';
 import { EmployeeInput, FormLayout, LAYOUT_RULES, MasterRef, isFormLayout } from './fields';
 
 /**
@@ -145,12 +146,14 @@ export async function checkReferences(q: Querier, input: EmployeeInput, layout: 
     }
   }
 
-  // Managers must be active accounts of the same institute (when their institute is recorded).
+  // Managers must be active accounts of the same institute (when their institute is recorded). Of the system accounts,
+  // only the Administrator may be chosen (the form offers it while no employee is registered yet).
   const activeAccount = async (id: string) => {
     const [row] = await rows(q,
-      `SELECT u.id, u.name, u.status, u.is_system, p.institute FROM users u
+      `SELECT u.id, u.biometric_id, u.name, u.status, u.is_system, p.institute FROM users u
          LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE u.id = ? LIMIT 1`, [Number(id)]);
-    if (!row || Number(row.is_system ?? 0) === 1 || String(row.status).toLowerCase() !== 'active') return null;
+    if (!row || String(row.status).toLowerCase() !== 'active') return null;
+    if (Number(row.is_system ?? 0) === 1 && !(await isSystemAdministrator(q, String(row.biometric_id)))) return null;
     if (row.institute && input.institute && String(row.institute) !== input.institute) return null;
     return row;
   };
@@ -182,4 +185,10 @@ export async function checkReferences(q: Querier, input: EmployeeInput, layout: 
 
   if (Object.keys(errors).length) throw badRequest('Please correct the highlighted fields.', errors);
   return { reviewingManagerId: rules.hod ? reviewingManagerId : null, hodName, reportingManagerName, leaveCycle };
+}
+
+/** A system account holding the HRMS Administrator role (the fixed Administrator, not the Auditor). */
+async function isSystemAdministrator(q: Querier, biometricId: string): Promise<boolean> {
+  const grants = await rows(q, "SELECT module_id, role_id FROM user_module_roles WHERE biometric_id = ? AND LOWER(status) = 'active'", [biometricId]);
+  return grants.some((g) => normalizeModule(g.module_id) === 'hrms' && normalizeRole(g.role_id) === 'administrator');
 }

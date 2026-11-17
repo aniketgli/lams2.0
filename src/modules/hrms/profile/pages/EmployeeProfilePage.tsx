@@ -1230,9 +1230,16 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
   // Memoized active employees (excluding deactivated)
   /** Reporting manager / HoD choices on the employee form: active employees of the same organization. The employee may be their own (a Director is their own reporting manager and HoD). */
-  const formManagers = useMemo(() => users.filter((u) =>
-    u.status !== 'deactivated' && (!newUserForm.institute || !u.institute || u.institute === newUserForm.institute)),
-  [users, newUserForm.institute]);
+  const formManagers = useMemo(() => {
+    const employees = users.filter((u) =>
+      u.status !== 'deactivated' && (!newUserForm.institute || !u.institute || u.institute === newUserForm.institute));
+    // The Administrator (system account) is offered while no employee is registered yet, and stays listed for an
+    // employee who already has it as reporting manager / HoD. The server accepts only this system account.
+    const admins = systemUsers.filter((u) => u.status !== 'deactivated' && (u.roles ?? [u.role]).includes('administrator'));
+    const chosen = new Set([newUserForm.reportingManagerId, newUserForm.reviewingManagerId].filter(Boolean));
+    const extra = admins.filter((a) => !employees.length || chosen.has(a.id));
+    return [...employees, ...extra];
+  }, [users, systemUsers, newUserForm.institute, newUserForm.reportingManagerId, newUserForm.reviewingManagerId]);
 
   // Filtered Users for User Controls tab
   const filteredUsersForControls = useMemo(() => {
