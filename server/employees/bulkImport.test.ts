@@ -53,3 +53,14 @@ describe('employee import', () => {
     expect(cycle).toEqual([2, 3]);
   });
 });
+
+describe('matching file values with the masters', () => {
+  test('case, spaces and full stops do not matter (Dr = Dr. = dr)', async () => {
+    const { keyOf } = await import('./bulkImportRules');
+    expect(keyOf('Dr')).toBe(keyOf('Dr.'));
+    expect(keyOf(' MRS ')).toBe(keyOf('Mrs.'));
+    expect(keyOf('GEN - General  Shift')).toBe(keyOf('GEN - General Shift'));
+    expect(keyOf('Permanent (CY)')).toBe('permanent (cy)');
+    expect(keyOf('Mr')).not.toBe(keyOf('Mrs'));
+  });
+});

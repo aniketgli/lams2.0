@@ -16,6 +16,7 @@ import {
 } from './fields';
 import { ResolvedReferences, checkReferences, layoutOfEmployeeType } from './references';
 import { isSystemRow, systemAccountError } from '../lib/systemAccounts';
+import { creditProRata, spanForNewEmployee, spansForExtension } from '../leave/proRata';
 
 /**
  * Employee accounts and profiles. One save touches three tables in one
@@ -394,6 +395,8 @@ export async function insertEmployee(conn: PoolConnection, req: Request, body: u
   const created = (await findEmployee(conn, userId))!.record;
   await writeMasterAuditSql(conn, req, { masterKey: AUDIT_EMPLOYEE, recordId: input.biometricId, recordLabel: input.name, action: 'CREATE', after: { ...auditView(created), password: passwordNote } });
   await writeMasterAuditSql(conn, req, { masterKey: AUDIT_ROLES, recordId: input.biometricId, recordLabel: input.name, action: 'CREATE', after: grantsView([NEW_EMPLOYEE_GRANT]) });
+  // Contract / Project / PhD / Intern: this leave year's quota, pro-rata from joining to "Valid up to".
+  await creditProRata(conn, req, userId, { before: [], added: spanForNewEmployee(input.joiningDate, accountValidUpto(input, layout)), reason: 'new employee' });
   return userId;
 }
 
@@ -457,6 +460,9 @@ async function updateEmployeeImpl(req: Request, id: number, body: unknown): Prom
 
       const after = (await findEmployee(conn, id))!.record;
       await writeMasterAuditSql(conn, req, { masterKey: AUDIT_EMPLOYEE, recordId: before.biometricId, recordLabel: input.name, action: 'UPDATE', before: auditView(before), after: auditView(after) });
+      // Validity extended (also reactivates an expired account): add the pro-rata quota of the new months only.
+      const extension = spansForExtension(after.joiningDate, before.validUpto, validUpto, before.validUpto !== null && before.validUpto < today, today);
+      if (extension) await creditProRata(conn, req, id, extension, today);
       return { record: after, changed };
     });
   } catch (error) {
@@ -524,6 +530,12 @@ async function setEmployeeStatusImpl(req: Request, id: number, change: StatusCha
     delete data.status;
     await conn.query('UPDATE employee_profiles SET profile_data = ? WHERE biometric_id = ?', [JSON.stringify(data), before.biometricId]);
 
+    // Reactivated: the running leave year's pro-rata quota from today, if the year has no balance yet
+    // (a deactivation and reactivation within the same year keeps the balance as it was).
+    if (change.status === 'active') {
+      const today = todayInIndia();
+      await creditProRata(conn, req, id, { before: [], added: { from: today, to: before.validUpto || '9999-12-31' }, onlyMissing: true, reason: `reactivated on ${today}` }, today);
+    }
     const after = (await findEmployee(conn, id))!.record;
     await writeMasterAuditSql(conn, req, {
       masterKey: AUDIT_EMPLOYEE, recordId: before.biometricId, recordLabel: before.name, action: 'STATUS',

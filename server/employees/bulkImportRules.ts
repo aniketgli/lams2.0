@@ -113,3 +113,10 @@ export function creationOrder(rows: ReadonlyArray<{ bi: string; managers: string
   return { order, cycle: [...cycle].sort((a, b) => a - b) };
 }
 
+
+/**
+ * How a cell is compared with master values: case, spaces and full stops do not matter, so "Dr", "dr." and "Dr."
+ * are the same salutation, and "GEN - General Shift" or "General  Shift" find the General Shift.
+ */
+export const keyOf = (text: string) => text.trim().toLowerCase().replace(/\./g, '').replace(/\s+/g, ' ').trim();
+
