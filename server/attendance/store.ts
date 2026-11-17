@@ -6,7 +6,7 @@ import { isValidIsoDate, todayInIndia } from '../lib/validate';
 import { cachedReference } from '../lib/referenceCache';
 import type { RoleId } from '../lib/roles';
 import { MAX_RANGE_DAYS_ONE, sizeProblem } from './limits';
-import { DayRecord, Punch, ShiftRule, buildDay, datesBetween, normalizeEmployeeCode, shiftRule, toMinutes, weekdayOf } from './compute';
+import { DayRecord, Punch, ShiftRule, buildDay, datesBetween, employeeCodeVariants, normalizeEmployeeCode, shiftRule, toMinutes, weekdayOf } from './compute';
 import { historyProblem, monthEnd, monthStart } from '../lib/dateWindow';
 
 /**
@@ -161,8 +161,8 @@ async function loadGazettedHolidays(from: string, to: string): Promise<Map<strin
 async function loadPunches(from: string, to: string, machines: Map<string, string>, codes: string[] | null): Promise<Map<string, Map<string, Punch[]>>> {
   const out = new Map<string, Map<string, Punch[]>>();
   if (machines.size === 0 || (codes && codes.length === 0)) return out;
-  // Each code is tried as stored and without leading zeros ("0317" / "317").
-  const variants = codes ? [...new Set(codes.flatMap((c) => [c, c.replace(/^0+/, '') || '0']))] : null;
+  // Each code is tried as stored, without leading zeros and zero-padded ("317" / "0317" / "00317"): eSSL writes 5 digits.
+  const variants = codes ? [...new Set(codes.flatMap(employeeCodeVariants))] : null;
   let found: RowDataPacket[];
   try {
     found = await rows(

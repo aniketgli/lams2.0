@@ -175,6 +175,19 @@ export function buildDay(ctx: DayContext): DayRecord | null {
 }
 
 /** Machine codes like "317" and "0317" are the same employee. */
+/**
+ * The spellings an employee code can have in the punch table, for an indexed `EmployeeCode IN (…)` lookup:
+ * as given, without leading zeros, and zero-padded up to 10 digits (eSSL writes "02477" for B.I. 2477).
+ */
+export function employeeCodeVariants(code: string): string[] {
+  const text = String(code ?? '').trim();
+  if (!/^\d+$/.test(text)) return text ? [text] : [];
+  const bare = text.replace(/^0+/, '') || '0';
+  const out = new Set<string>([text, bare]);
+  for (let width = bare.length + 1; width <= 10; width++) out.add(bare.padStart(width, '0'));
+  return [...out];
+}
+
 export function normalizeEmployeeCode(code: unknown): string {
   const text = String(code ?? '').trim();
   if (!/^\d+$/.test(text)) return text.toUpperCase();
