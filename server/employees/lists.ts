@@ -11,3 +11,6 @@ export const CADRES = [
 
 /** Category (how a permanent employee was recruited). */
 export const RECRUITMENT_CATEGORIES = ['Direct', 'Deputation'] as const;
+
+/** Blood groups (asked of every employee). */
+export const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const;

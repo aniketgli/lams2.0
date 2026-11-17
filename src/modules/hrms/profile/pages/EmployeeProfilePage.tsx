@@ -147,6 +147,9 @@ export interface EmployeeProfilePageProps {
   initialTab?: 'profile' | 'user_controls' | 'transfers';
 }
 
+/** Blood groups (same fixed list as the server's BLOOD_GROUPS). */
+const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+
 /** Cadre of permanent / contractual staff (fixed list, no master; same list as the server's CADRES). */
 const CADRES = ['Scientific', 'Technical', 'Support', 'Administrative', 'Finance', 'Stenographer', 'Driver', 'Multi Tasking Staff'];
 
@@ -582,6 +585,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     courseBatch: '',
     enrolledThrough: '',
     guideSupervisor: '',
+    bloodGroup: '',
     aadhaarNumber: '',
     panNumber: '',
     bankName: '',
@@ -1028,6 +1032,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       courseBatch: u.courseBatch || '',
       enrolledThrough: saved.enrolledThrough || '',
       guideSupervisor: u.guideSupervisor || '',
+      bloodGroup: u.bloodGroup || '',
       // Filled from the full record below (the directory carries masked numbers only).
       aadhaarNumber: '',
       panNumber: u.panNumber || '',
@@ -1138,6 +1143,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       courseProgram: '',
       courseBatch: '',
       guideSupervisor: '',
+      bloodGroup: '',
       aadhaarNumber: '',
       panNumber: '',
       bankName: '',
@@ -2263,6 +2269,29 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                       {fieldError('biometricId')}
                     </div>
 
+                    {/* Aadhaar (every employee type) */}
+                    <div>
+                      <label className="block text-slate-700 font-bold mb-1 text-xs">
+                        Aadhaar Number {!editingEmployeeId && <span className="text-blue-600 font-bold ml-0.5">*</span>}
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        maxLength={14}
+                        value={newUserForm.aadhaarNumber}
+                        onChange={(e) => setField('aadhaarNumber', e.target.value.replace(/[^\d ]/g, '').slice(0, 14))}
+                        placeholder="12-digit Aadhaar number"
+                        aria-invalid={Boolean(errorOf('aadhaarNumber'))}
+                        title={errorOf('aadhaarNumber') || undefined}
+                        className={inputClass('aadhaarNumber')}
+                      />
+                      {editingEmployeeId && !newUserForm.aadhaarNumber && !identityLoading && (
+                        <p className="text-[10px] text-amber-700 mt-1">Not entered yet for this employee.</p>
+                      )}
+                      {fieldError('aadhaarNumber')}
+                    </div>
+
                     {/* Organization (institute) */}
                     <div>
                       <label className="block text-slate-700 font-bold mb-1 text-xs">
@@ -2290,6 +2319,23 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                         />
                       </div>
                       {fieldError('institute')}
+                    </div>
+
+                    {/* Blood group (every employee type) */}
+                    <div>
+                      <label className="block text-slate-700 font-bold mb-1 text-xs">
+                        Blood Group {!editingEmployeeId && <span className="text-blue-600 font-bold ml-0.5">*</span>}
+                      </label>
+                      <div className={controlBox('bloodGroup')} title={errorOf('bloodGroup') || undefined}>
+                        <AppSelect
+                          value={newUserForm.bloodGroup}
+                          placeholder="Select Blood Group"
+                          onChange={(val) => setField('bloodGroup', val)}
+                          options={[{ label: 'Select Blood Group', value: '' }, ...BLOOD_GROUPS.map((g) => ({ label: g, value: g }))]}
+                          className="w-full"
+                        />
+                      </div>
+                      {fieldError('bloodGroup')}
                     </div>
 
                     {/* Employee Type Selection */}
@@ -3295,34 +3341,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                       </>
                     )}
 
-                    {/* Identity & bank details: Aadhaar for every type; PAN and bank for every type except M.Sc students. */}
-                    <div className="sm:col-span-2 pt-1 border-t border-slate-200/80">
-                      <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider pt-2">
-                        {layoutOf(newUserForm.employmentType) === 'bsc_msc_student' ? 'Identity' : 'Identity & bank details'}
-                      </p>
-                      {editingEmployeeId && !newUserForm.aadhaarNumber && (
-                        <p className="text-[11px] text-amber-700 mt-1">Aadhaar number has not been entered for this employee yet.</p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="block text-slate-700 font-bold mb-1 text-xs">
-                        Aadhaar Number {!editingEmployeeId && <span className="text-blue-600 font-bold ml-0.5">*</span>}
-                      </label>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        autoComplete="off"
-                        maxLength={14}
-                        value={newUserForm.aadhaarNumber}
-                        onChange={(e) => setField('aadhaarNumber', e.target.value.replace(/[^\d ]/g, '').slice(0, 14))}
-                        placeholder="12-digit Aadhaar number"
-                        aria-invalid={Boolean(errorOf('aadhaarNumber'))}
-                        title={errorOf('aadhaarNumber') || undefined}
-                        className={inputClass('aadhaarNumber')}
-                      />
-                      {fieldError('aadhaarNumber')}
-                    </div>
-                    {layoutOf(newUserForm.employmentType) !== 'bsc_msc_student' && (
+                    {/* PAN and bank details: once the employee type is chosen, for every type except M.Sc students. */}
+                    {newUserForm.employmentType && layoutOf(newUserForm.employmentType) !== 'bsc_msc_student' && (
                       <>
                         <div>
                           <label className="block text-slate-700 font-bold mb-1 text-xs">PAN</label>

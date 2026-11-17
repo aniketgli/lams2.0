@@ -76,3 +76,24 @@ describe('employee identity details', () => {
     expect(columnsFor('permanent').find((c) => c.header === 'Aadhaar')?.required).toBe(true);
   });
 });
+
+describe('blood group', () => {
+  const { parseEmployeeInput } = require('./fields') as typeof import('./fields');
+  const base = (bloodGroup: unknown) => ({ bloodGroup });
+  const errorsOf = (body: unknown, required = false) => {
+    try { parseEmployeeInput(body, null, '2026-11-17', { bloodGroup: required }); return {}; }
+    catch (e) { return ((e as { details?: Record<string, string> }).details ?? {}); }
+  };
+  test('accepted spellings and the required rule', () => {
+    expect(errorsOf(base('b+ve')).bloodGroup).toBeUndefined();
+    expect(errorsOf(base('O Negative')).bloodGroup).toBeUndefined();
+    expect(errorsOf(base('C+')).bloodGroup).toContain('Choose one of');
+    expect(errorsOf(base(''), true).bloodGroup).toBe('This field is required.');
+    expect(errorsOf(base(''), false).bloodGroup).toBeUndefined();
+  });
+  test('import template: Aadhaar after the mobile number, blood group for every type', () => {
+    const h = columnsFor('bsc_msc_student').map((c) => c.header);
+    expect(h[h.indexOf('Mobile') + 1]).toBe('Aadhaar');
+    expect(h).toContain('Blood_Group');
+  });
+});

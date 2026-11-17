@@ -72,6 +72,7 @@ export function employeePayload(user: Partial<User>): Record<string, unknown> {
     courseBatch: user.courseBatch,
     enrolledThrough: (user as { enrolledThrough?: string }).enrolledThrough,
     guideSupervisor: user.guideSupervisor,
+    bloodGroup: user.bloodGroup,
     aadhaarNumber: user.aadhaarNumber,
     panNumber: user.panNumber,
     bankName: user.bankName,
@@ -89,7 +90,7 @@ export const EMPLOYEE_FIELD_LABELS: Record<string, string> = {
   reportingManagerId: 'Reporting manager', reviewingManagerId: 'HoD', validUntilDate: 'Valid up to',
   probationEndDate: 'Probation end date', courseProgram: 'Course', courseBatch: 'Batch', enrolledThrough: 'Enrolled through',
   piName: 'PI name', guideSupervisor: 'Guide / supervisor',
-  aadhaarNumber: 'Aadhaar number', panNumber: 'PAN', bankName: 'Bank name', bankIfsc: 'IFSC', bankAccountNumber: 'Account number',
+  bloodGroup: 'Blood group', aadhaarNumber: 'Aadhaar number', panNumber: 'PAN', bankName: 'Bank name', bankIfsc: 'IFSC', bankAccountNumber: 'Account number',
 };
 
 export function describeFieldErrors(details?: Record<string, string>): string {

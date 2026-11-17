@@ -128,6 +128,7 @@ export function buildSections(
       f('gender', 'Gender', data.gender),
       f('isPwd', 'Person with disability (PwD)', yesNo(data.isPwd)),
       f('dob', 'Date of birth', data.dob, 'date'),
+      f('bloodGroup', 'Blood group', data.bloodGroup),
       f('email', 'Official email', record.email, 'email'),
       f('phone', 'Mobile number', record.phone, 'phone'),
     ],

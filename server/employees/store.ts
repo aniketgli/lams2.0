@@ -269,6 +269,7 @@ function profileDataFor(input: EmployeeInput, layout: FormLayout, refs: Resolved
   const fromForm: Record<string, unknown> = {
     gender: input.gender,
     dob: input.dob,
+    bloodGroup: input.bloodGroup,
     leaveGroup: input.leaveGroup,
     leaveCycle: refs.leaveCycle,
     leaveCycleBasis: refs.leaveCycle === 'FY' ? 'financial_year' : 'calendar_year',
@@ -313,9 +314,12 @@ function profileColumns(input: EmployeeInput, data: Record<string, unknown>) {
 async function prepare(conn: PoolConnection, body: unknown, selfId: number | null, previous: Record<string, unknown> = {}) {
   const employmentType = (body && typeof body === 'object' ? (body as Record<string, unknown>).employmentType : undefined);
   const layout = await layoutOfEmployeeType(conn, employmentType);
-  // Aadhaar: required for a new employee, and once entered it cannot be removed. Employees added before the field
+  // Aadhaar and blood group: required for a new employee, and once entered they cannot be removed. Employees added before the field
   // existed can still be saved without it.
-  const input = parseEmployeeInput(body, layout, todayInIndia(), selfId === null || Boolean(previous.aadhaarHash));
+  const input = parseEmployeeInput(body, layout, todayInIndia(), {
+    aadhaar: selfId === null || Boolean(previous.aadhaarHash),
+    bloodGroup: selfId === null || Boolean(previous.bloodGroup),
+  });
   const refs = await checkReferences(conn, input, layout!, selfId);
   return { layout: layout!, input, refs };
 }

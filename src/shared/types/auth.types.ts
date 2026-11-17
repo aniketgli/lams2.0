@@ -44,6 +44,8 @@ export interface User {
   institute?: string;
   joiningDate?: string;
   dob?: string;
+  /** A+, A-, B+, B-, AB+, AB-, O+ or O-. */
+  bloodGroup?: string;
   isOnProbation?: boolean;
   isPwd?: boolean;
   probationEndDate?: string;
