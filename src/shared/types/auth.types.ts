@@ -67,6 +67,13 @@ export interface User {
   emergencyContactName?: string;
   emergencyContactPhone?: string;
   biometricId?: string;
+  /** Full for administrators (employee form), masked (XXXX XXXX 1234) for everyone else. */
+  aadhaarNumber?: string;
+  panNumber?: string;
+  bankName?: string;
+  bankIfsc?: string;
+  /** Full for administrators, masked (XXXXXX1234) for everyone else. */
+  bankAccountNumber?: string;
   bio?: string;
   shiftId?: string; // ID of assigned Shift (falls back to default shift)
   leaveGroup?: string; // Code of the leave group (Master Settings > Leave Groups); it decides the leave types and the leave year

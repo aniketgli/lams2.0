@@ -1,6 +1,7 @@
 import { authConfig, normalizeLoginEmail } from '../config/auth.config';
 import { PATTERNS, Validator } from '../lib/validate';
 import { CADRES, RECRUITMENT_CATEGORIES } from './lists';
+import { type IdentityInput, parseIdentity } from './identity';
 
 /**
  * The employee form, field by field, as the server understands it.
@@ -85,6 +86,8 @@ export interface EmployeeInput {
   courseBatch: string | null;
   enrolledThrough: string | null;
   guideSupervisor: string | null;
+  /** Aadhaar, PAN and bank details (identity.ts). */
+  identity: IdentityInput;
 }
 
 const NAME_PATTERN = /^[\p{L}][\p{L}\p{M} .'-]*$/u;
@@ -128,7 +131,7 @@ function optionalId(v: Validator, field: string): string | null {
  * (looked up by the caller). Fields that do not belong to the layout are
  * dropped so stale values from a previous type are not kept.
  */
-export function parseEmployeeInput(body: unknown, layout: FormLayout | null, today: string): EmployeeInput {
+export function parseEmployeeInput(body: unknown, layout: FormLayout | null, today: string, aadhaarRequired = false): EmployeeInput {
   const v = new Validator(body);
   const rules = layout ? LAYOUT_RULES[layout] : null;
 
@@ -188,13 +191,16 @@ export function parseEmployeeInput(body: unknown, layout: FormLayout | null, tod
   const piName = rules?.piName ? v.optionalString('piName', { max: 255 }) : null;
   const guideSupervisor = rules?.guide ? v.optionalString('guideSupervisor', { max: 255 }) : null;
 
+  const identity = parseIdentity(v, layout);
+  if (aadhaarRequired && !identity.aadhaar) v.errors.aadhaarNumber ||= 'This field is required.';
+
   v.assert();
 
   return {
     biometricId, salutation, name, email: email!, gender, dob: dob!, phone: phone!, employmentType, shiftId,
     leaveGroup, joiningDate: joiningDate!, institute, department, designation, employeeCategory,
     permanentEmploymentType, reportingManagerId, reviewingManagerId, hodName, validUntilDate, isOnProbation, isPwd,
-    probationEndDate, isPhDEnrolled, piName, courseProgram, courseBatch, enrolledThrough, guideSupervisor,
+    probationEndDate, isPhDEnrolled, piName, courseProgram, courseBatch, enrolledThrough, guideSupervisor, identity,
   };
 }
 
@@ -216,4 +222,6 @@ export const PROFILE_DATA_FORBIDDEN = new Set([
   'id', 'name', 'email', 'role', 'roles', 'baseRole', 'moduleRoles', 'biometricId', 'biometric_id', 'suffix',
   'department', 'designation', 'employmentType', 'joiningDate', 'phone', 'officeLocation', 'institute', 'shiftId',
   'password', 'passwordHash', 'tempPassword', 'emergencyContactPhone', 'status',
+  // Full Aadhaar / account numbers are never stored as text (identity.ts keeps them encrypted).
+  'aadhaarNumber', 'bankAccountNumber',
 ]);

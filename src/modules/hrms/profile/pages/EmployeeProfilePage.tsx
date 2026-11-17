@@ -22,7 +22,7 @@ import { PageHeaderButton } from '../../../../shared/components/PageHeader';
 import { SegmentedControl } from '../../../../shared/components/SegmentedControl';
 import { PAGE_ICONS } from '../../hrmsPages';
 import { logThenDownload } from '../../../../shared/services/downloadAudit';
-import { auditorApi } from '../employeeApi';
+import { auditorApi, employeeApi } from '../employeeApi';
 import { FilterToolbar } from '../../../../shared/components/FilterToolbar';
 import { downloadCsvText, downloadTablePdf, toCsvText } from '../../../../shared/services/printTable';
 import { useSession } from '../../../../auth/SessionContext';
@@ -581,7 +581,12 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     courseProgram: '',
     courseBatch: '',
     enrolledThrough: '',
-    guideSupervisor: ''
+    guideSupervisor: '',
+    aadhaarNumber: '',
+    panNumber: '',
+    bankName: '',
+    bankIfsc: '',
+    bankAccountNumber: ''
   });
 
   /** Account being edited in the employee form, or null when adding a new one. */
@@ -975,6 +980,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
   // Handlers
   const [savingProfile, setSavingProfile] = useState(false);
+  // Editing: the full Aadhaar / bank details are being read; saving waits so they are not cleared by accident.
+  const [identityLoading, setIdentityLoading] = useState(false);
 
   const closeEmployeeForm = () => {
     setIsCreatingUser(false);
@@ -1020,16 +1027,38 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       courseProgram: u.courseProgram || '',
       courseBatch: u.courseBatch || '',
       enrolledThrough: saved.enrolledThrough || '',
-      guideSupervisor: u.guideSupervisor || ''
+      guideSupervisor: u.guideSupervisor || '',
+      // Filled from the full record below (the directory carries masked numbers only).
+      aadhaarNumber: '',
+      panNumber: u.panNumber || '',
+      bankName: u.bankName || '',
+      bankIfsc: u.bankIfsc || '',
+      bankAccountNumber: ''
     });
     setFormErrors({});
     setEditingEmployeeId(u.id);
     setIsCreatingUser(true);
+    setIdentityLoading(true);
+    employeeApi.get(u.id)
+      .then((row) => {
+        let data: Partial<UserType> = {};
+        try { data = JSON.parse(row.profileData || '{}'); } catch { data = {}; }
+        setNewUserForm((f) => ({
+          ...f,
+          aadhaarNumber: data.aadhaarNumber || '',
+          panNumber: data.panNumber || '',
+          bankName: data.bankName || '',
+          bankIfsc: data.bankIfsc || '',
+          bankAccountNumber: data.bankAccountNumber || '',
+        }));
+      })
+      .catch(() => showToast('Could not load the Aadhaar and bank details. Close the form and open it again.', 'error'))
+      .finally(() => setIdentityLoading(false));
   };
 
   const handleCreateUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (savingProfile) return;
+    if (savingProfile || identityLoading) return;
     if (!isAdmin) {
       showToast('Only administrators can create employee profiles.');
       return;
@@ -1108,7 +1137,12 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       hodName: '',
       courseProgram: '',
       courseBatch: '',
-      guideSupervisor: ''
+      guideSupervisor: '',
+      aadhaarNumber: '',
+      panNumber: '',
+      bankName: '',
+      bankIfsc: '',
+      bankAccountNumber: ''
     });
     setIsCreatingUser(true);
   };
@@ -3260,6 +3294,99 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                         </div>
                       </>
                     )}
+
+                    {/* Identity & bank details: Aadhaar for every type; PAN and bank for every type except M.Sc students. */}
+                    <div className="sm:col-span-2 pt-1 border-t border-slate-200/80">
+                      <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider pt-2">
+                        {layoutOf(newUserForm.employmentType) === 'bsc_msc_student' ? 'Identity' : 'Identity & bank details'}
+                      </p>
+                      {editingEmployeeId && !newUserForm.aadhaarNumber && (
+                        <p className="text-[11px] text-amber-700 mt-1">Aadhaar number has not been entered for this employee yet.</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-slate-700 font-bold mb-1 text-xs">
+                        Aadhaar Number {!editingEmployeeId && <span className="text-blue-600 font-bold ml-0.5">*</span>}
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        maxLength={14}
+                        value={newUserForm.aadhaarNumber}
+                        onChange={(e) => setField('aadhaarNumber', e.target.value.replace(/[^\d ]/g, '').slice(0, 14))}
+                        placeholder="12-digit Aadhaar number"
+                        aria-invalid={Boolean(errorOf('aadhaarNumber'))}
+                        title={errorOf('aadhaarNumber') || undefined}
+                        className={inputClass('aadhaarNumber')}
+                      />
+                      {fieldError('aadhaarNumber')}
+                    </div>
+                    {layoutOf(newUserForm.employmentType) !== 'bsc_msc_student' && (
+                      <>
+                        <div>
+                          <label className="block text-slate-700 font-bold mb-1 text-xs">PAN</label>
+                          <input
+                            type="text"
+                            autoComplete="off"
+                            maxLength={10}
+                            value={newUserForm.panNumber}
+                            onChange={(e) => setField('panNumber', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))}
+                            placeholder="e.g. ABCDE1234F"
+                            aria-invalid={Boolean(errorOf('panNumber'))}
+                            title={errorOf('panNumber') || undefined}
+                            className={inputClass('panNumber')}
+                          />
+                          {fieldError('panNumber')}
+                        </div>
+                        <div>
+                          <label className="block text-slate-700 font-bold mb-1 text-xs">Bank Name</label>
+                          <input
+                            type="text"
+                            autoComplete="off"
+                            maxLength={100}
+                            value={newUserForm.bankName}
+                            onChange={(e) => setField('bankName', e.target.value)}
+                            placeholder="e.g. State Bank of India"
+                            aria-invalid={Boolean(errorOf('bankName'))}
+                            title={errorOf('bankName') || undefined}
+                            className={inputClass('bankName')}
+                          />
+                          {fieldError('bankName')}
+                        </div>
+                        <div>
+                          <label className="block text-slate-700 font-bold mb-1 text-xs">IFSC</label>
+                          <input
+                            type="text"
+                            autoComplete="off"
+                            maxLength={11}
+                            value={newUserForm.bankIfsc}
+                            onChange={(e) => setField('bankIfsc', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 11))}
+                            placeholder="e.g. SBIN0001234"
+                            aria-invalid={Boolean(errorOf('bankIfsc'))}
+                            title={errorOf('bankIfsc') || undefined}
+                            className={inputClass('bankIfsc')}
+                          />
+                          {fieldError('bankIfsc')}
+                        </div>
+                        <div>
+                          <label className="block text-slate-700 font-bold mb-1 text-xs">Account Number</label>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            autoComplete="off"
+                            maxLength={18}
+                            value={newUserForm.bankAccountNumber}
+                            onChange={(e) => setField('bankAccountNumber', e.target.value.replace(/\D/g, '').slice(0, 18))}
+                            placeholder="Bank account number"
+                            aria-invalid={Boolean(errorOf('bankAccountNumber'))}
+                            title={errorOf('bankAccountNumber') || undefined}
+                            className={inputClass('bankAccountNumber')}
+                          />
+                          {fieldError('bankAccountNumber')}
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -3267,7 +3394,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
               {/* Pinned Modal Card Footer */}
               <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-end space-x-3 shrink-0 rounded-b-xl">
                 <Button type="button" variant="outline" size="sm" onClick={closeEmployeeForm} disabled={savingProfile}>Cancel</Button>
-                <Button type="submit" variant="primary" size="sm" loading={savingProfile} loadingText="Saving…">{editingEmployeeId ? 'Save changes' : 'Add employee'}</Button>
+                <Button type="submit" variant="primary" size="sm" loading={savingProfile || identityLoading} loadingText={identityLoading ? 'Loading…' : 'Saving…'}>{editingEmployeeId ? 'Save changes' : 'Add employee'}</Button>
               </div>
             </form>
           </div>
@@ -3763,6 +3890,11 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       {/* User Project & Career Posting History Modal */}
       <UserProjectHistoryModal
         user={historyUser}
+        current={historyUser ? {
+          typeLabel: employeeTypeOptions.find((o) => o.value === historyUser.employmentType)?.label ?? historyUser.employmentType ?? null,
+          layout: layoutOf(historyUser.employmentType),
+          managerName: [...users, ...systemUsers].find((m) => m.id === historyUser.reportingManagerId)?.name ?? historyUser.piName ?? null,
+        } : null}
         isOpen={!!historyUser}
         onClose={() => setHistoryUser(null)}
       />

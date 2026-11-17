@@ -2,6 +2,7 @@ import type { RowDataPacket } from 'mysql2/promise';
 import { pool } from '../../src/db';
 import { ROLE_LABELS } from '../lib/roles';
 import { FormLayout, isFormLayout, retirementDate } from './fields';
+import { asksBankDetails } from './identity';
 import { photoUrls } from './photos';
 import { EmployeeRecord, Viewer, getEmployee } from './store';
 
@@ -222,8 +223,21 @@ export function buildSections(
   // Shown in place of the old free-text office location.
   attendance.push(f('institute', 'Organization', resolved.institute));
 
+  // Shown masked here, even to administrators (they see full numbers only in the employee form).
+  const last4 = (v: unknown) => (typeof v === 'string' ? v.replace(/\D/g, '').slice(-4) : '');
+  const identity: ProfileField[] = [f('aadhaar', 'Aadhaar number', last4(data.aadhaarNumber) ? `XXXX XXXX ${last4(data.aadhaarNumber)}` : null)];
+  if (asksBankDetails(layout)) {
+    identity.push(
+      f('pan', 'PAN', data.panNumber),
+      f('bankName', 'Bank', data.bankName),
+      f('bankIfsc', 'IFSC', data.bankIfsc),
+      f('bankAccount', 'Account number', last4(data.bankAccountNumber) ? `XXXXXX${last4(data.bankAccountNumber)}` : null),
+    );
+  }
+
   return [
     personal,
+    { id: 'identity', title: asksBankDetails(layout) ? 'Identity & bank details' : 'Identity', fields: identity },
     { id: 'work', title: layout === 'diploma_trainee' || layout === 'bsc_msc_student' || layout === 'phd_student' || layout === 'intern' ? 'Programme details' : 'Employment details', fields: work },
     { id: 'reporting', title: 'Reporting', fields: reporting },
     { id: 'attendance', title: 'Attendance & leave', fields: attendance },
