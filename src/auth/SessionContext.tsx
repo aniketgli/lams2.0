@@ -49,6 +49,8 @@ interface SessionContextValue {
   skipPasswordChange: () => Promise<void>;
   /** Last user activity in any tab (epoch ms). */
   getLastActivity: () => number;
+  /** Checks with the server before an inactivity sign-out; true when the session really is idle. */
+  confirmIdle: () => Promise<boolean>;
   /** Milliseconds of inactivity after which this browser signs out. */
   idleLimitMs: number;
   /** "I'm still here": records activity and tells the server immediately. */
@@ -92,6 +94,18 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setNotice(message);
   }, []);
 
+  /**
+   * The server counts activity from every tab and device of the session. A tab that was asleep or frozen (and missed
+   * the other tabs' activity messages) takes the server's count, so it never signs everyone out on a stale clock.
+   * Relative seconds are used, so a wrong PC clock does not matter.
+   */
+  const adoptServerActivity = useCallback((payload: SessionPayload) => {
+    const left = payload.limits?.idleSecondsLeft;
+    if (typeof left !== 'number' || !Number.isFinite(left)) return;
+    const serverLast = Date.now() - Math.max(0, payload.limits.idleSeconds - left) * 1000;
+    lastActivityRef.current = Math.max(lastActivityRef.current, serverLast);
+  }, []);
+
   /** Ask the server who we are. `passive` checks do not count as user activity. */
   const sync = useCallback(async (passive: boolean) => {
     const activityAtStart = lastActivityRef.current;
@@ -99,6 +113,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const payload = await api<SessionPayload>('/auth/me', { passive });
       lastSyncAtRef.current = Date.now();
       if (!passive) lastSyncedActivityRef.current = activityAtStart;
+      adoptServerActivity(payload);
       applySession(payload);
     } catch (error) {
       if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
@@ -110,7 +125,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
       // A network blip while signed in keeps the current screen; the next check retries.
     }
-  }, [applySession, signedOut]);
+  }, [applySession, signedOut, adoptServerActivity]);
 
   const refresh = useCallback(() => sync(true), [sync]);
 
@@ -129,6 +144,8 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (message?.type === 'activity') {
           lastActivityRef.current = Math.max(lastActivityRef.current, message.at);
         } else if (message?.type === 'session-changed') {
+          // Signing in or switching role in another tab is the user being active.
+          lastActivityRef.current = Date.now();
           void sync(true);
         } else if (message?.type === 'signed-out') {
           signedOut(message.message);
@@ -257,14 +274,26 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [sync, tell]);
 
   const getLastActivity = useCallback(() => lastActivityRef.current, []);
+
+  /**
+   * Before signing out for inactivity, ask the server (passively): another tab may have been in use. Returns true
+   * only when the session is still idle by both counts; when the server has already ended it, the sign-out notice
+   * comes from the server instead.
+   */
+  const confirmIdle = useCallback(async () => {
+    await sync(true);
+    if (statusRef.current !== 'signedIn') return false;
+    const limit = Math.max(60_000, (session?.limits.idleSeconds ?? 900) * 1000 - IDLE_SAFETY_MARGIN_MS);
+    return Date.now() - lastActivityRef.current >= limit;
+  }, [sync, session]);
   const idleLimitMs = Math.max(60_000, (session?.limits.idleSeconds ?? 900) * 1000 - IDLE_SAFETY_MARGIN_MS);
 
   const value = useMemo<SessionContextValue>(
     () => ({
       status, session, notice, login, logout, enterModule, switchRole, exitModule, refresh, changePassword, skipPasswordChange,
-      getLastActivity, idleLimitMs, stayActive,
+      getLastActivity, confirmIdle, idleLimitMs, stayActive,
     }),
-    [status, session, notice, login, logout, enterModule, switchRole, exitModule, refresh, changePassword, skipPasswordChange, getLastActivity, idleLimitMs, stayActive],
+    [status, session, notice, login, logout, enterModule, switchRole, exitModule, refresh, changePassword, skipPasswordChange, getLastActivity, confirmIdle, idleLimitMs, stayActive],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

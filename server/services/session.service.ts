@@ -15,7 +15,8 @@ export interface SessionPayload {
   activeModule: ModuleId | null;
   activeRole: RoleId | null;
   /** Limits the browser mirrors to warn before sign-out. The server enforces them regardless. */
-  limits: { idleSeconds: number; expiresAt: string };
+  /** idleSecondsLeft: by the server's own clock, counting activity from every tab and device of this session. */
+  limits: { idleSeconds: number; idleSecondsLeft: number; expiresAt: string };
 }
 
 /**
@@ -43,6 +44,7 @@ export async function buildSessionPayload(req: Request): Promise<SessionPayload>
     activeRole: auth.activeRole,
     limits: {
       idleSeconds: Math.round(sessionConfig.idleMs / 1000),
+      idleSecondsLeft: Math.max(0, Math.round((sessionConfig.idleMs - (Date.now() - Number(req.session.lastActivityAt))) / 1000)),
       expiresAt: new Date(Number(req.session.loginAt) + sessionConfig.maxMs).toISOString(),
     },
   };

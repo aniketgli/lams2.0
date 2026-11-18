@@ -12,7 +12,7 @@ const WARN_BEFORE_EXPIRY_MS = 5 * 60_000;
  * screen is cleared on time.
  */
 export const SessionTimeoutGuard: React.FC = () => {
-  const { session, getLastActivity, idleLimitMs, stayActive, logout } = useSession();
+  const { session, getLastActivity, confirmIdle, idleLimitMs, stayActive, logout } = useSession();
   const [now, setNow] = useState(() => Date.now());
   const [busy, setBusy] = useState(false);
   const loggingOut = useRef(false);
@@ -31,12 +31,18 @@ export const SessionTimeoutGuard: React.FC = () => {
     if (loggingOut.current) return;
     if (idleLeftMs <= 0) {
       loggingOut.current = true;
-      void logout(`You were signed out after ${Math.round((session?.limits.idleSeconds ?? 900) / 60)} minutes of inactivity.`);
+      // A tab that was asleep may only think it is idle: the server knows about activity in the other tabs.
+      void confirmIdle().then((idle) => {
+        if (idle) return logout(`You were signed out after ${Math.round((session?.limits.idleSeconds ?? 900) / 60)} minutes of inactivity.`);
+        loggingOut.current = false;
+        setNow(Date.now());
+        return undefined;
+      });
     } else if (expiryLeftMs <= 0) {
       loggingOut.current = true;
       void logout('Your session has reached its time limit. Please sign in again.');
     }
-  }, [idleLeftMs, expiryLeftMs, logout, session]);
+  }, [idleLeftMs, expiryLeftMs, logout, confirmIdle, session]);
 
   const showIdleWarning = idleLeftMs > 0 && idleLeftMs <= WARN_BEFORE_IDLE_MS;
   const showExpiryNotice = !showIdleWarning && expiryLeftMs > 0 && expiryLeftMs <= WARN_BEFORE_EXPIRY_MS;
