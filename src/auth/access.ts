@@ -49,5 +49,6 @@ export interface SessionPayload {
   activeModule: ServerModuleId | null;
   activeRole: UserRole | null;
   /** Session limits from the server; the browser only uses them to warn in time. */
-  limits: { idleSeconds: number; expiresAt: string };
+  /** idleSecondsLeft: the server's count, including activity in other tabs (older servers omit it). */
+  limits: { idleSeconds: number; idleSecondsLeft?: number; expiresAt: string };
 }
