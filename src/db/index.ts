@@ -6,9 +6,22 @@ import { databaseTarget } from './connection';
 /** Which database this server uses (from DATABASE_URL or DB_HOST/DB_USER/DB_PASSWORD/DB_NAME). */
 export const dbTarget = databaseTarget();
 
+/**
+ * TIME columns the screens work with as "HH:MM" (shift, manual-attendance, outdoor-duty and report times).
+ * The database keeps them as real TIME values; they are read back in the same "HH:MM" form the code always used.
+ */
+const HHMM_COLUMNS = new Set(['start_time', 'end_time', 'in_time', 'out_time', 'original_in', 'original_out', 'send_time']);
+
 /** Shared connection pool. Also used directly by the session store. */
 export const pool = mysql.createPool({
   ...dbTarget,
+  typeCast(field, next) {
+    if (field.type === 'TIME' && HHMM_COLUMNS.has(field.name)) {
+      const value = field.string();
+      return value === null ? null : value.slice(0, 5);
+    }
+    return next();
+  },
   // Thousands of people use the portal together, so the pool is sized for that (MySQL's
   // max_connections must be higher than this number times the number of server processes).
   connectionLimit: Number(process.env.DB_POOL_SIZE || 40),
