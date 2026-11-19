@@ -135,7 +135,7 @@ function validateShift(body: unknown) {
 }
 
 async function shiftAssignments(id: number): Promise<number> {
-  const [row] = await db.select({ n: sql<number>`COUNT(*)` }).from(employee_profiles).where(eq(employee_profiles.shiftId, String(id)));
+  const [row] = await db.select({ n: sql<number>`COUNT(*)` }).from(employee_profiles).where(eq(employee_profiles.shiftId, id));
   return Number(row?.n ?? 0);
 }
 
