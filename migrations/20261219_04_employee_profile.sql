@@ -202,13 +202,21 @@ CALL lams_exec_if(NOT lams_has_index('employee_profiles', 'idx_profiles_departme
 
 -- Remove the copied keys from the JSON; drop the column when nothing is left in it
 CALL lams_exec_if(lams_has_column('employee_profiles', 'profile_data'),
-  'UPDATE employee_profiles SET profile_data = NULL WHERE profile_data IS NOT NULL AND (NOT JSON_VALID(profile_data) OR JSON_LENGTH(JSON_REMOVE(profile_data,
-     ''$.gender'', ''$.dob'', ''$.bloodGroup'', ''$.leaveGroup'', ''$.leaveCycle'', ''$.leaveCycleBasis'', ''$.employeeCategory'', ''$.permanentEmploymentType'',
+  'UPDATE employee_profiles SET profile_data = NULL WHERE TRIM(profile_data) IN ('''', ''{}'', ''null'')');
+CALL lams_exec_if(lams_has_column('employee_profiles', 'profile_data'),
+  'UPDATE employee_profiles SET profile_data = IF(JSON_LENGTH(JSON_REMOVE(profile_data, ''$.gender'', ''$.dob'', ''$.bloodGroup'', ''$.leaveGroup'', ''$.leaveCycle'', ''$.leaveCycleBasis'', ''$.employeeCategory'', ''$.permanentEmploymentType'',
      ''$.reportingManagerId'', ''$.reviewingManagerId'', ''$.hodName'', ''$.validUntilDate'', ''$.isOnProbation'', ''$.isPwd'', ''$.probationEndDate'',
      ''$.isPhDEnrolled'', ''$.piName'', ''$.courseProgram'', ''$.courseBatch'', ''$.enrolledThrough'', ''$.guideSupervisor'', ''$.retirementDate'',
      ''$.statusChangeReason'', ''$.statusEffectiveDate'', ''$.statusChangedBy'', ''$.status'',
      ''$.aadhaarEnc'', ''$.aadhaarHash'', ''$.aadhaarLast4'', ''$.panNumber'', ''$.bankName'', ''$.bankIfsc'', ''$.bankAccountEnc'', ''$.bankAccountHash'', ''$.bankAccountLast4'',
-     ''$.aadhaarNumber'', ''$.bankAccountNumber'')) = 0)');
+     ''$.aadhaarNumber'', ''$.bankAccountNumber'')) = 0, NULL,
+     JSON_REMOVE(profile_data, ''$.gender'', ''$.dob'', ''$.bloodGroup'', ''$.leaveGroup'', ''$.leaveCycle'', ''$.leaveCycleBasis'', ''$.employeeCategory'', ''$.permanentEmploymentType'',
+     ''$.reportingManagerId'', ''$.reviewingManagerId'', ''$.hodName'', ''$.validUntilDate'', ''$.isOnProbation'', ''$.isPwd'', ''$.probationEndDate'',
+     ''$.isPhDEnrolled'', ''$.piName'', ''$.courseProgram'', ''$.courseBatch'', ''$.enrolledThrough'', ''$.guideSupervisor'', ''$.retirementDate'',
+     ''$.statusChangeReason'', ''$.statusEffectiveDate'', ''$.statusChangedBy'', ''$.status'',
+     ''$.aadhaarEnc'', ''$.aadhaarHash'', ''$.aadhaarLast4'', ''$.panNumber'', ''$.bankName'', ''$.bankIfsc'', ''$.bankAccountEnc'', ''$.bankAccountHash'', ''$.bankAccountLast4'',
+     ''$.aadhaarNumber'', ''$.bankAccountNumber''))
+    WHERE profile_data IS NOT NULL AND JSON_VALID(profile_data)');
 CALL lams_exec_if(lams_has_column('employee_profiles', 'profile_data'),
   'SELECT COUNT(*) AS profiles_with_unknown_json_kept FROM employee_profiles WHERE profile_data IS NOT NULL');
 CALL lams_exec_if(lams_has_column('employee_profiles', 'profile_data') AND (SELECT COUNT(*) FROM employee_profiles WHERE profile_data IS NOT NULL) = 0,

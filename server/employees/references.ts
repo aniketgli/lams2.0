@@ -1,3 +1,4 @@
+import { lookupTable } from '../lib/lookups';
 import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
 import { pool } from '../../src/db';
 import { badRequest } from '../lib/http';
@@ -22,15 +23,9 @@ async function rows(q: Querier, sql: string, params: unknown[]): Promise<RowData
 export async function layoutOfEmployeeType(q: Querier, code: unknown): Promise<FormLayout | null> {
   if (typeof code !== 'string' || !code.trim()) return null;
   const [row] = await rows(q,
-    "SELECT metadata FROM lookup_values WHERE lookup_type = 'employee_type' AND code = ? AND UPPER(status) = 'ACTIVE' LIMIT 1",
+    "SELECT form_layout FROM employee_types WHERE code = ? AND UPPER(status) = 'ACTIVE' LIMIT 1",
     [code.trim()]);
-  if (!row) return null;
-  try {
-    const layout = JSON.parse(String(row.metadata || '{}'))?.formLayout;
-    return isFormLayout(layout) ? layout : null;
-  } catch {
-    return null;
-  }
+  return row && isFormLayout(row.form_layout) ? row.form_layout : null;
 }
 
 function jsonObject(value: unknown): Record<string, unknown> {
@@ -46,7 +41,7 @@ function jsonObject(value: unknown): Record<string, unknown> {
 /** A comma-separated master value ("a,b") as a list. */
 
 async function activeLookup(q: Querier, type: string, code: string): Promise<boolean> {
-  return (await rows(q, "SELECT 1 FROM lookup_values WHERE lookup_type = ? AND code = ? AND UPPER(status) = 'ACTIVE' LIMIT 1", [type, code])).length > 0;
+  return (await rows(q, `SELECT 1 FROM ${lookupTable(type)} WHERE code = ? AND UPPER(status) = 'ACTIVE' LIMIT 1`, [code])).length > 0;
 }
 
 const MASTER_TABLES: Record<Exclude<MasterRef, 'batches' | 'departmentOrProject'>, string> = {

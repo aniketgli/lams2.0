@@ -1,3 +1,4 @@
+import { lookupTable } from '../lib/lookups';
 import type { Request } from 'express';
 import type { RowDataPacket } from 'mysql2/promise';
 import { pool } from '../../src/db';
@@ -41,7 +42,7 @@ function parseData(value: string): Record<string, unknown> {
 }
 
 async function lookupNames(type: string): Promise<Map<string, string>> {
-  const [rows] = await pool.query<RowDataPacket[]>('SELECT code, name FROM lookup_values WHERE lookup_type = ?', [type]);
+  const [rows] = await pool.query<RowDataPacket[]>(`SELECT code, name FROM ${lookupTable(type)}`);
   return new Map(rows.map((r) => [String(r.code), String(r.name)]));
 }
 

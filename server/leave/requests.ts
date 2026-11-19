@@ -1,3 +1,4 @@
+import { LEAVE_TYPE_SELECT } from './leaveTypeSql';
 import { profileJsonSql, profileObject } from '../employees/profileSql';
 import { MAX_LIST_ROWS, listLimitProblem, visibilityClause, canSeeEmployee } from '../lib/visibility';
 import { INCREMENT, NOW, assertUndo, decide, moveStatus, undoProblem, undoTarget, type UndoCheck } from '../lib/approvalFlow';
@@ -472,7 +473,7 @@ async function attachQuotas(q: { query: typeof pool.query }, policies: Policy[])
 }
 
 export async function loadPolicy(q: { query: typeof pool.query }, id: number): Promise<Policy | null> {
-  const [row] = await rows(q, 'SELECT * FROM leave_types WHERE id = ? LIMIT 1', [id]);
+  const [row] = await rows(q, `SELECT ${LEAVE_TYPE_SELECT} FROM leave_types t WHERE t.id = ? LIMIT 1`, [id]);
   if (!row) return null;
   const [policy] = await attachQuotas(q, [toPolicy(row)]);
   return policy;
@@ -1463,7 +1464,7 @@ export async function applicableEmployees(viewer: Viewer): Promise<{ id: string;
 export async function applyTypeIds(userIds: number[]): Promise<Map<number, string[]>> {
   const out = new Map<number, string[]>();
   if (!userIds.length) return out;
-  const policies = (await rows(pool, "SELECT * FROM leave_types WHERE status = 'active'")).map(toPolicy);
+  const policies = (await rows(pool, `SELECT ${LEAVE_TYPE_SELECT} FROM leave_types t WHERE t.status = 'active'`)).map(toPolicy);
   const people = await rows(pool,
     `SELECT u.id, p.employment_type, ${profileJsonSql('p')} AS profile_data FROM users u LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE u.id IN (${userIds.map(() => '?').join(',')})`, userIds);
   const groupMap = await groupLeaveTypeMap(pool);
@@ -1496,7 +1497,7 @@ export async function listBalances(viewer: Viewer, yearRaw: unknown): Promise<{ 
   const year = yearRaw === undefined || yearRaw === '' ? Number(todayInIndia().slice(0, 4)) : Number(yearRaw);
   if (!Number.isInteger(year) || year < 2000 || year > 2100) throw badRequest('Choose a year between 2000 and 2100.');
   try {
-    const typeRows = await rows(pool, "SELECT * FROM leave_types WHERE status = 'active' ORDER BY name");
+    const typeRows = await rows(pool, `SELECT ${LEAVE_TYPE_SELECT} FROM leave_types t WHERE t.status = 'active' ORDER BY t.name`);
     const policies = await attachQuotas(pool, typeRows.map(toPolicy));
     const people = await rows(pool,
       `SELECT u.id, u.biometric_id, u.name, p.designation, p.department, p.employment_type, p.joining_date, p.shift_id, ${profileJsonSql('p')} AS profile_data
@@ -1547,7 +1548,7 @@ export async function listBalances(viewer: Viewer, yearRaw: unknown): Promise<{ 
     });
     const found = await rows(pool, 'SELECT cycle_year AS y FROM leave_balances UNION SELECT cycle_year AS y FROM leave_requests');
     const years = [...new Set([...found.map((f) => Number(f.y)), Number(today.slice(0, 4)), year])].sort((a, b) => b - a);
-    const employeeTypes = (await rows(pool, "SELECT code, name FROM lookup_values WHERE lookup_type = 'employee_type' ORDER BY name")).map((t) => ({ code: String(t.code), name: String(t.name) }));
+    const employeeTypes = (await rows(pool, 'SELECT code, name FROM employee_types ORDER BY name')).map((t) => ({ code: String(t.code), name: String(t.name) }));
     return { year, years, employeeTypes, types: policies.map((p) => ({ id: String(p.id), code: p.code, name: p.name, isDebited: p.debited })), rows: out };
   } catch (error) {
     missingTable(error);
@@ -1571,7 +1572,7 @@ export async function leaveHistory(viewer: Viewer, userIdRaw: unknown): Promise<
     if (!person || !canSeeBalance(viewer, { ...person, user_id: person.id })) throw notFound('Employee not found.');
     const data = profileData(person.profile_data);
     const basis: 'CY' | 'FY' = data.leaveCycle === 'FY' ? 'FY' : 'CY';
-    const policies = await attachQuotas(pool, (await rows(pool, 'SELECT * FROM leave_types ORDER BY name')).map(toPolicy));
+    const policies = await attachQuotas(pool, (await rows(pool, `SELECT ${LEAVE_TYPE_SELECT} FROM leave_types t ORDER BY t.name`)).map(toPolicy));
     const grants = await rows(pool, 'SELECT cycle_year, cycle_type, leave_type_id, total, carry_forward FROM leave_balances WHERE user_id = ?', [userId]);
     const own = await asOfFilter(pool, 'r', 'r.leave_type_id');
     const base = await asOfFilter(pool, 'r', 't.debit_from_type_id');
