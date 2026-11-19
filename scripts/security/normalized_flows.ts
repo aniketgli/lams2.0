@@ -78,7 +78,7 @@ async function main(): Promise<void> {
   const tiger = (projects.body?.records ?? []).find((r: any) => r.name === 'Tiger Project');
   check('Project reads its PI from pi_name', tiger?.fields?.pi === 'Dr. Stripes', JSON.stringify(tiger ?? projects.text).slice(0, 160));
 
-  const sal = await req('POST', '/api/hrms/masters/salutation', { name: 'Prof.', code: 'Prof.', status: 'ACTIVE' });
+  const sal = await req('POST', '/api/hrms/masters/salutation', { name: 'CI Shri', code: 'CI-SHRI', status: 'ACTIVE' });
   check('A new salutation goes into salutations (at the end of the list)', sal.status === 201 && Number(sal.body?.record?.sortOrder) > 0, `${sal.status} ${sal.text.slice(0, 200)}`);
 
   const used = (await req('GET', '/api/hrms/masters/designations')).body?.records?.find((r: any) => r.name === 'Technical Assistant');
@@ -117,9 +117,10 @@ async function main(): Promise<void> {
   check('Leave type reads employee types and purposes from their tables', JSON.stringify(lt?.employeeTypes) === '["contractual","permanent"]' || JSON.stringify(lt?.employeeTypes) === '["permanent","contractual"]', JSON.stringify(lt?.employeeTypes));
   check('Leave type purposes kept in order, without repeats', JSON.stringify(lt?.purposes) === '["Sports","Blood donation"]', JSON.stringify(lt?.purposes));
   if (lt) {
-    const put = await req('PUT', `/api/hrms/leave-types/${lt.id}`, { ...lt, employeeTypes: ['permanent'], purposes: ['Sports', 'Chess'], reason: 'ci' });
+    // contractual keeps its own quota row, so it stays in the list (an app rule)
+    const put = await req('PUT', `/api/hrms/leave-types/${lt.id}`, { ...lt, employeeTypes: ['contractual', 'permanent', 'msc'], purposes: ['Sports', 'Chess'], reason: 'ci' });
     const after = (await req('GET', '/api/hrms/leave-types')).body?.types?.find((t: any) => t.code === 'CISCL');
-    check('Leave type lists saved', put.status === 200 && JSON.stringify(after?.employeeTypes) === '["permanent"]' && JSON.stringify(after?.purposes) === '["Sports","Chess"]',
+    check('Leave type lists saved', put.status === 200 && [...(after?.employeeTypes ?? [])].sort().join(',') === 'contractual,msc,permanent' && JSON.stringify(after?.purposes) === '["Sports","Chess"]',
       `${put.status} ${put.status === 200 ? JSON.stringify([after?.employeeTypes, after?.purposes]) : put.text.slice(0, 200)}`);
   }
 
