@@ -67,6 +67,8 @@ jobs:
           nohup node server.ts > /tmp/server.log 2>&1 &
           for i in $(seq 1 60); do curl -sf http://127.0.0.1:3000/api/health/ready && break; sleep 1; done
           curl -sf http://127.0.0.1:3000/api/health/ready
+      - name: Normalized tables work through the app
+        run: bun scripts/security/normalized_flows.ts
       - name: Attack it
         run: SECURITY_REPORT=/tmp/security-report.md SECURITY_UPLOAD_DIR=/tmp/lams2-uploads bun scripts/security/pentest.ts
       - name: Server log
