@@ -1,4 +1,4 @@
-import { mysqlTable, varchar, text, longtext, timestamp, boolean, int, decimal, bigint, uniqueIndex, date, json, datetime, time, index } from 'drizzle-orm/mysql-core';
+import { mysqlTable, varchar, text, longtext, timestamp, boolean, int, decimal, bigint, uniqueIndex, date, json, datetime, time, index, foreignKey } from 'drizzle-orm/mysql-core';
 
 // Legacy tables (sessions, profile_master_records and the three old master audit-log tables) are no longer
 // used; migrations/20261212_retire_legacy_tables.sql renames them. Do not run `drizzle-kit push` on the live database.
@@ -97,19 +97,22 @@ export const employee_profiles = mysqlTable('employee_profiles', {
 
 /** Aadhaar (encrypted, keyed hash for uniqueness, last 4 digits) and PAN: one row per employee. */
 export const employee_identity = mysqlTable('employee_identity', {
-  biometricId: varchar('biometric_id', { length: 4 }).primaryKey().references(() => employee_profiles.biometricId, { onDelete: 'cascade', onUpdate: 'cascade' }),
+  biometricId: varchar('biometric_id', { length: 4 }).primaryKey(),
   aadhaarEnc: varchar('aadhaar_enc', { length: 255 }),
   aadhaarHash: varchar('aadhaar_hash', { length: 64 }).unique('uq_identity_aadhaar_hash'),
   aadhaarLast4: varchar('aadhaar_last4', { length: 4 }),
   pan: varchar('pan', { length: 10 }).unique('uq_identity_pan'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
-});
+}, (t) => ({
+  employee: foreignKey({ name: 'fk_identity_employee', columns: [t.biometricId], foreignColumns: [employee_profiles.biometricId] })
+    .onDelete('cascade').onUpdate('cascade'),
+}));
 
 /** Bank accounts of an employee (account number encrypted, keyed hash unique within a bank). One primary today. */
 export const employee_bank_accounts = mysqlTable('employee_bank_accounts', {
   id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
-  biometricId: varchar('biometric_id', { length: 4 }).notNull().references(() => employee_profiles.biometricId, { onDelete: 'cascade', onUpdate: 'cascade' }),
+  biometricId: varchar('biometric_id', { length: 4 }).notNull(),
   bankName: varchar('bank_name', { length: 100 }).notNull(),
   ifsc: varchar('ifsc', { length: 11 }).notNull(),
   accountEnc: varchar('account_enc', { length: 255 }).notNull(),
@@ -120,6 +123,8 @@ export const employee_bank_accounts = mysqlTable('employee_bank_accounts', {
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 }, (t) => ({
   byEmployee: index('idx_bank_accounts_employee').on(t.biometricId),
+  employee: foreignKey({ name: 'fk_bank_account_employee', columns: [t.biometricId], foreignColumns: [employee_profiles.biometricId] })
+    .onDelete('cascade').onUpdate('cascade'),
 }));
 
 export const shifts = mysqlTable('shifts', {
