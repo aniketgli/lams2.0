@@ -12,13 +12,13 @@ import { changedFields, writeMasterAuditSql } from '../masters/audit';
 import { defaultPasswordHash } from '../masters/accountSettings';
 import { photoUrls } from './photos';
 import {
-  EmployeeInput, FormLayout, PROFILE_DATA_FORBIDDEN, PROFILE_DATA_KEYS, accountValidUpto, parseEmployeeInput, retirementDate,
+  EmployeeInput, FormLayout, LAYOUT_RULES, PROFILE_DATA_FORBIDDEN, PROFILE_DATA_KEYS, accountValidUpto, parseEmployeeInput, retirementDate,
 } from './fields';
 import { ResolvedReferences, checkReferences, layoutOfEmployeeType } from './references';
 import { isSystemRow, systemAccountError } from '../lib/systemAccounts';
 import { IDENTITY_STORED_KEYS, identityAudit, identityView, storeIdentity } from './identity';
 import { identityOwner, loadIdentities, saveIdentity } from './identityStore';
-import { profileColumn, profileJsonSql, profileObject, profileValues } from './profileSql';
+import { placementValues, profileColumn, profileJsonSql, profileObject, profileValues } from './profileSql';
 import { creditProRata, spanForNewEmployee, spansForExtension } from '../leave/proRata';
 
 /**
@@ -261,12 +261,13 @@ function grantsView(grants: { moduleId: string; roleId: string }[]): Record<stri
 // Create / update
 // ---------------------------------------------------------------------------
 
-function profileDataFor(input: EmployeeInput, layout: FormLayout, refs: ResolvedReferences, previous: Record<string, unknown>): Record<string, unknown> {
-  // Keep what other screens store here (leave balances, avatar, …) but replace every form field.
+/**
+ * The profile object of a saved form (form keys, as profileJsonSql reads it back), including the values that are
+ * worked out rather than stored (leave year, HoD name, default PI, superannuation date), so the audit trail and the
+ * "nothing changed" check compare like with like.
+ */
+function profileDataFor(input: EmployeeInput, layout: FormLayout, refs: ResolvedReferences): Record<string, unknown> {
   const data: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(previous)) {
-    if (!PROFILE_DATA_FORBIDDEN.has(key) && !(PROFILE_DATA_KEYS as readonly string[]).includes(key)) data[key] = value;
-  }
   const fromForm: Record<string, unknown> = {
     gender: input.gender,
     dob: input.dob,
@@ -297,18 +298,38 @@ function profileDataFor(input: EmployeeInput, layout: FormLayout, refs: Resolved
   return data;
 }
 
-function profileColumns(input: EmployeeInput, data: Record<string, unknown>): Record<string, string | number | null> {
+/** Whether the employee's department is an institute unit (false: a project), by what the layout allows. */
+async function departmentIsOrgUnit(conn: Querier, layout: FormLayout, department: string | null): Promise<boolean> {
+  const allowed = LAYOUT_RULES[layout]?.department;
+  if (!department || allowed === 'projects') return false;
+  if (allowed === 'organizations') return true;
+  const [unit] = await rows(conn, 'SELECT 1 FROM organization_units WHERE name = ? LIMIT 1', [department]);
+  return Boolean(unit);
+}
+
+/**
+ * Column values of employee_profiles for a saved form. department / designation are generated columns (made from
+ * org_unit_name / project_name and designation_name), so they are never written.
+ */
+async function profileColumns(conn: Querier, input: EmployeeInput, layout: FormLayout, refs: ResolvedReferences, data: Record<string, unknown>): Promise<Record<string, string | number | null>> {
+  const values = profileValues(data);
+  // A researcher's PI defaults to the reporting manager, worked out when reading; only a different name is stored.
+  values.pi_name = input.piName && input.piName !== refs.reportingManagerName ? input.piName.slice(0, 255) : null;
   return {
     suffix: input.salutation,
-    // department / designation are NOT NULL in the database; types without them store ''.
-    department: input.department ?? '',
-    designation: input.designation ?? '',
     employment_type: input.employmentType,
     joining_date: input.joiningDate,
     phone: input.phone,
     institute: input.institute,
     shift_id: input.shiftId,
-    ...profileValues(data),
+    ...placementValues(layout, {
+      department: input.department,
+      departmentIsOrgUnit: await departmentIsOrgUnit(conn, layout, input.department),
+      designation: input.designation,
+      courseProgram: input.courseProgram,
+      courseBatch: input.courseBatch,
+    }),
+    ...values,
   };
 }
 
@@ -399,9 +420,9 @@ export async function insertEmployee(conn: PoolConnection, req: Request, body: u
   );
   const userId = Number((result as { insertId: number }).insertId);
 
-  const newData = profileDataFor(input, layout, refs, {});
+  const newData = profileDataFor(input, layout, refs);
   await assertIdentityUnique(conn, storeIdentity(newData, input.identity, {}, layout), input.biometricId);
-  const columns = profileColumns(input, newData);
+  const columns = await profileColumns(conn, input, layout, refs, newData);
   await conn.query(
     `INSERT INTO employee_profiles (biometric_id, ${Object.keys(columns).join(', ')}) VALUES (?, ${Object.keys(columns).map(() => '?').join(', ')})`,
     [input.biometricId, ...Object.values(columns)],
@@ -458,15 +479,16 @@ async function updateEmployeeImpl(req: Request, id: number, body: unknown): Prom
       const { layout, input, refs } = await prepare(conn, { ...(body as object), biometricId: before.biometricId }, id, existing.rawData);
       await assertUnique(conn, input, id);
 
-      const data = profileDataFor(input, layout, refs, existing.rawData);
+      const data = profileDataFor(input, layout, refs);
       await assertIdentityUnique(conn, storeIdentity(data, input.identity, existing.rawData, layout), before.biometricId);
-      const columns = profileColumns(input, data);
+      const columns = await profileColumns(conn, input, layout, refs, data);
       const validUpto = accountValidUpto(input, layout);
 
       // Work out the change before writing, so an unchanged save writes nothing.
       const preview = toRecord({
         id: before.id, biometric_id: before.biometricId, name: input.name, email: input.email, status: before.status,
-        valid_upto: validUpto, office_location: before.officeLocation, ...columns, profile_data: data,
+        valid_upto: validUpto, office_location: before.officeLocation, ...columns,
+        department: input.department ?? '', designation: input.designation ?? '', profile_data: data,
       } as unknown as RowDataPacket, []);
       const changed = changedFields(auditView(before), auditView(preview));
       if (changed.length === 0) return { record: before, changed };

@@ -55,40 +55,45 @@ export const employee_profiles = mysqlTable('employee_profiles', {
   id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
   biometricId: varchar('biometric_id', { length: 4 }).notNull().unique(),
   suffix: varchar('suffix', { length: 10 }),
+  /** Generated (read only): org_unit_name or project_name. */
   department: varchar('department', { length: 255 }),
+  /** Generated (read only): designation_name. */
   designation: varchar('designation', { length: 255 }),
   employmentType: varchar('employment_type', { length: 50 }),
-  joiningDate: varchar('joining_date', { length: 10 }),
+  joiningDate: date('joining_date', { mode: 'string' }),
   phone: varchar('phone', { length: 20 }),
   officeLocation: varchar('office_location', { length: 255 }),
   /** Institute code (lookup 'institute'): WII, SACON, … */
   institute: varchar('institute', { length: 50 }),
-  shiftId: varchar('shift_id', { length: 36 }),
-  // One column per profile field (migrations/20261218_employee_profile_columns.sql; server/employees/profileSql.ts).
-  gender: varchar('gender', { length: 20 }),
+  shiftId: bigint('shift_id', { mode: 'number', unsigned: true }),
+  // One column per profile field (migrations/20261219_04_employee_profile.sql; server/employees/profileSql.ts).
+  gender: varchar('gender', { length: 50 }),
   dob: date('dob', { mode: 'string' }),
   bloodGroup: varchar('blood_group', { length: 3 }),
-  leaveGroup: varchar('leave_group', { length: 50 }),
+  leaveGroup: varchar('leave_group', { length: 20 }),
   employeeCategory: varchar('employee_category', { length: 100 }),
   permanentEmploymentType: varchar('permanent_employment_type', { length: 20 }),
   reportingManagerId: bigint('reporting_manager_id', { mode: 'number', unsigned: true }),
   reviewingManagerId: bigint('reviewing_manager_id', { mode: 'number', unsigned: true }),
-  validUntilDate: date('valid_until_date', { mode: 'string' }),
   isOnProbation: boolean('is_on_probation').notNull().default(false),
   probationEndDate: date('probation_end_date', { mode: 'string' }),
   isPwd: boolean('is_pwd').notNull().default(false),
   isPhdEnrolled: boolean('is_phd_enrolled').notNull().default(false),
+  /** Only when typed in: a researcher's PI otherwise is the reporting manager (worked out when reading). */
   piName: varchar('pi_name', { length: 255 }),
-  courseProgram: varchar('course_program', { length: 255 }),
-  courseBatch: varchar('course_batch', { length: 255 }),
-  enrolledThrough: varchar('enrolled_through', { length: 255 }),
   guideSupervisor: varchar('guide_supervisor', { length: 255 }),
-  retirementDate: date('retirement_date', { mode: 'string' }),
+  /** Department / project: one of the two (department is generated from them). */
+  orgUnitName: varchar('org_unit_name', { length: 255 }),
+  projectName: varchar('project_name', { length: 255 }),
+  designationName: varchar('designation_name', { length: 255 }),
+  trainingCourseName: varchar('training_course_name', { length: 255 }),
+  mscStreamName: varchar('msc_stream_name', { length: 255 }),
+  traineeBatchName: varchar('trainee_batch_name', { length: 255 }),
+  mscBatchName: varchar('msc_batch_name', { length: 255 }),
+  phdEnrollmentName: varchar('phd_enrollment_name', { length: 255 }),
   statusChangeReason: varchar('status_change_reason', { length: 500 }),
   statusEffectiveDate: date('status_effective_date', { mode: 'string' }),
-  statusChangedBy: varchar('status_changed_by', { length: 50 }),
-  /** Legacy: older form data was kept here as JSON; the migration moved it into the columns above. */
-  profileData: text('profile_data'),
+  statusChangedBy: varchar('status_changed_by', { length: 4 }),
 }, (t) => ({
   byReportingManager: index('idx_profiles_reporting_manager').on(t.reportingManagerId),
   byReviewingManager: index('idx_profiles_reviewing_manager').on(t.reviewingManagerId),
@@ -140,7 +145,12 @@ export const shifts = mysqlTable('shifts', {
   status: varchar('status', { length: 16 }).notNull().default('active'),
   halfDayCutoffTime: varchar('half_day_cutoff_time', { length: 10 }),
   description: text('description'),
-  applicableDays: json('applicable_days').$type<string[]>(),
+});
+
+// Working days of a shift, one row per day (Sun … Sat).
+export const shift_days = mysqlTable('shift_days', {
+  shiftId: bigint('shift_id', { mode: 'number', unsigned: true }).notNull(),
+  day: varchar('day', { length: 3 }).notNull(),
 });
 
 // Biometric device registry. Device ID, short name and serial number are unique.
@@ -175,8 +185,6 @@ export const organization_units = mysqlTable('organization_units', {
   type: varchar('type', { length: 50 }).notNull().default('Department'),
   /** Institute code (lookup 'institute'). */
   institute: varchar('institute', { length: 50 }),
-  /** JSON text: which employee types / cadres the unit is offered for (empty = all). */
-  metadata: longtext('metadata'),
   status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
@@ -185,50 +193,56 @@ export const organization_units = mysqlTable('organization_units', {
 /** Dedicated database tables for each Profile Master. */
 export const designations = mysqlTable('designations', {
   id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
-  name: varchar('name', { length: 255 }).notNull(), code: varchar('code', { length: 100 }).notNull().unique(),
-  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'), metadata: longtext('metadata'),
+  name: varchar('name', { length: 255 }).notNull().unique(), code: varchar('code', { length: 100 }).notNull().unique(),
+  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
+  employeeTypeCode: varchar('employee_type_code', { length: 50 }), cadreCode: varchar('cadre_code', { length: 100 }),
   createdAt: timestamp('created_at').defaultNow(), updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });
 export const msc_streams = mysqlTable('msc_streams', {
   id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
-  name: varchar('name', { length: 255 }).notNull(), code: varchar('code', { length: 100 }).notNull().unique(),
-  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'), metadata: longtext('metadata'),
+  name: varchar('name', { length: 255 }).notNull().unique(), code: varchar('code', { length: 100 }).notNull().unique(),
+  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
   createdAt: timestamp('created_at').defaultNow(), updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });
 export const msc_batches = mysqlTable('msc_batches', {
   id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
-  name: varchar('name', { length: 255 }).notNull(), code: varchar('code', { length: 100 }).notNull().unique(),
-  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'), metadata: longtext('metadata'),
+  name: varchar('name', { length: 255 }).notNull().unique(), code: varchar('code', { length: 100 }).notNull().unique(),
+  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
+  mscStreamName: varchar('msc_stream_name', { length: 255 }), validity: varchar('validity', { length: 255 }),
   createdAt: timestamp('created_at').defaultNow(), updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });
 export const training_courses = mysqlTable('training_courses', {
   id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
-  name: varchar('name', { length: 255 }).notNull(), code: varchar('code', { length: 100 }).notNull().unique(),
-  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'), metadata: longtext('metadata'),
+  name: varchar('name', { length: 255 }).notNull().unique(), code: varchar('code', { length: 100 }).notNull().unique(),
+  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
   createdAt: timestamp('created_at').defaultNow(), updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });
 export const trainee_batches = mysqlTable('trainee_batches', {
   id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
-  name: varchar('name', { length: 255 }).notNull(), code: varchar('code', { length: 100 }).notNull().unique(),
-  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'), metadata: longtext('metadata'),
+  name: varchar('name', { length: 255 }).notNull().unique(), code: varchar('code', { length: 100 }).notNull().unique(),
+  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
+  trainingCourseName: varchar('training_course_name', { length: 255 }), validity: varchar('validity', { length: 255 }),
   createdAt: timestamp('created_at').defaultNow(), updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });
 export const projects = mysqlTable('projects', {
   id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
-  name: varchar('name', { length: 255 }).notNull(), code: varchar('code', { length: 100 }).notNull().unique(),
-  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'), metadata: longtext('metadata'),
+  name: varchar('name', { length: 255 }).notNull().unique(), code: varchar('code', { length: 100 }).notNull().unique(),
+  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
+  piName: varchar('pi_name', { length: 255 }),
   createdAt: timestamp('created_at').defaultNow(), updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });
 export const categories = mysqlTable('categories', {
   id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
-  name: varchar('name', { length: 255 }).notNull(), code: varchar('code', { length: 100 }).notNull().unique(),
-  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'), metadata: longtext('metadata'),
+  name: varchar('name', { length: 255 }).notNull().unique(), code: varchar('code', { length: 100 }).notNull().unique(),
+  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
+  cadreGroupCode: varchar('cadre_group_code', { length: 50 }),
   createdAt: timestamp('created_at').defaultNow(), updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });
 export const phd_enrollments = mysqlTable('phd_enrollments', {
   id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
-  name: varchar('name', { length: 255 }).notNull(), code: varchar('code', { length: 100 }).notNull().unique(),
-  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'), metadata: longtext('metadata'),
+  name: varchar('name', { length: 255 }).notNull().unique(), code: varchar('code', { length: 100 }).notNull().unique(),
+  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
+  fundingCategoryCode: varchar('funding_category_code', { length: 50 }),
   createdAt: timestamp('created_at').defaultNow(), updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });
 
@@ -272,17 +286,78 @@ export const master_audit_logs = mysqlTable('master_audit_logs', {
   legacyRef: varchar('legacy_ref', { length: 64 }),
 });
 
-// Short admin-managed dropdown lists (salutation, gender, employee type, ...).
-export const lookup_values = mysqlTable('lookup_values', {
+// Short admin-managed dropdown lists, one table each (server/lib/lookups.ts; migrations/20261219_02_list_tables.sql).
+export const salutations = mysqlTable('salutations', {
   id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
-  lookupType: varchar('lookup_type', { length: 40 }).notNull(),
-  code: varchar('code', { length: 50 }).notNull(),
+  code: varchar('code', { length: 50 }).notNull().unique(),
   name: varchar('name', { length: 255 }).notNull(),
   sortOrder: int('sort_order').notNull().default(0),
   status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
-  metadata: longtext('metadata'),
-  createdAt: timestamp('created_at', { fsp: 3, mode: 'string' }).defaultNow(),
-  updatedAt: timestamp('updated_at', { fsp: 3, mode: 'string' }).defaultNow().onUpdateNow(),
+  createdAt: datetime('created_at', { fsp: 3, mode: 'string' }),
+  updatedAt: datetime('updated_at', { fsp: 3, mode: 'string' }),
+});
+export const genders = mysqlTable('genders', {
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  code: varchar('code', { length: 50 }).notNull().unique(),
+  name: varchar('name', { length: 255 }).notNull(),
+  sortOrder: int('sort_order').notNull().default(0),
+  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
+  createdAt: datetime('created_at', { fsp: 3, mode: 'string' }),
+  updatedAt: datetime('updated_at', { fsp: 3, mode: 'string' }),
+});
+export const institutes = mysqlTable('institutes', {
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  code: varchar('code', { length: 50 }).notNull().unique(),
+  name: varchar('name', { length: 255 }).notNull(),
+  sortOrder: int('sort_order').notNull().default(0),
+  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
+  createdAt: datetime('created_at', { fsp: 3, mode: 'string' }),
+  updatedAt: datetime('updated_at', { fsp: 3, mode: 'string' }),
+});
+export const employee_types = mysqlTable('employee_types', {
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  code: varchar('code', { length: 50 }).notNull().unique(),
+  name: varchar('name', { length: 255 }).notNull(),
+  sortOrder: int('sort_order').notNull().default(0),
+  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
+  formLayout: varchar('form_layout', { length: 32 }).notNull().default('permanent'),
+  createdAt: datetime('created_at', { fsp: 3, mode: 'string' }),
+  updatedAt: datetime('updated_at', { fsp: 3, mode: 'string' }),
+});
+export const org_unit_types = mysqlTable('org_unit_types', {
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  code: varchar('code', { length: 50 }).notNull().unique(),
+  name: varchar('name', { length: 255 }).notNull(),
+  sortOrder: int('sort_order').notNull().default(0),
+  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
+  createdAt: datetime('created_at', { fsp: 3, mode: 'string' }),
+  updatedAt: datetime('updated_at', { fsp: 3, mode: 'string' }),
+});
+export const cadre_groups = mysqlTable('cadre_groups', {
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  code: varchar('code', { length: 50 }).notNull().unique(),
+  name: varchar('name', { length: 255 }).notNull(),
+  sortOrder: int('sort_order').notNull().default(0),
+  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
+  createdAt: datetime('created_at', { fsp: 3, mode: 'string' }),
+  updatedAt: datetime('updated_at', { fsp: 3, mode: 'string' }),
+});
+export const funding_categories = mysqlTable('funding_categories', {
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  code: varchar('code', { length: 50 }).notNull().unique(),
+  name: varchar('name', { length: 255 }).notNull(),
+  sortOrder: int('sort_order').notNull().default(0),
+  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
+  createdAt: datetime('created_at', { fsp: 3, mode: 'string' }),
+  updatedAt: datetime('updated_at', { fsp: 3, mode: 'string' }),
+});
+// Cadres (Scientific, Technical, …): fixed in the code (server/employees/lists.ts), kept here for the foreign keys.
+export const cadres = mysqlTable('cadres', {
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  code: varchar('code', { length: 100 }).notNull().unique(),
+  name: varchar('name', { length: 100 }).notNull(),
+  sortOrder: int('sort_order').notNull().default(0),
+  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
 });
 
 // Organization-wide CC / BCC copies for notification emails (migrations/20261029_notification_recipients.sql).

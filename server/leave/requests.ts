@@ -556,8 +556,8 @@ export async function dayRule(q: { query: typeof pool.query }, emp: Employee, po
   let workingDays: string[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
   try {
     const found = emp.shiftId
-      ? await rows(q, 'SELECT applicable_days FROM shifts WHERE id = ? LIMIT 1', [emp.shiftId])
-      : await rows(q, 'SELECT applicable_days FROM shifts WHERE is_default = 1 LIMIT 1');
+      ? await rows(q, 'SELECT (SELECT JSON_ARRAYAGG(sd.day) FROM shift_days sd WHERE sd.shift_id = shifts.id) AS applicable_days FROM shifts WHERE id = ? LIMIT 1', [emp.shiftId])
+      : await rows(q, 'SELECT (SELECT JSON_ARRAYAGG(sd.day) FROM shift_days sd WHERE sd.shift_id = shifts.id) AS applicable_days FROM shifts WHERE is_default = 1 LIMIT 1');
     const raw = found[0]?.applicable_days;
     const list = Array.isArray(raw) ? raw : typeof raw === 'string' ? JSON.parse(raw || '[]') : [];
     const valid = list.filter((d: unknown) => (WEEK_DAYS as readonly string[]).includes(String(d)));

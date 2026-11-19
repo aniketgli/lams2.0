@@ -167,7 +167,7 @@ async function apply(conn: PoolConnection, req: Request, kind: 'transfer' | 'man
     const data = { ...target.data };
     if (change.reportingManager) {
       data.reportingManagerId = change.reportingManager.id;
-      // A researcher's PI is their reporting manager.
+      // A researcher's PI is their reporting manager (pi_name is cleared below, so it is worked out from the new one).
       if (data.piName !== undefined) data.piName = change.reportingManager.name;
     }
     if (change.reviewingManager) {
@@ -175,10 +175,13 @@ async function apply(conn: PoolConnection, req: Request, kind: 'transfer' | 'man
       data.hodName = change.reviewingManager.name;
     }
     const department = change.department ?? target.department;
+    // department is a generated column: the name goes to org_unit_name or project_name, whichever master has it.
+    const [[unit]] = await conn.query<RowDataPacket[]>('SELECT 1 AS ok FROM organization_units WHERE name = ? LIMIT 1', [department || '']);
     await conn.query(
-      'UPDATE employee_profiles SET department = ?, reporting_manager_id = ?, reviewing_manager_id = ?, pi_name = ? WHERE biometric_id = ?',
-      [department, idOf(data.reportingManagerId) ? Number(idOf(data.reportingManagerId)) : null,
-        idOf(data.reviewingManagerId) ? Number(idOf(data.reviewingManagerId)) : null, data.piName ? String(data.piName).slice(0, 255) : null, target.biometricId]);
+      `UPDATE employee_profiles SET org_unit_name = ?, project_name = ?, reporting_manager_id = ?, reviewing_manager_id = ?${change.reportingManager ? ', pi_name = NULL' : ''} WHERE biometric_id = ?`,
+      [department && unit ? department : null, department && !unit ? department : null,
+        idOf(data.reportingManagerId) ? Number(idOf(data.reportingManagerId)) : null,
+        idOf(data.reviewingManagerId) ? Number(idOf(data.reviewingManagerId)) : null, target.biometricId]);
 
     const newRm = change.reportingManager ?? prevRm;
     const newHod = change.reviewingManager ?? prevHod;

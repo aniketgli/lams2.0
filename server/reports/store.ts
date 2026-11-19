@@ -16,6 +16,14 @@ import {
   describeTiming, isDue, occursOn, parseScheduleInput, periodFor, type Frequency, type ReportFormat, type ScheduleInput,
 } from './schedule';
 
+/** Formats of a schedule row (send_csv / send_pdf flags), CSV first. */
+function formatsOf(row: RowDataPacket): ReportFormat[] {
+  const out: ReportFormat[] = [];
+  if (Number(row.send_csv) === 1) out.push('csv');
+  if (Number(row.send_pdf) === 1) out.push('pdf');
+  return out;
+}
+
 /**
  * Report schedules: what is sent, to whom, how often and when (Indian time). Only administrators manage them and every change is
  * audited (master_key 'report_schedule') in the same transaction. Nothing is pre-filled. Each run (automatic or "send now")
@@ -86,7 +94,7 @@ async function toViews(list: RowDataPacket[]): Promise<ScheduleView[]> {
     return {
       id: String(r.id), name: String(r.name), reportKey: String(r.report_key), reportLabel: findReport(String(r.report_key))?.label ?? String(r.report_key),
       frequency: timing.frequency as Frequency, weekday: timing.weekday, monthDay: timing.monthDay, sendTime: timing.sendTime, timing: describeTiming(timing),
-      formats: String(r.formats).split(',').filter(Boolean) as ReportFormat[], status: String(r.status) === 'paused' ? 'paused' : 'active',
+      formats: formatsOf(r), status: String(r.status) === 'paused' ? 'paused' : 'active',
       users: mine.filter((x) => x.kind === 'user').map((x) => ({ id: String(x.user_id), name: String(x.name ?? ''), email: String(x.email ?? '') })),
       roles: mine.filter((x) => x.kind === 'role').map((x) => ({ id: String(x.role_id), label: ROLE_LABELS[x.role_id as RoleId] ?? String(x.role_id) })),
       lastRunAt: iso(r.last_run_at), lastStatus: r.last_status ? String(r.last_status) : null, lastMessage: r.last_message ? String(r.last_message) : null,
@@ -159,8 +167,8 @@ export async function createSchedule(req: Request, body: unknown): Promise<Sched
   try {
     return await inTransaction(async (conn) => {
       const [result] = await conn.query(
-        `INSERT INTO report_schedules (name, report_key, frequency, weekday, month_day, send_time, formats, status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [input.name, input.reportKey, input.frequency, input.weekday, input.monthDay, input.sendTime, input.formats.join(','), input.status, req.auth?.account.biometricId ?? null]);
+        `INSERT INTO report_schedules (name, report_key, frequency, weekday, month_day, send_time, send_csv, send_pdf, status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [input.name, input.reportKey, input.frequency, input.weekday, input.monthDay, input.sendTime, Number(input.formats.includes('csv')), Number(input.formats.includes('pdf')), input.status, req.auth?.account.biometricId ?? null]);
       const id = Number((result as { insertId: number }).insertId);
       await saveRecipients(conn, id, input);
       const created = (await toViews([(await loadOne(id, conn))!]))[0];
@@ -183,8 +191,8 @@ export async function updateSchedule(req: Request, id: number, body: unknown): P
       // A changed time or day starts afresh: today's occurrence counts again if its time is still to come.
       const timingChanged = before.frequency !== input.frequency || before.weekday !== input.weekday || before.monthDay !== input.monthDay || before.sendTime !== input.sendTime;
       await conn.query(
-        `UPDATE report_schedules SET name = ?, report_key = ?, frequency = ?, weekday = ?, month_day = ?, send_time = ?, formats = ?, status = ?${timingChanged ? ', last_slot = NULL' : ''} WHERE id = ?`,
-        [input.name, input.reportKey, input.frequency, input.weekday, input.monthDay, input.sendTime, input.formats.join(','), input.status, id]);
+        `UPDATE report_schedules SET name = ?, report_key = ?, frequency = ?, weekday = ?, month_day = ?, send_time = ?, send_csv = ?, send_pdf = ?, status = ?${timingChanged ? ', last_slot = NULL' : ''} WHERE id = ?`,
+        [input.name, input.reportKey, input.frequency, input.weekday, input.monthDay, input.sendTime, Number(input.formats.includes('csv')), Number(input.formats.includes('pdf')), input.status, id]);
       await saveRecipients(conn, id, input);
       const after = (await toViews([(await loadOne(id, conn))!]))[0];
       const changed = changedFields(auditView(before), auditView(after));
@@ -309,7 +317,7 @@ export async function runSchedule(row: RowDataPacket, trigger: 'schedule' | 'man
       result = { status: 'no_recipients', sent: 0, message: skipped ? 'This report goes only to Administrators, Auditors and people chosen by name.' : 'There is nobody with a registered email to send it to.' };
     } else {
       const periodText = def.snapshot ? `as on ${pretty(today)}` : period.from === period.to ? pretty(period.from) : `${pretty(period.from)} to ${pretty(period.to)}`;
-      const formats = String(row.formats).split(',').filter(Boolean) as ReportFormat[];
+      const formats = formatsOf(row);
       const baseName = `${def.label}_${def.snapshot ? today : period.from}${!def.snapshot && period.from !== period.to ? `_to_${period.to}` : ''}`;
       const orgName = await import('../masters/organizationStore').then((m) => m.getOrganization()).then((o) => o?.orgName || undefined).catch(() => undefined);
       // One table per audience: the full report once, a team report once per manager.

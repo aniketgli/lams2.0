@@ -75,8 +75,7 @@ async function allowedValues(type: ImportType): Promise<Record<string, string[]>
   if (rules.department === 'projects') out.Project = await names('projects');
   if (rules.department === 'departmentOrProject') out.Department_or_Project = [...await names('organization_units'), ...await names('projects')];
   if (rules.designation) {
-    out.Designation = (await rows(pool, "SELECT name, metadata FROM designations WHERE UPPER(status) = 'ACTIVE' ORDER BY name"))
-      .filter((r) => { try { const m = JSON.parse(String(r.metadata || '{}')); return !m.empType || m.empType === type.code; } catch { return true; } })
+    out.Designation = (await rows(pool, "SELECT name FROM designations WHERE UPPER(status) = 'ACTIVE' AND (employee_type_code IS NULL OR employee_type_code = ?) ORDER BY name", [type.code]))
       .map((r) => String(r.name));
   }
   if (rules.category) out.Cadre = [...CADRES];

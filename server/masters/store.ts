@@ -4,6 +4,7 @@ import { pool } from '../../src/db';
 import { HttpError, badRequest, notFound } from '../lib/http';
 import { writeMasterAuditSql } from './audit';
 import { inTransaction } from '../lib/tx';
+import { isLookupType, lookupTable } from '../lib/lookups';
 import {
   FORM_LAYOUTS, MASTERS, MasterDef, auditKey, describeUsage, findMaster, findUsage,
 } from './definitions';
@@ -27,22 +28,11 @@ export interface MasterRecord {
 
 const CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9 ._/&()-]*$/;
 
-function parseJson(value: unknown): Record<string, unknown> {
-  if (typeof value !== 'string' || !value) return {};
-  try {
-    const parsed = JSON.parse(value);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
 function toRecord(def: MasterDef, row: RowDataPacket): MasterRecord {
-  const meta = parseJson(row.metadata);
   const fields: Record<string, string> = {};
   for (const field of def.fields) {
-    const column = def.kind === 'table' ? def.columnFields?.[field.key] : undefined;
-    const raw = column ? row[column] : meta[field.key];
+    const column = def.columnFields[field.key];
+    const raw = column ? row[column] : undefined;
     fields[field.key] = raw === undefined || raw === null ? '' : String(raw);
   }
   return {
@@ -63,15 +53,9 @@ function toRecord(def: MasterDef, row: RowDataPacket): MasterRecord {
 type Querier = Pick<PoolConnection, 'query'> | typeof pool;
 
 async function selectRows(def: MasterDef, where = '', params: unknown[] = [], q: Querier = pool): Promise<RowDataPacket[]> {
-  if (def.kind === 'lookup') {
-    const [rows] = await q.query<RowDataPacket[]>(
-      `SELECT * FROM lookup_values WHERE lookup_type = ? ${where} ORDER BY sort_order, name`,
-      [def.lookupType, ...params],
-    );
-    return rows;
-  }
+  const order = def.kind === 'lookup' ? 'sort_order, name' : 'name';
   const [rows] = await q.query<RowDataPacket[]>(
-    `SELECT * FROM ${def.table} WHERE 1=1 ${where} ORDER BY name`,
+    `SELECT * FROM ${def.table} WHERE 1=1 ${where} ORDER BY ${order}`,
     params,
   );
   return rows;
@@ -100,22 +84,23 @@ interface CleanInput {
 }
 
 async function lookupCodeExists(lookupType: string, code: string): Promise<boolean> {
+  if (!isLookupType(lookupType)) return false;
   const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT 1 FROM lookup_values WHERE lookup_type = ? AND code = ? AND UPPER(status) = 'ACTIVE' LIMIT 1",
-    [lookupType, code],
+    `SELECT 1 FROM ${lookupTable(lookupType)} WHERE code = ? AND UPPER(status) = 'ACTIVE' LIMIT 1`,
+    [code],
   );
   return rows.length > 0;
 }
 
-/** Whether the active lookup value's form layout (metadata.formLayout) is one of `layouts`. */
+/** Whether the active employee type's form layout is one of `layouts` (only employee types have one). */
 async function lookupHasLayout(lookupType: string, code: string, layouts: string[]): Promise<boolean> {
+  if (lookupType !== 'employee_type') return false;
   const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT metadata FROM lookup_values WHERE lookup_type = ? AND code = ? AND UPPER(status) = 'ACTIVE' LIMIT 1",
-    [lookupType, code],
+    "SELECT form_layout FROM employee_types WHERE code = ? AND UPPER(status) = 'ACTIVE' LIMIT 1",
+    [code],
   );
-  const raw = rows[0]?.metadata;
-  const meta = raw && typeof raw === 'object' ? raw as Record<string, unknown> : parseJson(raw);
-  return typeof meta.formLayout === 'string' && layouts.includes(meta.formLayout);
+  const layout = rows[0]?.form_layout;
+  return typeof layout === 'string' && layouts.includes(layout);
 }
 
 async function masterNameExists(masterKey: string, name: string): Promise<boolean> {
@@ -222,32 +207,23 @@ function auditView(record: MasterRecord): Record<string, unknown> {
 }
 
 function storageValues(def: MasterDef, input: CleanInput): { columns: string[]; values: unknown[] } {
-  if (def.kind === 'lookup') {
-    return {
-      columns: ['lookup_type', 'code', 'name', 'sort_order', 'status', 'metadata'],
-      values: [def.lookupType, input.code, input.name, input.sortOrder, input.status, JSON.stringify(input.fields)],
-    };
-  }
   const columns = ['name', 'code', 'status'];
   const values: unknown[] = [input.name, input.code, input.status];
-  const metadata: Record<string, string> = {};
-  for (const field of def.fields) {
-    const column = def.columnFields?.[field.key];
-    if (column) {
-      columns.push(column);
-      values.push(input.fields[field.key]);
-    } else if (input.fields[field.key]) {
-      metadata[field.key] = input.fields[field.key];
-    }
+  if (def.kind === 'lookup') {
+    columns.push('sort_order');
+    values.push(input.sortOrder);
   }
-  if (def.hasMetadata) {
-    columns.push('metadata');
-    values.push(JSON.stringify(metadata));
+  for (const field of def.fields) {
+    const column = def.columnFields[field.key];
+    if (!column) continue;
+    columns.push(column);
+    // An empty choice is stored as NULL (the column may be a foreign key).
+    values.push(input.fields[field.key] || null);
   }
   return { columns, values };
 }
 
-const tableOf = (def: MasterDef) => (def.kind === 'lookup' ? 'lookup_values' : def.table);
+const tableOf = (def: MasterDef) => def.table;
 
 /** A write that names a column the database does not have yet means a migration was not run. */
 async function missingColumnHint<T>(work: Promise<T>): Promise<T> {
@@ -265,23 +241,6 @@ function assertCanCreate(def: MasterDef): void {
   if (def.noCreate) throw new HttpError(409, `${def.label} cannot be added here. Edit, deactivate or delete the existing ones.`, 'FIXED_SET');
 }
 
-/** An employee type's code is stored on profiles, designations and leave rules; move them all to the new code. */
-async function moveEmployeeTypeCode(conn: { query: typeof pool.query }, from: string, to: string): Promise<void> {
-  const quiet = async (run: () => Promise<unknown>) => {
-    try { await run(); } catch (error) { if ((error as { code?: string })?.code !== 'ER_NO_SUCH_TABLE') throw error; }
-  };
-  await conn.query('UPDATE employee_profiles SET employment_type = ? WHERE employment_type = ?', [to, from]);
-  await conn.query("UPDATE designations SET metadata = JSON_SET(metadata, '$.empType', ?) WHERE JSON_VALID(metadata) AND JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.empType')) = ?", [to, from]);
-  await quiet(async () => {
-    const [rows] = await conn.query<RowDataPacket[]>('SELECT id, employee_types FROM leave_types WHERE FIND_IN_SET(?, employee_types)', [from]);
-    for (const row of rows) {
-      const next = String(row.employee_types).split(',').map((c) => (c.trim() === from ? to : c.trim())).filter(Boolean).join(',');
-      await conn.query('UPDATE leave_types SET employee_types = ? WHERE id = ?', [next, row.id]);
-    }
-  });
-  await quiet(() => conn.query('UPDATE leave_type_quotas SET employee_type = ? WHERE employee_type = ?', [to, from]));
-}
-
 export async function createRecord(def: MasterDef, body: unknown, req: Request): Promise<MasterRecord> {
   assertCanCreate(def);
   const input = await validate(def, body, null);
@@ -289,7 +248,7 @@ export async function createRecord(def: MasterDef, body: unknown, req: Request):
   return missingColumnHint(inTransaction(async (conn) => {
     // Lists keep their order without anyone typing it: a new value goes to the end.
     if (def.kind === 'lookup' && (body as { sortOrder?: unknown } | null)?.sortOrder === undefined) {
-      const [[last]] = await conn.query<RowDataPacket[]>('SELECT COALESCE(MAX(sort_order), 0) AS n FROM lookup_values WHERE lookup_type = ?', [def.lookupType]);
+      const [[last]] = await conn.query<RowDataPacket[]>(`SELECT COALESCE(MAX(sort_order), 0) AS n FROM ${def.table}`);
       values[columns.indexOf('sort_order')] = Math.min(100000, Number(last?.n ?? 0) + 10);
     }
     const [result] = await conn.query<ResultSetHeader>(
@@ -323,10 +282,10 @@ export async function updateRecord(def: MasterDef, id: number, body: unknown, re
 
   const { columns, values } = storageValues(def, input);
   return missingColumnHint(inTransaction(async (conn) => {
-    if (def.kind === 'lookup' && def.codeEditable && input.code !== existing.code) await moveEmployeeTypeCode(conn, existing.code, input.code);
-    const sets = columns.filter((c) => c !== 'lookup_type').map((c) => `${c} = ?`);
-    const vals = def.kind === 'lookup' ? values.slice(1) : values;
-    await conn.query(`UPDATE ${tableOf(def)} SET ${sets.join(', ')} WHERE id = ?`, [...vals, id]);
+    // An employee type's new code reaches profiles, designations and leave rules
+    // through their foreign keys (ON UPDATE CASCADE).
+    const sets = columns.map((c) => `${c} = ?`);
+    await conn.query(`UPDATE ${tableOf(def)} SET ${sets.join(', ')} WHERE id = ?`, [...values, id]);
     const saved = (await getRecord(def, id, conn))!;
     await writeMasterAuditSql(conn, req, {
       masterKey: auditKey(def), recordId: saved.id, recordLabel: `${saved.name} (${saved.code})`,

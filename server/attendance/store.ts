@@ -125,7 +125,7 @@ function shiftRules(): Promise<ShiftRules> {
 
 async function loadShiftRules(): Promise<ShiftRules> {
   const found = await rows(
-    'SELECT id, code, name, start_time, end_time, grace_period_mins, half_day_hours, full_day_hours, half_day_cutoff_time, applicable_days, is_default, status FROM shifts ORDER BY is_default DESC, id',
+    'SELECT id, code, name, start_time, end_time, grace_period_mins, half_day_hours, full_day_hours, half_day_cutoff_time, (SELECT JSON_ARRAYAGG(sd.day) FROM shift_days sd WHERE sd.shift_id = shifts.id) AS applicable_days, is_default, status FROM shifts ORDER BY is_default DESC, id',
   );
   const byId = new Map<string, ShiftRule>();
   for (const s of found) {

@@ -35,7 +35,8 @@ const one = async (c: Connection, sql: string, params: unknown[] = []): Promise<
 /** Tables / columns the application cannot run without. */
 const REQUIRED: Record<string, string[]> = {
   users: ['id', 'biometric_id', 'status', 'valid_upto', 'is_system', 'must_change_password'],
-  employee_profiles: ['biometric_id', 'joining_date', 'shift_id', 'gender', 'dob', 'leave_group', 'reporting_manager_id', 'reviewing_manager_id'],
+  employee_profiles: ['biometric_id', 'joining_date', 'shift_id', 'gender', 'dob', 'leave_group', 'reporting_manager_id', 'reviewing_manager_id',
+    'org_unit_name', 'project_name', 'designation_name', 'training_course_name', 'msc_stream_name', 'phd_enrollment_name'],
   employee_identity: ['biometric_id', 'aadhaar_hash', 'pan'],
   employee_bank_accounts: ['biometric_id', 'account_hash', 'ifsc'],
   user_module_roles: ['biometric_id', 'module_id', 'role_id', 'status'],
@@ -47,12 +48,17 @@ const REQUIRED: Record<string, string[]> = {
   Attendance: ['EmployeeCode', 'LogDate', 'LogDateTime', 'DeviceSR'],
   // Notification emails: queue, retries and log (migrations/20261202_email_outbox.sql). Without it mails are sent at once, with no retry.
   email_outbox: ['status', 'next_attempt_at', 'queued_at', 'body_html'],
-  // The latest columns for leave purposes / paternity details (20261130_scl_paternity.sql).
-  leave_types: ['purposes'],
+  // Normalized lists (20261219_02 … 05). Without them the forms and masters fail.
+  salutations: ['code', 'name', 'status'], genders: ['code', 'name', 'status'], institutes: ['code', 'name', 'status'],
+  employee_types: ['code', 'name', 'status', 'form_layout'], org_unit_types: ['code', 'name', 'status'],
+  cadre_groups: ['code', 'name', 'status'], funding_categories: ['code', 'name', 'status'], cadres: ['code'],
+  leave_type_employee_types: ['leave_type_id', 'employee_type_code'], leave_type_purposes: ['leave_type_id', 'purpose'],
+  shift_days: ['shift_id', 'day'], role_aliases: ['module_id', 'role_id', 'alias'], report_schedules: ['send_csv', 'send_pdf'],
+  designations: ['employee_type_code', 'cadre_code'], trainee_batches: ['training_course_name'], msc_batches: ['msc_stream_name'],
   // A balance set "as on" a date (20261208_balance_as_on.sql). Without it every leave of the year is deducted.
   leave_balances: ['as_of'],
   // Roles that can be given and used (20261203_role_catalog.sql). Without it the built-in list is used.
-  role_catalog: ['module_id', 'role_id', 'name', 'access_role', 'aliases', 'is_active'],
+  role_catalog: ['module_id', 'role_id', 'name', 'access_role', 'is_active'],
   // Undo of a joining report's last step (20261210_joining_undo.sql). Without it the joining report list fails.
   leave_joining_reports: ['status', 'undo_count', 'undo2_count'],
 };
@@ -96,16 +102,25 @@ async function main(): Promise<void> {
       const col = await one(c, `SELECT COUNT(*) AS n FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE()
                                   AND TABLE_NAME = 'employee_profiles' AND COLUMN_NAME IN ('gender', 'dob', 'leave_group', 'is_pwd', 'reporting_manager_id')
                                   AND EXTRA NOT LIKE '%GENERATED%'`);
-      report(Number(col?.n) === 5 ? 'PASS' : 'FAIL', 'employee_profiles has one column per field', Number(col?.n) === 5 ? '' : 'run migrations/20261218_employee_profile_columns.sql');
+      report(Number(col?.n) === 5 ? 'PASS' : 'FAIL', 'employee_profiles has one column per field', Number(col?.n) === 5 ? '' : 'run migrations/20261219_04_employee_profile.sql');
+      const gen = await one(c, `SELECT COUNT(*) AS n FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE()
+                                  AND TABLE_NAME = 'employee_profiles' AND COLUMN_NAME IN ('department', 'designation') AND EXTRA LIKE '%GENERATED%'`);
+      report(Number(gen?.n) === 2 ? 'PASS' : 'FAIL', 'department / designation are generated', Number(gen?.n) === 2 ? '' : 'run migrations/20261219_04_employee_profile.sql');
       const tables = await one(c, `SELECT COUNT(*) AS n FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()
                                      AND TABLE_NAME IN ('employee_identity', 'employee_bank_accounts')`);
-      report(Number(tables?.n) === 2 ? 'PASS' : 'FAIL', 'employee_identity / employee_bank_accounts exist', Number(tables?.n) === 2 ? '' : 'run migrations/20261218_employee_profile_columns.sql');
+      report(Number(tables?.n) === 2 ? 'PASS' : 'FAIL', 'employee_identity / employee_bank_accounts exist', Number(tables?.n) === 2 ? '' : 'run migrations/20261219_04_employee_profile.sql');
+      const fks = await one(c, `SELECT COUNT(*) AS n FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE()`);
+      const fkTables = await one(c, `SELECT COUNT(*) AS n FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE()
+                                       AND CONSTRAINT_NAME IN ('fk_profiles_designation', 'fk_profiles_employee_type', 'fk_shift_days_shift')`);
+      report(Number(fkTables?.n) === 3 ? 'PASS' : 'FAIL', 'Foreign keys', Number(fkTables?.n) === 3 ? `${Number(fks?.n)} in all` : 'run migrations/20261219_01 … 06');
     } catch (e) { report('FAIL', 'Profile columns', (e as Error).message); }
 
     // 3b. Every active role grant names a role of the role catalog (otherwise it gives no access) ----
     try {
       const { catalogFromRows, BUILT_IN_CATALOG, findRole } = await import('../server/lib/roleCatalog');
-      const fromTable = await rows(c, 'SELECT module_id, role_id, name, access_role, aliases, description, sort_order FROM role_catalog WHERE is_active = 1').catch(() => null);
+      const fromTable = await rows(c, `SELECT c.module_id, c.role_id, c.name, c.access_role, c.description, c.sort_order,
+          (SELECT GROUP_CONCAT(a.alias SEPARATOR ',') FROM role_aliases a WHERE a.module_id = c.module_id AND a.role_id = c.role_id) AS aliases
+        FROM role_catalog c WHERE c.is_active = 1`).catch(() => null);
       const catalog = fromTable ? catalogFromRows(fromTable) : BUILT_IN_CATALOG;
       const grants = await rows(c, "SELECT biometric_id, module_id, role_id FROM user_module_roles WHERE LOWER(status) = 'active'");
       const orphans = grants.filter((g) => !findRole(catalog, g.module_id, g.role_id));
