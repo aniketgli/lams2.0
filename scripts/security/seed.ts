@@ -57,13 +57,12 @@ async function main(): Promise<void> {
     ids.set(p.bio, Number(row.id));
   }
   for (const p of PEOPLE) {
-    const data = {
-      gender: 'Male', reportingManagerId: p.rm ? String(ids.get(p.rm)) : '', reviewingManagerId: p.hod ? String(ids.get(p.hod)) : '',
-    };
+    // One column per profile field (migrations/20261218_employee_profile_columns.sql).
     await c.query(
-      `INSERT INTO employee_profiles (biometric_id, suffix, department, designation, employment_type, joining_date, phone, institute, profile_data)
-       VALUES (?, 'Mr.', 'QA', 'Tester', 'permanent', '2020-01-01', ?, 'WII', ?)`,
-      [p.bio, `98${p.bio}00000`.slice(0, 10), JSON.stringify(data)],
+      `INSERT INTO employee_profiles (biometric_id, suffix, department, designation, employment_type, joining_date, phone, institute,
+                                      gender, reporting_manager_id, reviewing_manager_id)
+       VALUES (?, 'Mr.', 'QA', 'Tester', 'permanent', '2020-01-01', ?, 'WII', 'Male', ?, ?)`,
+      [p.bio, `98${p.bio}00000`.slice(0, 10), p.rm ? ids.get(p.rm) ?? null : null, p.hod ? ids.get(p.hod) ?? null : null],
     );
     for (const [moduleId, roleId] of p.roles) {
       await c.query("INSERT INTO user_module_roles (biometric_id, module_id, role_id, status, last_updated_by) VALUES (?, ?, ?, 'active', '1001')", [p.bio, moduleId, roleId]);

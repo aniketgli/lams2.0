@@ -9,7 +9,7 @@
  * What it covers
  *   1. Connection, MySQL version and connection limits against the app's pool size
  *   2. Required tables, columns and indexes (so a missed migration is named explicitly)
- *   3. The generated manager columns really match the manager ids inside profile_data
+ *   3. Profile fields are real columns, and the identity / bank tables exist
  *   4. EXPLAIN of the hot queries: each must use an index instead of scanning the whole table
  *   5. Timing of the heavy reads (a year of one person's punches, a month of everyone's)
  *   6. Row-lock behaviour that stops a double submit (two sessions locking the same employee)
@@ -35,7 +35,9 @@ const one = async (c: Connection, sql: string, params: unknown[] = []): Promise<
 /** Tables / columns the application cannot run without. */
 const REQUIRED: Record<string, string[]> = {
   users: ['id', 'biometric_id', 'status', 'valid_upto', 'is_system', 'must_change_password'],
-  employee_profiles: ['biometric_id', 'profile_data', 'joining_date', 'shift_id', 'reporting_manager_id', 'reviewing_manager_id'],
+  employee_profiles: ['biometric_id', 'joining_date', 'shift_id', 'gender', 'dob', 'leave_group', 'reporting_manager_id', 'reviewing_manager_id'],
+  employee_identity: ['biometric_id', 'aadhaar_hash', 'pan'],
+  employee_bank_accounts: ['biometric_id', 'account_hash', 'ifsc'],
   user_module_roles: ['biometric_id', 'module_id', 'role_id', 'status'],
   web_sessions: ['sid'],
   leave_requests: ['user_id', 'start_date', 'end_date', 'status'],
@@ -89,16 +91,16 @@ async function main(): Promise<void> {
       report(Number(found?.n) > 0 ? 'PASS' : 'FAIL', `Index ${table}.${index}`, Number(found?.n) > 0 ? '' : 'missing — run migrations/20261129_scale_indexes.sql');
     }
 
-    // 3. Generated manager columns match the JSON -----------------------------------------------
+    // 3. Profile fields are columns; Aadhaar / PAN / bank in their own tables ---------------------
     try {
-      const bad = await one(c, `
-        SELECT COUNT(*) AS n FROM employee_profiles
-         WHERE JSON_VALID(profile_data)
-           AND NOT (reporting_manager_id <=> CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(profile_data, '$.reportingManagerId')), 'null') AS UNSIGNED))`);
-      report(Number(bad?.n) === 0 ? 'PASS' : 'FAIL', 'reporting_manager_id matches profile_data', `${bad?.n} mismatching profile(s)`);
-      const invalid = await one(c, 'SELECT COUNT(*) AS n FROM employee_profiles WHERE NOT JSON_VALID(profile_data)');
-      report(Number(invalid?.n) === 0 ? 'PASS' : 'WARN', 'profile_data is valid JSON everywhere', `${invalid?.n} invalid`);
-    } catch (e) { report('FAIL', 'Generated manager columns', (e as Error).message); }
+      const col = await one(c, `SELECT COUNT(*) AS n FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE()
+                                  AND TABLE_NAME = 'employee_profiles' AND COLUMN_NAME IN ('gender', 'dob', 'leave_group', 'is_pwd', 'reporting_manager_id')
+                                  AND EXTRA NOT LIKE '%GENERATED%'`);
+      report(Number(col?.n) === 5 ? 'PASS' : 'FAIL', 'employee_profiles has one column per field', Number(col?.n) === 5 ? '' : 'run migrations/20261218_employee_profile_columns.sql');
+      const tables = await one(c, `SELECT COUNT(*) AS n FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()
+                                     AND TABLE_NAME IN ('employee_identity', 'employee_bank_accounts')`);
+      report(Number(tables?.n) === 2 ? 'PASS' : 'FAIL', 'employee_identity / employee_bank_accounts exist', Number(tables?.n) === 2 ? '' : 'run migrations/20261218_employee_profile_columns.sql');
+    } catch (e) { report('FAIL', 'Profile columns', (e as Error).message); }
 
     // 3b. Every active role grant names a role of the role catalog (otherwise it gives no access) ----
     try {

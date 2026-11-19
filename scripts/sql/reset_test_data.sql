@@ -71,6 +71,14 @@ SET @t = 'employee_profiles';
 SET @sql = IF(@ok = 1 AND (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND BINARY TABLE_NAME = BINARY @t) = 1,
               CONCAT('TRUNCATE TABLE `', @t, '`'), 'DO 0');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+SET @t = 'employee_identity';
+SET @sql = IF(@ok = 1 AND (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND BINARY TABLE_NAME = BINARY @t) = 1,
+              CONCAT('TRUNCATE TABLE `', @t, '`'), 'DO 0');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+SET @t = 'employee_bank_accounts';
+SET @sql = IF(@ok = 1 AND (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND BINARY TABLE_NAME = BINARY @t) = 1,
+              CONCAT('TRUNCATE TABLE `', @t, '`'), 'DO 0');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- Requests & logs
 SET @t = 'leave_requests';

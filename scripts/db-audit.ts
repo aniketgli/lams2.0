@@ -30,7 +30,7 @@ const rows = async (c: Connection, sql: string, params: unknown[] = []): Promise
 
 /** Every table the server reads or writes (server/, scripts/, src/db/schema.ts, masters definitions). */
 export const USED_TABLES = new Set([
-  'users', 'employee_profiles', 'user_module_roles', 'role_catalog', 'web_sessions', 'employee_photos', 'user_histories',
+  'users', 'employee_profiles', 'employee_identity', 'employee_bank_accounts', 'user_module_roles', 'role_catalog', 'web_sessions', 'employee_photos', 'user_histories',
   'user_account_audit_logs', 'employee_mapping_log', 'master_audit_logs', 'lookup_values', 'organization_units', 'organization_settings',
   'designations', 'categories', 'projects', 'training_courses', 'trainee_batches', 'msc_streams', 'msc_batches', 'phd_enrollments',
   'shifts', 'biometric_machines', 'holidays', 'Attendance', 'manual_attendance_requests', 'outdoor_duty_requests',

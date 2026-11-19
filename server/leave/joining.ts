@@ -1,3 +1,4 @@
+import { profileJsonSql } from '../employees/profileSql';
 import { canSeeEmployee } from '../lib/visibility';
 import type { Request } from 'express';
 import type { RowDataPacket } from 'mysql2/promise';
@@ -113,7 +114,7 @@ const SELECT = `
   SELECT m.id AS request_id, m.user_id, m.leave_type_id, m.start_date, m.end_date, m.start_session, m.end_session, m.days_count, m.reason, m.contact_address, m.station_leave,
          m.ltc_type, m.status AS leave_status, m.prefix_from, m.prefix_to, m.suffix_from, m.suffix_to, m.manager_id AS leave_manager_id, m.reviewer_id AS leave_reviewer_id,
          t.name AS type_name, t.code AS type_code, (t.fitness_certificate = 1 OR t.debit_from_type_id IS NOT NULL) AS fitness_certificate, t.approval_stages,
-         u.biometric_id, u.name AS user_name, p.designation, p.department, p.profile_data,
+         u.biometric_id, u.name AS user_name, p.designation, p.department, ${profileJsonSql('p')} AS profile_data,
          j.id AS report_id, j.joining_date, j.punch_in, j.punch_out, j.status AS report_status, j.manager_id AS j_manager_id, j.reviewer_id AS j_reviewer_id,
          j.submitted_at, j.l1_by, j.l1_at, j.l1_comment, j.decided_stage, j.action_by, j.action_at, j.manager_comment,
          j.undo_count, j.undo2_count, TIMESTAMPDIFF(SECOND, COALESCE(j.action_at, j.l1_at), NOW(3)) AS step_age_sec,

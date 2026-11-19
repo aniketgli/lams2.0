@@ -72,6 +72,39 @@ jobs:
           ( echo "SET @confirm_drop = 'YES';"; cat scripts/sql/drop_unused_attendance_tables.sql ) | $M 2>&1 | grep -v "Using a password"
           [ "$($M -N -e "SELECT GROUP_CONCAT(TABLE_NAME ORDER BY BINARY TABLE_NAME) FROM information_schema.TABLES WHERE TABLE_SCHEMA='lams2_test' AND LOWER(TABLE_NAME) LIKE '%atten%'" 2>/dev/null)" = "Attendance,manual_attendance_requests" ] || { echo "attendance tables not as expected"; exit 1; }
           echo "attendance clean-up OK"
+      - name: Check the profile-columns migration on old-style data
+        run: |
+          R="mysql -h127.0.0.1 -uroot -proot"
+          $R -e "CREATE DATABASE lams2_mig" 2>&1 | grep -v "Using a password" || true
+          M="$R lams2_mig"
+          # The live shape before the migration: JSON text + generated manager columns.
+          $M -e "
+            CREATE TABLE users (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, biometric_id VARCHAR(4) NOT NULL UNIQUE, name VARCHAR(255) NOT NULL);
+            CREATE TABLE leave_groups (id INT AUTO_INCREMENT PRIMARY KEY, code VARCHAR(50), leave_year VARCHAR(2));
+            CREATE TABLE employee_profiles (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, biometric_id VARCHAR(4) NOT NULL UNIQUE,
+              department VARCHAR(255) NOT NULL DEFAULT '', profile_data LONGTEXT NOT NULL);
+            ALTER TABLE employee_profiles ADD COLUMN reporting_manager_id BIGINT UNSIGNED GENERATED ALWAYS AS (CASE WHEN JSON_VALID(profile_data) THEN (CASE WHEN JSON_UNQUOTE(JSON_EXTRACT(profile_data, '\$.reportingManagerId')) REGEXP '^[0-9]{1,18}\$' THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(profile_data, '\$.reportingManagerId')) AS UNSIGNED) END) END) STORED;
+            INSERT INTO employee_profiles (biometric_id, profile_data) VALUES
+              ('0101', '{\"gender\":\"Male\",\"dob\":\"1990-01-02\",\"leaveGroup\":\"PS\",\"leaveCycle\":\"CY\",\"isPwd\":true,\"reportingManagerId\":\"2\",\"reviewingManagerId\":\"3\",\"hodName\":\"X\",\"aadhaarEnc\":\"v1:a:b:c\",\"aadhaarHash\":\"h1\",\"aadhaarLast4\":\"1234\",\"panNumber\":\"ABCDE1234F\",\"bankName\":\"SBI\",\"bankIfsc\":\"SBIN0001234\",\"bankAccountEnc\":\"v1:x\",\"bankAccountHash\":\"b1\",\"bankAccountLast4\":\"6789\",\"avatarColor\":\"red\"}'),
+              ('0102', '{\"gender\":\"Female\",\"isPwd\":false,\"validUntilDate\":\"2027-03-31\",\"statusChangeReason\":\"left\"}'),
+              ('0103', 'not json');" 2>&1 | grep -v "Using a password" || true
+          $M < migrations/20261218_employee_profile_columns.sql 2>&1 | grep -v "Using a password"
+          $M < migrations/20261218_employee_profile_columns.sql 2>&1 | grep -v "Using a password" >/dev/null   # second run is a no-op
+          q() { $M -N -e "$1" 2>/dev/null; }
+          [ "$(q "SELECT CONCAT_WS('|', gender, dob, leave_group, is_pwd, reporting_manager_id, reviewing_manager_id) FROM employee_profiles WHERE biometric_id='0101'")" = "Male|1990-01-02|PS|1|2|3" ] || { echo "0101 columns wrong"; q "SELECT * FROM employee_profiles"; exit 1; }
+          [ "$(q "SELECT CONCAT_WS('|', gender, is_pwd, valid_until_date, status_change_reason) FROM employee_profiles WHERE biometric_id='0102'")" = "Female|0|2027-03-31|left" ] || { echo "0102 columns wrong"; exit 1; }
+          [ "$(q "SELECT profile_data FROM employee_profiles WHERE biometric_id='0101'")" = '{"avatarColor": "red"}' ] || { echo "unknown keys not kept"; q "SELECT profile_data FROM employee_profiles"; exit 1; }
+          [ "$(q "SELECT COUNT(*) FROM employee_profiles WHERE biometric_id='0102' AND profile_data IS NULL")" = "1" ] || { echo "empty JSON not cleared"; exit 1; }
+          [ "$(q "SELECT profile_data FROM employee_profiles WHERE biometric_id='0103'")" = "not json" ] || { echo "invalid JSON was touched"; exit 1; }
+          [ "$(q "SELECT CONCAT_WS('|', aadhaar_hash, aadhaar_last4, pan) FROM employee_identity")" = "h1|1234|ABCDE1234F" ] || { echo "identity not copied"; exit 1; }
+          [ "$(q "SELECT CONCAT_WS('|', bank_name, ifsc, account_hash, account_last4, is_primary) FROM employee_bank_accounts")" = "SBI|SBIN0001234|b1|6789|1" ] || { echo "bank not copied"; exit 1; }
+          [ "$(q "SELECT EXTRA FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='lams2_mig' AND TABLE_NAME='employee_profiles' AND COLUMN_NAME='reporting_manager_id'")" = "" ] || { echo "manager column still generated"; exit 1; }
+          # Duplicates are refused by the database itself.
+          $M -e "INSERT INTO employee_profiles (biometric_id) VALUES ('0104'); INSERT INTO employee_identity (biometric_id, aadhaar_hash) VALUES ('0104', 'h1')" 2>&1 | grep -q "Duplicate entry" || { echo "duplicate Aadhaar accepted"; exit 1; }
+          # Deleting a profile removes its identity and bank rows.
+          $M -e "DELETE FROM employee_profiles WHERE biometric_id='0101'" 2>/dev/null
+          [ "$(q "SELECT (SELECT COUNT(*) FROM employee_identity) + (SELECT COUNT(*) FROM employee_bank_accounts)")" = "0" ] || { echo "cascade missing"; exit 1; }
+          echo "profile-columns migration OK"
       - name: Seed test accounts
         run: npx tsx scripts/security/seed.ts
       - name: Read-only database audit

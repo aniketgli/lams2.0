@@ -221,14 +221,14 @@ export function accountValidUpto(input: EmployeeInput, layout: FormLayout): stri
   return input.validUntilDate!;
 }
 
-/** Keys of profile_data that come from the form. Anything else already stored there is kept. */
+/** Profile keys that come from the form (columns of employee_profiles, see profileSql.ts). */
 export const PROFILE_DATA_KEYS = [
   'gender', 'dob', 'bloodGroup', 'leaveGroup', 'leaveCycle', 'leaveCycleBasis', 'employeeCategory', 'permanentEmploymentType',
   'reportingManagerId', 'reviewingManagerId', 'hodName', 'validUntilDate', 'isOnProbation', 'isPwd', 'probationEndDate',
   'isPhDEnrolled', 'piName', 'courseProgram', 'courseBatch', 'enrolledThrough', 'guideSupervisor', 'retirementDate',
 ] as const;
 
-/** Keys never kept in profile_data (they live in real columns or must not be stored there). */
+/** Keys never taken into the profile object (they live in other columns or must not be stored). */
 export const PROFILE_DATA_FORBIDDEN = new Set([
   'id', 'name', 'email', 'role', 'roles', 'baseRole', 'moduleRoles', 'biometricId', 'biometric_id', 'suffix',
   'department', 'designation', 'employmentType', 'joiningDate', 'phone', 'officeLocation', 'institute', 'shiftId',

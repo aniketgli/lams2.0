@@ -1,3 +1,4 @@
+import { profileJsonSql } from '../employees/profileSql';
 import type { Request } from 'express';
 import { pool } from '../../src/db';
 import { todayInIndia } from '../lib/validate';
@@ -30,7 +31,7 @@ interface Person {
 
 async function loadPerson(q: Q, userId: number): Promise<Person | null> {
   const [row] = await rows(q,
-    `SELECT u.id, u.biometric_id, u.name, u.status, u.valid_upto, p.employment_type, p.joining_date, p.profile_data
+    `SELECT u.id, u.biometric_id, u.name, u.status, u.valid_upto, p.employment_type, p.joining_date, ${profileJsonSql('p')} AS profile_data
        FROM users u LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE u.id = ? LIMIT 1`, [userId]);
   if (!row) return null;
   const data = profileData(row.profile_data);

@@ -64,8 +64,7 @@ const reasonOf = (body: unknown) => {
 
 async function employeeCounts(q: Q): Promise<Map<string, number>> {
   const [rows] = await q.query<RowDataPacket[]>(
-    `SELECT JSON_UNQUOTE(JSON_EXTRACT(profile_data, '$.leaveGroup')) AS code, COUNT(*) AS n FROM employee_profiles
-      WHERE JSON_VALID(profile_data) AND JSON_EXTRACT(profile_data, '$.leaveGroup') IS NOT NULL GROUP BY code`);
+    'SELECT leave_group AS code, COUNT(*) AS n FROM employee_profiles WHERE leave_group IS NOT NULL GROUP BY leave_group');
   return new Map(rows.map((r) => [String(r.code), Number(r.n)]));
 }
 

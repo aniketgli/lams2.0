@@ -64,8 +64,63 @@ export const employee_profiles = mysqlTable('employee_profiles', {
   /** Institute code (lookup 'institute'): WII, SACON, … */
   institute: varchar('institute', { length: 50 }),
   shiftId: varchar('shift_id', { length: 36 }),
+  // One column per profile field (migrations/20261218_employee_profile_columns.sql; server/employees/profileSql.ts).
+  gender: varchar('gender', { length: 20 }),
+  dob: date('dob', { mode: 'string' }),
+  bloodGroup: varchar('blood_group', { length: 3 }),
+  leaveGroup: varchar('leave_group', { length: 50 }),
+  employeeCategory: varchar('employee_category', { length: 100 }),
+  permanentEmploymentType: varchar('permanent_employment_type', { length: 20 }),
+  reportingManagerId: bigint('reporting_manager_id', { mode: 'number', unsigned: true }),
+  reviewingManagerId: bigint('reviewing_manager_id', { mode: 'number', unsigned: true }),
+  validUntilDate: date('valid_until_date', { mode: 'string' }),
+  isOnProbation: boolean('is_on_probation').notNull().default(false),
+  probationEndDate: date('probation_end_date', { mode: 'string' }),
+  isPwd: boolean('is_pwd').notNull().default(false),
+  isPhdEnrolled: boolean('is_phd_enrolled').notNull().default(false),
+  piName: varchar('pi_name', { length: 255 }),
+  courseProgram: varchar('course_program', { length: 255 }),
+  courseBatch: varchar('course_batch', { length: 255 }),
+  enrolledThrough: varchar('enrolled_through', { length: 255 }),
+  guideSupervisor: varchar('guide_supervisor', { length: 255 }),
+  retirementDate: date('retirement_date', { mode: 'string' }),
+  statusChangeReason: varchar('status_change_reason', { length: 500 }),
+  statusEffectiveDate: date('status_effective_date', { mode: 'string' }),
+  statusChangedBy: varchar('status_changed_by', { length: 50 }),
+  /** Legacy: older form data was kept here as JSON; the migration moved it into the columns above. */
   profileData: text('profile_data'),
+}, (t) => ({
+  byReportingManager: index('idx_profiles_reporting_manager').on(t.reportingManagerId),
+  byReviewingManager: index('idx_profiles_reviewing_manager').on(t.reviewingManagerId),
+  byLeaveGroup: index('idx_profiles_leave_group').on(t.leaveGroup),
+}));
+
+/** Aadhaar (encrypted, keyed hash for uniqueness, last 4 digits) and PAN: one row per employee. */
+export const employee_identity = mysqlTable('employee_identity', {
+  biometricId: varchar('biometric_id', { length: 4 }).primaryKey().references(() => employee_profiles.biometricId, { onDelete: 'cascade', onUpdate: 'cascade' }),
+  aadhaarEnc: varchar('aadhaar_enc', { length: 255 }),
+  aadhaarHash: varchar('aadhaar_hash', { length: 64 }).unique('uq_identity_aadhaar_hash'),
+  aadhaarLast4: varchar('aadhaar_last4', { length: 4 }),
+  pan: varchar('pan', { length: 10 }).unique('uq_identity_pan'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });
+
+/** Bank accounts of an employee (account number encrypted, keyed hash unique within a bank). One primary today. */
+export const employee_bank_accounts = mysqlTable('employee_bank_accounts', {
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  biometricId: varchar('biometric_id', { length: 4 }).notNull().references(() => employee_profiles.biometricId, { onDelete: 'cascade', onUpdate: 'cascade' }),
+  bankName: varchar('bank_name', { length: 100 }).notNull(),
+  ifsc: varchar('ifsc', { length: 11 }).notNull(),
+  accountEnc: varchar('account_enc', { length: 255 }).notNull(),
+  accountHash: varchar('account_hash', { length: 64 }).notNull().unique('uq_bank_account_hash'),
+  accountLast4: varchar('account_last4', { length: 4 }).notNull(),
+  isPrimary: boolean('is_primary').notNull().default(true),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
+}, (t) => ({
+  byEmployee: index('idx_bank_accounts_employee').on(t.biometricId),
+}));
 
 export const shifts = mysqlTable('shifts', {
   id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),

@@ -1,3 +1,4 @@
+import { profileColumn } from '../employees/profileSql';
 import type { RowDataPacket } from 'mysql2';
 import { pool } from '../../src/db';
 import { CADRES } from '../employees/lists';
@@ -93,11 +94,11 @@ export interface LookupMasterDef extends BaseDef {
 
 export type MasterDef = TableMasterDef | LookupMasterDef;
 
-// Usage-check helpers. Values in profile_data / metadata are JSON stored in text columns.
+// Usage-check helpers. Profile fields are columns of employee_profiles (profileSql.ts); metadata is JSON text.
 const PROFILE_COLUMN = (column: string): string =>
   `SELECT COUNT(*) AS n FROM employee_profiles WHERE ${column} = ?`;
-const PROFILE_JSON = (path: string): string =>
-  `SELECT COUNT(*) AS n FROM employee_profiles WHERE JSON_VALID(profile_data) AND JSON_UNQUOTE(JSON_EXTRACT(profile_data, '$.${path}')) = ?`;
+/** A profile field by its form key (employeeCategory → employee_category). */
+const PROFILE_JSON = (key: string): string => PROFILE_COLUMN(profileColumn(key));
 const METADATA_JSON = (table: string, path: string): string =>
   `SELECT COUNT(*) AS n FROM ${table} WHERE JSON_VALID(metadata) AND JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.${path}')) = ?`;
 

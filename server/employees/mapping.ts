@@ -1,3 +1,4 @@
+import { profileJsonSql } from './profileSql';
 import type { Request } from 'express';
 import { randomUUID } from 'node:crypto';
 import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
@@ -65,7 +66,7 @@ export interface MappingData {
 /** Everyone an order can cover (active, non-system) with their current department and managers, plus the departments. */
 export async function mappingData(): Promise<MappingData> {
   const found = await rows(pool,
-    `SELECT u.id, u.biometric_id, u.name, u.status, p.institute, p.employment_type, p.designation, p.department, p.profile_data
+    `SELECT u.id, u.biometric_id, u.name, u.status, p.institute, p.employment_type, p.designation, p.department, ${profileJsonSql('p')} AS profile_data
        FROM users u JOIN employee_profiles p ON p.biometric_id = u.biometric_id
       WHERE u.is_system = 0 AND LOWER(u.status) = 'active'
       ORDER BY u.name`);
@@ -105,7 +106,7 @@ interface Person { id: string; name: string; biometricId: string }
 async function lockTargets(conn: Q, ids: number[]): Promise<Target[]> {
   if (!ids.length) return [];
   const found = await rows(conn,
-    `SELECT u.id, u.biometric_id, u.name, u.status, u.is_system, p.institute, p.employment_type, p.department, p.profile_data
+    `SELECT u.id, u.biometric_id, u.name, u.status, u.is_system, p.institute, p.employment_type, p.department, ${profileJsonSql('p')} AS profile_data
        FROM users u JOIN employee_profiles p ON p.biometric_id = u.biometric_id
       WHERE u.id IN (${ids.map(() => '?').join(',')}) ORDER BY u.id FOR UPDATE`, ids);
   if (found.length !== ids.length) throw notFound('One of the selected employees was not found.');
@@ -174,7 +175,10 @@ async function apply(conn: PoolConnection, req: Request, kind: 'transfer' | 'man
       data.hodName = change.reviewingManager.name;
     }
     const department = change.department ?? target.department;
-    await conn.query('UPDATE employee_profiles SET department = ?, profile_data = ? WHERE biometric_id = ?', [department, JSON.stringify(data), target.biometricId]);
+    await conn.query(
+      'UPDATE employee_profiles SET department = ?, reporting_manager_id = ?, reviewing_manager_id = ?, pi_name = ? WHERE biometric_id = ?',
+      [department, idOf(data.reportingManagerId) ? Number(idOf(data.reportingManagerId)) : null,
+        idOf(data.reviewingManagerId) ? Number(idOf(data.reviewingManagerId)) : null, data.piName ? String(data.piName).slice(0, 255) : null, target.biometricId]);
 
     const newRm = change.reportingManager ?? prevRm;
     const newHod = change.reviewingManager ?? prevHod;
@@ -267,9 +271,8 @@ export async function replaceManager(req: Request, body: unknown): Promise<Order
 
     const candidates = await rows(conn,
       `SELECT u.id FROM users u JOIN employee_profiles p ON p.biometric_id = u.biometric_id
-        WHERE u.is_system = 0 AND u.id <> ? AND JSON_VALID(p.profile_data)
-          AND ((? = 1 AND JSON_UNQUOTE(JSON_EXTRACT(p.profile_data, '$.reportingManagerId')) = ?)
-            OR (? = 1 AND JSON_UNQUOTE(JSON_EXTRACT(p.profile_data, '$.reviewingManagerId')) = ?))`,
+        WHERE u.is_system = 0 AND u.id <> ?
+          AND ((? = 1 AND p.reporting_manager_id = ?) OR (? = 1 AND p.reviewing_manager_id = ?))`,
       [input.outgoingManagerId, rmWanted ? 1 : 0, out, hodWanted ? 1 : 0, out]);
     let ids = candidates.map((r) => Number(r.id));
     if (input.userIds.length) {

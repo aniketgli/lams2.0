@@ -19,7 +19,7 @@ const query = async (q: string, p: any[] = []) => {
   if (q.startsWith('SELECT id FROM leave_groups WHERE id = ? FOR UPDATE')) return [grp.filter((g) => g.id === p[0])];
   if (q.startsWith('UPDATE leave_groups SET')) { const g = grp.find((x) => x.id === p[4])!; Object.assign(g, { code: p[0], name: p[1], leave_year: p[2], status: p[3] }); return [{}]; }
   if (q.includes('FROM leave_group_types g JOIN leave_types t')) return [links.filter((l) => p.includes(l.group_id)).map((l) => ({ group_id: l.group_id, id: l.leave_type_id, code: 'C' + l.leave_type_id, name: 'T' + l.leave_type_id }))];
-  if (q.includes("JSON_EXTRACT(profile_data, '$.leaveGroup')")) return [Object.entries(counts).map(([code, n]) => ({ code, n }))];
+  if (q.includes('SELECT leave_group AS code')) return [Object.entries(counts).map(([code, n]) => ({ code, n }))];
   if (q.includes('FROM leave_groups')) return [q.includes('WHERE id = ?') ? grp.filter((g) => g.id === p[0]) : grp];
   throw new Error('unexpected SQL ' + q);
 };
