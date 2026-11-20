@@ -965,6 +965,9 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       [String(userToEditRoles.id)]: refreshedRoles
     }));
     showToast(`Module roles and permissions updated for ${userToEditRoles.name}`);
+    // The directory carries each employee's roles (used e.g. by the Reporting Manager / HoD dropdowns): reload it so a
+    // new manager is offered at once, and refresh the own session when one's own roles changed.
+    void Promise.all([reloadEmployees(), String(userToEditRoles.id) === String(currentUser.id) ? refreshSession() : Promise.resolve()]);
     setUserToEditRoles(null);
   };
 
