@@ -535,9 +535,18 @@ export const updateEmployee = freshAccess(updateEmployeeImpl);
 // Status and deletion
 // ---------------------------------------------------------------------------
 
-/** Why an employee may not be deactivated or deleted, or null if they may. */
-async function responsibilityBlock(q: Querier, target: EmployeeRecord): Promise<string | null> {
+/**
+ * Why an employee may not be deactivated or deleted, or null if they may. Only a plain User account can be: no other
+ * role (Administrator, Auditor, manager, …) and nobody reporting to it; to be deactivated it must also hold the User
+ * role in at least one module.
+ */
+async function responsibilityBlock(q: Querier, target: EmployeeRecord, deactivating = false): Promise<string | null> {
   const grants = Object.entries(target.moduleRoles).flatMap(([moduleId, roles]) => roles.map((roleId) => ({ moduleId, roleId })));
+  const isUser = (roleId: string) => normalizeRole(roleId) === 'general_staff' || PLAIN_USER_ROLES.has(roleId.toLowerCase());
+  // (Deactivation only: a wrongly created record without any role can still be deleted.)
+  if (deactivating && !grants.some((g) => isUser(g.roleId))) {
+    return 'no module has the User role assigned to this account. Give it the User role in the role matrix first.';
+  }
   const privileged = grants.filter((g) => normalizeRole(g.roleId) !== 'general_staff' && !PLAIN_USER_ROLES.has(g.roleId.toLowerCase()));
   if (privileged.length) {
     return `remove these roles first in the role matrix: ${privileged.map((g) => `${g.moduleId}: ${g.roleId}`).join(', ')}.`;
@@ -549,6 +558,15 @@ async function responsibilityBlock(q: Querier, target: EmployeeRecord): Promise<
   const n = Number(managed?.n ?? 0);
   if (n > 0) return `they are the reporting manager or HoD of ${n} employee${n === 1 ? '' : 's'}; reassign them first.`;
   return null;
+}
+
+/** For the screen: whether the account can be deactivated now, and if not, why (the same check as the change itself). */
+export async function deactivationCheck(id: number): Promise<{ allowed: boolean; reason: string | null }> {
+  const found = await findEmployee(pool, id, false);
+  if (!found) throw notFound('Employee account not found.');
+  if (found.record.isSystem) return { allowed: false, reason: 'System accounts cannot be deactivated.' };
+  const block = await responsibilityBlock(pool, found.record, true);
+  return { allowed: !block, reason: block ? `Deactivation blocked: ${block}` : null };
 }
 
 export interface StatusChange { status: 'active' | 'inactive'; reason: string; effectiveDate: string }
@@ -565,7 +583,7 @@ async function setEmployeeStatusImpl(req: Request, id: number, change: StatusCha
     if (before.status === change.status) throw new HttpError(409, `The account is already ${change.status === 'active' ? 'active' : 'inactive'}.`, 'NO_CHANGE');
 
     if (change.status === 'inactive') {
-      const block = await responsibilityBlock(conn, before);
+      const block = await responsibilityBlock(conn, before, true);
       if (block) throw new HttpError(409, `Deactivation blocked: ${block}`, 'IN_USE');
     }
 
