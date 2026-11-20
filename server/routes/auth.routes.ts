@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import bcrypt from 'bcrypt';
+import { randomBytes } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { db } from '../../src/db';
 import { users } from '../../src/db/schema';
@@ -122,6 +123,7 @@ router.post('/login', asyncHandler(async (req, res) => {
   req.session.activeRole = null;
   req.session.loginAt = Date.now();
   req.session.lastActivityAt = req.session.loginAt;
+  req.session.sessionTag = randomBytes(12).toString('base64url');
   await saveSession(req);
 
   // Build the response through the same checks every later request goes through.
@@ -134,6 +136,12 @@ router.post('/login', asyncHandler(async (req, res) => {
 }));
 
 router.post('/logout', asyncHandler(async (req, res) => {
+  // The cookie is shared by every tab. A tab that still shows an older sign-in (asleep, offline for a moment) names
+  // the session it knows; when the user has since signed in again, the newer session is left alone.
+  const known = (req.body as { sessionTag?: unknown } | undefined)?.sessionTag;
+  if (typeof known === 'string' && req.session?.sessionTag && known !== req.session.sessionTag) {
+    return res.json({ success: true, kept: true });
+  }
   await destroySession(req);
   clearSessionCookie(res);
   res.json({ success: true });

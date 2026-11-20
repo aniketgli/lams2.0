@@ -7,6 +7,8 @@ import { photoUrls } from '../employees/photos';
 export interface SessionPayload {
   /** salutation: Mr./Mrs./Ms./Miss/Dr./Prof. from the employee profile, or null if none saved. */
   user: { id: string; biometricId: string; name: string; email: string; salutation: string | null; photoUrl: string | null };
+  /** Names this sign-in (not secret, not the session id): a tab signs out only the session it knows. */
+  sessionTag: string | null;
   /** True until the user replaces the default / temporary password. The server blocks everything else meanwhile. */
   mustChangePassword: boolean;
   /** True for a fixed system account still on its default password: the change cannot be skipped. */
@@ -27,6 +29,7 @@ export interface SessionPayload {
 export async function buildSessionPayload(req: Request): Promise<SessionPayload> {
   const auth = req.auth!;
   return {
+    sessionTag: req.session.sessionTag ?? null,
     user: {
       id: String(auth.account.id),
       biometricId: auth.account.biometricId,

@@ -14,6 +14,8 @@ declare module 'express-session' {
     loginAt: number;
     /** Epoch ms of the last user-initiated request; idle timeout counts from here. */
     lastActivityAt: number;
+    /** Random name of this sign-in, so a browser tab can only sign out the session it knows (see /auth/logout). */
+    sessionTag?: string;
   }
 }
 

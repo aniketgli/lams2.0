@@ -116,7 +116,9 @@ async function validate(def: MasterDef, body: unknown, existing: MasterRecord | 
 
   const name = typeof input.name === 'string' ? input.name.trim().replace(/\s+/g, ' ') : '';
   if (!name) errors.name = 'Name is required.';
-  else if (name.length > 255) errors.name = 'Name must be at most 255 characters.';
+  else if (name.length > (def.kind === 'table' ? def.nameMaxLength ?? 255 : 255)) {
+    errors.name = `Name must be at most ${def.kind === 'table' ? def.nameMaxLength ?? 255 : 255} characters.`;
+  }
 
   // Lookup codes are what records store, so they are fixed once created.
   let code = typeof input.code === 'string' ? input.code.trim() : '';

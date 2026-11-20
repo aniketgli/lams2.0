@@ -38,7 +38,7 @@ export const USED_TABLES = new Set([
   'leave_comp_off_uses', 'leave_joining_reports', 'leave_joining_certificates', 'email_settings', 'email_outbox',
   'notification_recipients', 'account_settings', 'report_schedules', 'report_schedule_recipients', 'report_runs',
   'salutations', 'genders', 'institutes', 'employee_types', 'org_unit_types', 'cadre_groups', 'funding_categories', 'cadres',
-  'org_unit_employee_types', 'org_unit_cadres', 'leave_type_employee_types', 'leave_type_purposes', 'shift_days', 'role_aliases',
+  'org_unit_employee_types', 'org_unit_cadres', 'leave_type_employee_types', 'leave_type_purposes', 'shift_days', 'role_aliases', 'banks',
 ]);
 
 /** Old tables whose rows were copied forward by earlier migrations; nothing reads them any more. */

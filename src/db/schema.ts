@@ -286,6 +286,16 @@ export const master_audit_logs = mysqlTable('master_audit_logs', {
   legacyRef: varchar('legacy_ref', { length: 64 }),
 });
 
+// Banks offered on the employee form (migrations/20261220_banks.sql); employee_bank_accounts.bank_name → name.
+export const banks = mysqlTable('banks', {
+  id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
+  name: varchar('name', { length: 100 }).notNull().unique(),
+  code: varchar('code', { length: 40 }).notNull().unique(),
+  status: varchar('status', { length: 16 }).notNull().default('ACTIVE'),
+  createdAt: datetime('created_at', { fsp: 3, mode: 'string' }),
+  updatedAt: datetime('updated_at', { fsp: 3, mode: 'string' }),
+});
+
 // Short admin-managed dropdown lists, one table each (server/lib/lookups.ts; migrations/20261219_02_list_tables.sql).
 export const salutations = mysqlTable('salutations', {
   id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),

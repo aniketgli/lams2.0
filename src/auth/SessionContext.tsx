@@ -30,7 +30,7 @@ const ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'wheel', 'touchstart', 'mouse
 type TabMessage =
   | { type: 'activity'; at: number }
   | { type: 'session-changed' }
-  | { type: 'signed-out'; message: string | null };
+  | { type: 'signed-out'; message: string | null; tag?: string | null };
 
 interface SessionContextValue {
   status: Status;
@@ -66,8 +66,8 @@ const LEGACY_IDENTITY_KEYS = ['la_hub_users', 'la_hub_current_user_id', 'la_hub_
  * so nothing of the old session is left in the browser when the user signs in again. Best effort.
  */
 let clearing: Promise<unknown> | null = null;
-function clearServerSession(): void {
-  const request = api('/auth/logout', { method: 'POST', passive: true }).catch(() => undefined);
+function clearServerSession(sessionTag: string | null): void {
+  const request = api('/auth/logout', { method: 'POST', passive: true, body: { sessionTag } }).catch(() => undefined);
   clearing = request;
   void request.finally(() => { if (clearing === request) clearing = null; });
 }
@@ -79,6 +79,8 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const statusRef = useRef(status);
   statusRef.current = status;
+  const tagRef = useRef<string | null>(null);
+  tagRef.current = session?.sessionTag ?? null;
   const lastActivityRef = useRef(Date.now());
   const lastSyncedActivityRef = useRef(Date.now());
   const lastSyncAtRef = useRef(0);
@@ -134,7 +136,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
         // 401 on first load just means "not signed in yet"; no notice needed.
         const wasSignedIn = statusRef.current === 'signedIn';
         // The server has ended the session: also drop its cookie, so the next sign-in starts clean.
-        if (wasSignedIn) clearServerSession();
+        if (wasSignedIn) clearServerSession(tagRef.current);
         signedOut(wasSignedIn || error.status === 403 ? error.message : null);
       } else if (statusRef.current === 'loading') {
         signedOut(error instanceof Error ? error.message : 'Unable to reach the server.');
@@ -164,7 +166,9 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
           lastActivityRef.current = Date.now();
           void sync(true);
         } else if (message?.type === 'signed-out') {
-          signedOut(message.message);
+          // Another tab signed out an older sign-in than this tab's: ask the server what is current instead.
+          if (message.tag && tagRef.current && message.tag !== tagRef.current) void sync(true);
+          else signedOut(message.message);
         }
       };
       channelRef.current = channel;
@@ -172,7 +176,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     const onEnded = (event: Event) => {
       if (statusRef.current !== 'signedIn') return;
-      clearServerSession();
+      clearServerSession(tagRef.current);
       signedOut((event as CustomEvent<{ message?: string }>).detail?.message ?? 'Your session has ended. Please sign in again.');
     };
     const onContextChanged = () => void sync(true);
@@ -256,15 +260,23 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [applySession, tell]);
 
   const logout = useCallback(async (message: string | null = null) => {
+    const tag = tagRef.current;
+    let kept = false;
     try {
-      await api('/auth/logout', { method: 'POST' });
+      // Only this tab's sign-in: if the user has signed in again elsewhere meanwhile, the server keeps that session.
+      kept = Boolean((await api<{ kept?: boolean }>('/auth/logout', { method: 'POST', body: { sessionTag: tag } }))?.kept);
     } catch {
       /* already signed out on the server */
     } finally {
-      signedOut(message);
-      tell({ type: 'signed-out', message: message ?? 'You signed out in another tab.' });
+      if (kept) {
+        // A newer sign-in is in use: show it here too instead of signing out.
+        void sync(true);
+      } else {
+        signedOut(message);
+        tell({ type: 'signed-out', message: message ?? 'You signed out in another tab.', tag });
+      }
     }
-  }, [signedOut, tell]);
+  }, [signedOut, tell, sync]);
 
   const changeContext = useCallback(async (path: string, body?: unknown) => {
     applySession(await api<SessionPayload>(path, { method: 'POST', body }));

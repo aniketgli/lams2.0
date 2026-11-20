@@ -375,10 +375,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </nav>
         </div>
 
-        {/* Bottom Section: Developed by IT Cell */}
+        {/* Bottom Section: Developed by IT, RS/GIS & AV Cell */}
         <div className="min-h-[52px] sm:h-14 px-3 border-t border-slate-200 bg-slate-50/70 flex items-center justify-center shrink-0">
           <p className="text-[11px] font-semibold text-slate-500 tracking-wide text-center">
-            Developed by <span className="font-extrabold text-slate-800">IT Cell</span>
+            Developed by <span className="font-extrabold text-slate-800">IT, RS/GIS &amp; AV Cell</span>
           </p>
         </div>
       </aside>

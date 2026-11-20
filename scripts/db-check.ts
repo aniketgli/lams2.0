@@ -54,6 +54,7 @@ const REQUIRED: Record<string, string[]> = {
   cadre_groups: ['code', 'name', 'status'], funding_categories: ['code', 'name', 'status'], cadres: ['code'],
   leave_type_employee_types: ['leave_type_id', 'employee_type_code'], leave_type_purposes: ['leave_type_id', 'purpose'],
   shift_days: ['shift_id', 'day'], role_aliases: ['module_id', 'role_id', 'alias'], report_schedules: ['send_csv', 'send_pdf'],
+  banks: ['name', 'code', 'status'], // 20261220_banks.sql
   designations: ['employee_type_code', 'cadre_code'], trainee_batches: ['training_course_name'], msc_batches: ['msc_stream_name'],
   // A balance set "as on" a date (20261208_balance_as_on.sql). Without it every leave of the year is deducted.
   leave_balances: ['as_of'],

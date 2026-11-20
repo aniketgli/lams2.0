@@ -174,6 +174,11 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const genderOptions = (masterOptions.gender ?? []).map((r) => ({ label: r.name, value: r.code }));
   const employeeTypeOptions = (masterOptions.employeeType ?? []).map((r) => ({ label: r.name, value: r.code }));
   const instituteOptions = (masterOptions.institute ?? []).map((r) => ({ label: r.name, value: r.code }));
+  // Banks master; an employee's saved bank stays selectable even if it was later made inactive.
+  const bankOptions = (current: string) => {
+    const names = optionNames('banks');
+    return [...(current && !names.includes(current) ? [current] : []), ...names].map((n) => ({ label: n, value: n }));
+  };
   /** The form layout behind an employee type (types are admin-defined; layouts are fixed). */
   const layoutOf = (employeeType?: string | null): string =>
     (masterOptions.employeeType ?? []).find((r) => r.code === employeeType)?.fields.formLayout || String(employeeType || '');
@@ -3361,17 +3366,15 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                         </div>
                         <div>
                           <label className="block text-slate-700 font-bold mb-1 text-xs">Bank Name</label>
-                          <input
-                            type="text"
-                            autoComplete="off"
-                            maxLength={100}
-                            value={newUserForm.bankName}
-                            onChange={(e) => setField('bankName', e.target.value)}
-                            placeholder="e.g. State Bank of India"
-                            aria-invalid={Boolean(errorOf('bankName'))}
-                            title={errorOf('bankName') || undefined}
-                            className={inputClass('bankName')}
-                          />
+                          <div className={controlBox('bankName')} title={errorOf('bankName') || undefined}>
+                            <AppSelect
+                              value={newUserForm.bankName}
+                              placeholder="Select Bank"
+                              onChange={(val) => setField('bankName', val)}
+                              options={[{ label: 'Select Bank', value: '' }, ...bankOptions(newUserForm.bankName)]}
+                              className="w-full"
+                            />
+                          </div>
                           {fieldError('bankName')}
                         </div>
                         <div>
