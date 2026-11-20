@@ -35,3 +35,7 @@ export const formatOrgAddress = (org?: Partial<OrgBranding> | null): string => {
   ].filter(Boolean);
   return parts.join(', ');
 };
+
+/** Copyright line of the footer: the saved notice, or "© <year> <organization name>" when none is saved. */
+export const formatOrgCopyright = (org?: Partial<OrgBranding> | null): string =>
+  (org?.copyrightText && org.copyrightText.trim()) || `© ${new Date().getFullYear()} ${org?.orgName?.trim() || 'Wildlife Institute of India'}`;

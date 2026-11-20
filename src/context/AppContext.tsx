@@ -153,7 +153,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     orgName: 'Organization',
     logoUrl: '',
     address: 'Office Location',
-    copyrightText: `© ${new Date().getFullYear()} Organization • Integrated Enterprise Suite`,
+    copyrightText: '', // empty: the footer shows "© <year> <organization name>" (formatOrgCopyright)
     appName: 'WII Portal',
     orgHindiName: '',
     badgeText: 'HUB',
@@ -203,10 +203,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         setOrgBranding((previous) => ({
           ...previous,
+          // The server's settings win, including an emptied address / copyright / removed logo.
           orgName: organization.orgName || previous.orgName,
-          logoUrl: organization.logoData || previous.logoUrl,
-          address: organization.address || previous.address,
-          copyrightText: organization.copyrightText || previous.copyrightText,
+          logoUrl: organization.logoData ?? '',
+          address: organization.address ?? '',
+          copyrightText: organization.copyrightText ?? '',
           updatedAt: organization.updatedAt || previous.updatedAt
         }));
       })

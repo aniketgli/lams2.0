@@ -1,3 +1,4 @@
+import { formatOrgCopyright } from '../../../../types';
 import React, { useEffect, useRef, useState } from 'react';
 import { Building2, ImagePlus, MapPin, Save, Trash2 } from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
@@ -24,7 +25,7 @@ const LivePreview: React.FC<{ form: Form }> = ({ form }) => (
       <div className="h-3 w-1/2 rounded bg-slate-200" />
     </div>
     <div className="bg-white border-t border-slate-200 px-3 py-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[10px] text-slate-600">
-      <span className="font-semibold">{form.copyrightText || `© ${new Date().getFullYear()} ${form.orgName || 'Organization'}`}</span>
+      <span className="font-semibold">{formatOrgCopyright(form)}</span>
       {form.address && <span className="flex items-center gap-1"><MapPin className="w-3 h-3 text-primary shrink-0" />{form.address}</span>}
     </div>
   </div>
