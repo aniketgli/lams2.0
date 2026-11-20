@@ -16,7 +16,7 @@ import {
 } from './fields';
 import { ResolvedReferences, checkReferences, layoutOfEmployeeType } from './references';
 import { isSystemRow, systemAccountError } from '../lib/systemAccounts';
-import { IDENTITY_STORED_KEYS, identityAudit, identityView, storeIdentity } from './identity';
+import { AADHAAR_REQUIRED, IDENTITY_STORED_KEYS, identityAudit, identityView, storeIdentity } from './identity';
 import { identityOwner, loadIdentities, saveIdentity } from './identityStore';
 import { placementValues, profileColumn, profileJsonSql, profileObject, profileValues } from './profileSql';
 import { creditProRata, spanForNewEmployee, spansForExtension } from '../leave/proRata';
@@ -336,10 +336,10 @@ async function profileColumns(conn: Querier, input: EmployeeInput, layout: FormL
 async function prepare(conn: PoolConnection, body: unknown, selfId: number | null, previous: Record<string, unknown> = {}) {
   const employmentType = (body && typeof body === 'object' ? (body as Record<string, unknown>).employmentType : undefined);
   const layout = await layoutOfEmployeeType(conn, employmentType);
-  // Aadhaar and blood group: required for a new employee, and once entered they cannot be removed. Employees added before the field
-  // existed can still be saved without it.
+  // Blood group (and Aadhaar while AADHAAR_REQUIRED): required for a new employee. Once entered they cannot be
+  // removed. Employees added before the field existed can still be saved without it.
   const input = parseEmployeeInput(body, layout, todayInIndia(), {
-    aadhaar: selfId === null || Boolean(previous.aadhaarHash),
+    aadhaar: (selfId === null && AADHAAR_REQUIRED) || Boolean(previous.aadhaarHash),
     bloodGroup: selfId === null || Boolean(previous.bloodGroup),
   });
   const refs = await checkReferences(conn, input, layout!, selfId);

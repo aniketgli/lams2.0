@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { Validator } from '../lib/validate';
 import {
-  aadhaarProblem, accountKey, decryptValue, encryptValue, identityAudit, identityHash, identityView, parseIdentity, storeIdentity, verhoeffValid,
+  AADHAAR_REQUIRED, aadhaarProblem, accountKey, decryptValue, encryptValue, identityAudit, identityHash, identityView, parseIdentity, storeIdentity, verhoeffValid,
 } from './identity';
 import { columnsFor } from './bulkImportRules';
 
@@ -73,7 +73,7 @@ describe('employee identity details', () => {
     expect(headers('intern')).toEqual(expect.arrayContaining(['Aadhaar', 'PAN', 'Bank_Name', 'IFSC', 'Account_Number']));
     expect(headers('bsc_msc_student')).toContain('Aadhaar');
     expect(headers('bsc_msc_student')).not.toContain('PAN');
-    expect(columnsFor('permanent').find((c) => c.header === 'Aadhaar')?.required).toBe(true);
+    expect(columnsFor('permanent').find((c) => c.header === 'Aadhaar')?.required).toBe(AADHAAR_REQUIRED);
   });
 });
 

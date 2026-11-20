@@ -22,7 +22,7 @@ import { PageHeaderButton } from '../../../../shared/components/PageHeader';
 import { SegmentedControl } from '../../../../shared/components/SegmentedControl';
 import { PAGE_ICONS } from '../../hrmsPages';
 import { logThenDownload } from '../../../../shared/services/downloadAudit';
-import { auditorApi, employeeApi } from '../employeeApi';
+import { AADHAAR_REQUIRED, auditorApi, employeeApi } from '../employeeApi';
 import { FilterToolbar } from '../../../../shared/components/FilterToolbar';
 import { downloadCsvText, downloadTablePdf, toCsvText } from '../../../../shared/services/printTable';
 import { useSession } from '../../../../auth/SessionContext';
@@ -2291,7 +2291,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                     {/* Aadhaar (every employee type) */}
                     <div>
                       <label className="block text-slate-700 font-bold mb-1 text-xs">
-                        Aadhaar Number {!editingEmployeeId && <span className="text-blue-600 font-bold ml-0.5">*</span>}
+                        Aadhaar Number {!editingEmployeeId && AADHAAR_REQUIRED && <span className="text-blue-600 font-bold ml-0.5">*</span>}
                       </label>
                       <input
                         type="text"

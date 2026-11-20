@@ -13,9 +13,14 @@ import type { FormLayout } from './fields';
  * - PAN, bank name and IFSC are stored as text.
  * - Full numbers are shown to administrators only (the employee form); everyone else sees XXXX XXXX 1234.
  * - Aadhaar is asked of every employee type; PAN and bank details of every type except M.Sc students.
- *   Aadhaar is required for a new employee; an employee added before this field existed can be saved without it
- *   until it is entered, and once entered it cannot be removed.
+ *   Aadhaar is optional for now (AADHAAR_REQUIRED); once entered it cannot be removed.
  */
+
+/**
+ * Whether a new employee must have an Aadhaar number (form and bulk import). Off for now; set to true to make it
+ * required again (also flip AADHAAR_REQUIRED in src/modules/hrms/profile/employeeApi.ts for the form's asterisk).
+ */
+export const AADHAAR_REQUIRED = false;
 
 /** Stored keys (never sent to the browser as they are). */
 export const IDENTITY_STORED_KEYS = [

@@ -198,6 +198,12 @@ async function main(): Promise<void> {
   const noRoleHod = await req('POST', '/api/hrms/employees', { ...body, biometricId: '3007', email: 'ci.hod@wii.gov.in', phone: '9876500007', reviewingManagerId: rmId, aadhaarNumber: aadhaarFrom('78901234567'), panNumber: 'ABCDE9882K', bankAccountNumber: '723456789012' });
   check('An HoD without the HoD role is refused', noRoleHod.status === 400 && /HoD role/.test(String(noRoleHod.body?.details?.reviewingManagerId)), `${noRoleHod.status} ${JSON.stringify(noRoleHod.body?.details ?? {}).slice(0, 160)}`);
 
+  // ---- Aadhaar is optional for now (AADHAAR_REQUIRED = false) -----------------------------------
+  const noAadhaar = await req('POST', '/api/hrms/employees', { ...body, biometricId: '3008', email: 'ci.noaadhaar@wii.gov.in', phone: '9876500008', aadhaarNumber: '', panNumber: 'ABCDE9883K', bankAccountNumber: '823456789012' });
+  check('A new employee can be saved without Aadhaar', noAadhaar.status === 201, `${noAadhaar.status} ${noAadhaar.text.slice(0, 160)}`);
+  const badAadhaar = await req('POST', '/api/hrms/employees', { ...body, biometricId: '3009', email: 'ci.badaadhaar@wii.gov.in', phone: '9876500009', aadhaarNumber: '123412341234', panNumber: 'ABCDE9884K', bankAccountNumber: '923456789012' });
+  check('An Aadhaar that is entered is still checked', badAadhaar.status === 400 && Boolean(badAadhaar.body?.details?.aadhaarNumber), String(badAadhaar.status));
+
   // ---- Banks master ----------------------------------------------------------------------------
   const bankList = await req('GET', '/api/hrms/masters/banks');
   check('Banks master lists the common banks', (bankList.body?.records ?? []).some((r: any) => r.name === 'State Bank of India' && r.code === 'SBIN'), String(bankList.status));
