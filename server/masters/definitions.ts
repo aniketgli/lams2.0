@@ -83,6 +83,8 @@ export interface TableMasterDef extends BaseDef {
   /** Column of each extra field (every field has one; there is no JSON column). */
   columnFields: Record<string, string>;
   codeMaxLength: number;
+  /** Longest name the table's column holds (default 255). */
+  nameMaxLength?: number;
 }
 
 export interface LookupMasterDef extends BaseDef {
@@ -196,6 +198,14 @@ export const MASTERS: MasterDef[] = [
     columnFields: { category: 'funding_category_code' },
     fields: [{ key: 'category', label: 'Funding category', type: 'lookup', lookupType: 'funding_category' }],
     usage: [{ what: 'employee profiles', sql: COUNT('employee_profiles', 'phd_enrollment_name'), by: 'name' }],
+  },
+  {
+    kind: 'table', key: 'banks', table: 'banks', group: 'profile', codeMaxLength: 40, nameMaxLength: 100,
+    label: 'Banks', noun: 'Bank',
+    description: 'Banks offered for an employee\'s salary account (code: the bank\'s 4-letter IFSC code, e.g. SBIN).',
+    columnFields: {},
+    fields: [],
+    usage: [{ what: 'employee bank accounts', sql: COUNT('employee_bank_accounts', 'bank_name'), by: 'name' }],
   },
 
   // ---- Employee-form lists (one table each, lookups.ts) -------------------------

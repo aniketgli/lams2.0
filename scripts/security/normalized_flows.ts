@@ -189,6 +189,15 @@ async function main(): Promise<void> {
   const badDesig = await req('POST', '/api/hrms/employees', { ...body, biometricId: '3004', email: 'ci.bad@wii.gov.in', phone: '9876500004', designation: 'No Such Post', aadhaarNumber: aadhaarFrom('45678901234'), panNumber: 'ABCDE9879K', bankAccountNumber: '423456789012' });
   check('An unknown designation is refused with 400', badDesig.status === 400, String(badDesig.status));
 
+  // ---- Banks master ----------------------------------------------------------------------------
+  const bankList = await req('GET', '/api/hrms/masters/banks');
+  check('Banks master lists the common banks', (bankList.body?.records ?? []).some((r: any) => r.name === 'State Bank of India' && r.code === 'SBIN'), String(bankList.status));
+  const badBank = await req('POST', '/api/hrms/employees', { ...body, biometricId: '3005', email: 'ci.bank@wii.gov.in', phone: '9876500005', bankName: 'Not A Bank', aadhaarNumber: aadhaarFrom('56789012345'), panNumber: 'ABCDE9880K', bankAccountNumber: '523456789012' });
+  check('A bank outside the master is refused', badBank.status === 400 && Boolean(badBank.body?.details?.bankName), `${badBank.status} ${JSON.stringify(badBank.body?.details ?? {}).slice(0, 120)}`);
+  const sbi = (bankList.body?.records ?? []).find((r: any) => r.code === 'SBIN');
+  const sbiDel = sbi ? await req('DELETE', `/api/hrms/masters/banks/${sbi.id}`, { reason: 'ci' }) : { status: 0 };
+  check('A bank in use cannot be deleted', sbiDel.status === 409, String(sbiDel.status));
+
   // ---- Sign-out names the sign-in it means (a sleeping tab must not end a newer sign-in) ---------
   const first = (await req('GET', '/api/auth/me')).body?.sessionTag;
   const again = await req('POST', '/api/auth/login', { email: 'admin@wii.gov.in', password: PASSWORD });

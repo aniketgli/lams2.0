@@ -38,16 +38,17 @@ jobs:
           $M < scripts/sql/fixtures/live_schema_2026-11-19.sql > /tmp/load.out 2>&1 || { cat /tmp/load.out; exit 1; }
           # The starting rows the earlier migrations put in (lists, role catalog, system accounts, leave types):
           # every earlier migration is safe to re-run, so they are applied once more with errors ignored.
-          for f in $(ls migrations/*.sql | sort | grep -v '/20261219_'); do
+          for f in $(ls migrations/*.sql | sort | awk -F/ '$2 < "20261219"'); do
             mysql -h127.0.0.1 -uroot -proot --force lams2_test < "$f" > /dev/null 2>&1 || true
           done
           $M < scripts/sql/ci/legacy_sample.sql > /tmp/sample.out 2>&1 || { cat /tmp/sample.out; exit 1; }
           $M -N -e "SELECT COUNT(*) AS tables FROM information_schema.TABLES WHERE TABLE_SCHEMA='lams2_test'" 2>/dev/null
-      - name: Normalization migrations (twice; the second run must change nothing)
+      - name: Normalization and later migrations (twice; the second run must change nothing)
         run: |
           for run in 1 2; do
             echo "=== run $run"
-            for f in $(ls migrations/20261219_0*.sql | sort); do
+            # The normalization files and every later migration, in order.
+            for f in $(ls migrations/*.sql | sort | awk -F/ '$2 >= "20261219"'); do
               if ! mysql -h127.0.0.1 -uroot -proot lams2_test < "$f" > /tmp/mig.out 2>&1; then
                 grep -v "Using a password" /tmp/mig.out; echo "FAILED: $f"; exit 1
               fi

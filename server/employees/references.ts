@@ -166,6 +166,20 @@ export async function checkReferences(q: Querier, input: EmployeeInput, layout: 
     }
   }
 
+  // Bank: one of the Banks master (an inactive bank stays allowed for the employee who already has it).
+  const bankName = input.identity?.bankName;
+  if (bankName) {
+    const [bank] = await rows(q, 'SELECT name, status FROM banks WHERE name = ? LIMIT 1', [bankName]);
+    let allowed = Boolean(bank) && String(bank.status).toUpperCase() === 'ACTIVE';
+    if (bank && !allowed && selfId) {
+      const [own] = await rows(q, `SELECT 1 FROM employee_bank_accounts a JOIN users u ON u.biometric_id = a.biometric_id
+                                    WHERE u.id = ? AND a.bank_name = ? LIMIT 1`, [selfId, bank.name]);
+      allowed = Boolean(own);
+    }
+    if (!allowed) errors.bankName = 'Choose a bank from the list (Master Settings → Banks).';
+    else input.identity.bankName = String(bank.name); // the master's spelling
+  }
+
   if (Object.keys(errors).length) throw badRequest('Please correct the highlighted fields.', errors);
   return { reviewingManagerId: rules.hod ? reviewingManagerId : null, hodName, reportingManagerName, leaveCycle };
 }

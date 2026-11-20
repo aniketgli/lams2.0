@@ -10,6 +10,7 @@ import { Validator } from '../lib/validate';
 import { parseDelimited } from '../leave/balanceImport';
 import { defaultPasswordHash } from '../masters/accountSettings';
 import { CADRES, LAYOUT_RULES, RECRUITMENT_CATEGORIES, type FormLayout } from './fields';
+import { asksBankDetails } from './identity';
 import { MAX_EMPLOYEE_IMPORT_ROWS, columnsFor, creationOrder, keyOf, parseDay, parseYesNo, type ImportColumn } from './bulkImportRules';
 
 export { MAX_EMPLOYEE_IMPORT_ROWS } from './bulkImportRules';
@@ -86,6 +87,7 @@ async function allowedValues(type: ImportType): Promise<Record<string, string[]>
     out.Batch = await names(msc ? 'msc_batches' : 'trainee_batches');
   }
   if (rules.enrollment) out.Enrolled_Through = await names('phd_enrollments');
+  if (asksBankDetails(type.layout)) out.Bank_Name = await names('banks');
   return out;
 }
 
