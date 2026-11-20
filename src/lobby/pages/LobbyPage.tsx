@@ -1,13 +1,11 @@
 import React, { useState } from 'react';
-import { useApp } from '../../context/AppContext';
 import { useSession } from '../../auth/SessionContext';
 import { ServerModuleId, toUiModule } from '../../auth/access';
 import { ApiError } from '../../shared/services/api';
-import { formatOrgAddress } from '../../types';
 import { WIILogo } from '../../shared/components/WIILogo';
 import { Alert } from '../../shared/components';
 import { navigate } from '../../shared/router';
-import { Users, Package, IndianRupee, Building2, FolderKanban, LogOut, MapPin, Loader2, KeyRound } from 'lucide-react';
+import { Users, Package, IndianRupee, Building2, FolderKanban, LogOut, Loader2, KeyRound } from 'lucide-react';
 
 interface ModuleCard {
   title: string;
@@ -26,7 +24,6 @@ const MODULE_CARDS: Record<ServerModuleId, ModuleCard> = {
 };
 
 export const LobbyPage: React.FC = () => {
-  const { orgBranding } = useApp();
   const { session, enterModule, logout } = useSession();
   const [opening, setOpening] = useState<ServerModuleId | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -114,17 +111,6 @@ export const LobbyPage: React.FC = () => {
         )}
       </main>
 
-      <footer className="w-full px-6 sm:px-10 lg:px-12 py-5 bg-white border-t border-slate-200 text-xs text-slate-500 font-medium">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-center sm:text-left">
-          <p>{orgBranding?.copyrightText || `© ${new Date().getFullYear()} ${orgBranding?.orgName || 'Wildlife Institute of India'}`}</p>
-          {formatOrgAddress(orgBranding) && (
-            <p className="flex items-center gap-1.5 text-slate-600">
-              <MapPin className="w-3.5 h-3.5 text-brand shrink-0" aria-hidden="true" />
-              <span>{formatOrgAddress(orgBranding)}</span>
-            </p>
-          )}
-        </div>
-      </footer>
     </div>
   );
 };
