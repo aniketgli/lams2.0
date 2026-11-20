@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../../src/db';
 import { users } from '../../src/db/schema';
 import {
-  HttpError, asyncHandler, clearSessionCookie, destroySession, regenerateSession, saveSession, tooManyRequests,
+  HttpError, asyncHandler, clearOldSessionCookies, clearSessionCookie, destroySession, regenerateSession, saveSession, tooManyRequests,
 } from '../lib/http';
 import { AttemptLimiter } from '../lib/rateLimit';
 import { captchaEnabled, createCaptcha, verifyCaptcha } from '../lib/captcha';
@@ -125,6 +125,7 @@ router.post('/login', asyncHandler(async (req, res) => {
   req.session.lastActivityAt = req.session.loginAt;
   req.session.sessionTag = randomBytes(12).toString('base64url');
   await saveSession(req);
+  clearOldSessionCookies(res);
 
   // Build the response through the same checks every later request goes through.
   const account = await findAccountById(user.id);

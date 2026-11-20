@@ -47,7 +47,15 @@ export function destroySession(req: Request): Promise<void> {
   return new Promise((resolve) => req.session.destroy(() => resolve()));
 }
 
-export const SESSION_COOKIE = 'wii.sid';
+/**
+ * Name of the session cookie. Browsers share cookies between every port of the same address, so another web app on
+ * this server (another port) that also used "wii.sid" overwrote this app's cookie and signed users out — until they
+ * cleared their browser data. The name is unique to this app and can be set with SESSION_COOKIE_NAME.
+ */
+const cookieName = String(process.env.SESSION_COOKIE_NAME ?? '').trim();
+export const SESSION_COOKIE = /^[A-Za-z0-9._-]{3,40}$/.test(cookieName) ? cookieName : 'lams2.sid';
+/** Name used before; removed from the browser at sign-in and sign-out. */
+export const OLD_SESSION_COOKIES = ['wii.sid'].filter((name) => name !== SESSION_COOKIE);
 
 export function clearSessionCookie(res: Response) {
   res.clearCookie(SESSION_COOKIE, {
@@ -57,6 +65,35 @@ export function clearSessionCookie(res: Response) {
     secure: res.req.secure,
     path: '/',
   });
+  clearOldSessionCookies(res);
+}
+
+/** Drops cookies of the old name (they would only confuse a later sign-in). */
+export function clearOldSessionCookies(res: Response) {
+  const sent = String(res.req.headers.cookie ?? '');
+  for (const name of OLD_SESSION_COOKIES) {
+    if (sent.split(';').some((part) => part.trim().startsWith(`${name}=`))) res.clearCookie(name, { path: '/' });
+  }
+}
+
+let lastDuplicateWarning = 0;
+/**
+ * When a browser sends the session cookie more than once (left over with another path or from another app), keep
+ * only the last one, which is the newest sign-in for the same path. Logged (without values) so it can be traced.
+ */
+export function keepOneSessionCookie(req: Request, _res: Response, next: () => void) {
+  const header = req.headers.cookie;
+  if (header && header.split(`${SESSION_COOKIE}=`).length > 2) {
+    const parts = header.split(';').map((p) => p.trim()).filter(Boolean);
+    const ours = parts.filter((p) => p.startsWith(`${SESSION_COOKIE}=`));
+    const others = parts.filter((p) => !p.startsWith(`${SESSION_COOKIE}=`));
+    req.headers.cookie = [...others, ours[ours.length - 1]].join('; ');
+    if (Date.now() - lastDuplicateWarning > 10 * 60 * 1000) {
+      lastDuplicateWarning = Date.now();
+      console.warn(`[session] a browser sent ${ours.length} "${SESSION_COOKIE}" cookies; the last one was used (${req.method} ${req.path}).`);
+    }
+  }
+  next();
 }
 
 /**
