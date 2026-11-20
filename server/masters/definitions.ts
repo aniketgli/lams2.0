@@ -271,7 +271,7 @@ export const MASTERS: MasterDef[] = [
  */
 export const PROFILE_TABS = [
   'salutation', 'gender', 'institute', 'organizations', 'employeeType', 'designations', 'projects',
-  'courses', 'traineeBatches', 'mscStreams', 'mscBatches', 'phdEnrollment', 'fundingCategory',
+  'courses', 'traineeBatches', 'mscStreams', 'mscBatches', 'phdEnrollment', 'fundingCategory', 'banks',
 ] as const;
 
 export function tabOrder(key: string): number | null {

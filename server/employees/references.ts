@@ -4,6 +4,7 @@ import { pool } from '../../src/db';
 import { badRequest } from '../lib/http';
 import { normalizeModule, normalizeRole } from '../lib/roles';
 import { EmployeeInput, FormLayout, LAYOUT_RULES, MasterRef, isFormLayout } from './fields';
+import { type ManagerKind, holdsManagerRole, managerRoleMessage, someoneHoldsManagerRole } from './managerRoles';
 
 /**
  * Database checks for the employee form: every dropdown value must be an
@@ -131,21 +132,36 @@ export async function checkReferences(q: Querier, input: EmployeeInput, layout: 
 
   // Managers must be active accounts of the same institute (when their institute is recorded). Of the system accounts,
   // only the Administrator may be chosen (the form offers it while no employee is registered yet).
-  const activeAccount = async (id: string) => {
+  // They must also hold that HRMS role (managerRoles.ts). A manager the employee already has stays accepted on an
+  // edit, so other changes to an older profile can still be saved.
+  const [current] = selfId
+    ? await rows(q, `SELECT p.reporting_manager_id, p.reviewing_manager_id FROM users u
+                       JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE u.id = ? LIMIT 1`, [selfId])
+    : [];
+  const roleError: Record<ManagerKind, string | null> = { reporting: null, hod: null };
+  const activeAccount = async (id: string, kind: ManagerKind) => {
     const [row] = await rows(q,
       `SELECT u.id, u.biometric_id, u.name, u.status, u.is_system, p.institute FROM users u
          LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE u.id = ? LIMIT 1`, [Number(id)]);
     if (!row || String(row.status).toLowerCase() !== 'active') return null;
-    if (Number(row.is_system ?? 0) === 1 && !(await isSystemAdministrator(q, String(row.biometric_id)))) return null;
+    const system = Number(row.is_system ?? 0) === 1;
+    if (system && !(await isSystemAdministrator(q, String(row.biometric_id)))) return null;
     if (row.institute && input.institute && String(row.institute) !== input.institute) return null;
+    const kept = String(current?.[kind === 'reporting' ? 'reporting_manager_id' : 'reviewing_manager_id'] ?? '') === String(row.id);
+    if (!kept) {
+      const ok = system
+        ? !(await someoneHoldsManagerRole(q, kind)) // the Administrator only until an employee holds the role
+        : await holdsManagerRole(q, String(row.biometric_id), kind);
+      if (!ok) { roleError[kind] = managerRoleMessage(kind); return null; }
+    }
     return row;
   };
 
   let reportingManagerName: string | null = null;
   if (input.reportingManagerId) {
     // An employee may be their own reporting manager (a Director is).
-    const manager = await activeAccount(input.reportingManagerId);
-    if (!manager) errors.reportingManagerId = 'Choose an active employee of the same organization as the reporting manager.';
+    const manager = await activeAccount(input.reportingManagerId, 'reporting');
+    if (!manager) errors.reportingManagerId = roleError.reporting ?? 'Choose an active employee of the same organization as the reporting manager.';
     else reportingManagerName = String(manager.name);
   }
 
@@ -160,8 +176,8 @@ export async function checkReferences(q: Querier, input: EmployeeInput, layout: 
     }
     if (reviewingManagerId && !errors.reviewingManagerId) {
       // An employee may be their own HoD (a Director is).
-      const hod = await activeAccount(reviewingManagerId);
-      if (!hod) errors.reviewingManagerId = 'Choose an active employee of the same organization as the HoD.';
+      const hod = await activeAccount(reviewingManagerId, 'hod');
+      if (!hod) errors.reviewingManagerId = roleError.hod ?? 'Choose an active employee of the same organization as the HoD.';
       else hodName = String(hod.name);
     }
   }

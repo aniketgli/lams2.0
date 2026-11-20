@@ -189,6 +189,13 @@ async function main(): Promise<void> {
   const badDesig = await req('POST', '/api/hrms/employees', { ...body, biometricId: '3004', email: 'ci.bad@wii.gov.in', phone: '9876500004', designation: 'No Such Post', aadhaarNumber: aadhaarFrom('45678901234'), panNumber: 'ABCDE9879K', bankAccountNumber: '423456789012' });
   check('An unknown designation is refused with 400', badDesig.status === 400, String(badDesig.status));
 
+  // ---- Reporting manager / HoD must hold that role --------------------------------------------
+  const staffId = String(byBio('1004')?.id ?? '');
+  const noRoleRm = await req('POST', '/api/hrms/employees', { ...body, biometricId: '3006', email: 'ci.rm@wii.gov.in', phone: '9876500006', reportingManagerId: staffId, aadhaarNumber: aadhaarFrom('67890123456'), panNumber: 'ABCDE9881K', bankAccountNumber: '623456789012' });
+  check('A reporting manager without the Reporting Manager role is refused', noRoleRm.status === 400 && /Reporting Manager role/.test(String(noRoleRm.body?.details?.reportingManagerId)), `${noRoleRm.status} ${JSON.stringify(noRoleRm.body?.details ?? {}).slice(0, 160)}`);
+  const noRoleHod = await req('POST', '/api/hrms/employees', { ...body, biometricId: '3007', email: 'ci.hod@wii.gov.in', phone: '9876500007', reviewingManagerId: rmId, aadhaarNumber: aadhaarFrom('78901234567'), panNumber: 'ABCDE9882K', bankAccountNumber: '723456789012' });
+  check('An HoD without the HoD role is refused', noRoleHod.status === 400 && /HoD role/.test(String(noRoleHod.body?.details?.reviewingManagerId)), `${noRoleHod.status} ${JSON.stringify(noRoleHod.body?.details ?? {}).slice(0, 160)}`);
+
   // ---- Banks master ----------------------------------------------------------------------------
   const bankList = await req('GET', '/api/hrms/masters/banks');
   check('Banks master lists the common banks', (bankList.body?.records ?? []).some((r: any) => r.name === 'State Bank of India' && r.code === 'SBIN'), String(bankList.status));
