@@ -189,6 +189,18 @@ async function main(): Promise<void> {
   const badDesig = await req('POST', '/api/hrms/employees', { ...body, biometricId: '3004', email: 'ci.bad@wii.gov.in', phone: '9876500004', designation: 'No Such Post', aadhaarNumber: aadhaarFrom('45678901234'), panNumber: 'ABCDE9879K', bankAccountNumber: '423456789012' });
   check('An unknown designation is refused with 400', badDesig.status === 400, String(badDesig.status));
 
+  // ---- Sign-out names the sign-in it means (a sleeping tab must not end a newer sign-in) ---------
+  const first = (await req('GET', '/api/auth/me')).body?.sessionTag;
+  const again = await req('POST', '/api/auth/login', { email: 'admin@wii.gov.in', password: PASSWORD });
+  const second = again.body?.sessionTag;
+  check('Every sign-in gets its own tag', typeof first === 'string' && typeof second === 'string' && first !== second, `${first} / ${second}`);
+  const stale = await req('POST', '/api/auth/logout', { sessionTag: first });
+  const still = await req('GET', '/api/auth/me');
+  check('Signing out an older sign-in keeps the newer one', stale.body?.kept === true && still.status === 200, `${stale.status} ${JSON.stringify(stale.body)} / me ${still.status}`);
+  const own = await req('POST', '/api/auth/logout', { sessionTag: second });
+  const gone = await req('GET', '/api/auth/me');
+  check('Signing out this sign-in ends it', own.status === 200 && !own.body?.kept && gone.status === 401, `${own.status} / me ${gone.status}`);
+
   console.log(`\n${failed ? `${failed} check(s) failed.` : 'All normalized flows work.'}`);
   process.exit(failed ? 1 : 0);
 }

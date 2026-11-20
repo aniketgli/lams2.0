@@ -16,6 +16,10 @@ export const SessionTimeoutGuard: React.FC = () => {
   const [now, setNow] = useState(() => Date.now());
   const [busy, setBusy] = useState(false);
   const loggingOut = useRef(false);
+  // A newer sign-in (here or in another tab) starts the idle watch again.
+  useEffect(() => {
+    loggingOut.current = false;
+  }, [session?.sessionTag]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
