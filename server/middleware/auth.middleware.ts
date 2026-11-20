@@ -1,5 +1,5 @@
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
-import { asyncHandler, clearSessionCookie, destroySession, forbidden, unauthorized, HttpError } from '../lib/http';
+import { asyncHandler, destroySession, forbidden, unauthorized, HttpError } from '../lib/http';
 import type { ModuleId, RoleId } from '../lib/roles';
 import { PASSIVE_REQUEST_HEADER, sessionConfig } from '../config/session.config';
 import { accountBlockReason, cachedAccountById, cachedActiveGrants, hasGrant } from '../services/access.service';
@@ -18,15 +18,17 @@ export { passwordChangeRequired } from '../lib/passwordGate';
 
 const requestPath = (req: Request) => (req.originalUrl || req.url || '').split('?')[0].replace(/\/+$/, '');
 
-export const requireAuth: RequestHandler = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+export const requireAuth: RequestHandler = asyncHandler(async (req: Request, _res: Response, next: NextFunction) => {
   if (req.auth) return next(); // already checked earlier in this request
 
   const userId = Number(req.session?.userId);
   if (!Number.isSafeInteger(userId) || userId <= 0) throw unauthorized();
 
+  // The session is removed on the server; the cookie is left for the browser to drop (the app calls /auth/logout).
+  // Clearing it here could remove a NEWER cookie: an old tab's request can be answered after the user has already
+  // signed in again, and its "clear the cookie" would then sign the new session out.
   const endSession = async (status: number, message: string, code: string): Promise<never> => {
     await destroySession(req);
-    clearSessionCookie(res);
     throw new HttpError(status, message, code);
   };
 
