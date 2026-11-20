@@ -143,7 +143,8 @@ async function main(): Promise<void> {
     ];
     for (const [name, sql, params] of hot) {
       try {
-        const plan = await rows(c, `EXPLAIN ${sql}`, params);
+        // FORMAT=TRADITIONAL: MySQL 9 may default to the tree format, which has no table / key columns.
+        const plan = await rows(c, `EXPLAIN FORMAT=TRADITIONAL ${sql}`, params);
         const scans = plan.filter((p) => p.type === 'ALL' && Number(p.rows) > 1000);
         if (scans.length) report('WARN', `Plan: ${name}`, `full scan of ${scans.map((p) => `${p.table} (~${p.rows} rows)`).join(', ')}`);
         else report('PASS', `Plan: ${name}`, plan.map((p) => `${p.table}:${p.key ?? 'no key'}`).join(', '));
