@@ -1274,17 +1274,28 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   };
 
   // Memoized active employees (excluding deactivated)
-  /** Reporting manager / HoD choices on the employee form: active employees of the same organization. The employee may be their own (a Director is their own reporting manager and HoD). */
-  const formManagers = useMemo(() => {
+  /**
+   * Reporting manager / HoD choices on the employee form: active employees of the same organization who hold the
+   * Reporting Manager / HoD role (the server checks the same). The employee may be their own (a Director is).
+   * The Administrator (system account) is offered while no employee holds the role yet. The manager an employee
+   * already has stays listed, so an older profile can still be saved.
+   */
+  const managersWithRole = (role: 'reporting_manager' | 'reviewing_manager', current: string) => {
     const employees = users.filter((u) =>
       u.status !== 'deactivated' && (!newUserForm.institute || !u.institute || u.institute === newUserForm.institute));
-    // The Administrator (system account) is offered while no employee is registered yet, and stays listed for an
-    // employee who already has it as reporting manager / HoD. The server accepts only this system account.
+    const holders = employees.filter((u) => (u.roles ?? [u.role]).includes(role));
     const admins = systemUsers.filter((u) => u.status !== 'deactivated' && (u.roles ?? [u.role]).includes('administrator'));
-    const chosen = new Set([newUserForm.reportingManagerId, newUserForm.reviewingManagerId].filter(Boolean));
-    const extra = admins.filter((a) => !employees.length || chosen.has(a.id));
-    return [...employees, ...extra];
-  }, [users, systemUsers, newUserForm.institute, newUserForm.reportingManagerId, newUserForm.reviewingManagerId]);
+    const kept = [...employees, ...admins].filter((u) => u.id === current && !holders.includes(u));
+    const extra = holders.length ? [] : admins.filter((a) => !kept.includes(a));
+    return [...holders, ...kept, ...extra];
+  };
+  const editedEmployee = editingEmployeeId ? users.find((u) => u.id === editingEmployeeId) : undefined;
+  const formReportingManagers = useMemo(() => managersWithRole('reporting_manager', editedEmployee?.reportingManagerId ?? ''),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [users, systemUsers, newUserForm.institute, editedEmployee?.reportingManagerId]);
+  const formHods = useMemo(() => managersWithRole('reviewing_manager', editedEmployee?.reviewingManagerId ?? ''),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [users, systemUsers, newUserForm.institute, editedEmployee?.reviewingManagerId]);
 
   // Filtered Users for User Controls tab
   const filteredUsersForControls = useMemo(() => {
@@ -2494,7 +2505,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, reportingManagerId: val })}
                             options={[
                               { label: 'Select Reporting Manager', value: '' },
-                              ...formManagers.map((u) => ({
+                              ...formReportingManagers.map((u) => ({
                                 label: `${u.name} (${u.designation || 'Manager'} - ${u.department || 'General'})`,
                                 value: u.id
                               }))
@@ -2516,7 +2527,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, reviewingManagerId: val, hodName: users.find((u) => u.id === val)?.name || '' })}
                             options={[
                               { label: 'Select HoD', value: '' },
-                              ...formManagers.map((u) => ({
+                              ...formHods.map((u) => ({
                                 label: `${u.name} (${u.designation || 'HoD'} - ${u.department || 'General'})`,
                                 value: u.id
                               }))
@@ -2694,7 +2705,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, reportingManagerId: val })}
                             options={[
                               { label: 'Select Reporting Manager', value: '' },
-                              ...formManagers.map((u) => ({
+                              ...formReportingManagers.map((u) => ({
                                 label: `${u.name} (${u.designation || 'Manager'} - ${u.department || 'General'})`,
                                 value: u.id
                               }))
@@ -2822,7 +2833,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             }}
                             options={[
                               { label: 'Select Reporting Manager', value: '' },
-                              ...formManagers.map((u) => ({
+                              ...formReportingManagers.map((u) => ({
                                 label: `${u.name} (${u.designation || 'PI'} - ${u.department || 'General'})`,
                                 value: u.id
                               }))
@@ -2956,7 +2967,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, reportingManagerId: val })}
                             options={[
                               { label: 'Select Reporting Manager', value: '' },
-                              ...formManagers.map((u) => ({
+                              ...formReportingManagers.map((u) => ({
                                 label: `${u.name} (${u.designation || 'Manager'} - ${u.department || 'General'})`,
                                 value: u.id
                               }))
@@ -3077,7 +3088,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, reportingManagerId: val })}
                             options={[
                               { label: 'Select Reporting Manager', value: '' },
-                              ...formManagers.map((u) => ({
+                              ...formReportingManagers.map((u) => ({
                                 label: `${u.name} (${u.designation || 'Guide'} - ${u.department || 'General'})`,
                                 value: u.id
                               }))
@@ -3187,7 +3198,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             }}
                             options={[
                               { label: 'Select Reporting Manager', value: '' },
-                              ...formManagers.map((u) => ({
+                              ...formReportingManagers.map((u) => ({
                                 label: `${u.name} (${u.designation || 'Guide'} - ${u.department || 'General'})`,
                                 value: u.id
                               }))
@@ -3307,7 +3318,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             onChange={(val) => setNewUserForm({ ...newUserForm, reportingManagerId: val })}
                             options={[
                               { label: 'Select Reporting Manager', value: '' },
-                              ...formManagers.map((u) => ({
+                              ...formReportingManagers.map((u) => ({
                                 label: `${u.name} (${u.designation || 'Manager'} - ${u.department || 'General'})`,
                                 value: u.id
                               }))
