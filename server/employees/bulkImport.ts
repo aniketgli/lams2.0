@@ -1,3 +1,4 @@
+import { lookupTable } from '../lib/lookups';
 import type { Request } from 'express';
 import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
 import bcrypt from 'bcrypt';
@@ -43,7 +44,7 @@ export interface ImportType { code: string; name: string; layout: FormLayout }
 
 /** Active employee types that have a form layout. */
 export async function importTypes(): Promise<ImportType[]> {
-  const list = await rows(pool, "SELECT code, name FROM lookup_values WHERE lookup_type = 'employee_type' AND UPPER(status) = 'ACTIVE' ORDER BY sort_order, name");
+  const list = await rows(pool, "SELECT code, name FROM employee_types WHERE UPPER(status) = 'ACTIVE' ORDER BY sort_order, name");
   const out: ImportType[] = [];
   for (const t of list) {
     const layout = await layoutOfEmployeeType(pool, String(t.code));
@@ -62,7 +63,7 @@ async function typeOf(code: unknown): Promise<ImportType> {
 async function allowedValues(type: ImportType): Promise<Record<string, string[]>> {
   const rules = LAYOUT_RULES[type.layout];
   const names = async (table: string) => (await rows(pool, `SELECT name FROM ${table} WHERE UPPER(status) = 'ACTIVE' ORDER BY name`)).map((r) => String(r.name));
-  const lookup = async (t: string) => (await rows(pool, "SELECT name FROM lookup_values WHERE lookup_type = ? AND UPPER(status) = 'ACTIVE' ORDER BY sort_order, name", [t])).map((r) => String(r.name));
+  const lookup = async (t: string) => (await rows(pool, `SELECT name FROM ${lookupTable(t)} WHERE UPPER(status) = 'ACTIVE' ORDER BY sort_order, name`)).map((r) => String(r.name));
   const out: Record<string, string[]> = {
     Salutation: await lookup('salutation'),
     Gender: await lookup('gender'),
@@ -74,8 +75,7 @@ async function allowedValues(type: ImportType): Promise<Record<string, string[]>
   if (rules.department === 'projects') out.Project = await names('projects');
   if (rules.department === 'departmentOrProject') out.Department_or_Project = [...await names('organization_units'), ...await names('projects')];
   if (rules.designation) {
-    out.Designation = (await rows(pool, "SELECT name, metadata FROM designations WHERE UPPER(status) = 'ACTIVE' ORDER BY name"))
-      .filter((r) => { try { const m = JSON.parse(String(r.metadata || '{}')); return !m.empType || m.empType === type.code; } catch { return true; } })
+    out.Designation = (await rows(pool, "SELECT name FROM designations WHERE UPPER(status) = 'ACTIVE' AND (employee_type_code IS NULL OR employee_type_code = ?) ORDER BY name", [type.code]))
       .map((r) => String(r.name));
   }
   if (rules.category) out.Cadre = [...CADRES];
@@ -162,7 +162,10 @@ const LEAVE_YEAR_LABELS: Record<string, string[]> = { CY: ['CY', 'Calendar year'
 
 /** Lookups and shifts / leave groups, read once per file; a cell may give the code or the name. */
 async function referenceMaps(q: Q) {
-  const lookups = await rows(q, "SELECT lookup_type, code, name FROM lookup_values WHERE lookup_type IN ('salutation', 'gender', 'institute') AND UPPER(status) = 'ACTIVE'");
+  const lookups = await rows(q,
+    `SELECT 'salutation' AS lookup_type, code, name FROM salutations WHERE UPPER(status) = 'ACTIVE'
+     UNION ALL SELECT 'gender', code, name FROM genders WHERE UPPER(status) = 'ACTIVE'
+     UNION ALL SELECT 'institute', code, name FROM institutes WHERE UPPER(status) = 'ACTIVE'`);
   const lookup = new Map<string, string>();
   for (const l of lookups) {
     lookup.set(`${l.lookup_type}:${keyOf(String(l.code))}`, String(l.code));

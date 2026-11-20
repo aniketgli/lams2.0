@@ -30,13 +30,15 @@ const rows = async (c: Connection, sql: string, params: unknown[] = []): Promise
 
 /** Every table the server reads or writes (server/, scripts/, src/db/schema.ts, masters definitions). */
 export const USED_TABLES = new Set([
-  'users', 'employee_profiles', 'user_module_roles', 'role_catalog', 'web_sessions', 'employee_photos', 'user_histories',
-  'user_account_audit_logs', 'employee_mapping_log', 'master_audit_logs', 'lookup_values', 'organization_units', 'organization_settings',
+  'users', 'employee_profiles', 'employee_identity', 'employee_bank_accounts', 'user_module_roles', 'role_catalog', 'web_sessions', 'employee_photos', 'user_histories',
+  'user_account_audit_logs', 'employee_mapping_log', 'master_audit_logs', 'organization_units', 'organization_settings',
   'designations', 'categories', 'projects', 'training_courses', 'trainee_batches', 'msc_streams', 'msc_batches', 'phd_enrollments',
   'shifts', 'biometric_machines', 'holidays', 'Attendance', 'manual_attendance_requests', 'outdoor_duty_requests',
   'leave_types', 'leave_type_quotas', 'leave_groups', 'leave_group_types', 'leave_balances', 'leave_requests', 'leave_certificates',
   'leave_comp_off_uses', 'leave_joining_reports', 'leave_joining_certificates', 'email_settings', 'email_outbox',
   'notification_recipients', 'account_settings', 'report_schedules', 'report_schedule_recipients', 'report_runs',
+  'salutations', 'genders', 'institutes', 'employee_types', 'org_unit_types', 'cadre_groups', 'funding_categories', 'cadres',
+  'org_unit_employee_types', 'org_unit_cadres', 'leave_type_employee_types', 'leave_type_purposes', 'shift_days', 'role_aliases',
 ]);
 
 /** Old tables whose rows were copied forward by earlier migrations; nothing reads them any more. */

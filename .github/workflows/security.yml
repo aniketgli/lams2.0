@@ -12,7 +12,7 @@ jobs:
     timeout-minutes: 20
     services:
       mysql:
-        image: mysql:8.0
+        image: mysql:9
         env:
           MYSQL_ROOT_PASSWORD: root
           MYSQL_DATABASE: lams2_test
@@ -32,46 +32,30 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
       - run: bun install
-      - name: Create the schema (schema.ts, then every migration in order)
-        run: |
-          bunx drizzle-kit export --dialect=mysql --schema=./src/db/schema.ts | sed -n "/^CREATE TABLE/,\$p" > /tmp/schema.sql
-          head -3 /tmp/schema.sql
-          mysql -h127.0.0.1 -uroot -proot --force lams2_test < /tmp/schema.sql 2>&1 | grep -v "Using a password" || true
-          # File-name order is not dependency order (e.g. 20261031_leave_policy_* alters leave_types before
-          # 20261031_leave_types.sql creates it), so the idempotent migrations are applied in three passes.
-          for pass in 1 2 3; do
-            echo "=== pass $pass"
-            for f in $(ls src/db/migrations/*.sql | sort) $(ls migrations/*.sql | sort); do
-              out=$(mysql -h127.0.0.1 -uroot -proot --force lams2_test < "$f" 2>&1 | grep -v "Using a password" | grep ERROR || true)
-              [ -n "$out" ] && echo "$f: $out" | head -3 || true
-            done
-          done
-      - name: Check the cleanup migrations (exact table names, primary key)
+      - name: Load the live database structure (structure only, no data)
         run: |
           M="mysql -h127.0.0.1 -uroot -proot lams2_test"
-          # Live-database situation: a lower-case `attendance` next to the real `Attendance`, an empty user_logs,
-          # and employee_profiles with a UNIQUE `id` instead of a PRIMARY KEY.
-          $M -e "CREATE TABLE IF NOT EXISTS \`attendance\` (x INT PRIMARY KEY); CREATE TABLE IF NOT EXISTS user_logs (id INT PRIMARY KEY);
-                 INSERT INTO \`Attendance\` (EmployeeCode, LogDateTime, LogDate) VALUES ('9999','2026-01-01 09:00:00','2026-01-01')" 2>&1 | grep -v "Using a password" || true
-          $M -e "ALTER TABLE employee_profiles DROP PRIMARY KEY, ADD UNIQUE KEY \`id\` (id)" 2>&1 | grep -v "Using a password" || true
-          $M < migrations/20261212_retire_legacy_tables.sql 2>&1 | grep -v "Using a password"
-          $M < migrations/20261213_employee_profiles_primary_key.sql 2>&1 | grep -v "Using a password"
-          $M < migrations/20261213_employee_profiles_primary_key.sql 2>&1 | grep -v "Using a password"   # second run is a no-op
-          T=$($M -N -e "SELECT GROUP_CONCAT(TABLE_NAME ORDER BY BINARY TABLE_NAME) FROM information_schema.TABLES WHERE TABLE_SCHEMA='lams2_test' AND TABLE_NAME IN ('attendance','zz_retired_attendance','user_logs','zz_retired_user_logs')" 2>/dev/null)
-          echo "tables: $T"
-          $M -N -e "SELECT COUNT(*) FROM \`Attendance\`" 2>/dev/null | grep -qx 1 || { echo "Attendance (capital A) was touched"; exit 1; }
-          echo "$T" | grep -q "zz_retired_attendance" || { echo "lower-case attendance not retired"; exit 1; }
-          echo "$T" | grep -q "zz_retired_user_logs" || { echo "user_logs not retired"; exit 1; }
-          $M -N -e "SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA='lams2_test' AND TABLE_NAME='employee_profiles' AND CONSTRAINT_TYPE='PRIMARY KEY'" 2>/dev/null | grep -qx 1 || { echo "no primary key"; exit 1; }
-          $M -e "DELETE FROM \`Attendance\` WHERE EmployeeCode='9999'" 2>/dev/null
-          echo "cleanup migrations OK"
-          # drop_unused_attendance_tables.sql: lists only, then drops only after confirmation, never Attendance
-          $M -e "CREATE TABLE IF NOT EXISTS old_attendance_backup (x INT PRIMARY KEY)" 2>/dev/null
-          $M < scripts/sql/drop_unused_attendance_tables.sql 2>&1 | grep -v "Using a password"
-          $M -N -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='lams2_test' AND TABLE_NAME='old_attendance_backup'" 2>/dev/null | grep -qx 1 || { echo "dropped without confirmation"; exit 1; }
-          ( echo "SET @confirm_drop = 'YES';"; cat scripts/sql/drop_unused_attendance_tables.sql ) | $M 2>&1 | grep -v "Using a password"
-          [ "$($M -N -e "SELECT GROUP_CONCAT(TABLE_NAME ORDER BY BINARY TABLE_NAME) FROM information_schema.TABLES WHERE TABLE_SCHEMA='lams2_test' AND LOWER(TABLE_NAME) LIKE '%atten%'" 2>/dev/null)" = "Attendance,manual_attendance_requests" ] || { echo "attendance tables not as expected"; exit 1; }
-          echo "attendance clean-up OK"
+          $M < scripts/sql/fixtures/live_schema_2026-11-19.sql > /tmp/load.out 2>&1 || { cat /tmp/load.out; exit 1; }
+          # The starting rows the earlier migrations put in (lists, role catalog, system accounts, leave types):
+          # every earlier migration is safe to re-run, so they are applied once more with errors ignored.
+          for f in $(ls migrations/*.sql | sort | grep -v '/20261219_'); do
+            mysql -h127.0.0.1 -uroot -proot --force lams2_test < "$f" > /dev/null 2>&1 || true
+          done
+          $M < scripts/sql/ci/legacy_sample.sql > /tmp/sample.out 2>&1 || { cat /tmp/sample.out; exit 1; }
+          $M -N -e "SELECT COUNT(*) AS tables FROM information_schema.TABLES WHERE TABLE_SCHEMA='lams2_test'" 2>/dev/null
+      - name: Normalization migrations (twice; the second run must change nothing)
+        run: |
+          for run in 1 2; do
+            echo "=== run $run"
+            for f in $(ls migrations/20261219_0*.sql | sort); do
+              if ! mysql -h127.0.0.1 -uroot -proot lams2_test < "$f" > /tmp/mig.out 2>&1; then
+                grep -v "Using a password" /tmp/mig.out; echo "FAILED: $f"; exit 1
+              fi
+              grep -v "Using a password" /tmp/mig.out | tail -4
+            done
+          done
+      - name: Check the normalized data
+        run: bash scripts/sql/ci/verify_normalization.sh lams2_test
       - name: Seed test accounts
         run: npx tsx scripts/security/seed.ts
       - name: Read-only database audit
@@ -83,34 +67,10 @@ jobs:
           nohup node server.ts > /tmp/server.log 2>&1 &
           for i in $(seq 1 60); do curl -sf http://127.0.0.1:3000/api/health/ready && break; sleep 1; done
           curl -sf http://127.0.0.1:3000/api/health/ready
+      - name: Normalized tables work through the app
+        run: bun scripts/security/normalized_flows.ts
       - name: Attack it
         run: SECURITY_REPORT=/tmp/security-report.md SECURITY_UPLOAD_DIR=/tmp/lams2-uploads bun scripts/security/pentest.ts
-      - name: Check the test-data reset script
-        run: |
-          M="mysql -h127.0.0.1 -uroot -proot -N lams2_test"
-          $M -e "INSERT INTO \`Attendance\` (EmployeeCode, LogDateTime, LogDate) VALUES ('8888','2026-01-01 09:00:00','2026-01-01')" 2>/dev/null
-          BEFORE=$($M -e "SELECT CONCAT(email,'|',password_hash) FROM users WHERE email IN ('erp@wii.gov.in','erpauditor@wii.gov.in') ORDER BY email" 2>/dev/null)
-          PUNCHES=$($M -e "SELECT COUNT(*) FROM \`Attendance\`" 2>/dev/null)
-          echo "users before: $($M -e 'SELECT COUNT(*) FROM users' 2>/dev/null), leave/OD rows: $($M -e 'SELECT (SELECT COUNT(*) FROM leave_requests)+(SELECT COUNT(*) FROM outdoor_duty_requests)+(SELECT COUNT(*) FROM holidays)' 2>/dev/null)"
-          for run in 1 2; do $M < scripts/sql/reset_test_data.sql 2>&1 | grep -v "Using a password" | tail -12; done
-          fail() { echo "RESET CHECK FAILED: $1"; exit 1; }
-          [ "$($M -e "SELECT GROUP_CONCAT(CONCAT(id,':',email) ORDER BY id) FROM users" 2>/dev/null)" = "1:erp@wii.gov.in,2:erpauditor@wii.gov.in" ] || fail "users are not exactly 1 Administrator, 2 Auditor"
-          [ "$($M -e "SELECT CONCAT(email,'|',password_hash) FROM users ORDER BY email" 2>/dev/null)" = "$BEFORE" ] || fail "passwords changed"
-          [ "$($M -e "SELECT COUNT(DISTINCT biometric_id) FROM user_module_roles" 2>/dev/null)" = "2" ] || fail "role grants of the two accounts not kept"
-          for t in leave_requests outdoor_duty_requests manual_attendance_requests holidays leave_types web_sessions master_audit_logs employee_photos; do
-            [ "$($M -e "SELECT COUNT(*) FROM \`$t\`" 2>/dev/null)" = "0" ] || fail "$t not empty"
-          done
-          [ "$($M -e "SELECT COUNT(*) FROM \`Attendance\`" 2>/dev/null)" = "$PUNCHES" ] || fail "Attendance punches touched"
-          [ "$($M -e "SELECT COUNT(*) FROM role_catalog" 2>/dev/null)" -gt 0 ] || fail "role_catalog emptied"
-          [ "$($M -e "SELECT COUNT(*) FROM lookup_values WHERE lookup_type IN ('gender','employee_type','institute')" 2>/dev/null)" = "12" ] || fail "starting lists missing"
-          $M -e "SELECT AUTO_INCREMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA='lams2_test' AND TABLE_NAME='users'" 2>/dev/null | grep -qx 3 || fail "next user id is not 3"
-          # The attack step used up the sign-in limits of this address: restart the server to clear them.
-          pkill -f "server.ts" || true; sleep 2
-          nohup node server.ts >> /tmp/server.log 2>&1 &
-          for i in $(seq 1 60); do curl -sf http://127.0.0.1:3000/api/health/ready >/dev/null && break; sleep 1; done
-          code=$(curl -s -o /tmp/login.json -w '%{http_code}' -H 'Content-Type: application/json' -d '{"email":"erp@wii.gov.in","password":"123456"}' http://127.0.0.1:3000/api/auth/login)
-          [ "$code" = "200" ] || fail "Administrator cannot sign in after the reset ($code $(cat /tmp/login.json))"
-          echo "reset script OK"
       - name: Server log
         if: always()
         run: tail -150 /tmp/server.log

@@ -1,3 +1,4 @@
+import { lookupTable } from '../lib/lookups';
 import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
 import { pool } from '../../src/db';
 import { badRequest } from '../lib/http';
@@ -22,31 +23,15 @@ async function rows(q: Querier, sql: string, params: unknown[]): Promise<RowData
 export async function layoutOfEmployeeType(q: Querier, code: unknown): Promise<FormLayout | null> {
   if (typeof code !== 'string' || !code.trim()) return null;
   const [row] = await rows(q,
-    "SELECT metadata FROM lookup_values WHERE lookup_type = 'employee_type' AND code = ? AND UPPER(status) = 'ACTIVE' LIMIT 1",
+    "SELECT form_layout FROM employee_types WHERE code = ? AND UPPER(status) = 'ACTIVE' LIMIT 1",
     [code.trim()]);
-  if (!row) return null;
-  try {
-    const layout = JSON.parse(String(row.metadata || '{}'))?.formLayout;
-    return isFormLayout(layout) ? layout : null;
-  } catch {
-    return null;
-  }
-}
-
-function jsonObject(value: unknown): Record<string, unknown> {
-  if (value && typeof value === 'object') return value as Record<string, unknown>;
-  try {
-    const parsed = JSON.parse(String(value || '{}'));
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
+  return row && isFormLayout(row.form_layout) ? row.form_layout : null;
 }
 
 /** A comma-separated master value ("a,b") as a list. */
 
 async function activeLookup(q: Querier, type: string, code: string): Promise<boolean> {
-  return (await rows(q, "SELECT 1 FROM lookup_values WHERE lookup_type = ? AND code = ? AND UPPER(status) = 'ACTIVE' LIMIT 1", [type, code])).length > 0;
+  return (await rows(q, `SELECT 1 FROM ${lookupTable(type)} WHERE code = ? AND UPPER(status) = 'ACTIVE' LIMIT 1`, [code])).length > 0;
 }
 
 const MASTER_TABLES: Record<Exclude<MasterRef, 'batches' | 'departmentOrProject'>, string> = {
@@ -113,11 +98,10 @@ export async function checkReferences(q: Querier, input: EmployeeInput, layout: 
 
   // A designation may be tied to one employee type; if so it must be this one.
   if (rules.designation && input.designation) {
-    const [row] = await rows(q, "SELECT metadata FROM designations WHERE name = ? AND UPPER(status) = 'ACTIVE' LIMIT 1", [input.designation]);
-    const meta = jsonObject(row?.metadata);
+    const [row] = await rows(q, "SELECT employee_type_code, cadre_code FROM designations WHERE name = ? AND UPPER(status) = 'ACTIVE' LIMIT 1", [input.designation]);
     if (!row) errors.designation = 'Choose an active designation from Master Settings.';
-    else if (meta.empType && String(meta.empType) !== input.employmentType) errors.designation = 'This designation is not for the selected employee type.';
-    else if (rules.category && input.employeeCategory && meta.cadre && String(meta.cadre) !== input.employeeCategory) errors.designation = 'This designation is not for the selected cadre.';
+    else if (row.employee_type_code && String(row.employee_type_code) !== input.employmentType) errors.designation = 'This designation is not for the selected employee type.';
+    else if (rules.category && input.employeeCategory && row.cadre_code && String(row.cadre_code) !== input.employeeCategory) errors.designation = 'This designation is not for the selected cadre.';
   }
 
   // Course and batch: trainees pick a training course and its batch, M.Sc students a stream and its batch.
@@ -125,14 +109,13 @@ export async function checkReferences(q: Querier, input: EmployeeInput, layout: 
     const msc = layout === 'bsc_msc_student';
     const courseTable = msc ? 'msc_streams' : 'training_courses';
     const batchTable = msc ? 'msc_batches' : 'trainee_batches';
-    const parentPath = msc ? '$.parentStream' : '$.parentCourse';
+    const parentColumn = msc ? 'msc_stream_name' : 'training_course_name';
     const noun = msc ? 'stream' : 'course';
     const course = await rows(q, `SELECT 1 FROM ${courseTable} WHERE name = ? AND UPPER(status) = 'ACTIVE' LIMIT 1`, [input.courseProgram]);
     if (!course.length) errors.courseProgram = `Choose an active ${noun} from Master Settings.`;
     else if (input.courseBatch) {
       const [batch] = await rows(q,
-        `SELECT JSON_UNQUOTE(JSON_EXTRACT(IF(JSON_VALID(metadata), metadata, '{}'), '${parentPath}')) AS parent
-           FROM ${batchTable} WHERE name = ? AND UPPER(status) = 'ACTIVE' LIMIT 1`, [input.courseBatch]);
+        `SELECT ${parentColumn} AS parent FROM ${batchTable} WHERE name = ? AND UPPER(status) = 'ACTIVE' LIMIT 1`, [input.courseBatch]);
       if (!batch) errors.courseBatch = 'Choose an active batch from Master Settings.';
       else if (String(batch.parent ?? '') !== input.courseProgram) errors.courseBatch = `This batch is not for the selected ${noun}.`;
     }

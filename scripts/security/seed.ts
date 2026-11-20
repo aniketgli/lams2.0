@@ -56,14 +56,21 @@ async function main(): Promise<void> {
     const [[row]] = await c.query<mysql.RowDataPacket[]>('SELECT id FROM users WHERE biometric_id = ?', [p.bio]);
     ids.set(p.bio, Number(row.id));
   }
+  // The lists and masters the test profiles point at (foreign keys, migrations/20261219_*).
+  await c.query("INSERT IGNORE INTO salutations (code, name, sort_order) VALUES ('Mr.', 'Mr.', 10)");
+  await c.query("INSERT IGNORE INTO genders (code, name, sort_order) VALUES ('Male', 'Male', 10)");
+  await c.query("INSERT IGNORE INTO institutes (code, name, sort_order) VALUES ('WII', 'Wildlife Institute of India', 10)");
+  await c.query("INSERT IGNORE INTO org_unit_types (code, name, sort_order) VALUES ('Department', 'Department', 10)");
+  await c.query("INSERT IGNORE INTO employee_types (code, name, sort_order, form_layout) VALUES ('permanent', 'Permanent', 10, 'permanent')");
+  await c.query("INSERT IGNORE INTO organization_units (name, code, type, institute, status) VALUES ('QA', 'QA', 'Department', 'WII', 'ACTIVE')");
+  await c.query("INSERT IGNORE INTO designations (name, code, status) VALUES ('Tester', 'TESTER', 'ACTIVE')");
   for (const p of PEOPLE) {
-    const data = {
-      gender: 'Male', reportingManagerId: p.rm ? String(ids.get(p.rm)) : '', reviewingManagerId: p.hod ? String(ids.get(p.hod)) : '',
-    };
+    // One column per profile field (migrations/20261219_04_employee_profile.sql); department / designation are generated.
     await c.query(
-      `INSERT INTO employee_profiles (biometric_id, suffix, department, designation, employment_type, joining_date, phone, institute, profile_data)
-       VALUES (?, 'Mr.', 'QA', 'Tester', 'permanent', '2020-01-01', ?, 'WII', ?)`,
-      [p.bio, `98${p.bio}00000`.slice(0, 10), JSON.stringify(data)],
+      `INSERT INTO employee_profiles (biometric_id, suffix, org_unit_name, designation_name, employment_type, joining_date, phone, institute,
+                                      gender, reporting_manager_id, reviewing_manager_id)
+       VALUES (?, 'Mr.', 'QA', 'Tester', 'permanent', '2020-01-01', ?, 'WII', 'Male', ?, ?)`,
+      [p.bio, `98${p.bio}00000`.slice(0, 10), p.rm ? ids.get(p.rm) ?? null : null, p.hod ? ids.get(p.hod) ?? null : null],
     );
     for (const [moduleId, roleId] of p.roles) {
       await c.query("INSERT INTO user_module_roles (biometric_id, module_id, role_id, status, last_updated_by) VALUES (?, ?, ?, 'active', '1001')", [p.bio, moduleId, roleId]);

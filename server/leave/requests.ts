@@ -1,3 +1,5 @@
+import { LEAVE_TYPE_SELECT } from './leaveTypeSql';
+import { profileJsonSql, profileObject } from '../employees/profileSql';
 import { MAX_LIST_ROWS, listLimitProblem, visibilityClause, canSeeEmployee } from '../lib/visibility';
 import { INCREMENT, NOW, assertUndo, decide, moveStatus, undoProblem, undoTarget, type UndoCheck } from '../lib/approvalFlow';
 import type { Request } from 'express';
@@ -170,14 +172,9 @@ export async function rows(q: { query: typeof pool.query }, sql: string, params:
   return result;
 }
 
+/** The profile object of an employee (profileJsonSql), without empty keys. */
 export function profileData(raw: unknown): Record<string, unknown> {
-  if (raw && typeof raw === 'object') return raw as Record<string, unknown>;
-  try {
-    const parsed = JSON.parse(String(raw || '{}'));
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
+  return profileObject(raw);
 }
 export const isoDate = (value: unknown): string => {
   if (value instanceof Date) return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
@@ -193,7 +190,7 @@ const daysBetween = (from: string, to: string): number => Math.round((Date.parse
 export const num = (n: number) => Math.round(n * 10) / 10;
 
 const SELECT = `
-  SELECT m.*, u.biometric_id, u.name AS user_name, p.designation, p.department, p.profile_data,
+  SELECT m.*, u.biometric_id, u.name AS user_name, p.designation, p.department, ${profileJsonSql('p')} AS profile_data,
          t.name AS type_name, t.code AS type_code, (SELECT c.file_name FROM leave_certificates c WHERE c.request_id = m.id) AS certificate_name,
          (SELECT GROUP_CONCAT(DATE_FORMAT(w.work_date, '%Y-%m-%d') ORDER BY w.work_date) FROM leave_comp_off_uses w WHERE w.request_id = m.id) AS comp_off_days,
          ab.name AS applied_by_name, mg.name AS manager_name, rv.name AS reviewer_name, l1.name AS l1_name, ac.name AS action_by_name,
@@ -394,7 +391,7 @@ export interface Employee {
 
 export async function loadEmployee(q: { query: typeof pool.query }, userId: number): Promise<Employee> {
   const [row] = await rows(q,
-    `SELECT u.id, u.status, u.biometric_id, p.employment_type, p.joining_date, p.shift_id, p.profile_data FROM users u
+    `SELECT u.id, u.status, u.biometric_id, p.employment_type, p.joining_date, p.shift_id, ${profileJsonSql('p')} AS profile_data FROM users u
        LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE u.id = ? LIMIT 1`, [userId]);
   if (!row) throw badRequest('Please correct the highlighted fields.', { userId: 'Choose an employee from the list.' });
   if (String(row.status).toLowerCase() !== 'active') throw badRequest('Please correct the highlighted fields.', { userId: 'This employee is not active.' });
@@ -476,7 +473,7 @@ async function attachQuotas(q: { query: typeof pool.query }, policies: Policy[])
 }
 
 export async function loadPolicy(q: { query: typeof pool.query }, id: number): Promise<Policy | null> {
-  const [row] = await rows(q, 'SELECT * FROM leave_types WHERE id = ? LIMIT 1', [id]);
+  const [row] = await rows(q, `SELECT ${LEAVE_TYPE_SELECT} FROM leave_types t WHERE t.id = ? LIMIT 1`, [id]);
   if (!row) return null;
   const [policy] = await attachQuotas(q, [toPolicy(row)]);
   return policy;
@@ -559,8 +556,8 @@ export async function dayRule(q: { query: typeof pool.query }, emp: Employee, po
   let workingDays: string[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
   try {
     const found = emp.shiftId
-      ? await rows(q, 'SELECT applicable_days FROM shifts WHERE id = ? LIMIT 1', [emp.shiftId])
-      : await rows(q, 'SELECT applicable_days FROM shifts WHERE is_default = 1 LIMIT 1');
+      ? await rows(q, 'SELECT (SELECT JSON_ARRAYAGG(sd.day) FROM shift_days sd WHERE sd.shift_id = shifts.id) AS applicable_days FROM shifts WHERE id = ? LIMIT 1', [emp.shiftId])
+      : await rows(q, 'SELECT (SELECT JSON_ARRAYAGG(sd.day) FROM shift_days sd WHERE sd.shift_id = shifts.id) AS applicable_days FROM shifts WHERE is_default = 1 LIMIT 1');
     const raw = found[0]?.applicable_days;
     const list = Array.isArray(raw) ? raw : typeof raw === 'string' ? JSON.parse(raw || '[]') : [];
     const valid = list.filter((d: unknown) => (WEEK_DAYS as readonly string[]).includes(String(d)));
@@ -1452,7 +1449,7 @@ export function requestId(raw: unknown): number {
 export async function applicableEmployees(viewer: Viewer): Promise<{ id: string; biometricId: string; name: string; designation: string; isPwd: boolean; leaveTypeIds: string[] }[]> {
   if (viewer.role !== 'administrator') return [];
   const found = await rows(pool,
-    `SELECT u.id, u.biometric_id, u.name, p.designation, p.profile_data FROM users u
+    `SELECT u.id, u.biometric_id, u.name, p.designation, ${profileJsonSql('p')} AS profile_data FROM users u
        LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id
       WHERE LOWER(u.status) = 'active' AND u.is_system = 0 ORDER BY u.name`);
   const allowed = await applyTypeIds(found.map((r) => Number(r.id)));
@@ -1467,9 +1464,9 @@ export async function applicableEmployees(viewer: Viewer): Promise<{ id: string;
 export async function applyTypeIds(userIds: number[]): Promise<Map<number, string[]>> {
   const out = new Map<number, string[]>();
   if (!userIds.length) return out;
-  const policies = (await rows(pool, "SELECT * FROM leave_types WHERE status = 'active'")).map(toPolicy);
+  const policies = (await rows(pool, `SELECT ${LEAVE_TYPE_SELECT} FROM leave_types t WHERE t.status = 'active'`)).map(toPolicy);
   const people = await rows(pool,
-    `SELECT u.id, p.employment_type, p.profile_data FROM users u LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE u.id IN (${userIds.map(() => '?').join(',')})`, userIds);
+    `SELECT u.id, p.employment_type, ${profileJsonSql('p')} AS profile_data FROM users u LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE u.id IN (${userIds.map(() => '?').join(',')})`, userIds);
   const groupMap = await groupLeaveTypeMap(pool);
   for (const r of people) {
     const data = profileData(r.profile_data);
@@ -1500,10 +1497,10 @@ export async function listBalances(viewer: Viewer, yearRaw: unknown): Promise<{ 
   const year = yearRaw === undefined || yearRaw === '' ? Number(todayInIndia().slice(0, 4)) : Number(yearRaw);
   if (!Number.isInteger(year) || year < 2000 || year > 2100) throw badRequest('Choose a year between 2000 and 2100.');
   try {
-    const typeRows = await rows(pool, "SELECT * FROM leave_types WHERE status = 'active' ORDER BY name");
+    const typeRows = await rows(pool, `SELECT ${LEAVE_TYPE_SELECT} FROM leave_types t WHERE t.status = 'active' ORDER BY t.name`);
     const policies = await attachQuotas(pool, typeRows.map(toPolicy));
     const people = await rows(pool,
-      `SELECT u.id, u.biometric_id, u.name, p.designation, p.department, p.employment_type, p.joining_date, p.shift_id, p.profile_data
+      `SELECT u.id, u.biometric_id, u.name, p.designation, p.department, p.employment_type, p.joining_date, p.shift_id, ${profileJsonSql('p')} AS profile_data
          FROM users u LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE LOWER(u.status) = 'active' AND u.is_system = 0 ORDER BY u.name`);
     const visible = people.filter((r) => canSeeBalance(viewer, { ...r, user_id: r.id }));
     // Compensatory off is counted from the days worked on weekly offs / holidays that are still valid today.
@@ -1551,7 +1548,7 @@ export async function listBalances(viewer: Viewer, yearRaw: unknown): Promise<{ 
     });
     const found = await rows(pool, 'SELECT cycle_year AS y FROM leave_balances UNION SELECT cycle_year AS y FROM leave_requests');
     const years = [...new Set([...found.map((f) => Number(f.y)), Number(today.slice(0, 4)), year])].sort((a, b) => b - a);
-    const employeeTypes = (await rows(pool, "SELECT code, name FROM lookup_values WHERE lookup_type = 'employee_type' ORDER BY name")).map((t) => ({ code: String(t.code), name: String(t.name) }));
+    const employeeTypes = (await rows(pool, 'SELECT code, name FROM employee_types ORDER BY name')).map((t) => ({ code: String(t.code), name: String(t.name) }));
     return { year, years, employeeTypes, types: policies.map((p) => ({ id: String(p.id), code: p.code, name: p.name, isDebited: p.debited })), rows: out };
   } catch (error) {
     missingTable(error);
@@ -1570,12 +1567,12 @@ export async function leaveHistory(viewer: Viewer, userIdRaw: unknown): Promise<
   if (!Number.isInteger(userId) || userId <= 0) throw badRequest('Choose an employee.');
   try {
     const [person] = await rows(pool,
-      `SELECT u.id, u.biometric_id, u.name, p.employment_type, p.joining_date, p.profile_data
+      `SELECT u.id, u.biometric_id, u.name, p.employment_type, p.joining_date, ${profileJsonSql('p')} AS profile_data
          FROM users u LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE u.id = ? LIMIT 1`, [userId]);
     if (!person || !canSeeBalance(viewer, { ...person, user_id: person.id })) throw notFound('Employee not found.');
     const data = profileData(person.profile_data);
     const basis: 'CY' | 'FY' = data.leaveCycle === 'FY' ? 'FY' : 'CY';
-    const policies = await attachQuotas(pool, (await rows(pool, 'SELECT * FROM leave_types ORDER BY name')).map(toPolicy));
+    const policies = await attachQuotas(pool, (await rows(pool, `SELECT ${LEAVE_TYPE_SELECT} FROM leave_types t ORDER BY t.name`)).map(toPolicy));
     const grants = await rows(pool, 'SELECT cycle_year, cycle_type, leave_type_id, total, carry_forward FROM leave_balances WHERE user_id = ?', [userId]);
     const own = await asOfFilter(pool, 'r', 'r.leave_type_id');
     const base = await asOfFilter(pool, 'r', 't.debit_from_type_id');

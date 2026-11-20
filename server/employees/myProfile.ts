@@ -71,21 +71,14 @@ function text(value: unknown): string | null {
 async function employeeType(code: string | null): Promise<{ label: string | null; layout: FormLayout | null }> {
   if (!code) return { label: null, layout: null };
   // Inactive types still describe existing employees, so status is not filtered here.
-  const [row] = await rows("SELECT name, metadata FROM lookup_values WHERE lookup_type = 'employee_type' AND code = ? LIMIT 1", [code]);
+  const [row] = await rows('SELECT name, form_layout FROM employee_types WHERE code = ? LIMIT 1', [code]);
   if (!row) return { label: code, layout: isFormLayout(code) ? code : null };
-  let layout: FormLayout | null = null;
-  try {
-    const parsed = JSON.parse(String(row.metadata || '{}'))?.formLayout;
-    layout = isFormLayout(parsed) ? parsed : null;
-  } catch {
-    layout = null;
-  }
-  return { label: text(row.name), layout };
+  return { label: text(row.name), layout: isFormLayout(row.form_layout) ? row.form_layout : null };
 }
 
 async function instituteName(code: string | null): Promise<string | null> {
   if (!code) return null;
-  const [row] = await rows("SELECT name FROM lookup_values WHERE lookup_type = 'institute' AND code = ? LIMIT 1", [code]);
+  const [row] = await rows('SELECT name FROM institutes WHERE code = ? LIMIT 1', [code]);
   return row ? text(row.name) : code;
 }
 

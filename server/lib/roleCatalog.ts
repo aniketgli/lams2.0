@@ -20,7 +20,7 @@ export interface CatalogRole {
   roleId: string;
   name: string;
   accessRole: RoleId;
-  /** Comma-separated other spellings accepted for this role. */
+  /** Comma-separated other spellings accepted for this role (table role_aliases, one row each). */
   aliases: string;
   description: string;
   sortOrder: number;
@@ -123,7 +123,10 @@ export async function loadCatalog(): Promise<CatalogRole[]> {
   return cache.getOrLoad('all', async () => {
     const { pool } = await import('../../src/db');
     try {
-      const [rows] = await pool.query('SELECT module_id, role_id, name, access_role, aliases, description, sort_order FROM role_catalog WHERE is_active = 1');
+      const [rows] = await pool.query(`SELECT c.module_id, c.role_id, c.name, c.access_role, c.description, c.sort_order,
+                (SELECT GROUP_CONCAT(a.alias ORDER BY a.alias SEPARATOR ',') FROM role_aliases a
+                  WHERE a.module_id = c.module_id AND a.role_id = c.role_id) AS aliases
+           FROM role_catalog c WHERE c.is_active = 1`);
       return catalogFromRows(rows as Array<Record<string, unknown>>);
     } catch (error) {
       const code = (error as { code?: string })?.code;

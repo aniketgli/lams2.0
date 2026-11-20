@@ -12,11 +12,13 @@ import { changedFields, writeMasterAuditSql } from '../masters/audit';
 import { defaultPasswordHash } from '../masters/accountSettings';
 import { photoUrls } from './photos';
 import {
-  EmployeeInput, FormLayout, PROFILE_DATA_FORBIDDEN, PROFILE_DATA_KEYS, accountValidUpto, parseEmployeeInput, retirementDate,
+  EmployeeInput, FormLayout, LAYOUT_RULES, PROFILE_DATA_FORBIDDEN, PROFILE_DATA_KEYS, accountValidUpto, parseEmployeeInput, retirementDate,
 } from './fields';
 import { ResolvedReferences, checkReferences, layoutOfEmployeeType } from './references';
 import { isSystemRow, systemAccountError } from '../lib/systemAccounts';
 import { IDENTITY_STORED_KEYS, identityAudit, identityView, storeIdentity } from './identity';
+import { identityOwner, loadIdentities, saveIdentity } from './identityStore';
+import { placementValues, profileColumn, profileJsonSql, profileObject, profileValues } from './profileSql';
 import { creditProRata, spanForNewEmployee, spansForExtension } from '../leave/proRata';
 
 /**
@@ -24,7 +26,9 @@ import { creditProRata, spanForNewEmployee, spansForExtension } from '../leave/p
  * transaction, together with its audit record:
  *
  *   users               name, email, validity, status
- *   employee_profiles   salutation, department, designation, type, joining date, phone, shift, profile_data
+ *   employee_profiles   salutation, department, designation, type, joining date, phone, shift and one column per
+ *                       form field (profileSql.ts)
+ *   employee_identity / employee_bank_accounts   Aadhaar, PAN, bank details (identityStore.ts)
  *   user_module_roles   the HRMS "User" role for a new employee (and nothing else)
  *   master_audit_logs   who changed what (before / after)
  */
@@ -48,15 +52,8 @@ async function rows(q: Querier, sql: string, params: unknown[] = []): Promise<Ro
   return result;
 }
 
-function parseProfileData(value: unknown): Record<string, unknown> {
-  if (typeof value !== 'string' || !value) return {};
-  try {
-    const parsed = JSON.parse(value);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
-}
+/** The profile object (form keys) from the JSON text of a record or the object built by profileJsonSql. */
+const parseProfileData = (value: unknown): Record<string, unknown> => profileObject(value);
 
 function dateText(value: unknown): string | null {
   if (!value) return null;
@@ -114,7 +111,7 @@ export interface EmployeeRecord {
 const SELECT_EMPLOYEES = `
   SELECT u.id, u.biometric_id, u.name, u.email, u.status, u.valid_upto, u.is_system,
          p.suffix, p.department, p.designation, p.employment_type, p.joining_date,
-         p.phone, p.office_location, p.institute, p.shift_id, p.profile_data
+         p.phone, p.office_location, p.institute, p.shift_id, ${profileJsonSql('p')} AS profile_data
     FROM users u
     LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id`;
 
@@ -135,13 +132,14 @@ async function loadGrants(q: Querier, biometricIds: string[] | null): Promise<Ma
 const identityForAudit = new WeakMap<EmployeeRecord, Record<string, unknown>>();
 
 /** `fullIdentity`: full Aadhaar / account numbers (administrators); otherwise masked. */
-function toRecord(row: RowDataPacket, grants: { moduleId: string; roleId: string }[], fullIdentity = false): EmployeeRecord {
-  const data = parseProfileData(row.profile_data);
+function toRecord(row: RowDataPacket, grants: { moduleId: string; roleId: string }[], fullIdentity = false, identity: Record<string, unknown> = {}): EmployeeRecord {
+  // `identity`: the stored Aadhaar / PAN / bank keys of identityStore (a preview passes them inside profile_data).
+  const data = { ...parseProfileData(row.profile_data), ...identity };
   for (const key of PROFILE_DATA_FORBIDDEN) delete data[key];
   const audit = identityAudit(data);
-  const identity = identityView(data, fullIdentity);
+  const shown = identityView(data, fullIdentity);
   for (const key of IDENTITY_STORED_KEYS) delete data[key];
-  Object.assign(data, identity);
+  Object.assign(data, shown);
 
   const moduleRoles: Record<string, string[]> = {};
   const hrmsRoles: RoleId[] = [];
@@ -208,10 +206,11 @@ export function canSeeFullProfile(viewer: Viewer, record: EmployeeRecord): boole
 export async function listEmployees(viewer: Viewer, which: 'regular' | 'system' = 'regular'): Promise<EmployeeRecord[]> {
   const found = await rows(pool, `${SELECT_EMPLOYEES} WHERE u.is_system = ${which === 'system' ? 1 : 0} ORDER BY u.name`);
   const grants = await loadGrants(pool, null);
+  const identities = await loadIdentities(pool, null);
   const photos = await photoUrls(null);
   return found
     // Lists always carry masked Aadhaar / account numbers; the administrator's employee form reads one employee in full.
-    .map((row) => ({ ...toRecord(row, grants.get(String(row.biometric_id)) ?? []), photoUrl: photos.get(String(row.biometric_id)) ?? null }))
+    .map((row) => ({ ...toRecord(row, grants.get(String(row.biometric_id)) ?? [], false, identities.get(String(row.biometric_id))), photoUrl: photos.get(String(row.biometric_id)) ?? null }))
     .map((record) => (canSeeFullProfile(viewer, record) ? record : publicView(record)));
 }
 
@@ -219,9 +218,11 @@ async function findEmployee(q: Querier, id: number, lock = false, fullIdentity =
   const [row] = await rows(q, `${SELECT_EMPLOYEES} WHERE u.id = ? LIMIT 1${lock ? ' FOR UPDATE' : ''}`, [id]);
   if (!row) return null;
   const grants = await loadGrants(q, [String(row.biometric_id)]);
+  const identity = (await loadIdentities(q, [String(row.biometric_id)])).get(String(row.biometric_id)) ?? {};
   return {
-    record: toRecord(row, grants.get(String(row.biometric_id)) ?? [], fullIdentity),
-    rawData: parseProfileData(row.profile_data),
+    record: toRecord(row, grants.get(String(row.biometric_id)) ?? [], fullIdentity, identity),
+    // Form keys + stored identity keys (the previous values a save works from).
+    rawData: { ...parseProfileData(row.profile_data), ...identity },
   };
 }
 
@@ -260,12 +261,13 @@ function grantsView(grants: { moduleId: string; roleId: string }[]): Record<stri
 // Create / update
 // ---------------------------------------------------------------------------
 
-function profileDataFor(input: EmployeeInput, layout: FormLayout, refs: ResolvedReferences, previous: Record<string, unknown>): Record<string, unknown> {
-  // Keep what other screens store here (leave balances, avatar, …) but replace every form field.
+/**
+ * The profile object of a saved form (form keys, as profileJsonSql reads it back), including the values that are
+ * worked out rather than stored (leave year, HoD name, default PI, superannuation date), so the audit trail and the
+ * "nothing changed" check compare like with like.
+ */
+function profileDataFor(input: EmployeeInput, layout: FormLayout, refs: ResolvedReferences): Record<string, unknown> {
   const data: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(previous)) {
-    if (!PROFILE_DATA_FORBIDDEN.has(key) && !(PROFILE_DATA_KEYS as readonly string[]).includes(key)) data[key] = value;
-  }
   const fromForm: Record<string, unknown> = {
     gender: input.gender,
     dob: input.dob,
@@ -296,18 +298,38 @@ function profileDataFor(input: EmployeeInput, layout: FormLayout, refs: Resolved
   return data;
 }
 
-function profileColumns(input: EmployeeInput, data: Record<string, unknown>) {
+/** Whether the employee's department is an institute unit (false: a project), by what the layout allows. */
+async function departmentIsOrgUnit(conn: Querier, layout: FormLayout, department: string | null): Promise<boolean> {
+  const allowed = LAYOUT_RULES[layout]?.department;
+  if (!department || allowed === 'projects') return false;
+  if (allowed === 'organizations') return true;
+  const [unit] = await rows(conn, 'SELECT 1 FROM organization_units WHERE name = ? LIMIT 1', [department]);
+  return Boolean(unit);
+}
+
+/**
+ * Column values of employee_profiles for a saved form. department / designation are generated columns (made from
+ * org_unit_name / project_name and designation_name), so they are never written.
+ */
+async function profileColumns(conn: Querier, input: EmployeeInput, layout: FormLayout, refs: ResolvedReferences, data: Record<string, unknown>): Promise<Record<string, string | number | null>> {
+  const values = profileValues(data);
+  // A researcher's PI defaults to the reporting manager, worked out when reading; only a different name is stored.
+  values.pi_name = input.piName && input.piName !== refs.reportingManagerName ? input.piName.slice(0, 255) : null;
   return {
     suffix: input.salutation,
-    // department / designation are NOT NULL in the database; types without them store ''.
-    department: input.department ?? '',
-    designation: input.designation ?? '',
     employment_type: input.employmentType,
     joining_date: input.joiningDate,
     phone: input.phone,
     institute: input.institute,
     shift_id: input.shiftId,
-    profile_data: JSON.stringify(data),
+    ...placementValues(layout, {
+      department: input.department,
+      departmentIsOrgUnit: await departmentIsOrgUnit(conn, layout, input.department),
+      designation: input.designation,
+      courseProgram: input.courseProgram,
+      courseBatch: input.courseBatch,
+    }),
+    ...values,
   };
 }
 
@@ -347,22 +369,14 @@ async function assertUnique(conn: PoolConnection, input: EmployeeInput, selfId: 
   if (Object.keys(errors).length) throw new HttpError(409, 'This employee already exists.', 'DUPLICATE', errors);
 }
 
-/** Aadhaar, bank account (within a bank) and PAN belong to one employee only. */
+/** Aadhaar, bank account (within a bank) and PAN belong to one employee only (the tables' UNIQUE keys also refuse it). */
 async function assertIdentityUnique(conn: PoolConnection, keys: ReturnType<typeof storeIdentity>, biometricId: string) {
   const errors: Record<string, string> = {};
-  const owner = async (path: string, value: string | null) => {
-    if (!value) return null;
-    const [found] = await rows(conn,
-      `SELECT u.name, u.biometric_id FROM employee_profiles p JOIN users u ON u.biometric_id = p.biometric_id
-        WHERE p.biometric_id <> ? AND JSON_VALID(p.profile_data) AND JSON_UNQUOTE(JSON_EXTRACT(p.profile_data, '${path}')) = ? LIMIT 1`,
-      [biometricId, value]);
-    return found ? `${found.name} (B.I. ${found.biometric_id})` : null;
-  };
-  const byAadhaar = await owner('$.aadhaarHash', keys.aadhaarHash);
+  const byAadhaar = await identityOwner(conn, 'aadhaar', keys.aadhaarHash, biometricId);
   if (byAadhaar) errors.aadhaarNumber = `This Aadhaar number is already registered to ${byAadhaar}.`;
-  const byAccount = await owner('$.bankAccountHash', keys.accountHash);
+  const byAccount = await identityOwner(conn, 'account', keys.accountHash, biometricId);
   if (byAccount) errors.bankAccountNumber = `This bank account is already registered to ${byAccount}.`;
-  const byPan = await owner('$.panNumber', keys.pan);
+  const byPan = await identityOwner(conn, 'pan', keys.pan, biometricId);
   if (byPan) errors.panNumber = `This PAN is already registered to ${byPan}.`;
   if (Object.keys(errors).length) throw new HttpError(409, 'These details belong to another employee.', 'DUPLICATE', errors);
 }
@@ -406,13 +420,14 @@ export async function insertEmployee(conn: PoolConnection, req: Request, body: u
   );
   const userId = Number((result as { insertId: number }).insertId);
 
-  const newData = profileDataFor(input, layout, refs, {});
+  const newData = profileDataFor(input, layout, refs);
   await assertIdentityUnique(conn, storeIdentity(newData, input.identity, {}, layout), input.biometricId);
-  const columns = profileColumns(input, newData);
+  const columns = await profileColumns(conn, input, layout, refs, newData);
   await conn.query(
     `INSERT INTO employee_profiles (biometric_id, ${Object.keys(columns).join(', ')}) VALUES (?, ${Object.keys(columns).map(() => '?').join(', ')})`,
     [input.biometricId, ...Object.values(columns)],
   );
+  await saveIdentity(conn, input.biometricId, newData);
 
   // A new employee holds exactly one role: HRMS User. Rows left behind for this
   // biometric ID (e.g. imported data) are switched off, never reused.
@@ -464,15 +479,16 @@ async function updateEmployeeImpl(req: Request, id: number, body: unknown): Prom
       const { layout, input, refs } = await prepare(conn, { ...(body as object), biometricId: before.biometricId }, id, existing.rawData);
       await assertUnique(conn, input, id);
 
-      const data = profileDataFor(input, layout, refs, existing.rawData);
+      const data = profileDataFor(input, layout, refs);
       await assertIdentityUnique(conn, storeIdentity(data, input.identity, existing.rawData, layout), before.biometricId);
-      const columns = profileColumns(input, data);
+      const columns = await profileColumns(conn, input, layout, refs, data);
       const validUpto = accountValidUpto(input, layout);
 
       // Work out the change before writing, so an unchanged save writes nothing.
       const preview = toRecord({
         id: before.id, biometric_id: before.biometricId, name: input.name, email: input.email, status: before.status,
         valid_upto: validUpto, office_location: before.officeLocation, ...columns,
+        department: input.department ?? '', designation: input.designation ?? '', profile_data: data,
       } as unknown as RowDataPacket, []);
       const changed = changedFields(auditView(before), auditView(preview));
       if (changed.length === 0) return { record: before, changed };
@@ -499,6 +515,7 @@ async function updateEmployeeImpl(req: Request, id: number, body: unknown): Prom
           [before.biometricId, ...Object.values(columns)],
         );
       }
+      await saveIdentity(conn, before.biometricId, data);
 
       const after = (await findEmployee(conn, id))!.record;
       await writeMasterAuditSql(conn, req, { masterKey: AUDIT_EMPLOYEE, recordId: before.biometricId, recordLabel: input.name, action: 'UPDATE', before: auditView(before), after: auditView(after) });
@@ -527,9 +544,7 @@ async function responsibilityBlock(q: Querier, target: EmployeeRecord): Promise<
   }
   const [managed] = await rows(q,
     `SELECT COUNT(*) AS n FROM employee_profiles
-      WHERE biometric_id <> ? AND JSON_VALID(profile_data)
-        AND (JSON_UNQUOTE(JSON_EXTRACT(profile_data, '$.reportingManagerId')) = ?
-          OR JSON_UNQUOTE(JSON_EXTRACT(profile_data, '$.reviewingManagerId')) = ?)`,
+      WHERE biometric_id <> ? AND (reporting_manager_id = ? OR reviewing_manager_id = ?)`,
     [target.biometricId, target.id, target.id]);
   const n = Number(managed?.n ?? 0);
   if (n > 0) return `they are the reporting manager or HoD of ${n} employee${n === 1 ? '' : 's'}; reassign them first.`;
@@ -568,9 +583,10 @@ async function setEmployeeStatusImpl(req: Request, id: number, change: StatusCha
       `UPDATE users SET status = ?, last_updated_by = ?, last_updated_at = NOW(), last_update_summary = ?${resetHash ? ', password_hash = ?, must_change_password = 1' : ''} WHERE id = ?`,
       [change.status, actor, `${verb} effective ${change.effectiveDate}${change.reason ? `: ${change.reason}` : ''}`.slice(0, 1000), ...(resetHash ? [resetHash] : []), id],
     );
-    const data: Record<string, unknown> = { ...existing.rawData, statusChangeReason: change.reason, statusEffectiveDate: change.effectiveDate, statusChangedBy: actor };
-    delete data.status;
-    await conn.query('UPDATE employee_profiles SET profile_data = ? WHERE biometric_id = ?', [JSON.stringify(data), before.biometricId]);
+    await conn.query(
+      `UPDATE employee_profiles SET ${profileColumn('statusChangeReason')} = ?, ${profileColumn('statusEffectiveDate')} = ?, ${profileColumn('statusChangedBy')} = ?
+        WHERE biometric_id = ?`,
+      [change.reason ? change.reason.slice(0, 500) : null, change.effectiveDate, actor, before.biometricId]);
 
     // Reactivated: the running leave year's pro-rata quota from today, if the year has no balance yet
     // (a deactivation and reactivation within the same year keeps the balance as it was).
@@ -612,6 +628,8 @@ async function deleteEmployeeImpl(req: Request, id: number, reason: string, refe
       before: { ...auditView(target), ...grantsView(Object.entries(target.moduleRoles).flatMap(([moduleId, roles]) => roles.map((roleId) => ({ moduleId, roleId })))) },
       reason: reference ? `${reason} (ref: ${reference})` : reason,
     });
+    await conn.query('DELETE FROM employee_bank_accounts WHERE biometric_id = ?', [target.biometricId]);
+    await conn.query('DELETE FROM employee_identity WHERE biometric_id = ?', [target.biometricId]);
     await conn.query('DELETE FROM employee_profiles WHERE biometric_id = ?', [target.biometricId]);
     await conn.query('DELETE FROM user_module_roles WHERE biometric_id = ?', [target.biometricId]);
     await conn.query('DELETE FROM users WHERE id = ?', [id]);

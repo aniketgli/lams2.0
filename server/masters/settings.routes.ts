@@ -3,10 +3,10 @@ import { clearReferenceCacheAfterWrites } from '../lib/referenceCache';
 import { logoProblem } from './logoRules';
 import { limitHeavy } from '../middleware/apiRateLimit';
 import { Router } from 'express';
-import { and, eq, ne, sql } from 'drizzle-orm';
+import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 import { isIP } from 'node:net';
 import { db } from '../../src/db';
-import { biometric_machines, email_settings, employee_profiles, master_audit_logs, notification_recipients, organization_settings, shifts } from '../../src/db/schema';
+import { biometric_machines, email_settings, employee_profiles, master_audit_logs, notification_recipients, organization_settings, shift_days, shifts } from '../../src/db/schema';
 import { HttpError, asyncHandler, badRequest, notFound } from '../lib/http';
 import { PATTERNS, Validator } from '../lib/validate';
 import { requireActiveRole, requireAuth } from '../middleware/auth.middleware';
@@ -49,7 +49,29 @@ const reasonOf = (body: unknown) => {
 
 const WEEK_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 
-function toShift(row: typeof shifts.$inferSelect) {
+type ShiftDb = Pick<typeof db, 'select' | 'insert' | 'delete'>;
+
+/** Working days of each shift (shift_days), in week order. */
+async function shiftDays(q: ShiftDb, ids: number[]): Promise<Map<number, string[]>> {
+  const out = new Map<number, string[]>();
+  if (!ids.length) return out;
+  const rows = await q.select().from(shift_days).where(inArray(shift_days.shiftId, ids));
+  for (const r of rows) (out.get(r.shiftId) ?? out.set(r.shiftId, []).get(r.shiftId)!).push(r.day);
+  for (const list of out.values()) list.sort((a, b) => WEEK_DAYS.indexOf(a as typeof WEEK_DAYS[number]) - WEEK_DAYS.indexOf(b as typeof WEEK_DAYS[number]));
+  return out;
+}
+
+async function saveShiftDays(q: ShiftDb, id: number, days: readonly string[]): Promise<void> {
+  await q.delete(shift_days).where(eq(shift_days.shiftId, id));
+  if (days.length) await q.insert(shift_days).values(days.map((day) => ({ shiftId: id, day })));
+}
+
+async function loadShift(q: ShiftDb, id: number) {
+  const [row] = await q.select().from(shifts).where(eq(shifts.id, id));
+  return row ? toShift(row, (await shiftDays(q, [id])).get(id) ?? []) : null;
+}
+
+function toShift(row: typeof shifts.$inferSelect, applicableDays: string[]) {
   return {
     id: String(row.id),
     code: row.code,
@@ -61,7 +83,7 @@ function toShift(row: typeof shifts.$inferSelect) {
     fullDayHours: Number(row.fullDayHours ?? 8),
     halfDayCutoffTime: row.halfDayCutoffTime ? String(row.halfDayCutoffTime).slice(0, 5) : null,
     description: row.description ?? '',
-    applicableDays: Array.isArray(row.applicableDays) ? row.applicableDays : [],
+    applicableDays,
     isDefault: Boolean(row.isDefault),
     status: String(row.status || 'active').toLowerCase() === 'inactive' ? 'inactive' : 'active',
     isActive: String(row.status || 'active').toLowerCase() !== 'inactive',
@@ -104,19 +126,23 @@ function validateShift(body: unknown) {
   if (isDefault && status === 'inactive') v.errors.status = 'The default shift must be active.';
   v.assert();
   return {
-    code, name, startTime, endTime, gracePeriodMins, halfDayCutoffTime, description, applicableDays, isDefault, status,
-    halfDayHours: halfDayHours.toFixed(1), fullDayHours: fullDayHours.toFixed(1),
+    applicableDays,
+    row: {
+      code, name, startTime, endTime, gracePeriodMins, halfDayCutoffTime, description, isDefault, status,
+      halfDayHours: halfDayHours.toFixed(1), fullDayHours: fullDayHours.toFixed(1),
+    },
   };
 }
 
 async function shiftAssignments(id: number): Promise<number> {
-  const [row] = await db.select({ n: sql<number>`COUNT(*)` }).from(employee_profiles).where(eq(employee_profiles.shiftId, String(id)));
+  const [row] = await db.select({ n: sql<number>`COUNT(*)` }).from(employee_profiles).where(eq(employee_profiles.shiftId, id));
   return Number(row?.n ?? 0);
 }
 
 router.get('/shifts', requireAuth, asyncHandler(async (_req, res) => {
   const rows = await db.select().from(shifts).orderBy(shifts.name);
-  res.json(rows.map(toShift));
+  const days = await shiftDays(db, rows.map((r) => r.id));
+  res.json(rows.map((r) => toShift(r, days.get(r.id) ?? [])));
 }));
 
 router.get('/shifts/:id/audit', ...canView, asyncHandler(async (req, res) => {
@@ -127,15 +153,16 @@ router.get('/shifts/:id/audit', ...canView, asyncHandler(async (req, res) => {
 }));
 
 router.post('/shifts', ...canEdit, asyncHandler(async (req, res) => {
-  const input = validateShift(req.body);
+  const { row: input, applicableDays } = validateShift(req.body);
   const [dup] = await db.select({ id: shifts.id }).from(shifts).where(eq(shifts.code, input.code));
   if (dup) throw badRequest('Please correct the highlighted fields.', { code: 'A shift with this code already exists.' });
 
   const saved = await db.transaction(async (tx) => {
     if (input.isDefault) await tx.update(shifts).set({ isDefault: false });
     const [result] = await tx.insert(shifts).values(input);
-    const [row] = await tx.select().from(shifts).where(eq(shifts.id, Number(result.insertId)));
-    const shift = toShift(row);
+    const newId = Number(result.insertId);
+    await saveShiftDays(tx, newId, applicableDays);
+    const shift = (await loadShift(tx, newId))!;
     await writeMasterAudit(tx, req, { masterKey: 'shift', recordId: shift.id, recordLabel: `${shift.name} (${shift.code})`, action: 'CREATE', after: shift, reason: reasonOf(req.body) });
     return shift;
   });
@@ -144,10 +171,9 @@ router.post('/shifts', ...canEdit, asyncHandler(async (req, res) => {
 
 router.put('/shifts/:id', ...canEdit, asyncHandler(async (req, res) => {
   const id = idParam(req.params.id);
-  const input = validateShift(req.body);
-  const [existingRow] = await db.select().from(shifts).where(eq(shifts.id, id));
-  if (!existingRow) throw notFound('Shift not found.');
-  const before = toShift(existingRow);
+  const { row: input, applicableDays } = validateShift(req.body);
+  const before = await loadShift(db, id);
+  if (!before) throw notFound('Shift not found.');
 
   const [dup] = await db.select({ id: shifts.id }).from(shifts).where(and(eq(shifts.code, input.code), ne(shifts.id, id)));
   if (dup) throw badRequest('Please correct the highlighted fields.', { code: 'A shift with this code already exists.' });
@@ -162,8 +188,8 @@ router.put('/shifts/:id', ...canEdit, asyncHandler(async (req, res) => {
   const saved = await db.transaction(async (tx) => {
     if (input.isDefault && !before.isDefault) await tx.update(shifts).set({ isDefault: false });
     await tx.update(shifts).set(input).where(eq(shifts.id, id));
-    const [row] = await tx.select().from(shifts).where(eq(shifts.id, id));
-    const shift = toShift(row);
+    await saveShiftDays(tx, id, applicableDays);
+    const shift = (await loadShift(tx, id))!;
     await writeMasterAudit(tx, req, {
       masterKey: 'shift', recordId: shift.id, recordLabel: `${shift.name} (${shift.code})`,
       action: before.status !== shift.status ? 'STATUS' : 'UPDATE', before, after: shift, reason: reasonOf(req.body),
@@ -175,9 +201,8 @@ router.put('/shifts/:id', ...canEdit, asyncHandler(async (req, res) => {
 
 router.delete('/shifts/:id', ...canEdit, asyncHandler(async (req, res) => {
   const id = idParam(req.params.id);
-  const [row] = await db.select().from(shifts).where(eq(shifts.id, id));
-  if (!row) throw notFound('Shift not found.');
-  const shift = toShift(row);
+  const shift = await loadShift(db, id);
+  if (!shift) throw notFound('Shift not found.');
   if (shift.isDefault) throw new HttpError(409, 'The default shift cannot be deleted. Make another shift the default first.', 'DEFAULT_REQUIRED');
   const assigned = await shiftAssignments(id);
   if (assigned) throw new HttpError(409, `This shift is assigned to ${assigned} employee(s) and cannot be deleted. Make it Inactive instead.`, 'IN_USE');

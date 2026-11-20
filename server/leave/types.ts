@@ -1,3 +1,4 @@
+import { LEAVE_TYPE_SELECT } from './leaveTypeSql';
 import type { Request } from 'express';
 import type { RowDataPacket } from 'mysql2/promise';
 import { pool } from '../../src/db';
@@ -145,7 +146,7 @@ function missingTable(error: unknown): never | void {
 
 /** employee_type codes that exist, so an unknown code is rejected. */
 async function employeeTypeCodes(): Promise<Set<string>> {
-  const [rows] = await pool.query<RowDataPacket[]>("SELECT code FROM lookup_values WHERE lookup_type = 'employee_type'");
+  const [rows] = await pool.query<RowDataPacket[]>('SELECT code FROM employee_types');
   return new Set(rows.map((r) => String(r.code)));
 }
 
@@ -270,7 +271,7 @@ export async function parseLeaveTypeInput(body: unknown, selfId = 0): Promise<Le
 
 export async function listLeaveTypes(): Promise<LeaveType[]> {
   try {
-    const [rows] = await pool.query<RowDataPacket[]>('SELECT * FROM leave_types ORDER BY name');
+    const [rows] = await pool.query<RowDataPacket[]>(`SELECT ${LEAVE_TYPE_SELECT} FROM leave_types t ORDER BY t.name`);
     return await withQuotas(pool, rows.map(toLeaveType));
   } catch (error) {
     missingTable(error);
@@ -292,20 +293,32 @@ async function saveQuotas(conn: Q, id: number, quotas: LeaveTypeInput['quotas'])
   for (const q of quotas) await conn.query('INSERT INTO leave_type_quotas (leave_type_id, employee_type, quota) VALUES (?, ?, ?)', [id, q.employeeType, q.quota]);
 }
 
+/** Employee types the leave type is for (none = every type) and its purposes, one row each. */
+async function saveLists(conn: Q, id: number, input: LeaveTypeInput): Promise<void> {
+  await conn.query('DELETE FROM leave_type_employee_types WHERE leave_type_id = ?', [id]);
+  for (const code of new Set(input.employeeTypes)) {
+    await conn.query('INSERT INTO leave_type_employee_types (leave_type_id, employee_type_code) VALUES (?, ?)', [id, code]);
+  }
+  await conn.query('DELETE FROM leave_type_purposes WHERE leave_type_id = ?', [id]);
+  for (const [i, purpose] of input.purposes.entries()) {
+    await conn.query('INSERT INTO leave_type_purposes (leave_type_id, sort_order, purpose) VALUES (?, ?, ?)', [id, i + 1, purpose]);
+  }
+}
+
 export async function leaveTypeOptions(): Promise<{ employeeTypes: Array<{ code: string; name: string }> }> {
-  const [rows] = await pool.query<RowDataPacket[]>("SELECT code, name FROM lookup_values WHERE lookup_type = 'employee_type' AND status = 'active' ORDER BY name");
+  const [rows] = await pool.query<RowDataPacket[]>("SELECT code, name FROM employee_types WHERE UPPER(status) = 'ACTIVE' ORDER BY name");
   return { employeeTypes: rows.map((r) => ({ code: String(r.code), name: String(r.name) })) };
 }
 
 const COLS = `code, name, description, default_quota, pwd_quota, accrual, max_accumulation, carry_forward, max_carry_forward, encashment_allowed, approval_stages,
-  min_notice_days, half_day_allowed, medical_cert_days, sandwich_rule, combine_with, employee_types, pwd_only, gender, min_service_months, max_consecutive_days,
+  min_notice_days, half_day_allowed, medical_cert_days, sandwich_rule, combine_with, pwd_only, gender, min_service_months, max_consecutive_days,
   is_debited, is_paid, joining_required, after_exhausted_type_id, debit_from_type_id, debit_factor, lifetime_max, max_spells_per_year, min_days_per_application, max_spells_per_month, max_spells_lifetime, status,
-  needs_contact, ltc_allowed, prefix_suffix, hod_after_days, certificate_required, off_days_only, fitness_certificate, purposes`;
+  needs_contact, ltc_allowed, prefix_suffix, hod_after_days, certificate_required, off_days_only, fitness_certificate`;
 const values = (t: LeaveTypeInput) => [
   t.code, t.name, t.description || null, t.defaultQuota, t.pwdQuota, t.accrual, t.maxAccumulation, t.carryForward ? 1 : 0, t.maxCarryForward, t.encashmentAllowed ? 1 : 0,
-  t.approvalStages, t.minNoticeDays, t.halfDayAllowed ? 1 : 0, t.medicalCertDays, t.sandwichRule, t.combineWith, t.employeeTypes.join(','), t.pwdOnly ? 1 : 0, t.gender, t.minServiceMonths,
+  t.approvalStages, t.minNoticeDays, t.halfDayAllowed ? 1 : 0, t.medicalCertDays, t.sandwichRule, t.combineWith, t.pwdOnly ? 1 : 0, t.gender, t.minServiceMonths,
   t.maxConsecutiveDays, t.isDebited ? 1 : 0, t.isPaid ? 1 : 0, t.joiningRequired ? 1 : 0, t.afterExhaustedTypeId ? Number(t.afterExhaustedTypeId) : null, t.debitFromTypeId ? Number(t.debitFromTypeId) : null, t.debitFactor, t.lifetimeMax, t.maxSpellsPerYear, t.minDaysPerApplication, t.maxSpellsPerMonth, t.maxSpellsLifetime, t.status,
-  t.needsContact ? 1 : 0, t.ltcAllowed ? 1 : 0, t.prefixSuffix ? 1 : 0, t.hodAfterDays, t.certificateRequired ? 1 : 0, t.offDaysOnly ? 1 : 0, t.fitnessCertificate ? 1 : 0, t.purposes.length ? t.purposes.join('\n') : null,
+  t.needsContact ? 1 : 0, t.ltcAllowed ? 1 : 0, t.prefixSuffix ? 1 : 0, t.hodAfterDays, t.certificateRequired ? 1 : 0, t.offDaysOnly ? 1 : 0, t.fitnessCertificate ? 1 : 0,
 ];
 
 function duplicate(error: unknown): never | void {
@@ -322,8 +335,9 @@ export async function createLeaveType(req: Request, body: unknown): Promise<Leav
     return await inTransaction(async (conn) => {
       const [result] = await conn.query(`INSERT INTO leave_types (${COLS}) VALUES (${COLS.split(',').map(() => '?').join(',')})`, values(input));
       const id = Number((result as { insertId: number }).insertId);
-      const [rows] = await conn.query<RowDataPacket[]>('SELECT * FROM leave_types WHERE id = ?', [id]);
       await saveQuotas(conn, id, input.quotas);
+      await saveLists(conn, id, input);
+      const [rows] = await conn.query<RowDataPacket[]>(`SELECT ${LEAVE_TYPE_SELECT} FROM leave_types t WHERE t.id = ?`, [id]);
       const [created] = await withQuotas(conn, [toLeaveType(rows[0])]);
       await writeMasterAuditSql(conn, req, { masterKey: AUDIT_KEY, recordId: id, recordLabel: label(created), action: 'CREATE', after: auditView(input), reason: reasonOf(body) });
       return created;
@@ -358,7 +372,7 @@ export async function updateLeaveType(req: Request, id: number, body: unknown): 
   const input = await parseLeaveTypeInput(body, id);
   try {
     return await inTransaction(async (conn) => {
-      const [rows] = await conn.query<RowDataPacket[]>('SELECT * FROM leave_types WHERE id = ? FOR UPDATE', [id]);
+      const [rows] = await conn.query<RowDataPacket[]>(`SELECT ${LEAVE_TYPE_SELECT} FROM leave_types t WHERE t.id = ? FOR UPDATE`, [id]);
       if (!rows[0]) throw notFound('Leave type not found.');
       const [before] = await withQuotas(conn, [toLeaveType(rows[0])]);
       if (before.code !== input.code && (await leaveTypeUsage(conn, id)) > 0) {
@@ -367,7 +381,8 @@ export async function updateLeaveType(req: Request, id: number, body: unknown): 
       const sets = COLS.split(',').map((c) => `${c.trim()} = ?`).join(', ');
       await conn.query(`UPDATE leave_types SET ${sets} WHERE id = ?`, [...values(input), id]);
       await saveQuotas(conn, id, input.quotas);
-      const [after] = await conn.query<RowDataPacket[]>('SELECT * FROM leave_types WHERE id = ?', [id]);
+      await saveLists(conn, id, input);
+      const [after] = await conn.query<RowDataPacket[]>(`SELECT ${LEAVE_TYPE_SELECT} FROM leave_types t WHERE t.id = ?`, [id]);
       const [updated] = await withQuotas(conn, [toLeaveType(after[0])]);
       const beforeView = auditView(before as unknown as LeaveTypeInput);
       const afterView = auditView(input);
@@ -391,7 +406,7 @@ export async function updateLeaveType(req: Request, id: number, body: unknown): 
 export async function deleteLeaveType(req: Request, id: number, reason: string | null): Promise<void> {
   try {
     await inTransaction(async (conn) => {
-      const [rows] = await conn.query<RowDataPacket[]>('SELECT * FROM leave_types WHERE id = ? FOR UPDATE', [id]);
+      const [rows] = await conn.query<RowDataPacket[]>(`SELECT ${LEAVE_TYPE_SELECT} FROM leave_types t WHERE t.id = ? FOR UPDATE`, [id]);
       if (!rows[0]) throw notFound('Leave type not found.');
       const [before] = await withQuotas(conn, [toLeaveType(rows[0])]);
       if ((await leaveTypeUsage(conn, id)) > 0) {

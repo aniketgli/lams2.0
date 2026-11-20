@@ -4,7 +4,7 @@ import type { Validator } from '../lib/validate';
 import type { FormLayout } from './fields';
 
 /**
- * Aadhaar, PAN and bank details of an employee (kept in employee_profiles.profile_data; no schema change).
+ * Aadhaar, PAN and bank details of an employee (stored in employee_identity / employee_bank_accounts, identityStore.ts).
  *
  * - Aadhaar and the bank account number are stored encrypted (AES-256-GCM) with a keyed hash (HMAC-SHA256) for the
  *   uniqueness check and the last 4 digits for masked display. The key is SETTINGS_ENCRYPTION_KEY in .env, the same
@@ -162,7 +162,7 @@ export const maskAadhaar = (last4: string | null) => (last4 ? `XXXX XXXX ${last4
 export const maskAccount = (last4: string | null) => (last4 ? `XXXXXX${last4}` : null);
 
 /**
- * Writes the identity into a new profile_data object (`data`), from the form input and the stored values (`previous`).
+ * Writes the identity's stored keys into `data` (saved by identityStore.saveIdentity), from the form input and the stored values (`previous`).
  * Returns the hashes to check for uniqueness.
  */
 export function storeIdentity(data: Record<string, unknown>, input: IdentityInput, previous: Record<string, unknown>, layout: FormLayout | null) {

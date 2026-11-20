@@ -1,3 +1,4 @@
+import { profileJsonSql } from '../employees/profileSql';
 import { MAX_LIST_ROWS, listLimitProblem, visibilityClause, canSeeEmployee } from '../lib/visibility';
 import type { Request } from 'express';
 import type { RowDataPacket } from 'mysql2/promise';
@@ -116,7 +117,7 @@ const isoDate = (value: unknown): string => {
 const isoTime = (value: unknown): string | null => (value ? new Date(value as string | number | Date).toISOString() : null);
 
 const SELECT = `
-  SELECT m.*, u.biometric_id, u.name AS user_name, p.designation, p.department, p.profile_data,
+  SELECT m.*, u.biometric_id, u.name AS user_name, p.designation, p.department, ${profileJsonSql('p')} AS profile_data,
          ab.name AS applied_by_name, mg.name AS manager_name, ac.name AS action_by_name,
          TIMESTAMPDIFF(SECOND, m.action_at, NOW(3)) AS step_age_sec
     FROM manual_attendance_requests m
@@ -285,7 +286,7 @@ interface Target { id: number; biometricId: string; shiftId: string | null; join
 
 async function loadTarget(q: { query: typeof pool.query }, userId: number): Promise<Target> {
   const [row] = await rows(q,
-    `SELECT u.id, u.biometric_id, u.status, p.joining_date, p.shift_id, p.profile_data
+    `SELECT u.id, u.biometric_id, u.status, p.joining_date, p.shift_id, ${profileJsonSql('p')} AS profile_data
        FROM users u LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE u.id = ? LIMIT 1`, [userId]);
   if (!row) throw badRequest('Please correct the highlighted fields.', { userId: 'Choose an employee from the list.' });
   if (String(row.status).toLowerCase() !== 'active') throw badRequest('Please correct the highlighted fields.', { userId: 'This employee is not active.' });

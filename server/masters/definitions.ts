@@ -1,6 +1,7 @@
 import type { RowDataPacket } from 'mysql2';
 import { pool } from '../../src/db';
 import { CADRES } from '../employees/lists';
+import { lookupTable } from '../lib/lookups';
 
 /**
  * Registry of every simple master (name + code + status + a few extra fields).
@@ -25,7 +26,7 @@ export const FORM_LAYOUTS = [
 
 /**
  * text    free text
- * lookup  one lookup_values code      master  one name from another master
+ * lookup  one code of a list table      master  one name from another master
  * choice  one value of a fixed list    multi   several values (fixed list or lookup codes), stored comma-separated
  * layout  a form layout code
  */
@@ -37,7 +38,7 @@ export interface FieldDef {
   type: FieldType;
   required?: boolean;
   maxLength?: number;
-  /** For type 'lookup': lookup_values.lookup_type supplying the options (stored by code). */
+  /** For type 'lookup': the list (lookups.ts) supplying the options (stored by code). */
   lookupType?: string;
   /** For type 'master': another master supplying the options (stored by name). */
   masterKey?: string;
@@ -79,32 +80,29 @@ interface BaseDef {
 export interface TableMasterDef extends BaseDef {
   kind: 'table';
   table: string;
-  /** Extra fields stored in real columns rather than the metadata JSON. */
-  columnFields?: Record<string, string>;
-  /** Whether the table has a `metadata` JSON column (organization_units does not). */
-  hasMetadata: boolean;
+  /** Column of each extra field (every field has one; there is no JSON column). */
+  columnFields: Record<string, string>;
   codeMaxLength: number;
 }
 
 export interface LookupMasterDef extends BaseDef {
   kind: 'lookup';
   lookupType: string;
+  /** The list's own table (lookups.ts). */
+  table: string;
+  /** Column of each extra field. */
+  columnFields: Record<string, string>;
 }
 
 export type MasterDef = TableMasterDef | LookupMasterDef;
 
-// Usage-check helpers. Values in profile_data / metadata are JSON stored in text columns.
-const PROFILE_COLUMN = (column: string): string =>
-  `SELECT COUNT(*) AS n FROM employee_profiles WHERE ${column} = ?`;
-const PROFILE_JSON = (path: string): string =>
-  `SELECT COUNT(*) AS n FROM employee_profiles WHERE JSON_VALID(profile_data) AND JSON_UNQUOTE(JSON_EXTRACT(profile_data, '$.${path}')) = ?`;
-const METADATA_JSON = (table: string, path: string): string =>
-  `SELECT COUNT(*) AS n FROM ${table} WHERE JSON_VALID(metadata) AND JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.${path}')) = ?`;
+// Usage-check helper: how many rows of `table` hold the value in `column`.
+const COUNT = (table: string, column: string): string => `SELECT COUNT(*) AS n FROM ${table} WHERE ${column} = ?`;
 
 export const MASTERS: MasterDef[] = [
   // ---- Profile masters --------------------------------------------------------
   {
-    kind: 'table', key: 'organizations', table: 'organization_units', group: 'profile', codeMaxLength: 80, hasMetadata: true,
+    kind: 'table', key: 'organizations', table: 'organization_units', group: 'profile', codeMaxLength: 80,
     label: 'Institute Units', noun: 'Institute unit',
     description: 'Departments, divisions, cells and units, each under its institute.',
     columnFields: { institute: 'institute', type: 'type' },
@@ -114,134 +112,145 @@ export const MASTERS: MasterDef[] = [
       { key: 'type', label: 'Type', type: 'lookup', lookupType: 'org_unit_type', required: true },
     ],
     usage: [
-      { what: 'employee profiles', sql: PROFILE_COLUMN('department'), by: 'name' },
+      { what: 'employee profiles', sql: COUNT('employee_profiles', 'org_unit_name'), by: 'name' },
     ],
   },
   {
-    kind: 'table', key: 'designations', table: 'designations', group: 'profile', codeMaxLength: 100, hasMetadata: true,
+    kind: 'table', key: 'designations', table: 'designations', group: 'profile', codeMaxLength: 100,
     label: 'Designations', noun: 'Designation',
     description: 'Job titles and positions.',
+    columnFields: { empType: 'employee_type_code', cadre: 'cadre_code' },
     fields: [
       { key: 'empType', label: 'Employment type', type: 'lookup', lookupType: 'employee_type', allowedLayouts: ['permanent', 'contractual', 'researcher'] },
       { key: 'cadre', label: 'Cadre', type: 'choice', choices: CADRES },
     ],
-    usage: [{ what: 'employee profiles', sql: PROFILE_COLUMN('designation'), by: 'name' }],
+    usage: [{ what: 'employee profiles', sql: COUNT('employee_profiles', 'designation_name'), by: 'name' }],
   },
   {
-    kind: 'table', key: 'categories', table: 'categories', group: 'profile', codeMaxLength: 100, hasMetadata: true,
+    kind: 'table', key: 'categories', table: 'categories', group: 'profile', codeMaxLength: 100,
     label: 'Employee Categories', noun: 'Category',
     description: 'Administrative, scientific, technical and academic categories.',
+    columnFields: { group: 'cadre_group_code' },
     fields: [{ key: 'group', label: 'Cadre group', type: 'lookup', lookupType: 'cadre_group' }],
-    usage: [{ what: 'employee profiles', sql: PROFILE_JSON('employeeCategory'), by: 'name' }],
+    usage: [{ what: 'employee profiles', sql: COUNT('employee_profiles', 'employee_category'), by: 'name' }],
   },
   {
-    kind: 'table', key: 'projects', table: 'projects', group: 'profile', codeMaxLength: 100, hasMetadata: true,
+    kind: 'table', key: 'projects', table: 'projects', group: 'profile', codeMaxLength: 100,
     label: 'Projects', noun: 'Project',
     description: 'Research projects and grant units.',
+    columnFields: { pi: 'pi_name' },
     fields: [{ key: 'pi', label: 'Principal Investigator', type: 'text', maxLength: 255, placeholder: 'Name of the PI' }],
     usage: [
-      { what: 'employee profiles', sql: PROFILE_COLUMN('department'), by: 'name' },
+      { what: 'employee profiles', sql: COUNT('employee_profiles', 'project_name'), by: 'name' },
       { what: 'project histories', sql: 'SELECT COUNT(*) AS n FROM user_histories WHERE project_name = ?', by: 'name' },
     ],
   },
   {
-    kind: 'table', key: 'courses', table: 'training_courses', group: 'profile', codeMaxLength: 100, hasMetadata: true,
+    kind: 'table', key: 'courses', table: 'training_courses', group: 'profile', codeMaxLength: 100,
     label: 'Training Courses', noun: 'Training course',
     description: 'Diploma, certificate and training programmes.',
+    columnFields: {},
     fields: [],
     usage: [
-      { what: 'employee profiles', sql: PROFILE_JSON('courseProgram'), by: 'name' },
-      { what: 'trainee batches', sql: METADATA_JSON('trainee_batches', 'parentCourse'), by: 'name' },
+      { what: 'employee profiles', sql: COUNT('employee_profiles', 'training_course_name'), by: 'name' },
+      { what: 'trainee batches', sql: COUNT('trainee_batches', 'training_course_name'), by: 'name' },
     ],
   },
   {
-    kind: 'table', key: 'traineeBatches', table: 'trainee_batches', group: 'profile', codeMaxLength: 100, hasMetadata: true,
+    kind: 'table', key: 'traineeBatches', table: 'trainee_batches', group: 'profile', codeMaxLength: 100,
     label: 'Training Batches', noun: 'Training batch',
     description: 'Trainee cohorts per course.',
+    columnFields: { parentCourse: 'training_course_name', validity: 'validity' },
     fields: [
       { key: 'parentCourse', label: 'Course', type: 'master', masterKey: 'courses', required: true },
       { key: 'validity', label: 'Year / validity', type: 'text', maxLength: 50, required: true, placeholder: 'e.g. 2026' },
     ],
-    usage: [{ what: 'employee profiles', sql: PROFILE_JSON('courseBatch'), by: 'name' }],
+    usage: [{ what: 'employee profiles', sql: COUNT('employee_profiles', 'trainee_batch_name'), by: 'name' }],
   },
   {
-    kind: 'table', key: 'mscStreams', table: 'msc_streams', group: 'profile', codeMaxLength: 100, hasMetadata: true,
+    kind: 'table', key: 'mscStreams', table: 'msc_streams', group: 'profile', codeMaxLength: 100,
     label: 'M.Sc Streams', noun: 'Stream',
     description: 'Postgraduate streams and disciplines.',
+    columnFields: {},
     fields: [],
-    usage: [{ what: 'M.Sc batches', sql: METADATA_JSON('msc_batches', 'parentStream'), by: 'name' }],
+    usage: [
+      { what: 'M.Sc batches', sql: COUNT('msc_batches', 'msc_stream_name'), by: 'name' },
+      { what: 'employee profiles', sql: COUNT('employee_profiles', 'msc_stream_name'), by: 'name' },
+    ],
   },
   {
-    kind: 'table', key: 'mscBatches', table: 'msc_batches', group: 'profile', codeMaxLength: 100, hasMetadata: true,
+    kind: 'table', key: 'mscBatches', table: 'msc_batches', group: 'profile', codeMaxLength: 100,
     label: 'M.Sc Batches', noun: 'M.Sc batch',
     description: 'Academic batches and tenures.',
+    columnFields: { parentStream: 'msc_stream_name', validity: 'validity' },
     fields: [
       { key: 'parentStream', label: 'Stream', type: 'master', masterKey: 'mscStreams', required: true },
       { key: 'validity', label: 'Academic tenure', type: 'text', maxLength: 50, required: true, placeholder: 'e.g. 2026–2028' },
     ],
-    usage: [{ what: 'employee profiles', sql: PROFILE_JSON('courseBatch'), by: 'name' }],
+    usage: [{ what: 'employee profiles', sql: COUNT('employee_profiles', 'msc_batch_name'), by: 'name' }],
   },
   {
-    kind: 'table', key: 'phdEnrollment', table: 'phd_enrollments', group: 'profile', codeMaxLength: 100, hasMetadata: true,
+    kind: 'table', key: 'phdEnrollment', table: 'phd_enrollments', group: 'profile', codeMaxLength: 100,
     label: 'PhD Enrollment', noun: 'Enrollment source',
     description: 'Fellowship sources and enrollment types for PhD scholars.',
+    columnFields: { category: 'funding_category_code' },
     fields: [{ key: 'category', label: 'Funding category', type: 'lookup', lookupType: 'funding_category' }],
-    usage: [{ what: 'employee profiles', sql: PROFILE_JSON('enrolledThrough'), by: 'name' }],
+    usage: [{ what: 'employee profiles', sql: COUNT('employee_profiles', 'phd_enrollment_name'), by: 'name' }],
   },
 
-  // ---- Employee-form lists (lookup_values) ------------------------------------
+  // ---- Employee-form lists (one table each, lookups.ts) -------------------------
   {
-    kind: 'lookup', key: 'institute', lookupType: 'institute', group: 'lists',
+    kind: 'lookup', key: 'institute', lookupType: 'institute', table: lookupTable('institute'), columnFields: {}, group: 'lists',
     label: 'Institutes', noun: 'Institute',
     description: 'Wildlife Institute of India, WII - SACON, … Each employee and organization unit belongs to one.',
     fields: [],
     usage: [
       { what: 'organization units', sql: 'SELECT COUNT(*) AS n FROM organization_units WHERE institute = ?', by: 'code' },
-      { what: 'employee profiles', sql: PROFILE_COLUMN('institute'), by: 'code' },
+      { what: 'employee profiles', sql: COUNT('employee_profiles', 'institute'), by: 'code' },
     ],
   },
   {
-    kind: 'lookup', key: 'salutation', lookupType: 'salutation', group: 'lists',
+    kind: 'lookup', key: 'salutation', lookupType: 'salutation', table: lookupTable('salutation'), columnFields: {}, group: 'lists',
     label: 'Salutations', noun: 'Salutation', description: 'Shown before names (Mr., Dr., …).',
     fields: [],
-    usage: [{ what: 'employee profiles', sql: PROFILE_COLUMN('suffix'), by: 'code' }],
+    usage: [{ what: 'employee profiles', sql: COUNT('employee_profiles', 'suffix'), by: 'code' }],
   },
   {
-    kind: 'lookup', key: 'gender', lookupType: 'gender', group: 'lists',
+    kind: 'lookup', key: 'gender', lookupType: 'gender', table: lookupTable('gender'), columnFields: {}, group: 'lists',
     label: 'Genders', noun: 'Gender', description: 'Gender options on the employee form.',
     fields: [],
-    usage: [{ what: 'employee profiles', sql: PROFILE_JSON('gender'), by: 'code' }],
+    usage: [{ what: 'employee profiles', sql: COUNT('employee_profiles', 'gender'), by: 'code' }],
   },
   {
-    kind: 'lookup', key: 'employeeType', lookupType: 'employee_type', group: 'lists',
+    kind: 'lookup', key: 'employeeType', lookupType: 'employee_type', table: lookupTable('employee_type'), columnFields: { formLayout: 'form_layout' }, group: 'lists',
     label: 'Employee Types', noun: 'Employee type',
     description: 'Each type uses one form layout, which decides the fields asked for.',
     noCreate: true, codeEditable: true,
     fields: [{ key: 'formLayout', label: 'Form layout', type: 'layout', required: true, hidden: true }],
     usage: [
-      { what: 'employee profiles', sql: PROFILE_COLUMN('employment_type'), by: 'code' },
-      { what: 'designations', sql: METADATA_JSON('designations', 'empType'), by: 'code' },
-      { what: 'leave types', sql: 'SELECT COUNT(*) AS n FROM leave_types WHERE FIND_IN_SET(?, employee_types)', by: 'code' },
+      { what: 'employee profiles', sql: COUNT('employee_profiles', 'employment_type'), by: 'code' },
+      { what: 'designations', sql: COUNT('designations', 'employee_type_code'), by: 'code' },
+      { what: 'leave types', sql: COUNT('leave_type_employee_types', 'employee_type_code'), by: 'code' },
       { what: 'leave quotas', sql: 'SELECT COUNT(*) AS n FROM leave_type_quotas WHERE employee_type = ?', by: 'code' },
     ],
   },
   {
-    kind: 'lookup', key: 'orgUnitType', lookupType: 'org_unit_type', group: 'lists',
+    kind: 'lookup', key: 'orgUnitType', lookupType: 'org_unit_type', table: lookupTable('org_unit_type'), columnFields: {}, group: 'lists',
     label: 'Organization Unit Types', noun: 'Unit type', description: 'Types used in the Organizations master.',
     fields: [],
     usage: [{ what: 'organization units', sql: 'SELECT COUNT(*) AS n FROM organization_units WHERE type = ?', by: 'code' }],
   },
   {
-    kind: 'lookup', key: 'cadreGroup', lookupType: 'cadre_group', group: 'lists',
+    kind: 'lookup', key: 'cadreGroup', lookupType: 'cadre_group', table: lookupTable('cadre_group'), columnFields: {}, group: 'lists',
     label: 'Cadre Groups', noun: 'Cadre group', description: 'Groups used in the Employee Categories master.',
     fields: [],
-    usage: [{ what: 'employee categories', sql: METADATA_JSON('categories', 'group'), by: 'code' }],
+    usage: [{ what: 'employee categories', sql: COUNT('categories', 'cadre_group_code'), by: 'code' }],
   },
   {
-    kind: 'lookup', key: 'fundingCategory', lookupType: 'funding_category', group: 'lists',
+    kind: 'lookup', key: 'fundingCategory', lookupType: 'funding_category', table: lookupTable('funding_category'), columnFields: {}, group: 'lists',
     label: 'Funding Categories', noun: 'Funding category', description: 'Categories used in the PhD Enrollment master.',
     fields: [],
-    usage: [{ what: 'PhD enrollment sources', sql: METADATA_JSON('phd_enrollments', 'category'), by: 'code' }],
+    usage: [{ what: 'PhD enrollment sources', sql: COUNT('phd_enrollments', 'funding_category_code'), by: 'code' }],
   },
 ];
 
