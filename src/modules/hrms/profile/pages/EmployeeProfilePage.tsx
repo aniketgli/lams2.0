@@ -1283,10 +1283,13 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const managersWithRole = (role: 'reporting_manager' | 'reviewing_manager', current: string) => {
     const employees = users.filter((u) =>
       u.status !== 'deactivated' && (!newUserForm.institute || !u.institute || u.institute === newUserForm.institute));
-    const holders = employees.filter((u) => (u.roles ?? [u.role]).includes(role));
+    const hasRole = (u: (typeof users)[number]) => (u.roles ?? [u.role]).includes(role);
+    const holders = employees.filter(hasRole);
     const admins = systemUsers.filter((u) => u.status !== 'deactivated' && (u.roles ?? [u.role]).includes('administrator'));
     const kept = [...employees, ...admins].filter((u) => u.id === current && !holders.includes(u));
-    const extra = holders.length ? [] : admins.filter((a) => !kept.includes(a));
+    // The Administrator only while no active employee anywhere holds the role (the server applies the same rule).
+    const anyoneHasRole = users.some((u) => u.status !== 'deactivated' && hasRole(u));
+    const extra = anyoneHasRole ? [] : admins.filter((a) => !kept.includes(a));
     return [...holders, ...kept, ...extra];
   };
   const editedEmployee = editingEmployeeId ? users.find((u) => u.id === editingEmployeeId) : undefined;

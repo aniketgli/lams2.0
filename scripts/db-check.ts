@@ -129,6 +129,39 @@ async function main(): Promise<void> {
         orphans.length ? `${orphans.length} grant(s) give no access: ${orphans.slice(0, 10).map((g) => `${g.biometric_id} ${g.module_id}/${g.role_id}`).join(', ')}` : `${grants.length} grant(s)`);
     } catch (e) { report('FAIL', 'Role grants match the role catalog', (e as Error).message); }
 
+    // Reporting managers / HoDs set before the role rule (server/employees/managerRoles.ts) who do not hold the role.
+    try {
+      const { catalogFromRows, BUILT_IN_CATALOG, resolveGrant } = await import('../server/lib/roleCatalog');
+      const fromTable = await rows(c, `SELECT c.module_id, c.role_id, c.name, c.access_role, c.description, c.sort_order,
+          (SELECT GROUP_CONCAT(a.alias SEPARATOR ',') FROM role_aliases a WHERE a.module_id = c.module_id AND a.role_id = c.role_id) AS aliases
+        FROM role_catalog c WHERE c.is_active = 1`).catch(() => null);
+      const catalog = fromTable ? catalogFromRows(fromTable) : BUILT_IN_CATALOG;
+      const held = new Set<string>();
+      for (const g of await rows(c, `SELECT g.biometric_id, g.module_id, g.role_id FROM user_module_roles g
+                                       JOIN users u ON u.biometric_id = g.biometric_id
+                                      WHERE LOWER(g.status) = 'active' AND LOWER(u.status) = 'active'`)) {
+        const r = resolveGrant(catalog, g.module_id, g.role_id);
+        if (r?.moduleId === 'hrms') held.add(`${g.biometric_id}|${r.role}`);
+      }
+      const links = await rows(c, `SELECT e.biometric_id AS emp, m.biometric_id AS mgr, m.name AS mgr_name, m.is_system, 'reporting_manager' AS role
+                                     FROM employee_profiles e JOIN users eu ON eu.biometric_id = e.biometric_id AND LOWER(eu.status) = 'active'
+                                     JOIN users m ON m.id = e.reporting_manager_id
+                                   UNION ALL
+                                   SELECT e.biometric_id, m.biometric_id, m.name, m.is_system, 'reviewing_manager'
+                                     FROM employee_profiles e JOIN users eu ON eu.biometric_id = e.biometric_id AND LOWER(eu.status) = 'active'
+                                     JOIN users m ON m.id = e.reviewing_manager_id`);
+      const missing = links.filter((l) => Number(l.is_system) !== 1 && !held.has(`${l.mgr}|${l.role}`));
+      const byManager = new Map<string, number>();
+      for (const l of missing) {
+        const key = `${l.mgr_name} (${l.mgr}) without the ${l.role === 'reporting_manager' ? 'Reporting Manager' : 'HoD'} role`;
+        byManager.set(key, (byManager.get(key) ?? 0) + 1);
+      }
+      report(missing.length ? 'WARN' : 'PASS', 'Reporting managers / HoDs hold their role',
+        missing.length
+          ? `${[...byManager].map(([k, n]) => `${k}: ${n} employee(s)`).join('; ')}. Give the role (User Controls) or change the manager (Transfers).`
+          : `${links.length} link(s)`);
+    } catch (e) { report('FAIL', 'Reporting managers / HoDs hold their role', (e as Error).message); }
+
     // 4. EXPLAIN: hot queries must use an index ---------------------------------------------------
     const sample = await one(c, 'SELECT id, biometric_id FROM users WHERE is_system = 0 ORDER BY id LIMIT 1');
     const uid = sample?.id ?? 0;
