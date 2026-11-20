@@ -4,6 +4,9 @@ import type { User } from '../../../shared/types/auth.types';
 
 /** Client for /api/hrms/employees. The server validates everything; this only shapes requests. */
 
+/** Whether a new employee must have an Aadhaar number (keep in step with server/employees/identity.ts). */
+export const AADHAAR_REQUIRED = false;
+
 export interface EmployeeRow {
   id: string;
   isSystem?: boolean;
