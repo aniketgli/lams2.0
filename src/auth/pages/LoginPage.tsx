@@ -4,7 +4,7 @@ import { useSession } from '../SessionContext';
 import { WIILogo } from '../../shared/components/WIILogo';
 import { Button, Input, Alert } from '../../shared/components';
 import { ApiError } from '../../shared/services/api';
-import { formatOrgAddress } from '../../types';
+import { formatOrgAddress, formatOrgCopyright } from '../../types';
 import { Lock, Mail, ArrowRight, MapPin } from 'lucide-react';
 import { CaptchaField, type CaptchaHandle } from '../components/CaptchaField';
 
@@ -123,7 +123,7 @@ export const LoginPage: React.FC = () => {
 
         <div className="pt-2 text-[11px] text-center text-slate-500 space-y-1">
           <p className="font-semibold text-slate-600">
-            {orgBranding?.copyrightText || `© ${new Date().getFullYear()} ${orgBranding?.orgName || 'Wildlife Institute of India'}`}
+            {formatOrgCopyright(orgBranding)}
           </p>
           {formatOrgAddress(orgBranding) && (
             <p className="flex items-center justify-center gap-1">

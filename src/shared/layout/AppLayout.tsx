@@ -1,3 +1,4 @@
+import { formatOrgAddress, formatOrgCopyright } from '../types/branding.types';
 import React from 'react';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
@@ -36,11 +37,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
 }) => {
   const { orgBranding } = useApp();
 
-  const formatOrgAddress = (branding?: any) => {
-    if (!branding) return 'Post Box #18, Chandrabani, Dehradun 248001, Uttarakhand, India';
-    const parts = [branding.addressLine1, branding.city, branding.state, branding.pincode].filter(Boolean);
-    return parts.length > 0 ? parts.join(', ') : 'Post Box #18, Chandrabani, Dehradun 248001, Uttarakhand, India';
-  };
+  // Same footer as the login page and the Organization details preview (Master Settings → Organization).
+  const address = formatOrgAddress(orgBranding);
 
   return (
     <div className="h-[100dvh] w-full min-w-0 bg-slate-50 text-slate-900 font-sans flex overflow-hidden">
@@ -88,16 +86,13 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           {/* 6. Standard Institutional Footer */}
           <footer className="py-2.5 sm:py-0 min-h-[52px] sm:h-14 bg-white border-t border-slate-200 text-slate-500 text-xs mt-auto px-4 sm:px-6 shrink-0 flex items-center">
             <div className="w-full max-w-[1700px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-center sm:text-left">
-              <p className="font-medium text-slate-600">
-                {orgBranding?.copyrightText ||
-                  `© ${new Date().getFullYear()} ${
-                    orgBranding?.orgName || 'Wildlife Institute of India'
-                  } • Integrated Enterprise Suite (WII-ERP)`}
-              </p>
-              <div className="flex items-center space-x-1.5 text-slate-600 font-medium text-[11px] sm:text-xs">
-                <MapPin className="w-3.5 h-3.5 text-primary shrink-0" />
-                <span>{formatOrgAddress(orgBranding)}</span>
-              </div>
+              <p className="font-medium text-slate-600">{formatOrgCopyright(orgBranding)}</p>
+              {address && (
+                <div className="flex items-center space-x-1.5 text-slate-600 font-medium text-[11px] sm:text-xs">
+                  <MapPin className="w-3.5 h-3.5 text-primary shrink-0" />
+                  <span>{address}</span>
+                </div>
+              )}
             </div>
           </footer>
         </div>
