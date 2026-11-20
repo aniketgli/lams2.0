@@ -24,7 +24,7 @@ import { apiNotFound, errorHandler } from './middleware/errorHandler';
 import { csrfGuard, noStore, securityHeaders } from './middleware/security';
 import { compressJson } from './middleware/compress';
 import { MySqlSessionStore } from './lib/sessionStore';
-import { SESSION_COOKIE } from './lib/http';
+import { SESSION_COOKIE, keepOneSessionCookie } from './lib/http';
 import { sessionConfig } from './config/session.config';
 import { trustProxySetting } from './config/proxy.config';
 import { requireCurrentContext } from './middleware/auth.middleware';
@@ -71,6 +71,7 @@ export async function createApp(httpServer?: HttpServer) {
   app.use(compressJson);
   app.use(express.json({ limit: '2mb' }));
 
+  app.use(keepOneSessionCookie);
   app.use(session({
     name: SESSION_COOKIE,
     store: await createSessionStore(isProduction),

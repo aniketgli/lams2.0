@@ -8,6 +8,8 @@
  *     SECURITY_TEST_URL=http://127.0.0.1:3000 bun scripts/security/normalized_flows.ts
  * Exit code 1 when any check fails.
  */
+/** Session cookie name (server/lib/http.ts). */
+const SID = (process.env.SESSION_COOKIE_NAME || '').trim() || 'lams2.sid';
 const BASE = (process.env.SECURITY_TEST_URL || 'http://127.0.0.1:3000').replace(/\/$/, '');
 if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(BASE)) {
   console.error(`Refusing to run against ${BASE}: only a local test server is allowed.`);
@@ -29,7 +31,7 @@ async function req(method: string, path: string, body?: unknown): Promise<{ stat
   const res = await fetch(`${BASE}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
   for (const c of (res.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie?.() ?? []) {
     const pair = c.split(';')[0];
-    if (pair.startsWith('wii.sid=')) cookie = pair;
+    if (pair.startsWith(`${SID}=`)) cookie = pair;
   }
   const text = await res.text();
   let parsed: any = null;
@@ -204,6 +206,17 @@ async function main(): Promise<void> {
   const sbi = (bankList.body?.records ?? []).find((r: any) => r.code === 'SBIN');
   const sbiDel = sbi ? await req('DELETE', `/api/hrms/masters/banks/${sbi.id}`, { reason: 'ci' }) : { status: 0 };
   check('A bank in use cannot be deleted', sbiDel.status === 409, String(sbiDel.status));
+
+  // ---- A leftover second session cookie (another path / app) does not sign the user out ------------
+  const goodCookie = cookie;
+  cookie = `${SID}=s%3Aleftover.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA; ${goodCookie}`;
+  const twoCookies = await req('GET', '/api/auth/me');
+  cookie = goodCookie;
+  check('With two session cookies the newest one is used', twoCookies.status === 200, String(twoCookies.status));
+  cookie = `wii.sid=s%3Aold.AAAA; ${goodCookie}`;
+  const oldName = await req('GET', '/api/auth/me');
+  cookie = goodCookie;
+  check('A cookie of the old name is ignored', oldName.status === 200, String(oldName.status));
 
   // ---- Sign-out names the sign-in it means (a sleeping tab must not end a newer sign-in) ---------
   const first = (await req('GET', '/api/auth/me')).body?.sessionTag;
