@@ -204,6 +204,12 @@ async function main(): Promise<void> {
   const badAadhaar = await req('POST', '/api/hrms/employees', { ...body, biometricId: '3009', email: 'ci.badaadhaar@wii.gov.in', phone: '9876500009', aadhaarNumber: '123412341234', panNumber: 'ABCDE9884K', bankAccountNumber: '923456789012' });
   check('An Aadhaar that is entered is still checked', badAadhaar.status === 400 && Boolean(badAadhaar.body?.details?.aadhaarNumber), String(badAadhaar.status));
 
+  // ---- Deactivation: only a plain User account -------------------------------------------------
+  const rmCheck = await req('GET', `/api/hrms/employees/${rmId}/deactivation-check`);
+  check('A reporting manager cannot be deactivated (shown before the form)', rmCheck.status === 200 && rmCheck.body?.allowed === false && /role/i.test(String(rmCheck.body?.reason)), `${rmCheck.status} ${JSON.stringify(rmCheck.body)}`);
+  const rmDeact = await req('PATCH', `/api/hrms/employees/${rmId}/status`, { status: 'inactive', reason: 'ci' });
+  check('…and the deactivation itself is refused', rmDeact.status === 409, String(rmDeact.status));
+
   // ---- Banks master ----------------------------------------------------------------------------
   const bankList = await req('GET', '/api/hrms/masters/banks');
   check('Banks master lists the common banks', (bankList.body?.records ?? []).some((r: any) => r.name === 'State Bank of India' && r.code === 'SBIN'), String(bankList.status));

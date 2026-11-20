@@ -19,7 +19,7 @@ import { clearAccessCache } from '../services/access.service';
 import { PATTERNS, Validator, todayInIndia } from '../lib/validate';
 import {
   Grant, Viewer, auditPasswordReset, createEmployee, deleteEmployee, getEmployee, listEmployees,
-  employeeById, replaceRoleGrants, setEmployeeStatus, updateEmployee,
+  deactivationCheck, employeeById, replaceRoleGrants, setEmployeeStatus, updateEmployee,
 } from './store';
 import { deleteOwnPhoto, deletePhotoFor, loadPhoto, saveOwnPhoto, savePhotoFor } from './photos';
 import { activityCsv, activityTable, employeeDirectoryCsv, employeeDirectoryTable, listActivity, parseActivityFilter } from './activity';
@@ -254,6 +254,11 @@ router.put('/employees/:userId', isAdmin, asyncHandler(async (req, res) => {
   const { record, changed } = await updateEmployee(req, accountId(req.params.userId), req.body);
   notifyEmployeeUpdated(record, changed, portalUrlOf(req));
   res.json({ employee: record, changed, message: changed.length ? 'Employee profile updated.' : 'No changes to save.' });
+}));
+
+// Whether the account can be deactivated now (the screen asks before opening the form; the change checks again).
+router.get('/employees/:userId/deactivation-check', isAdmin, asyncHandler(async (req, res) => {
+  res.json(await deactivationCheck(accountId(req.params.userId)));
 }));
 
 router.patch('/employees/:userId/status', isAdmin, asyncHandler(async (req, res) => {

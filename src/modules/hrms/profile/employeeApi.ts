@@ -146,6 +146,9 @@ export const employeeApi = {
   update: (id: string, user: Partial<User>) =>
     api<{ employee: EmployeeRow; changed: string[]; message: string }>(`/hrms/employees/${encodeURIComponent(id)}`, { method: 'PUT', body: employeePayload(user) }),
   /** effectiveDate is optional; the server uses today's date in India when it is missing. */
+  /** Whether the account can be deactivated now; the reason when not (same check as the deactivation itself). */
+  deactivationCheck: (id: string) =>
+    api<{ allowed: boolean; reason: string | null }>(`/hrms/employees/${encodeURIComponent(id)}/deactivation-check`),
   setStatus: (id: string, status: 'active' | 'inactive', reason: string, effectiveDate?: string) =>
     api<{ employee: EmployeeRow; message: string; temporaryPassword?: string }>(`/hrms/employees/${encodeURIComponent(id)}/status`, {
       method: 'PATCH', body: { status, reason, ...(effectiveDate ? { effectiveDate } : {}) },

@@ -1216,12 +1216,26 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     }
   };
 
-  const handleOpenStatusToggleModal = (u: UserType) => {
+  const handleOpenStatusToggleModal = async (u: UserType) => {
     if (u.id === currentUser.id) {
       showToast('Administrators cannot change their own account status.');
       return;
     }
     const isDeactivating = u.status === 'active';
+    if (isDeactivating) {
+      // Only a plain User account (User role, no other role, nobody reporting to it) can be deactivated; the server
+      // decides and says why not, before the form is filled in.
+      try {
+        const check = await employeeApi.deactivationCheck(u.id);
+        if (!check.allowed) {
+          showToast(check.reason || 'This account cannot be deactivated.', 'error');
+          return;
+        }
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : 'Could not check whether this account can be deactivated.', 'error');
+        return;
+      }
+    }
     setStatusChangeError(null);
     setUserToToggleStatusModal(u);
     setStatusChangeForm({
