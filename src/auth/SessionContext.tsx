@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { EnterpriseModuleId, UserRole } from '../types';
-import { ApiError, CONTEXT_CHANGED_EVENT, SESSION_ENDED_EVENT, api, setApiContext } from '../shared/services/api';
+import { ApiError, CONTEXT_CHANGED_EVENT, SESSION_ENDED_EVENT, api, currentSessionEpoch, setApiContext, startNewSessionEpoch } from '../shared/services/api';
 import { SessionPayload, toServerModule } from './access';
 
 /**
@@ -61,6 +61,17 @@ const SessionContext = createContext<SessionContextValue | undefined>(undefined)
 
 const LEGACY_IDENTITY_KEYS = ['la_hub_users', 'la_hub_current_user_id', 'la_hub_is_authenticated'];
 
+/**
+ * After the server has ended a session (idle, time limit, account blocked), ask it to drop the session cookie too,
+ * so nothing of the old session is left in the browser when the user signs in again. Best effort.
+ */
+let clearing: Promise<unknown> | null = null;
+function clearServerSession(): void {
+  const request = api('/auth/logout', { method: 'POST', passive: true }).catch(() => undefined);
+  clearing = request;
+  void request.finally(() => { if (clearing === request) clearing = null; });
+}
+
 export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [status, setStatus] = useState<Status>('loading');
   const [session, setSession] = useState<SessionPayload | null>(null);
@@ -109,6 +120,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
   /** Ask the server who we are. `passive` checks do not count as user activity. */
   const sync = useCallback(async (passive: boolean) => {
     const activityAtStart = lastActivityRef.current;
+    const epoch = currentSessionEpoch();
     try {
       const payload = await api<SessionPayload>('/auth/me', { passive });
       lastSyncAtRef.current = Date.now();
@@ -116,9 +128,13 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
       adoptServerActivity(payload);
       applySession(payload);
     } catch (error) {
+      // The user signed in again while this check was on its way: its answer is about the old session.
+      if (epoch !== currentSessionEpoch()) return;
       if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
         // 401 on first load just means "not signed in yet"; no notice needed.
         const wasSignedIn = statusRef.current === 'signedIn';
+        // The server has ended the session: also drop its cookie, so the next sign-in starts clean.
+        if (wasSignedIn) clearServerSession();
         signedOut(wasSignedIn || error.status === 403 ? error.message : null);
       } else if (statusRef.current === 'loading') {
         signedOut(error instanceof Error ? error.message : 'Unable to reach the server.');
@@ -156,6 +172,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     const onEnded = (event: Event) => {
       if (statusRef.current !== 'signedIn') return;
+      clearServerSession();
       signedOut((event as CustomEvent<{ message?: string }>).detail?.message ?? 'Your session has ended. Please sign in again.');
     };
     const onContextChanged = () => void sync(true);
@@ -220,10 +237,15 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // --- Actions ---------------------------------------------------------------
   const login = useCallback(async (email: string, password: string, captcha?: { token: string; answer: string }) => {
+    // Answers to requests sent before this sign-in (an old tab, a check on its way) are about the old session.
+    startNewSessionEpoch();
+    // Let a cookie clean-up still on its way finish first, so its answer cannot remove the new cookie.
+    if (clearing) await clearing;
     const payload = await api<SessionPayload>('/auth/login', {
       method: 'POST',
       body: { email, password, ...(captcha ? { captchaToken: captcha.token, captchaAnswer: captcha.answer } : {}) },
     });
+    startNewSessionEpoch();
     const now = Date.now();
     lastActivityRef.current = now;
     lastSyncedActivityRef.current = now;
