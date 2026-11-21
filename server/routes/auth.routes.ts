@@ -139,8 +139,11 @@ router.post('/login', asyncHandler(async (req, res) => {
 router.post('/logout', asyncHandler(async (req, res) => {
   // The cookie is shared by every tab. A tab that still shows an older sign-in (asleep, offline for a moment) names
   // the session it knows; when the user has since signed in again, the newer session is left alone.
+  // A tab without a tag (an older version of the app still open) cannot name it either: a named sign-in is ended only
+  // by a request that names it.
   const known = (req.body as { sessionTag?: unknown } | undefined)?.sessionTag;
-  if (typeof known === 'string' && req.session?.sessionTag && known !== req.session.sessionTag) {
+  if (req.session?.sessionTag && known !== req.session.sessionTag) {
+    console.info(`[session] sign-out of an older sign-in ignored; current sign-in of ${req.session.biometricId ?? '?'} kept (${typeof known === 'string' ? 'other tag' : 'no tag'}).`);
     return res.json({ success: true, kept: true });
   }
   await destroySession(req);

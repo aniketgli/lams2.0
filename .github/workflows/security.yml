@@ -68,6 +68,10 @@ jobs:
           nohup node server.ts > /tmp/server.log 2>&1 &
           for i in $(seq 1 60); do curl -sf http://127.0.0.1:3000/api/health/ready && break; sleep 1; done
           curl -sf http://127.0.0.1:3000/api/health/ready
+      - name: Sign-in and sign-out in a real browser (two tabs)
+        run: |
+          npm i --prefix /tmp/pw --no-audit --no-fund playwright-core@1 > /dev/null
+          PLAYWRIGHT_CORE=/tmp/pw/node_modules/playwright-core/index.mjs bun scripts/security/browser_session.ts
       - name: Normalized tables work through the app
         run: bun scripts/security/normalized_flows.ts
       - name: Attack it

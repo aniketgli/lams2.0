@@ -235,6 +235,9 @@ async function main(): Promise<void> {
   const again = await req('POST', '/api/auth/login', { email: 'admin@wii.gov.in', password: PASSWORD });
   const second = again.body?.sessionTag;
   check('Every sign-in gets its own tag', typeof first === 'string' && typeof second === 'string' && first !== second, `${first} / ${second}`);
+  const untagged = await req('POST', '/api/auth/logout', {});
+  const stillAfterUntagged = await req('GET', '/api/auth/me');
+  check('A sign-out that names no sign-in (an old version still open in a tab) keeps the current one', untagged.body?.kept === true && stillAfterUntagged.status === 200, `${JSON.stringify(untagged.body)} / me ${stillAfterUntagged.status}`);
   const stale = await req('POST', '/api/auth/logout', { sessionTag: first });
   const still = await req('GET', '/api/auth/me');
   check('Signing out an older sign-in keeps the newer one', stale.body?.kept === true && still.status === 200, `${stale.status} ${JSON.stringify(stale.body)} / me ${still.status}`);
