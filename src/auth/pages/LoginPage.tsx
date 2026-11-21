@@ -17,7 +17,7 @@ import { CaptchaField, type CaptchaHandle } from '../components/CaptchaField';
  */
 export const LoginPage: React.FC = () => {
   const { orgBranding } = useApp();
-  const { login, notice } = useSession();
+  const { login, notice, noticeRef } = useSession();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(notice);
@@ -65,6 +65,9 @@ export const LoginPage: React.FC = () => {
           {error && (
             <Alert variant="error" onDismiss={() => setError(null)}>
               {error}
+              {error === notice && noticeRef && (
+                <span className="block mt-0.5 text-[10px] font-normal opacity-60">Ref: {noticeRef}</span>
+              )}
             </Alert>
           )}
 

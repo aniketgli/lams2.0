@@ -37,8 +37,10 @@ interface SessionContextValue {
   session: SessionPayload | null;
   /** Message to show on the login screen (e.g. "Account is inactive"). */
   notice: string | null;
+  /** Where the last sign-out came from (shown small under the notice, so a report can say which part did it). */
+  noticeRef: string | null;
   login: (email: string, password: string, captcha?: { token: string; answer: string }) => Promise<void>;
-  logout: (message?: string | null) => Promise<void>;
+  logout: (message?: string | null, source?: string) => Promise<void>;
   enterModule: (moduleId: EnterpriseModuleId) => Promise<void>;
   switchRole: (role: UserRole) => Promise<void>;
   exitModule: () => Promise<void>;
@@ -76,6 +78,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [status, setStatus] = useState<Status>('loading');
   const [session, setSession] = useState<SessionPayload | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [noticeRef, setNoticeRef] = useState<string | null>(null);
 
   const statusRef = useRef(status);
   statusRef.current = status;
@@ -100,11 +103,13 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setStatus('signedIn');
   }, []);
 
-  const signedOut = useCallback((message: string | null = null) => {
+  const signedOut = useCallback((message: string | null = null, source: string | null = null) => {
     setApiContext(null, null);
     setSession(null);
     setStatus('signedOut');
     setNotice(message);
+    setNoticeRef(message ? source : null);
+    if (message && source) console.warn(`[session] signed out (${source}): ${message}`);
   }, []);
 
   /**
@@ -137,9 +142,9 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const wasSignedIn = statusRef.current === 'signedIn';
         // The server has ended the session: also drop its cookie, so the next sign-in starts clean.
         if (wasSignedIn) clearServerSession(tagRef.current);
-        signedOut(wasSignedIn || error.status === 403 ? error.message : null);
+        signedOut(wasSignedIn || error.status === 403 ? error.message : null, `check ${error.status} ${error.code ?? ''}`.trim());
       } else if (statusRef.current === 'loading') {
-        signedOut(error instanceof Error ? error.message : 'Unable to reach the server.');
+        signedOut(error instanceof Error ? error.message : 'Unable to reach the server.', 'start');
       }
       // A network blip while signed in keeps the current screen; the next check retries.
     }
@@ -166,9 +171,10 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
           lastActivityRef.current = Date.now();
           void sync(true);
         } else if (message?.type === 'signed-out') {
-          // Another tab signed out an older sign-in than this tab's: ask the server what is current instead.
-          if (message.tag && tagRef.current && message.tag !== tagRef.current) void sync(true);
-          else signedOut(message.message);
+          // Another tab signed out a different (older) sign-in than this tab's — or is still running an older version
+          // of the app that does not name its sign-in: ask the server what is current instead of signing out.
+          if (tagRef.current && message.tag !== tagRef.current) void sync(true);
+          else signedOut(message.message, 'other tab');
         }
       };
       channelRef.current = channel;
@@ -177,7 +183,8 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const onEnded = (event: Event) => {
       if (statusRef.current !== 'signedIn') return;
       clearServerSession(tagRef.current);
-      signedOut((event as CustomEvent<{ message?: string }>).detail?.message ?? 'Your session has ended. Please sign in again.');
+      const detail = (event as CustomEvent<{ message?: string; code?: string; path?: string }>).detail ?? {};
+      signedOut(detail.message ?? 'Your session has ended. Please sign in again.', `server ${detail.code ?? ''} ${detail.path ?? ''}`.replace(/\s+/g, ' ').trim());
     };
     const onContextChanged = () => void sync(true);
     window.addEventListener(SESSION_ENDED_EVENT, onEnded);
@@ -259,7 +266,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     tell({ type: 'session-changed' });
   }, [applySession, tell]);
 
-  const logout = useCallback(async (message: string | null = null) => {
+  const logout = useCallback(async (message: string | null = null, source = 'sign out') => {
     const tag = tagRef.current;
     let kept = false;
     try {
@@ -272,7 +279,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
         // A newer sign-in is in use: show it here too instead of signing out.
         void sync(true);
       } else {
-        signedOut(message);
+        signedOut(message, source);
         tell({ type: 'signed-out', message: message ?? 'You signed out in another tab.', tag });
       }
     }
@@ -324,10 +331,10 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const value = useMemo<SessionContextValue>(
     () => ({
-      status, session, notice, login, logout, enterModule, switchRole, exitModule, refresh, changePassword, skipPasswordChange,
+      status, session, notice, noticeRef, login, logout, enterModule, switchRole, exitModule, refresh, changePassword, skipPasswordChange,
       getLastActivity, confirmIdle, idleLimitMs, stayActive,
     }),
-    [status, session, notice, login, logout, enterModule, switchRole, exitModule, refresh, changePassword, skipPasswordChange, getLastActivity, confirmIdle, idleLimitMs, stayActive],
+    [status, session, notice, noticeRef, login, logout, enterModule, switchRole, exitModule, refresh, changePassword, skipPasswordChange, getLastActivity, confirmIdle, idleLimitMs, stayActive],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

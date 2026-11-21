@@ -28,6 +28,9 @@ export const requireAuth: RequestHandler = asyncHandler(async (req: Request, _re
   // Clearing it here could remove a NEWER cookie: an old tab's request can be answered after the user has already
   // signed in again, and its "clear the cookie" would then sign the new session out.
   const endSession = async (status: number, message: string, code: string): Promise<never> => {
+    // One line per ended session (no secrets): who, why, how long idle, which request noticed it.
+    const idleFor = Math.round((Date.now() - Number(req.session?.lastActivityAt)) / 1000);
+    console.info(`[session] ${code} for ${req.session?.biometricId ?? '?'} (idle ${Number.isFinite(idleFor) ? idleFor : '?'}s) on ${req.method} ${requestPath(req)}`);
     await destroySession(req);
     throw new HttpError(status, message, code);
   };

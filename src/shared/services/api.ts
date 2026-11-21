@@ -59,8 +59,8 @@ let sessionEpoch = 0;
 export function startNewSessionEpoch(): void { sessionEpoch += 1; }
 export function currentSessionEpoch(): number { return sessionEpoch; }
 
-function emit(name: string, message: string) {
-  window.dispatchEvent(new CustomEvent(name, { detail: { message } }));
+function emit(name: string, message: string, extra: { code?: string; path?: string } = {}) {
+  window.dispatchEvent(new CustomEvent(name, { detail: { message, ...extra } }));
 }
 
 /** Looks at a response and raises the app-wide events. Reads a clone, never the original body. */
@@ -72,7 +72,7 @@ async function inspect(response: Response, path: string, epoch: number) {
   const body = await response.clone().json().catch(() => null);
   const message = (body && (body.message || body.error)) || '';
   if (response.status === 401 || body?.code === 'ACCOUNT_BLOCKED') {
-    emit(SESSION_ENDED_EVENT, message || 'Your session has ended. Please sign in again.');
+    emit(SESSION_ENDED_EVENT, message || 'Your session has ended. Please sign in again.', { code: body?.code, path });
   } else if (body?.code === 'CONTEXT_CHANGED') {
     emit(CONTEXT_CHANGED_EVENT, message);
   }
