@@ -3,10 +3,11 @@
  * the situation in which users were bounced from the lobby back to "signed out after 15 minutes of inactivity".
  *
  * Only for the throw-away CI server (.github/workflows/security.yml), after seed.ts:
- *     npm i --no-save playwright-core && SECURITY_TEST_URL=http://127.0.0.1:3000 npx tsx scripts/security/browser_session.ts
+ *     npm i --prefix /tmp/pw playwright-core && PLAYWRIGHT_CORE=/tmp/pw/node_modules/playwright-core bun scripts/security/browser_session.ts
+ * (installed outside the project so its node_modules stay untouched)
  * Exit code 1 when a check fails.
  */
-import { chromium, type Page } from 'playwright-core';
+import type { Page } from 'playwright-core';
 
 const BASE = (process.env.SECURITY_TEST_URL || 'http://127.0.0.1:3000').replace(/\/$/, '');
 if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(BASE)) {
@@ -32,10 +33,16 @@ async function signIn(page: Page): Promise<void> {
   await page.fill('input[placeholder="Enter your email address"]', EMAIL);
   await page.fill('input[placeholder="Enter your password"]', PASSWORD);
   await page.click('button[type="submit"]');
-  await page.waitForFunction(() => !document.querySelector('input[placeholder="Enter your email address"]'), undefined, { timeout: 15000 });
+  try {
+    await page.waitForFunction(() => !document.querySelector('input[placeholder="Enter your email address"]'), undefined, { timeout: 15000 });
+  } catch {
+    const alert = await page.locator('[role="alert"]').allInnerTexts().catch(() => []);
+    throw new Error(`sign-in did not leave the sign-in page: ${alert.join(' | ') || '(no message)'}`);
+  }
 }
 
 async function main(): Promise<void> {
+  const { chromium } = await import(process.env.PLAYWRIGHT_CORE || 'playwright-core');
   const browser = await chromium.launch({ executablePath: CHROME, headless: true });
   const context = await browser.newContext();
   const logs: string[] = [];
