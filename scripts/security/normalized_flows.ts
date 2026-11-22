@@ -210,6 +210,14 @@ async function main(): Promise<void> {
   const rmDeact = await req('PATCH', `/api/hrms/employees/${rmId}/status`, { status: 'inactive', reason: 'ci' });
   check('…and the deactivation itself is refused', rmDeact.status === 409, String(rmDeact.status));
 
+  // ---- Mobile number is optional for now (MOBILE_REQUIRED = false) ------------------------------
+  const noPhone = await req('POST', '/api/hrms/employees', { ...body, biometricId: '3010', email: 'ci.nophone@wii.gov.in', phone: '', aadhaarNumber: '', panNumber: 'ABCDE9885K', bankAccountNumber: '1023456789012' });
+  check('A new employee can be saved without a mobile number', noPhone.status === 201, `${noPhone.status} ${noPhone.text.slice(0, 160)}`);
+  const noPhone2 = await req('POST', '/api/hrms/employees', { ...body, biometricId: '3011', email: 'ci.nophone2@wii.gov.in', phone: '', aadhaarNumber: '', panNumber: 'ABCDE9886K', bankAccountNumber: '1123456789012' });
+  check('…and so can a second one (no mobile is not a duplicate)', noPhone2.status === 201, `${noPhone2.status} ${noPhone2.text.slice(0, 160)}`);
+  const badPhone = await req('POST', '/api/hrms/employees', { ...body, biometricId: '3012', email: 'ci.badphone@wii.gov.in', phone: '12', aadhaarNumber: '', panNumber: 'ABCDE9887K', bankAccountNumber: '1223456789012' });
+  check('A mobile number that is entered is still checked', badPhone.status === 400 && Boolean(badPhone.body?.details?.phone), String(badPhone.status));
+
   // ---- Banks master ----------------------------------------------------------------------------
   const bankList = await req('GET', '/api/hrms/masters/banks');
   check('Banks master lists the common banks', (bankList.body?.records ?? []).some((r: any) => r.name === 'State Bank of India' && r.code === 'SBIN'), String(bankList.status));

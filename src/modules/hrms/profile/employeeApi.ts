@@ -6,6 +6,8 @@ import type { User } from '../../../shared/types/auth.types';
 
 /** Whether a new employee must have an Aadhaar number (keep in step with server/employees/identity.ts). */
 export const AADHAAR_REQUIRED = false;
+/** Whether the mobile number is required (keep in step with server/employees/fields.ts). */
+export const MOBILE_REQUIRED = false;
 
 export interface EmployeeRow {
   id: string;

@@ -1,5 +1,5 @@
 import { isValidIsoDate } from '../lib/validate';
-import { BLOOD_GROUPS, CADRES, LAYOUT_RULES, RECRUITMENT_CATEGORIES, type FormLayout } from './fields';
+import { BLOOD_GROUPS, CADRES, LAYOUT_RULES, MOBILE_REQUIRED, RECRUITMENT_CATEGORIES, type FormLayout } from './fields';
 import { AADHAAR_REQUIRED, asksBankDetails } from './identity';
 
 /** Employee import: columns of each employee type's template and how cells are read. Pure, tested in bulkImport.test.ts. */
@@ -31,7 +31,7 @@ export function columnsFor(layout: FormLayout): ImportColumn[] {
     col('Salutation', 'suffix', true, 'lookup', 'as in Master Settings', { lookup: 'salutation' }),
     col('Name', 'name', true, 'text', 'full name'),
     col('Email', 'email', true, 'text', 'official email (login ID)'),
-    col('Mobile', 'phone', true, 'text', '10 digit mobile'),
+    col('Mobile', 'phone', MOBILE_REQUIRED, 'text', `10 digit mobile${MOBILE_REQUIRED ? '' : ', optional'}`),
     col('Aadhaar', 'aadhaarNumber', AADHAAR_REQUIRED, 'text', `12 digits (format the column as Text)${AADHAAR_REQUIRED ? '' : ', optional'}`),
     col('Gender', 'gender', true, 'lookup', 'as in Master Settings', { lookup: 'gender' }),
     col('Date_of_Birth', 'dob', true, 'date', 'DD-MM-YYYY'),
