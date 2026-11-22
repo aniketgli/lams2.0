@@ -356,10 +356,10 @@ async function assertUnique(conn: PoolConnection, input: EmployeeInput, selfId: 
   const [byEmail] = await rows(conn, 'SELECT id FROM users WHERE LOWER(email) = ? LIMIT 1', [input.email]);
   if (byEmail && Number(byEmail.id) !== selfId) errors.email = 'Another account already uses this email.';
   // Mobile numbers are compared on their last 10 digits, so 0XXXXXXXXXX, +91XXXXXXXXXX and XXXXXXXXXX are the same number.
-  const [byPhone] = await rows(conn,
+  const [byPhone] = input.phone ? await rows(conn,
     `SELECT u.id, u.name FROM employee_profiles p JOIN users u ON u.biometric_id = p.biometric_id
       WHERE RIGHT(REPLACE(REPLACE(REPLACE(p.phone, ' ', ''), '-', ''), '+', ''), 10) = ? AND u.id <> ? LIMIT 1`,
-    [phoneKey(input.phone), selfId ?? 0]);
+    [phoneKey(input.phone), selfId ?? 0]) : [];
   if (byPhone) errors.phone = `This mobile number is already registered to ${byPhone.name}.`;
   if (selfId === null) {
     const [byId] = await rows(conn, 'SELECT id FROM users WHERE biometric_id = ? LIMIT 1', [input.biometricId]);

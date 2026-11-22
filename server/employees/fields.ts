@@ -59,7 +59,8 @@ export interface EmployeeInput {
   email: string;
   gender: string;
   dob: string;
-  phone: string;
+  /** Null when not entered (allowed while MOBILE_REQUIRED is off). */
+  phone: string | null;
   employmentType: string;
   shiftId: string;
   /** Code of the employee's leave group (Leave Groups master); it decides the leave types and the leave year. */
@@ -96,6 +97,12 @@ const NAME_PATTERN = /^[\p{L}][\p{L}\p{M} .'-]*$/u;
 const ID_PATTERN = /^\d{1,20}$/;
 
 /** Mobile numbers: digits with an optional leading +, spaces and hyphens are removed. */
+/**
+ * Whether the mobile number is required (employee form and bulk import). Off for now; set to true to make it
+ * required again (also MOBILE_REQUIRED in src/modules/hrms/profile/employeeApi.ts for the form's asterisk).
+ */
+export const MOBILE_REQUIRED = false;
+
 export function normalizePhone(value: string): string | null {
   const compact = value.replace(/[\s-]/g, '');
   return /^\+?\d{10,15}$/.test(compact) ? compact : null;
@@ -149,7 +156,8 @@ export function parseEmployeeInput(body: unknown, layout: FormLayout | null, tod
   if (rawEmail && !email) v.errors.email ||= `Use an official email address ending in ${authConfig.loginEmailDomains.map((d) => `@${d}`).join(' or ')}.`;
   const gender = v.string('gender', { max: 40 });
   const dob = v.date('dob');
-  const rawPhone = v.string('phone', { max: 20 });
+  // Optional for now (MOBILE_REQUIRED); a number that is entered is still checked and must be unique.
+  const rawPhone = MOBILE_REQUIRED ? v.string('phone', { max: 20 }) : (v.optionalString('phone', { max: 20 }) ?? '');
   const phone = rawPhone ? normalizePhone(rawPhone) : null;
   if (rawPhone && !phone) v.errors.phone ||= 'Enter a 10 to 15 digit mobile number.';
   const employmentType = v.string('employmentType', { max: 50 });
@@ -208,7 +216,7 @@ export function parseEmployeeInput(body: unknown, layout: FormLayout | null, tod
   v.assert();
 
   return {
-    biometricId, salutation, name, email: email!, gender, dob: dob!, phone: phone!, employmentType, shiftId,
+    biometricId, salutation, name, email: email!, gender, dob: dob!, phone, employmentType, shiftId,
     leaveGroup, joiningDate: joiningDate!, institute, department, designation, employeeCategory,
     permanentEmploymentType, reportingManagerId, reviewingManagerId, hodName, validUntilDate, isOnProbation, isPwd,
     probationEndDate, isPhDEnrolled, piName, courseProgram, courseBatch, enrolledThrough, guideSupervisor, bloodGroup, identity,
