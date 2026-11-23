@@ -82,6 +82,19 @@ async function main(): Promise<void> {
   await b.waitForTimeout(3000);
   check('An old tab\'s untagged "signed out" does not end the current sign-in', !(await onLogin(b)) && await signedIn(b));
 
+  // 5. Forgot password screen on the sign-in page.
+  const c = await (await browser.newContext()).newPage();
+  await c.goto(`${BASE}/login`);
+  await c.getByRole('button', { name: /reset it with a code/i }).click();
+  await c.fill('input[placeholder="Enter your email address"]', 'staff@wii.gov.in');
+  await c.getByRole('button', { name: /send code/i }).click();
+  const sent = await c.getByText(/a 6-digit code has been sent/i).first().waitFor({ state: 'visible', timeout: 10000 }).then(() => true, () => false);
+  const codeBox = await c.locator('input[placeholder="6-digit code"]').count();
+  const shown = sent && codeBox === 1 ? '' : (await c.locator('body').innerText()).replace(/\s+/g, ' ').slice(0, 400);
+  check('Forgot password: the link opens the form, a code is requested, the code step follows', sent && codeBox === 1, shown);
+  await c.getByRole('button', { name: /back to sign in/i }).click();
+  check('…and "Back to sign in" returns to the sign-in form', await onLogin(c));
+
   if (logs.length) console.log(`\nSession messages in the browser:\n  ${logs.join('\n  ')}`);
   await browser.close();
   console.log(`\n${failed ? `${failed} check(s) failed.` : 'Browser sign-in works.'}`);

@@ -238,6 +238,47 @@ async function main(): Promise<void> {
   cookie = goodCookie;
   check('A cookie of the old name is ignored', oldName.status === 200, String(oldName.status));
 
+  // ---- Forgot password (code by email) -----------------------------------------------------------
+  {
+    const target = 'ci.new@wii.gov.in'; // created above; not used by the security test
+    const unknown = await req('POST', '/api/auth/forgot-password', { email: 'nobody.here@wii.gov.in' });
+    const known = await req('POST', '/api/auth/forgot-password', { email: target });
+    check('Forgot password answers the same for a known and an unknown email', unknown.status === 200 && known.status === 200 && unknown.body?.message === known.body?.message, `${unknown.status}/${known.status}`);
+    // The CI database cannot read the email: put a known code in place of the one that was sent.
+    const { createHmac } = await import('node:crypto');
+    const mysql = await import('mysql2/promise');
+    const conn = await mysql.createConnection(String(process.env.DATABASE_URL));
+    const setCode = async (code: string) => {
+      const [[u]] = await conn.query<any[]>('SELECT id FROM users WHERE email = ?', [target]);
+      const hash = createHmac('sha256', String(process.env.SESSION_SECRET)).update(`password-reset:${u.id}:${code}`).digest('hex');
+      const [r] = await conn.query<any>('UPDATE password_reset_otps SET otp_hash = ? WHERE user_id = ?', [hash, u.id]);
+      return Number(r.affectedRows);
+    };
+    check('A code was stored for the known email (hashed)', (await setCode('123456')) === 1);
+    const wrong = await req('POST', '/api/auth/reset-password', { email: target, otp: '000000', newPassword: 'Forest#2026a', confirmPassword: 'Forest#2026a' });
+    check('A wrong code is refused', wrong.status === 400 && wrong.body?.code === 'OTP_INVALID', String(wrong.status));
+    const weak = await req('POST', '/api/auth/reset-password', { email: target, otp: '123456', newPassword: 'short', confirmPassword: 'short' });
+    check('A weak new password is refused (the code stays usable)', weak.status === 400 && Boolean(weak.body?.details?.newPassword), String(weak.status));
+    const ok = await req('POST', '/api/auth/reset-password', { email: target, otp: '123456', newPassword: 'Forest#2026a', confirmPassword: 'Forest#2026a' });
+    check('The right code sets the new password', ok.status === 200, `${ok.status} ${ok.text.slice(0, 160)}`);
+    const again = await req('POST', '/api/auth/reset-password', { email: target, otp: '123456', newPassword: 'Forest#2026b', confirmPassword: 'Forest#2026b' });
+    check('A code works only once', again.status === 400, String(again.status));
+    await req('POST', '/api/auth/forgot-password', { email: target });
+    await setCode('654321');
+    const reused = await req('POST', '/api/auth/reset-password', { email: target, otp: '654321', newPassword: 'Forest#2026a', confirmPassword: 'Forest#2026a' });
+    check('The current / a previous password cannot be chosen again', reused.status === 400 && /not used before/.test(String(reused.body?.details?.newPassword)), `${reused.status} ${JSON.stringify(reused.body?.details)}`);
+    let tries = 0;
+    for (let i = 0; i < 5; i++) { const r = await req('POST', '/api/auth/reset-password', { email: target, otp: '111111', newPassword: 'Forest#2026c' }); if (r.status === 400) tries++; }
+    const usedUp = await req('POST', '/api/auth/reset-password', { email: target, otp: '654321', newPassword: 'Forest#2026c', confirmPassword: 'Forest#2026c' });
+    check('After 5 wrong tries the code is used up', tries === 5 && usedUp.status === 400 && usedUp.body?.code === 'OTP_INVALID', `${tries} / ${usedUp.status}`);
+    // (A successful reset starts the count again: requests since then are the one above and these two.)
+    await req('POST', '/api/auth/forgot-password', { email: target });
+    await req('POST', '/api/auth/forgot-password', { email: target }); // third request: still allowed
+    const fourth = await req('POST', '/api/auth/forgot-password', { email: target });
+    check('At most 3 code requests per email in 15 minutes', fourth.status === 429, String(fourth.status));
+    await conn.end();
+  }
+
   // ---- Sign-out names the sign-in it means (a sleeping tab must not end a newer sign-in) ---------
   const first = (await req('GET', '/api/auth/me')).body?.sessionTag;
   const again = await req('POST', '/api/auth/login', { email: 'admin@wii.gov.in', password: PASSWORD });
