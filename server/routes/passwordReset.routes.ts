@@ -99,7 +99,8 @@ router.post('/forgot-password', asyncHandler(async (req, res) => {
     await pool.query(
       'INSERT INTO password_reset_otps (user_id, otp_hash, expires_at, requested_ip) VALUES (?, ?, DATE_ADD(NOW(3), INTERVAL ? MINUTE), ?)',
       [account.id, otpHash(account.id, otp), OTP_MINUTES, ip.slice(0, 45)]);
-    await mail(account, 'Password reset code', [
+    // Sent in the background: the answer comes at once and takes as long for an unknown email (no timing hint).
+    void mail(account, 'Password reset code', [
       `Your code to reset the portal password is ${otp}`,
       `It is valid for ${OTP_MINUTES} minutes. Do not share it with anyone; the institute never asks for it.`,
       'If you did not ask for this, ignore this email: your password stays the same.',
@@ -167,7 +168,7 @@ router.post('/reset-password', asyncHandler(async (req, res) => {
   clearAccessCache();
   await destroyUserSessions(account.id);
   console.info(`[password-reset] password reset for ${account.biometricId}`);
-  await mail(account, 'Your password was changed', [
+  void mail(account, 'Your password was changed', [
     'The password of your portal account was just reset with a code sent to this email.',
     'If this was not you, contact the administrator at once.',
   ]).catch(() => undefined);
