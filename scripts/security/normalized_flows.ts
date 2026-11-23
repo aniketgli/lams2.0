@@ -271,6 +271,8 @@ async function main(): Promise<void> {
     for (let i = 0; i < 5; i++) { const r = await req('POST', '/api/auth/reset-password', { email: target, otp: '111111', newPassword: 'Forest#2026c' }); if (r.status === 400) tries++; }
     const usedUp = await req('POST', '/api/auth/reset-password', { email: target, otp: '654321', newPassword: 'Forest#2026c', confirmPassword: 'Forest#2026c' });
     check('After 5 wrong tries the code is used up', tries === 5 && usedUp.status === 400 && usedUp.body?.code === 'OTP_INVALID', `${tries} / ${usedUp.status}`);
+    // (A successful reset starts the count again: requests since then are the one above and these two.)
+    await req('POST', '/api/auth/forgot-password', { email: target });
     await req('POST', '/api/auth/forgot-password', { email: target }); // third request: still allowed
     const fourth = await req('POST', '/api/auth/forgot-password', { email: target });
     check('At most 3 code requests per email in 15 minutes', fourth.status === 429, String(fourth.status));
