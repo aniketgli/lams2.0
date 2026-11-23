@@ -90,7 +90,8 @@ async function main(): Promise<void> {
   await c.getByRole('button', { name: /send code/i }).click();
   const sent = await c.getByText(/a 6-digit code has been sent/i).first().isVisible({ timeout: 10000 }).catch(() => false);
   const codeBox = await c.locator('input[placeholder="6-digit code"]').count();
-  check('Forgot password: the link opens the form, a code is requested, the code step follows', sent && codeBox === 1);
+  const shown = sent && codeBox === 1 ? '' : (await c.locator('body').innerText()).replace(/\s+/g, ' ').slice(0, 400);
+  check('Forgot password: the link opens the form, a code is requested, the code step follows', sent && codeBox === 1, shown);
   await c.getByRole('button', { name: /back to sign in/i }).click();
   check('…and "Back to sign in" returns to the sign-in form', await onLogin(c));
 
