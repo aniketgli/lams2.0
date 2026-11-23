@@ -2,7 +2,9 @@ import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import { randomBytes } from 'node:crypto';
 import { eq } from 'drizzle-orm';
-import { db } from '../../src/db';
+import { db, pool } from '../../src/db';
+import { REUSED_PASSWORD_MESSAGE, rememberPassword, reusesPassword } from '../lib/passwordHistory';
+import passwordResetRouter from './passwordReset.routes';
 import { users } from '../../src/db/schema';
 import {
   HttpError, asyncHandler, clearOldSessionCookies, clearSessionCookie, destroySession, regenerateSession, saveSession, tooManyRequests,
@@ -21,6 +23,9 @@ import { writeMasterAuditSql } from '../masters/audit';
 import { inTransaction } from '../lib/tx';
 
 const router = Router();
+
+// Forgot password: emailed code, then a new password (passwordReset.routes.ts).
+router.use(passwordResetRouter);
 
 // 10 failed attempts per email, and 30 per IP address, every 15 minutes.
 const WINDOW_MS = 15 * 60 * 1000;
@@ -192,8 +197,9 @@ router.post('/change-password', requireAuth, asyncHandler(async (req, res) => {
   }
   changeLimiter.reset(key);
 
-  if (await bcrypt.compare(newPassword, row.passwordHash)) {
-    throw new HttpError(400, 'Please correct the highlighted fields.', 'VALIDATION_ERROR', { newPassword: 'Choose a password different from the current one.' });
+  // Not the current password and not one of the last five (password_history).
+  if (await reusesPassword(pool, account.id, newPassword, row.passwordHash)) {
+    throw new HttpError(400, 'Please correct the highlighted fields.', 'VALIDATION_ERROR', { newPassword: REUSED_PASSWORD_MESSAGE });
   }
   if (await isDefaultPassword(newPassword)) {
     throw new HttpError(400, 'Please correct the highlighted fields.', 'VALIDATION_ERROR', { newPassword: 'The default password cannot be used as your own password.' });
@@ -202,6 +208,7 @@ router.post('/change-password', requireAuth, asyncHandler(async (req, res) => {
   const wasRequired = account.mustChangePassword;
   const passwordHash = await bcrypt.hash(newPassword, 12);
   await inTransaction(async (conn) => {
+    await rememberPassword(conn, account.id, row.passwordHash);
     await conn.query(
       `UPDATE users SET password_hash = ?, must_change_password = 0, password_changed_at = NOW(),
               last_updated_by = ?, last_updated_at = NOW(), last_update_summary = ? WHERE id = ?`,

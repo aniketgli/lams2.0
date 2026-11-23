@@ -7,6 +7,7 @@ import { ApiError } from '../../shared/services/api';
 import { formatOrgAddress, formatOrgCopyright } from '../../types';
 import { Lock, Mail, ArrowRight, MapPin } from 'lucide-react';
 import { CaptchaField, type CaptchaHandle } from '../components/CaptchaField';
+import { ForgotPassword } from '../components/ForgotPassword';
 
 /** Shown until the server's list arrives; the server's list is what is enforced. */
 
@@ -26,6 +27,8 @@ export const LoginPage: React.FC = () => {
   const [captcha, setCaptcha] = useState({ token: '', answer: '' });
   const [captchaError, setCaptchaError] = useState<string | undefined>();
   const captchaRef = useRef<CaptchaHandle>(null);
+  const [forgot, setForgot] = useState(false);
+  const [success, setSuccess] = useState<string | null>(null);
 
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -58,9 +61,17 @@ export const LoginPage: React.FC = () => {
         </div>
 
         <div className="bg-white border border-slate-200 rounded-2xl shadow-xl p-6 sm:p-8 space-y-5">
+          {forgot ? (
+            <ForgotPassword
+              initialEmail={email}
+              onDone={(message) => { setForgot(false); setSuccess(message); setError(null); captchaRef.current?.reload(); }}
+            />
+          ) : (<>
           <div className="border-b border-slate-100 pb-3.5">
             <h1 className="text-base font-bold text-slate-900 tracking-tight">Sign in</h1>
           </div>
+
+          {success && <Alert variant="success" onDismiss={() => setSuccess(null)}>{success}</Alert>}
 
           {error && (
             <Alert variant="error" onDismiss={() => setError(null)}>
@@ -120,8 +131,13 @@ export const LoginPage: React.FC = () => {
           </form>
 
           <p className="text-center text-xs text-slate-500 pt-2">
-            <span className="font-bold text-slate-700">Forgot password?</span> Contact your administrator.
+            <span className="font-bold text-slate-700">Forgot password?</span>{' '}
+            <button type="button" onClick={() => { setForgot(true); setSuccess(null); setError(null); }}
+              className="font-semibold text-primary hover:underline">
+              Reset it with a code sent to your email
+            </button>
           </p>
+          </>)}
         </div>
 
         <div className="pt-2 text-[11px] text-center text-slate-500 space-y-1">
