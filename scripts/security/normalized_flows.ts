@@ -384,6 +384,9 @@ async function main(): Promise<void> {
     await req('POST', '/api/access/module', { moduleId: 'pms' });
     const asPms = await req('POST', '/api/access/active-role', { moduleId: 'pms', role: 'Administrator' });
     check('PMS Administrator can be chosen as the active PMS role', asPms.status === 200, `${asPms.status} ${asPms.text.slice(0, 160)}`);
+    const pmsOptions = await req('GET', '/api/hrms/masters/options');
+    const pmsCatalog = await req('GET', '/api/hrms/masters/catalog');
+    check('PMS loads the dropdown lists for the employee form, not the HRMS master screens', pmsOptions.status === 200 && Array.isArray(pmsOptions.body?.employeeType) && pmsCatalog.status === 403, `${pmsOptions.status} / ${pmsCatalog.status}`);
     const pmsTypes = (await req('GET', '/api/hrms/employees/import/types')).body?.types ?? [];
     check('PMS bulk import offers only the PMS employee types', pmsTypes.some((t: any) => t.code === 'project') && !pmsTypes.some((t: any) => t.code === 'permanent'), JSON.stringify(pmsTypes.map((t: any) => t.code)));
     const pmsBody = {

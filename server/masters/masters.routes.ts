@@ -22,7 +22,12 @@ import { sendCsvReport } from '../lib/csvResponse';
  *   DELETE /:key/:id                delete (only if not in use)             admin
  */
 const router = Router();
-router.use(requireAuth, requireModule('hrms'));
+// The dropdown lists (/options) serve the employee screens HRMS and PMS share; everything else is HRMS's.
+const hrmsModule = requireModule('hrms');
+router.use(requireAuth, (req, res, next) => {
+  if (req.method === 'GET' && req.path === '/options' && req.auth?.activeModule === 'pms') return next();
+  return hrmsModule(req, res, next);
+});
 
 const canView = requireActiveRole('hrms', 'administrator', 'audit');
 const canEdit = requireActiveRole('hrms', 'administrator');

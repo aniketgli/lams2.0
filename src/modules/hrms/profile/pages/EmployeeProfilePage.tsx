@@ -1667,7 +1667,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                   onView={(u) => { setSelectedUserId(u.id); setDirectoryViewMode('detail'); }}
                   onEdit={canManageEmployees ? (u) => openEditEmployee(u) : undefined}
                   canEdit={(u) => u.id !== currentUser.id && canManageEmployee(u)}
-                  onHistory={isAdmin ? (u) => setHistoryUser(u) : undefined}
+                  onHistory={isAdmin && !isPms ? (u) => setHistoryUser(u) : undefined}
                 />
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1806,7 +1806,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             <span>View Full Profile</span>
                           </button>
 
-                          {isAdmin && !u.isSystem && (
+                          {isAdmin && !isPms && !u.isSystem && (
                             <button
                               onClick={() => setHistoryUser(u)}
                               className={actionBtn('neutral')}
@@ -1840,7 +1840,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
             <div>
               <EmployeeProfileView
                 userId={selectedUser.id}
-                canEditPhoto={isAdmin && !selectedUser.isSystem}
+                canEditPhoto={isAdmin && !isPms && !selectedUser.isSystem}
                 onBack={(isAdmin || isAudit || isManager || isEmployeeManager) ? () => setDirectoryViewMode(lastListMode) : undefined}
                 onPhotoChanged={async () => {
                   await Promise.all([reloadEmployees(), selectedUser.id === currentUser.id ? refreshSession() : Promise.resolve()]);
