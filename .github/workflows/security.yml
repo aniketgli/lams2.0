@@ -75,7 +75,8 @@ jobs:
       - name: Normalized tables work through the app
         run: bun scripts/security/normalized_flows.ts
       - name: Attack it
-        run: SECURITY_REPORT=/tmp/security-report.md SECURITY_UPLOAD_DIR=/tmp/lams2-uploads bun scripts/security/pentest.ts
+        # A minute's pause first, so the per-minute write limit is not already used up by the steps above.
+        run: sleep 61 && SECURITY_REPORT=/tmp/security-report.md SECURITY_UPLOAD_DIR=/tmp/lams2-uploads bun scripts/security/pentest.ts
       - name: Server log
         if: always()
         run: tail -150 /tmp/server.log
