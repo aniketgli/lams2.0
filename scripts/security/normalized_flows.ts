@@ -373,6 +373,45 @@ async function main(): Promise<void> {
     await req('POST', '/api/access/active-role', { moduleId: 'hrms', role: 'Administrator' });
   } else check('Employee Manager: seed user 1005 and the new employee', false);
 
+  // ---- PMS: its administrator adds PMS employees, whose approver is a PI; HRMS employees are out of its reach -------
+  await freshMinute();
+  const piUser = byBio('1006');
+  const pmsAdmin = byBio('1007');
+  if (piUser && pmsAdmin && scientist) {
+    const piGrant = await req('PUT', `/api/hrms/employees/${piUser.id}/module-roles`, { moduleRoles: { lams: ['hrms_reporting', 'hrms_staff'], pms: ['pms_pi'] } });
+    check('PMS PI role can be given (next to HRMS roles)', piGrant.status === 200, `${piGrant.status} ${piGrant.text.slice(0, 160)}`);
+    await req('POST', '/api/auth/login', { email: 'pmsadmin@wii.gov.in', password: PASSWORD });
+    await req('POST', '/api/access/module', { moduleId: 'pms' });
+    const asPms = await req('POST', '/api/access/active-role', { moduleId: 'pms', role: 'Administrator' });
+    check('PMS Administrator can be chosen as the active PMS role', asPms.status === 200, `${asPms.status} ${asPms.text.slice(0, 160)}`);
+    const pmsTypes = (await req('GET', '/api/hrms/employees/import/types')).body?.types ?? [];
+    check('PMS bulk import offers only the PMS employee types', pmsTypes.some((t: any) => t.code === 'project') && !pmsTypes.some((t: any) => t.code === 'permanent'), JSON.stringify(pmsTypes.map((t: any) => t.code)));
+    const pmsBody = {
+      ...fellowBody, biometricId: '3030', name: 'CI PMS Fellow', email: 'ci.pms@wii.gov.in', phone: '9876500030',
+      aadhaarNumber: aadhaarFrom('56789012345'), panNumber: 'ABCDE9891K', bankAccountNumber: '423456789012',
+    };
+    const noPi = await req('POST', '/api/hrms/employees', { ...pmsBody, reportingManagerId: rmId });
+    check('PMS: the approver must hold the PI role (an HRMS reporting manager is refused)', noPi.status === 400 && /PI role/.test(String(noPi.body?.details?.reportingManagerId)), `${noPi.status} ${JSON.stringify(noPi.body?.details ?? {}).slice(0, 160)}`);
+    const pmsNew = await req('POST', '/api/hrms/employees', { ...pmsBody, reportingManagerId: String(piUser.id) });
+    check('PMS Administrator adds a Project staff employee with a PI (PMS staff role)', pmsNew.status === 201 && /PMS Research Fellow/.test(String(pmsNew.body?.message)) && (pmsNew.body?.employee?.moduleRoles?.pms ?? []).length === 1 && !(pmsNew.body?.employee?.moduleRoles?.hrms ?? []).length,
+      `${pmsNew.status} ${pmsNew.text.slice(0, 200)}`);
+    const pmsPerm = await req('POST', '/api/hrms/employees', { ...body, biometricId: '3031', email: 'ci.pmsperm@wii.gov.in', phone: '9876500031', aadhaarNumber: aadhaarFrom('67890123456'), panNumber: 'ABCDE9892K', bankAccountNumber: '523456789012' });
+    check('PMS refuses a Permanent (HRMS) employee', pmsPerm.status === 400 && /HRMS/.test(String(pmsPerm.body?.details?.employmentType)), `${pmsPerm.status} ${JSON.stringify(pmsPerm.body?.details ?? {}).slice(0, 160)}`);
+    const pmsEditHrms = await req('PUT', `/api/hrms/employees/${scientist}`, { ...body, designation: 'CI Any Type' });
+    check('PMS Administrator cannot edit an HRMS employee', pmsEditHrms.status === 403, `${pmsEditHrms.status} ${pmsEditHrms.text.slice(0, 160)}`);
+    const pmsList = (await req('GET', '/api/hrms/employees')).body ?? [];
+    const seenHrms = pmsList.find((e: any) => e.id === String(scientist));
+    const seenPms = pmsList.find((e: any) => e.biometricId === '3030');
+    check('PMS Administrator sees PMS employees in full, HRMS employees only by name', Boolean(seenPms?.phone) && Boolean(seenHrms) && !seenHrms?.phone, JSON.stringify({ pms: seenPms?.phone, hrms: seenHrms?.phone }));
+    const pmsRoles = await req('PUT', `/api/hrms/employees/${pmsNew.body?.employee?.id ?? 0}/module-roles`, { moduleRoles: { pms: ['pms_admin'] } });
+    check('PMS has no User Controls: roles are given in HRMS only', pmsRoles.status === 403, String(pmsRoles.status));
+    await req('POST', '/api/auth/login', { email: 'admin@wii.gov.in', password: PASSWORD });
+    await req('POST', '/api/access/module', { moduleId: 'hrms' });
+    await req('POST', '/api/access/active-role', { moduleId: 'hrms', role: 'Administrator' });
+    const hrmsDir = (await req('GET', '/api/hrms/employees/export-pdf')).body?.rows ?? [];
+    check('The HRMS directory download lists HRMS employees only', !JSON.stringify(hrmsDir).includes('CI PMS Fellow') && JSON.stringify(hrmsDir).includes('CI New Scientist'), `${hrmsDir.length} rows`);
+  } else check('PMS: seed users 1006 / 1007 and the HRMS employee', false);
+
   // ---- Sign-out names the sign-in it means (a sleeping tab must not end a newer sign-in) ---------
   await freshMinute();
   const first = (await req('GET', '/api/auth/me')).body?.sessionTag;

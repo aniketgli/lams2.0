@@ -1,6 +1,7 @@
 import type { EnterpriseModuleId } from '../types';
 import { SessionPayload, toUiModule } from './access';
 import { canOpenPage, findPageBySlug, homePageFor, hrmsPath } from '../modules/hrms/hrmsPages';
+import { canOpenPmsPage, findPmsPageBySlug, pmsHomeFor, pmsPath } from '../modules/pms/pmsPages';
 
 export const CHANGE_PASSWORD_PATH = '/change-password';
 
@@ -11,6 +12,8 @@ export type Screen =
   /** first = the one-time offer after the first sign-in of a new or reactivated account (can be skipped). */
   | { kind: 'changePassword'; first: boolean }
   | { kind: 'hrms'; page: string }
+  /** PMS pages (pmsPages.ts): Projects and the employee screens it shares with HRMS. */
+  | { kind: 'pms'; page: string }
   | { kind: 'module'; module: Exclude<EnterpriseModuleId, 'lams'> };
 
 /**
@@ -42,6 +45,11 @@ export function resolveRoute(
     const page = moduleSegment === 'hrms' && pageSegment ? findPageBySlug(pageSegment) : undefined;
     const pageId = page && canOpenPage(page.id, session.activeRole) ? page.id : homePageFor(session.activeRole);
     return { screen: { kind: 'hrms', page: pageId }, path: hrmsPath(pageId) };
+  }
+  if (session.activeModule === 'pms') {
+    const page = moduleSegment === 'pms' && pageSegment ? findPmsPageBySlug(pageSegment) : undefined;
+    const pageId = page && canOpenPmsPage(page.id, session.activeRole) ? page.id : pmsHomeFor(session.activeRole);
+    return { screen: { kind: 'pms', page: pageId }, path: pmsPath(pageId) };
   }
   const module = toUiModule(session.activeModule) as Exclude<EnterpriseModuleId, 'lams'>;
   return { screen: { kind: 'module', module }, path: `/${session.activeModule}` };

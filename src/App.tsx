@@ -20,13 +20,14 @@ import { LoginPage } from './auth/pages/LoginPage';
 import { LobbyPage } from './lobby/pages/LobbyPage';
 import { ChangePasswordPage } from './auth/pages/ChangePasswordPage';
 import { PMSView } from './modules/pms/PMSView';
+import { pmsHomeFor, pmsPath } from './modules/pms/pmsPages';
 import { InventoryView } from './modules/inventory/InventoryView';
 import { FMSView } from './modules/fms/FMSView';
 import { FinanceView } from './modules/finance/FinanceView';
 import { EnterpriseModuleId } from './types';
 import { LoadingScreen } from './shared/components/LoadingScreen';
 import { setExportContext } from './shared/services/printTable';
-import { ROLE_LABELS } from './auth/access';
+import { roleLabel } from './auth/access';
 
 const AppContent: React.FC = () => {
   const { status, session, enterModule, exitModule } = useSession();
@@ -36,7 +37,7 @@ const AppContent: React.FC = () => {
   // Report header of every PDF / CSV download: who downloads it, in which role, and for which organization.
   useEffect(() => {
     const user = session?.user;
-    const role = session?.activeRole ? ROLE_LABELS[session.activeRole] : null;
+    const role = session?.activeRole ? roleLabel(session.activeRole, session.activeModule) : null;
     setExportContext({
       organization: orgBranding?.orgName || 'Wildlife Institute of India',
       generatedBy: user ? `${user.name} (${user.biometricId})${role ? ` · ${role}` : ''}` : null,
@@ -61,6 +62,9 @@ const AppContent: React.FC = () => {
     previousRole.current = activeRole;
     if (before && activeRole && before !== activeRole && session?.activeModule === 'hrms') {
       navigate(hrmsPath(homePageFor(activeRole)), { replace: true });
+    }
+    if (before && activeRole && before !== activeRole && session?.activeModule === 'pms') {
+      navigate(pmsPath(pmsHomeFor(activeRole)), { replace: true });
     }
   }, [activeRole, session?.activeModule]);
 
@@ -91,9 +95,10 @@ const AppContent: React.FC = () => {
     );
   }
 
-  const activeModule: EnterpriseModuleId = screen.kind === 'hrms' ? 'lams' : screen.module;
-  const tab = screen.kind === 'hrms' ? screen.page : homePageFor(activeRole);
-  const goTo = (pageId: string) => navigate(hrmsPath(pageId));
+  const activeModule: EnterpriseModuleId = screen.kind === 'hrms' ? 'lams' : screen.kind === 'pms' ? 'pms' : screen.module;
+  const tab = screen.kind === 'hrms' || screen.kind === 'pms' ? screen.page : homePageFor(activeRole);
+  const goTo = (pageId: string) => navigate(screen.kind === 'pms' ? pmsPath(pageId) : hrmsPath(pageId));
+  const home = screen.kind === 'pms' ? pmsHomeFor(activeRole) : homePageFor(activeRole);
 
   return (
     <>
@@ -104,7 +109,7 @@ const AppContent: React.FC = () => {
         setActiveModule={setActiveModule}
         isOpenMobile={isOpenMobile}
         setIsOpenMobile={setIsOpenMobile}
-        onRoleChangedGoDashboard={() => goTo(homePageFor(activeRole))}
+        onRoleChangedGoDashboard={() => goTo(home)}
       >
         {screen.kind === 'hrms' && (
           // Keyed by role so every page remounts with fresh state after a role switch.
@@ -125,7 +130,13 @@ const AppContent: React.FC = () => {
           </React.Fragment>
         )}
 
-        {screen.kind === 'module' && screen.module === 'pms' && <PMSView onReturnToLobby={() => setActiveModule('lobby')} />}
+        {screen.kind === 'pms' && (
+          // PMS: Projects, and the employee screens shared with HRMS (the server limits them to PMS employees).
+          <React.Fragment key={activeRole ?? 'none'}>
+            {tab === 'projects' && <PMSView onReturnToLobby={() => setActiveModule('lobby')} />}
+            {tab === 'profile' && <EmployeeProfilePage key="pms-profile" initialTab="profile" />}
+          </React.Fragment>
+        )}
         {screen.kind === 'module' && screen.module === 'sims' && <InventoryView onReturnToLobby={() => setActiveModule('lobby')} />}
         {screen.kind === 'module' && screen.module === 'fms' && <FMSView onReturnToLobby={() => setActiveModule('lobby')} />}
         {screen.kind === 'module' && screen.module === 'finance' && <FinanceView onReturnToLobby={() => setActiveModule('lobby')} />}
