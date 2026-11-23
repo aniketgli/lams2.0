@@ -52,6 +52,9 @@ function aadhaarFrom(prefix11: string): string {
   throw new Error('no check digit');
 }
 
+/** The API allows 60 changes a minute per account: a long run of checks waits for a fresh minute. */
+const freshMinute = () => new Promise((resolve) => setTimeout(resolve, 61_000));
+
 const profileOf = (record: any): Record<string, any> => { try { return JSON.parse(record?.profileData || '{}'); } catch { return {}; } };
 
 async function main(): Promise<void> {
@@ -193,7 +196,9 @@ async function main(): Promise<void> {
   const setProjectModule = (module: string) => projectType
     ? req('PUT', `/api/hrms/masters/employeeType/${projectType.id}`, { name: projectType.name, code: projectType.code, status: projectType.status, fields: { ...projectType.fields, module } })
     : Promise.resolve({ status: 0 });
-  await setProjectModule('HRMS');
+  await freshMinute();
+  const toHrms = await setProjectModule('HRMS');
+  check('Project staff type moved to HRMS for the checks below', toHrms.status === 200, `${toHrms.status} ${'text' in toHrms ? String(toHrms.text).slice(0, 160) : ''}`);
   const researcher = await req('POST', '/api/hrms/employees', {
     ...body, biometricId: '3002', name: 'CI New Fellow', email: 'ci.fellow@wii.gov.in', phone: '9876500002', employmentType: 'project', department: 'Tiger Project', designation: 'CI Any Type',
     employeeCategory: undefined, permanentEmploymentType: undefined, reviewingManagerId: undefined, validUntilDate: '2027-12-31', piName: '',
@@ -333,6 +338,7 @@ async function main(): Promise<void> {
   }
 
   // ---- Employee Manager (HRMS): adds and edits HRMS employees only; no status / roles -------------------------
+  await freshMinute();
   const emUser = byBio('1005');
   const fellowAccount = researcher.body?.employee?.id;
   const scientist = created.body?.employee?.id;
@@ -346,7 +352,7 @@ async function main(): Promise<void> {
     const emTypes = (await req('GET', '/api/hrms/employees/import/types')).body?.types ?? [];
     check('Employee Manager: bulk import of HRMS types only', emTypes.some((t: any) => t.code === 'permanent') && !emTypes.some((t: any) => t.code === 'project'), JSON.stringify(emTypes.map((t: any) => t.code)));
     const emNew = await req('POST', '/api/hrms/employees', {
-      ...body, biometricId: '3010', name: 'CI Added By EM', email: 'ci.em@wii.gov.in', phone: '9876500010',
+      ...body, biometricId: '3020', name: 'CI Added By EM', email: 'ci.em@wii.gov.in', phone: '9876500020',
       aadhaarNumber: aadhaarFrom('45678901234'), panNumber: 'ABCDE9890K', bankAccountNumber: '323456789012',
     });
     check('Employee Manager adds a Permanent employee', emNew.status === 201, `${emNew.status} ${emNew.text.slice(0, 200)}`);
@@ -368,6 +374,7 @@ async function main(): Promise<void> {
   } else check('Employee Manager: seed user 1005 and the new employee', false);
 
   // ---- Sign-out names the sign-in it means (a sleeping tab must not end a newer sign-in) ---------
+  await freshMinute();
   const first = (await req('GET', '/api/auth/me')).body?.sessionTag;
   const again = await req('POST', '/api/auth/login', { email: 'admin@wii.gov.in', password: PASSWORD });
   const second = again.body?.sessionTag;
