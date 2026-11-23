@@ -597,6 +597,10 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
     bankIfsc: '',
     bankAccountNumber: ''
   });
+  // Biometric ID form of the chosen institute (Master Settings → Institutes): 4 digits (WII) or letters and digits (SACON).
+  // Before an institute is chosen, letters are accepted too; the server checks the ID against the institute.
+  const chosenInstitute = (masterOptions.institute ?? []).find((r) => r.code === newUserForm.institute);
+  const bioLettersAllowed = !chosenInstitute || chosenInstitute.fields?.biometricIdFormat === 'Letters and digits';
 
   /** Account being edited in the employee form, or null when adding a new one. */
   const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
@@ -1183,7 +1187,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
     const biometricId = String((userToResetPasswordForm as UserType & { biometricId?: string; biometric_id?: string }).biometricId ??
       (userToResetPasswordForm as UserType & { biometric_id?: string }).biometric_id ?? '').trim();
-    if (!/^\d{4}$/.test(biometricId)) {
+    if (!/^[A-Za-z0-9]{2,10}$/.test(biometricId)) {
       showToast('Cannot reset password: this user has no valid biometric ID.', 'error');
       return;
     }
@@ -2292,12 +2296,14 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                       <input
                         type="text"
                         required
-                        inputMode="numeric"
-                        maxLength={4}
+                        inputMode={bioLettersAllowed ? 'text' : 'numeric'}
+                        maxLength={bioLettersAllowed ? 10 : 4}
                         readOnly={Boolean(editingEmployeeId)}
                         value={newUserForm.biometricId}
-                        onChange={(e) => setField('biometricId', e.target.value.replace(/\D/g, '').slice(0, 4))}
-                        placeholder="4-digit biometric ID"
+                        onChange={(e) => setField('biometricId', bioLettersAllowed
+                          ? e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)
+                          : e.target.value.replace(/\D/g, '').slice(0, 4))}
+                        placeholder={bioLettersAllowed ? 'Letters and digits, e.g. SAC1001' : '4-digit biometric ID'}
                         aria-invalid={Boolean(errorOf('biometricId'))}
                         title={errorOf('biometricId') || (editingEmployeeId ? 'The biometric ID cannot be changed after the employee is created.' : undefined)}
                         className={inputClass('biometricId', Boolean(editingEmployeeId))}

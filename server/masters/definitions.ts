@@ -14,6 +14,9 @@ import { lookupTable } from '../lib/lookups';
  */
 
 /** How the employee form behaves for an employee type (fixed set, chosen per type). */
+/** How an institute's employees' biometric IDs look (institutes.biometric_id_format). */
+export const BIOMETRIC_ID_FORMATS = ['4 digits', 'Letters and digits'] as const;
+
 export const FORM_LAYOUTS = [
   { code: 'permanent', name: 'Permanent staff (department, designation, category)' },
   { code: 'contractual', name: 'Contractual staff (department, designation, category)' },
@@ -210,10 +213,10 @@ export const MASTERS: MasterDef[] = [
 
   // ---- Employee-form lists (one table each, lookups.ts) -------------------------
   {
-    kind: 'lookup', key: 'institute', lookupType: 'institute', table: lookupTable('institute'), columnFields: {}, group: 'lists',
+    kind: 'lookup', key: 'institute', lookupType: 'institute', table: lookupTable('institute'), columnFields: { biometricIdFormat: 'biometric_id_format' }, group: 'lists',
     label: 'Institutes', noun: 'Institute',
-    description: 'Wildlife Institute of India, WII - SACON, … Each employee and organization unit belongs to one.',
-    fields: [],
+    description: 'Wildlife Institute of India, WII - SACON, … Each employee and organization unit belongs to one. Biometric ID format: 4 digits (WII) or letters and digits (SACON: SAC1001).',
+    fields: [{ key: 'biometricIdFormat', label: 'Biometric ID format', type: 'choice', choices: BIOMETRIC_ID_FORMATS, required: true }],
     usage: [
       { what: 'organization units', sql: 'SELECT COUNT(*) AS n FROM organization_units WHERE institute = ?', by: 'code' },
       { what: 'employee profiles', sql: COUNT('employee_profiles', 'institute'), by: 'code' },

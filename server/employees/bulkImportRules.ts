@@ -27,7 +27,7 @@ const col = (header: string, key: string, required: boolean, kind: ColumnKind, h
 export function columnsFor(layout: FormLayout): ImportColumn[] {
   const rules = LAYOUT_RULES[layout];
   const out: ImportColumn[] = [
-    col('Biometric_ID', 'biometricId', true, 'text', '4 digits'),
+    col('Biometric_ID', 'biometricId', true, 'text', "4 digits; letters and digits (e.g. SAC1001) for an institute set to 'Letters and digits'"),
     col('Salutation', 'suffix', true, 'lookup', 'as in Master Settings', { lookup: 'salutation' }),
     col('Name', 'name', true, 'text', 'full name'),
     col('Email', 'email', true, 'text', 'official email (login ID)'),

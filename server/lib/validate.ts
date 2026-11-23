@@ -23,7 +23,8 @@ interface StringRules {
 }
 
 export const PATTERNS = {
-  biometricId: /^\d{4}$/,
+  /** Any biometric ID (WII: 4 digits; institutes set to 'Letters and digits', e.g. SACON: SAC1001): 2–10 letters / digits. */
+  biometricId: /^[A-Za-z0-9]{2,10}$/,
   isoDate: /^\d{4}-\d{2}-\d{2}$/,
   time24: /^([01]\d|2[0-3]):[0-5]\d$/,
   email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,

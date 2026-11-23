@@ -182,6 +182,14 @@ export async function checkReferences(q: Querier, input: EmployeeInput, layout: 
     }
   }
 
+  // Biometric ID form for the institute (new employees; an existing ID is never changed).
+  if (selfId === null && input.biometricId && input.institute) {
+    const [inst] = await rows(q, 'SELECT biometric_id_format FROM institutes WHERE code = ? LIMIT 1', [input.institute]);
+    const lettersAllowed = String(inst?.biometric_id_format ?? '4 digits') === 'Letters and digits';
+    if (!lettersAllowed && !/^\d{4}$/.test(input.biometricId)) errors.biometricId = 'Biometric ID must be exactly 4 digits for this institute.';
+    else if (lettersAllowed && !/^[A-Z0-9]{2,10}$/.test(input.biometricId)) errors.biometricId = 'Use 2 to 10 letters or digits (e.g. SAC1001).';
+  }
+
   // Bank: one of the Banks master (an inactive bank stays allowed for the employee who already has it).
   const bankName = input.identity?.bankName;
   if (bankName) {

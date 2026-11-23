@@ -156,7 +156,7 @@ router.get('/employees/:userId/profile', isAuthenticated, asyncHandler(async (re
 /** Administrator: set or remove any employee's photo (audited with the administrator as the actor). */
 async function photoOwner(raw: unknown) {
   const biometricId = String(raw ?? '').trim();
-  if (!PATTERNS.biometricId.test(biometricId)) throw badRequest('A valid 4-digit biometric ID is required.');
+  if (!PATTERNS.biometricId.test(biometricId)) throw badRequest('A valid biometric ID is required.');
   const [target] = await db.select({ biometricId: users.biometricId, name: users.name, isSystem: users.isSystem }).from(users).where(eq(users.biometricId, biometricId)).limit(1);
   if (!target) throw notFound('Employee not found.');
   if (target.isSystem) throw systemAccountError();
@@ -327,7 +327,7 @@ router.put('/employees/:userId/module-roles', isAdmin, asyncHandler(async (req, 
  */
 router.post('/employees/:biometricId/reset-password', isAdmin, limitHeavy('password-reset', 30), asyncHandler(async (req, res) => {
   const biometricId = String(req.params.biometricId || '').trim();
-  if (!PATTERNS.biometricId.test(biometricId)) throw badRequest('A valid 4-digit biometric ID is required.');
+  if (!PATTERNS.biometricId.test(biometricId)) throw badRequest('A valid biometric ID is required.');
   const mode = req.body?.mode === 'custom' ? 'custom' : req.body?.mode === 'default' ? 'default' : 'auto';
   const reason = String(req.body?.reason || '').trim().slice(0, 500);
   if (req.auth!.account.biometricId === biometricId) throw selfChangeError('password');
