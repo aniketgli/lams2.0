@@ -218,6 +218,27 @@ async function main(): Promise<void> {
   const badPhone = await req('POST', '/api/hrms/employees', { ...body, biometricId: '3012', email: 'ci.badphone@wii.gov.in', phone: '12', aadhaarNumber: '', panNumber: 'ABCDE9887K', bankAccountNumber: '1223456789012' });
   check('A mobile number that is entered is still checked', badPhone.status === 400 && Boolean(badPhone.body?.details?.phone), String(badPhone.status));
 
+  // ---- Biometric IDs with letters for an institute that allows them (SACON: SAC1001) ---------------
+  {
+    const inst = await req('POST', '/api/hrms/masters/institute', { name: 'CI SACON', code: 'CISACON', status: 'ACTIVE', fields: { biometricIdFormat: 'Letters and digits' } });
+    check('An institute can allow letters in biometric IDs', inst.status === 201 && inst.body?.record?.fields?.biometricIdFormat === 'Letters and digits', `${inst.status} ${inst.text.slice(0, 160)}`);
+    const unit = await req('POST', '/api/hrms/masters/organizations', { name: 'CI SACON Office', code: 'CISACOFF', status: 'ACTIVE', fields: { institute: 'CISACON', type: 'Department' } });
+    check('…with an office of its own', unit.status === 201, `${unit.status} ${unit.text.slice(0, 160)}`);
+    const sac = { ...body, institute: 'CISACON', department: 'CI SACON Office', reportingManagerId: '', reviewingManagerId: '', aadhaarNumber: '', phone: '' };
+    // The test managers belong to WII; for this check they belong to no institute (managers must share the employee's).
+    const mysql = await import('mysql2/promise');
+    const db = await mysql.createConnection(String(process.env.DATABASE_URL));
+    await db.query("UPDATE employee_profiles SET institute = NULL WHERE biometric_id IN ('1002', '1003')");
+    const sacEmp = await req('POST', '/api/hrms/employees', { ...sac, biometricId: 'sac1001', email: 'ci.sac1001@wii.gov.in', panNumber: 'ABCDE9888K', bankAccountNumber: '1323456789012', reportingManagerId: rmId, reviewingManagerId: hodId });
+    await db.query("UPDATE employee_profiles SET institute = 'WII' WHERE biometric_id IN ('1002', '1003')");
+    await db.end();
+    check('An employee of that institute is saved with biometric ID SAC1001 (stored in capitals)', sacEmp.status === 201 && sacEmp.body?.employee?.biometricId === 'SAC1001', `${sacEmp.status} ${sacEmp.text.slice(0, 200)}`);
+    const wiiLetters = await req('POST', '/api/hrms/employees', { ...body, biometricId: 'SAC1002', email: 'ci.sac1002@wii.gov.in', phone: '', aadhaarNumber: '', panNumber: 'ABCDE9889K', bankAccountNumber: '1423456789012' });
+    check('A WII employee still needs a 4-digit biometric ID', wiiLetters.status === 400 && /4 digits/.test(String(wiiLetters.body?.details?.biometricId)), `${wiiLetters.status} ${JSON.stringify(wiiLetters.body?.details ?? {}).slice(0, 160)}`);
+    const sacLogin = await fetch(`${BASE}/api/hrms/photos/SAC1001`, { headers: { Cookie: cookie } });
+    check('Biometric-ID routes accept SAC1001', sacLogin.status === 404 || sacLogin.status === 200, String(sacLogin.status));
+  }
+
   // ---- Banks master ----------------------------------------------------------------------------
   const bankList = await req('GET', '/api/hrms/masters/banks');
   check('Banks master lists the common banks', (bankList.body?.records ?? []).some((r: any) => r.name === 'State Bank of India' && r.code === 'SBIN'), String(bankList.status));

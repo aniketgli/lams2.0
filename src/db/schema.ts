@@ -6,7 +6,7 @@ import { mysqlTable, varchar, text, longtext, timestamp, boolean, int, decimal, 
 export const users = mysqlTable('users', {
   // ORM mapping only: the existing MySQL table is not modified by this declaration.
   id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
-  biometricId: varchar('biometric_id', { length: 4 }).notNull().unique(),
+  biometricId: varchar('biometric_id', { length: 10 }).notNull().unique(),
   name: varchar('name', { length: 255 }).notNull(),
   email: varchar('email', { length: 255 }).notNull().unique(),
   passwordHash: varchar('password_hash', { length: 255 }).notNull(),
@@ -25,12 +25,12 @@ export const users = mysqlTable('users', {
 
 export const user_module_roles = mysqlTable('user_module_roles', {
   id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
-  biometricId: varchar('biometric_id', { length: 4 }).notNull(),
+  biometricId: varchar('biometric_id', { length: 10 }).notNull(),
   moduleId: varchar('module_id', { length: 80 }).notNull(),
   roleId: varchar('role_id', { length: 100 }).notNull(),
   createdAt: timestamp('created_at').defaultNow(),
   lastUpdated: timestamp('last_updated').defaultNow().onUpdateNow(),
-  lastUpdatedBy: varchar('last_updated_by', { length: 4 }),
+  lastUpdatedBy: varchar('last_updated_by', { length: 10 }),
   status: varchar('status', { length: 16 }).notNull().default('active'),
 }, (table) => ({
   assignmentUnique: uniqueIndex('user_module_role_biometric_unique').on(table.biometricId, table.moduleId, table.roleId),
@@ -40,20 +40,20 @@ export const user_module_roles = mysqlTable('user_module_roles', {
 // so the deletion event survives after the account row is removed.
 export const user_account_audit_logs = mysqlTable('user_account_audit_logs', {
   id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
-  targetBiometricId: varchar('target_biometric_id', { length: 4 }).notNull(),
+  targetBiometricId: varchar('target_biometric_id', { length: 10 }).notNull(),
   targetName: varchar('target_name', { length: 255 }).notNull(),
   targetEmail: varchar('target_email', { length: 255 }).notNull(),
   action: varchar('action', { length: 32 }).notNull(),
   reason: text('reason'),
   reference: varchar('reference', { length: 255 }),
-  deletedBy: varchar('deleted_by', { length: 4 }).notNull(),
+  deletedBy: varchar('deleted_by', { length: 10 }).notNull(),
   deletedAt: timestamp('deleted_at').defaultNow().notNull(),
 });
 
 export const employee_profiles = mysqlTable('employee_profiles', {
   // ORM mapping only; uses the existing biometric_id key, not a user_id relationship.
   id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
-  biometricId: varchar('biometric_id', { length: 4 }).notNull().unique(),
+  biometricId: varchar('biometric_id', { length: 10 }).notNull().unique(),
   suffix: varchar('suffix', { length: 10 }),
   /** Generated (read only): org_unit_name or project_name. */
   department: varchar('department', { length: 255 }),
@@ -93,7 +93,7 @@ export const employee_profiles = mysqlTable('employee_profiles', {
   phdEnrollmentName: varchar('phd_enrollment_name', { length: 255 }),
   statusChangeReason: varchar('status_change_reason', { length: 500 }),
   statusEffectiveDate: date('status_effective_date', { mode: 'string' }),
-  statusChangedBy: varchar('status_changed_by', { length: 4 }),
+  statusChangedBy: varchar('status_changed_by', { length: 10 }),
 }, (t) => ({
   byReportingManager: index('idx_profiles_reporting_manager').on(t.reportingManagerId),
   byReviewingManager: index('idx_profiles_reviewing_manager').on(t.reviewingManagerId),
@@ -102,7 +102,7 @@ export const employee_profiles = mysqlTable('employee_profiles', {
 
 /** Aadhaar (encrypted, keyed hash for uniqueness, last 4 digits) and PAN: one row per employee. */
 export const employee_identity = mysqlTable('employee_identity', {
-  biometricId: varchar('biometric_id', { length: 4 }).primaryKey(),
+  biometricId: varchar('biometric_id', { length: 10 }).primaryKey(),
   aadhaarEnc: varchar('aadhaar_enc', { length: 255 }),
   aadhaarHash: varchar('aadhaar_hash', { length: 64 }).unique('uq_identity_aadhaar_hash'),
   aadhaarLast4: varchar('aadhaar_last4', { length: 4 }),
@@ -117,7 +117,7 @@ export const employee_identity = mysqlTable('employee_identity', {
 /** Bank accounts of an employee (account number encrypted, keyed hash unique within a bank). One primary today. */
 export const employee_bank_accounts = mysqlTable('employee_bank_accounts', {
   id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
-  biometricId: varchar('biometric_id', { length: 4 }).notNull(),
+  biometricId: varchar('biometric_id', { length: 10 }).notNull(),
   bankName: varchar('bank_name', { length: 100 }).notNull(),
   ifsc: varchar('ifsc', { length: 11 }).notNull(),
   accountEnc: varchar('account_enc', { length: 255 }).notNull(),
@@ -248,7 +248,7 @@ export const phd_enrollments = mysqlTable('phd_enrollments', {
 
 export const user_project_histories = mysqlTable('user_histories', {
   id: bigint('id', { mode: 'number', unsigned: true }).autoincrement().primaryKey(),
-  biometricId: varchar('biometric_id', { length: 4 }).notNull(),
+  biometricId: varchar('biometric_id', { length: 10 }).notNull(),
   projectName: varchar('project_name', { length: 255 }).notNull(),
   projectCode: varchar('project_code', { length: 100 }),
   piName: varchar('pi_name', { length: 255 }),
@@ -278,7 +278,7 @@ export const master_audit_logs = mysqlTable('master_audit_logs', {
   beforeData: longtext('before_data'),
   afterData: longtext('after_data'),
   reason: varchar('reason', { length: 500 }),
-  actorBiometricId: varchar('actor_biometric_id', { length: 4 }),
+  actorBiometricId: varchar('actor_biometric_id', { length: 10 }),
   actorName: varchar('actor_name', { length: 255 }),
   actorRole: varchar('actor_role', { length: 32 }),
   ipAddress: varchar('ip_address', { length: 45 }),
@@ -401,7 +401,7 @@ export const email_settings = mysqlTable('email_settings', {
 export const account_settings = mysqlTable('account_settings', {
   id: varchar('id', { length: 32 }).primaryKey(),
   defaultPasswordHash: varchar('default_password_hash', { length: 255 }),
-  updatedBy: varchar('updated_by', { length: 4 }),
+  updatedBy: varchar('updated_by', { length: 10 }),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow(),
 });
 

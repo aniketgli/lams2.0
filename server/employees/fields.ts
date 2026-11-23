@@ -148,7 +148,8 @@ export function parseEmployeeInput(body: unknown, layout: FormLayout | null, tod
   const v = new Validator(body);
   const rules = layout ? LAYOUT_RULES[layout] : null;
 
-  const biometricId = v.string('biometricId', { max: 4, pattern: PATTERNS.biometricId, patternMessage: 'Biometric ID must be exactly 4 digits.' });
+  // Stored in capitals. Which form is allowed depends on the institute (references.ts: WII 4 digits, SACON SAC1001 …).
+  const biometricId = v.string('biometricId', { max: 10, pattern: PATTERNS.biometricId, patternMessage: 'Use 4 digits, or letters and digits (e.g. SAC1001).' }).toUpperCase();
   const salutation = v.string('suffix', { max: 10 });
   const name = v.string('name', { min: 2, max: 255, pattern: NAME_PATTERN, patternMessage: 'Use letters, spaces, dots, hyphens and apostrophes only.' }).replace(/\s+/g, ' ');
   const rawEmail = v.string('email', { max: 254 });
