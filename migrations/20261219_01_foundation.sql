@@ -140,9 +140,11 @@ CALL lams_exec_if(lams_col_type('outdoor_duty_requests', 'start_time') <> 'time'
 CALL lams_exec_if(lams_col_type('report_schedules', 'send_time') <> 'time',
   'ALTER TABLE report_schedules MODIFY COLUMN send_time TIME NOT NULL');
 
-CALL lams_exec_if(lams_col_type('employee_photos', 'biometric_id') <> 'char(4)',
+-- (20261224 widens biometric IDs to VARCHAR(10); that is left as it is.)
+CALL lams_exec_if(lams_col_type('employee_photos', 'biometric_id') NOT IN ('char(4)', 'varchar(10)'),
   'ALTER TABLE employee_photos MODIFY COLUMN biometric_id CHAR(4) NOT NULL');
-CALL lams_exec_if(lams_col_type('user_histories', 'biometric_id') <> 'char(4)',
+-- (20261224 widens biometric IDs to VARCHAR(10); that is left as it is.)
+CALL lams_exec_if(lams_col_type('user_histories', 'biometric_id') NOT IN ('char(4)', 'varchar(10)'),
   'ALTER TABLE user_histories MODIFY COLUMN biometric_id CHAR(4) NOT NULL');
 
 -- ---------------------------------------------------------------------------------------------
