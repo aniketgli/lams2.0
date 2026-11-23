@@ -130,11 +130,10 @@ export const LoginPage: React.FC = () => {
             </Button>
           </form>
 
-          <p className="text-center text-xs text-slate-500 pt-2">
-            <span className="font-bold text-slate-700">Forgot password?</span>{' '}
+          <p className="text-center text-xs pt-2">
             <button type="button" onClick={() => { setForgot(true); setSuccess(null); setError(null); }}
               className="font-semibold text-primary hover:underline">
-              Reset it with a code sent to your email
+              Forgot password?
             </button>
           </p>
           </>)}
