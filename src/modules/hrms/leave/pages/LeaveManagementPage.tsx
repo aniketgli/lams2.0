@@ -9,6 +9,7 @@ import { ActivityLogPanel, ActivitySource } from '../../../../shared/components/
 import { activityEndpoints } from '../../../../shared/services/activityApi';
 import { LeaveRequestsView } from '../components/LeaveRequestsView';
 import { LeaveBalancesView } from '../components/LeaveBalancesView';
+import { NoDuesPanel } from '../components/NoDuesPanel';
 import { LeavePolicyMaster } from '../../master/components/LeavePolicyMaster';
 
 /**
@@ -21,7 +22,7 @@ const LEAVE_ACTIVITY: ActivitySource = {
   title: 'Leave activity log',
   recordLabel: 'Request / balance',
   searchPlaceholder: 'Employee, leave type, done by, reason…',
-  areas: [{ value: 'leave_request', label: 'Leave request' }, { value: 'leave_balance', label: 'Leave balance' }, { value: 'leave_joining', label: 'Joining report' }, { value: 'leave_data_export', label: 'Data download' }, { value: 'leave_export', label: 'Log download' }],
+  areas: [{ value: 'leave_request', label: 'Leave request' }, { value: 'leave_balance', label: 'Leave balance' }, { value: 'leave_joining', label: 'Joining report' }, { value: 'leave_no_dues', label: 'No Dues' }, { value: 'leave_data_export', label: 'Data download' }, { value: 'leave_export', label: 'Log download' }],
   actions: ['CREATE', 'UPDATE', 'STATUS', 'DELETE', 'EXPORT'],
   actionLabels: { CREATE: 'Applied / set', UPDATE: 'Edited', STATUS: 'Approved / forwarded / rejected', DELETE: 'Deleted', EXPORT: 'Downloaded' },
   ...activityEndpoints('/hrms/leave/activity', 'WII_Leave_Activity.csv'),
@@ -37,7 +38,7 @@ const BALANCE_ACTIVITY: ActivitySource = {
   limitToAreas: true,
 };
 
-type LeaveView = 'requests' | 'types' | 'activity';
+type LeaveView = 'requests' | 'types' | 'nodues' | 'activity';
 
 interface LeaveManagementPageProps {
   onNavigate?: (tab: string) => void;
@@ -58,7 +59,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ initia
   const balanceSwitch = isAudit
     ? <SegmentedControl ariaLabel="Leave balance views" value={balanceView} onChange={setBalanceView} options={[{ value: 'balances', label: 'Leave balance' }, { value: 'activity', label: 'Activity log' }]} />
     : null;
-  const viewTabs: Array<readonly [LeaveView, string]> = isAdmin ? [['requests', 'Requests'], ['types', 'Leave Types']]
+  const viewTabs: Array<readonly [LeaveView, string]> = isAdmin ? [['requests', 'Requests'], ['types', 'Leave Types'], ['nodues', 'No Dues']]
     : isAudit ? [['requests', 'Requests'], ['types', 'Leave Types'], ['activity', 'Activity log']] : [['requests', 'Requests']];
   const viewSwitch = viewTabs.length > 1
     ? <SegmentedControl ariaLabel="Leave views" value={view} onChange={setView} options={viewTabs.map(([value, label]) => ({ value, label }))} />
@@ -99,6 +100,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ initia
               <LeavePolicyMaster readOnly={!isAdmin} />
             </>
           )
+            : isAdmin && view === 'nodues' ? <NoDuesPanel toolbarStart={viewSwitch} />
             : isAudit && view === 'activity' ? <ActivityLogPanel source={LEAVE_ACTIVITY} toolbarStart={viewSwitch} />
             : <LeaveRequestsView applySignal={applySignal} toolbarStart={viewSwitch} />}
         </>

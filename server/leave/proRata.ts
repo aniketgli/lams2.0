@@ -24,12 +24,12 @@ export { spanForNewEmployee, spansForExtension } from './proRataRules';
 
 type Q = { query: typeof pool.query };
 
-interface Person {
+export interface Person {
   id: number; biometricId: string; name: string; status: string; employmentType: string; gender: string;
   joining: string | null; validUpto: string | null; basis: Basis; isPwd: boolean; group: unknown;
 }
 
-async function loadPerson(q: Q, userId: number): Promise<Person | null> {
+export async function loadPerson(q: Q, userId: number): Promise<Person | null> {
   const [row] = await rows(q,
     `SELECT u.id, u.biometric_id, u.name, u.status, u.valid_upto, p.employment_type, p.joining_date, ${profileJsonSql('p')} AS profile_data
        FROM users u LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE u.id = ? LIMIT 1`, [userId]);
@@ -44,7 +44,7 @@ async function loadPerson(q: Q, userId: number): Promise<Person | null> {
 }
 
 /** Leave types that get a pro-rata quota for this person, with the yearly quota. Empty when the person is out of scope. */
-async function quotaTypes(q: Q, p: Person): Promise<Array<{ id: number; code: string; quota: number }>> {
+export async function quotaTypes(q: Q, p: Person): Promise<Array<{ id: number; code: string; quota: number }>> {
   const layout = await layoutOfEmployeeType(q, p.employmentType);
   if (!layout || !PRO_RATA_LAYOUTS.has(layout)) return [];
   const ids = await groupLeaveTypeIds(q, p.group);

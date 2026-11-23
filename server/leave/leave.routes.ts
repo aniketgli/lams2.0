@@ -1,4 +1,5 @@
 import { applyImport, importTemplate, reviewImport } from './balanceImport';
+import { issueLeaveClearance, leaveClearance } from './noDues';
 import { Router, type Request, type Response } from 'express';
 import { asyncHandler, attachmentDisposition } from '../lib/http';
 import { limitHeavy } from '../middleware/apiRateLimit';
@@ -155,6 +156,14 @@ router.post('/leave/balances/import/review', requireAuth, limitHeavy('balance-im
 router.post('/leave/balances/import', requireAuth, limitHeavy('balance-import-apply', 10), asyncHandler(async (req, res) => {
   const result = await applyImport(req, viewerOf(req), req.body);
   res.json({ ...result, message: `${result.summary.ok} balance(s) updated${result.summary.unchanged ? `, ${result.summary.unchanged} unchanged` : ''}.` });
+}));
+
+// No Dues — leave clearance of a fixed-term employee who is leaving (noDues.ts). Administrator only.
+router.get('/leave/no-dues', ...isAdmin, asyncHandler(async (req, res) => {
+  res.json(await leaveClearance(req.query.userId, req.query.relievingDate));
+}));
+router.post('/leave/no-dues', ...isAdmin, asyncHandler(async (req, res) => {
+  res.json(await issueLeaveClearance(req, req.body?.userId, req.body?.relievingDate));
 }));
 
 // Auditor log routes come before /:id so "activity" is never read as an ID.

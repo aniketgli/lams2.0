@@ -522,6 +522,14 @@ async function updateEmployeeImpl(req: Request, id: number, body: unknown): Prom
       // Validity extended (also reactivates an expired account): add the pro-rata quota of the new months only.
       const extension = spansForExtension(after.joiningDate, before.validUpto, validUpto, before.validUpto !== null && before.validUpto < today, today);
       if (extension) await creditProRata(conn, req, id, extension, today);
+      // Leave group or employee type changed: leave types of the new group that have no balance yet this leave year
+      // get their pro-rata quota (joining → "Valid up to"); balances that exist are left as they are.
+      if (String(existing.rawData.leaveGroup ?? '') !== String(input.leaveGroup ?? '') || before.employmentType !== input.employmentType) {
+        await creditProRata(conn, req, id, {
+          before: [], added: spanForNewEmployee(after.joiningDate, validUpto), onlyMissing: true,
+          reason: 'leave group / employee type changed',
+        }, today);
+      }
       return { record: after, changed };
     });
   } catch (error) {
