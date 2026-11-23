@@ -88,7 +88,7 @@ async function main(): Promise<void> {
   await c.getByRole('button', { name: /reset it with a code/i }).click();
   await c.fill('input[placeholder="Enter your email address"]', 'staff@wii.gov.in');
   await c.getByRole('button', { name: /send code/i }).click();
-  const sent = await c.getByText(/a 6-digit code has been sent/i).first().isVisible({ timeout: 10000 }).catch(() => false);
+  const sent = await c.getByText(/a 6-digit code has been sent/i).first().waitFor({ state: 'visible', timeout: 10000 }).then(() => true, () => false);
   const codeBox = await c.locator('input[placeholder="6-digit code"]').count();
   const shown = sent && codeBox === 1 ? '' : (await c.locator('body').innerText()).replace(/\s+/g, ' ').slice(0, 400);
   check('Forgot password: the link opens the form, a code is requested, the code step follows', sent && codeBox === 1, shown);
