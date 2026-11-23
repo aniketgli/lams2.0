@@ -32,7 +32,8 @@ export const HRMS_PAGES: HrmsPage[] = [
   // Leave Balance Manager: this page only.
   { id: 'leave_balance', slug: 'leave-balance', roles: ['administrator', 'audit', 'leave_balance_manager'] },
   { id: 'holiday_calendar', slug: 'holidays', roles: ALL },
-  { id: 'profile', slug: 'profiles', roles: ALL },
+  // The Employee Manager has only this page: it adds, edits and imports employees.
+  { id: 'profile', slug: 'profiles', roles: [...ALL, 'employee_manager'] },
   { id: 'user_controls', slug: 'user-controls', roles: ['administrator', 'audit'] },
   { id: 'transfers', slug: 'employee-mapping', roles: ['administrator', 'audit'] },
   { id: 'master', slug: 'master-settings', roles: ['administrator', 'audit'] },
@@ -67,7 +68,7 @@ export const PAGE_ICONS: Record<string, LucideIcon> = {
 
 export const HRMS_HOME = 'dashboard';
 
-/** The page a role lands on: the dashboard, or the first page it may open when it has no dashboard (Leave Balance Manager). */
+/** The page a role lands on: the dashboard, or the first page it may open when it has no dashboard (Leave Balance Manager, Employee Manager). */
 export function homePageFor(role: UserRole | null | undefined): string {
   if (!role || canOpenPage(HRMS_HOME, role)) return HRMS_HOME;
   return HRMS_PAGES.find((page) => page.roles.includes(role))?.id ?? HRMS_HOME;

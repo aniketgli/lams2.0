@@ -14,7 +14,7 @@ import { photoUrls } from './photos';
 import {
   EmployeeInput, FormLayout, LAYOUT_RULES, PROFILE_DATA_FORBIDDEN, PROFILE_DATA_KEYS, accountValidUpto, parseEmployeeInput, retirementDate,
 } from './fields';
-import { ResolvedReferences, checkReferences, layoutOfEmployeeType } from './references';
+import { ResolvedReferences, assertTypeInModule, checkReferences, employeeTypeModules, layoutOfEmployeeType, sessionEmployeeModule } from './references';
 import { isSystemRow, systemAccountError } from '../lib/systemAccounts';
 import { AADHAAR_REQUIRED, IDENTITY_STORED_KEYS, identityAudit, identityView, storeIdentity } from './identity';
 import { identityOwner, loadIdentities, saveIdentity } from './identityStore';
@@ -42,7 +42,7 @@ const AUDIT_PASSWORD = 'employee_password';
 /** Role every new employee starts with (the role-matrix spelling for HRMS "User"). */
 const NEW_EMPLOYEE_GRANT = { moduleId: 'hrms', roleId: 'hrms_staff' } as const;
 
-const ROLE_RANK: RoleId[] = ['administrator', 'audit', 'leave_balance_manager', 'reviewing_manager', 'reporting_manager', 'general_staff'];
+const ROLE_RANK: RoleId[] = ['administrator', 'audit', 'leave_balance_manager', 'employee_manager', 'reviewing_manager', 'reporting_manager', 'general_staff'];
 
 /** Module-specific "plain user" roles that, like HRMS User, carry no responsibilities. */
 const PLAIN_USER_ROLES = new Set(['pms_researcher', 'sims_indenter', 'fin_claimant', 'fms_requester']);
@@ -190,12 +190,38 @@ function publicView(record: EmployeeRecord): EmployeeRecord {
   };
 }
 
-export interface Viewer { id: number; role: RoleId | null }
+export interface Viewer {
+  id: number; role: RoleId | null;
+  /** Employee Manager: the employee types of its module, whose employees it adds and edits (withManagedTypes). */
+  managedTypes?: ReadonlySet<string>;
+}
+
+/** An Employee Manager viewer with the employee types it manages (those of HRMS: the HRMS screens call this). */
+export async function withManagedTypes(viewer: Viewer, module: 'HRMS' | 'PMS' = 'HRMS'): Promise<Viewer> {
+  if (viewer.role !== 'employee_manager') return viewer;
+  const modules = await employeeTypeModules(pool);
+  return { ...viewer, managedTypes: new Set([...modules].filter(([, m]) => m === module).map(([code]) => code)) };
+}
+
+const managesRecord = (viewer: Viewer, record: EmployeeRecord): boolean =>
+  viewer.role === 'employee_manager' && Boolean(viewer.managedTypes?.has(String(record.employmentType ?? '')));
+
+/**
+ * An Employee Manager edits only the employees of its own module (an administrator, every employee).
+ * Their type decides: an HRMS Employee Manager the Permanent / Trainee employees.
+ */
+async function assertManagesEmployee(conn: PoolConnection, req: Request, record: EmployeeRecord): Promise<void> {
+  if (req.auth?.activeRole !== 'employee_manager') return;
+  const module = sessionEmployeeModule(req);
+  const of = (await employeeTypeModules(conn)).get(String(record.employmentType ?? ''));
+  if (!module || of !== module) throw new HttpError(403, `${record.name} is not a ${module ?? ''} employee: an Employee Manager edits only the employees of its own module.`, 'FORBIDDEN');
+}
 
 /** Full details for administrators, auditors, the employee and their managers; basic details otherwise. */
 export function canSeeFullProfile(viewer: Viewer, record: EmployeeRecord): boolean {
   if (viewer.role === 'administrator' || viewer.role === 'audit') return true;
   if (record.id === String(viewer.id)) return true;
+  if (managesRecord(viewer, record)) return true;
   // Reporting managers / HoDs see their own people, and only while acting in that role.
   if (viewer.role !== 'reporting_manager' && viewer.role !== 'reviewing_manager') return false;
   const data = parseProfileData(record.profileData);
@@ -203,7 +229,8 @@ export function canSeeFullProfile(viewer: Viewer, record: EmployeeRecord): boole
 }
 
 /** `regular` (default): every employee except the system accounts. `system`: only those, for the Profiles table. */
-export async function listEmployees(viewer: Viewer, which: 'regular' | 'system' = 'regular'): Promise<EmployeeRecord[]> {
+export async function listEmployees(viewerIn: Viewer, which: 'regular' | 'system' = 'regular'): Promise<EmployeeRecord[]> {
+  const viewer = await withManagedTypes(viewerIn);
   const found = await rows(pool, `${SELECT_EMPLOYEES} WHERE u.is_system = ${which === 'system' ? 1 : 0} ORDER BY u.name`);
   const grants = await loadGrants(pool, null);
   const identities = await loadIdentities(pool, null);
@@ -226,9 +253,15 @@ async function findEmployee(q: Querier, id: number, lock = false, fullIdentity =
   };
 }
 
-export async function getEmployee(viewer: Viewer, id: number): Promise<EmployeeRecord> {
-  const found = await findEmployee(pool, id, false, viewer.role === 'administrator');
+export async function getEmployee(viewerIn: Viewer, id: number): Promise<EmployeeRecord> {
+  const viewer = await withManagedTypes(viewerIn);
+  const found = await findEmployee(pool, id, false, viewer.role === 'administrator' || viewer.role === 'employee_manager');
   if (!found) throw notFound('Employee not found.');
+  // The full Aadhaar / account number is for the edit form: an Employee Manager reads them only for its own employees.
+  if (viewer.role === 'employee_manager' && !managesRecord(viewer, found.record)) {
+    const masked = await findEmployee(pool, id, false, false);
+    if (masked) found.record = masked.record;
+  }
   if (!canSeeFullProfile(viewer, found.record)) throw new HttpError(403, 'You are not allowed to view this employee profile.', 'FORBIDDEN');
   const photos = await photoUrls([found.record.biometricId]);
   return { ...found.record, photoUrl: photos.get(found.record.biometricId) ?? null };
@@ -410,6 +443,7 @@ export const createEmployee = freshAccess(createEmployeeImpl);
  */
 export async function insertEmployee(conn: PoolConnection, req: Request, body: unknown, passwordHash: string, passwordNote: string): Promise<number> {
   const actor = req.auth!.account.biometricId;
+  await assertTypeInModule(conn, req, body && typeof body === 'object' ? (body as Record<string, unknown>).employmentType : null);
   const { layout, input, refs } = await prepare(conn, body, null);
   await assertUnique(conn, input, null);
 
@@ -476,6 +510,8 @@ async function updateEmployeeImpl(req: Request, id: number, body: unknown): Prom
       if (sentId && sentId !== before.biometricId) {
         throw badRequest('Please correct the highlighted fields.', { biometricId: 'Biometric ID cannot be changed once the employee is created.' });
       }
+      await assertManagesEmployee(conn, req, before);
+      await assertTypeInModule(conn, req, body && typeof body === 'object' ? (body as Record<string, unknown>).employmentType : null, before.employmentType);
       const { layout, input, refs } = await prepare(conn, { ...(body as object), biometricId: before.biometricId }, id, existing.rawData);
       await assertUnique(conn, input, id);
 

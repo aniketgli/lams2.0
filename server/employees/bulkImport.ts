@@ -14,7 +14,7 @@ import { asksBankDetails } from './identity';
 import { MAX_EMPLOYEE_IMPORT_ROWS, columnsFor, creationOrder, keyOf, parseDay, parseYesNo, type ImportColumn } from './bulkImportRules';
 
 export { MAX_EMPLOYEE_IMPORT_ROWS } from './bulkImportRules';
-import { layoutOfEmployeeType } from './references';
+import { type EmployeeModule, assertTypeInModule, employeeTypeModules, layoutOfEmployeeType } from './references';
 import { insertEmployee } from './store';
 
 /**
@@ -43,11 +43,13 @@ async function rows(q: Q, sql: string, params: unknown[] = []): Promise<RowDataP
 
 export interface ImportType { code: string; name: string; layout: FormLayout }
 
-/** Active employee types that have a form layout. */
-export async function importTypes(): Promise<ImportType[]> {
+/** Active employee types that have a form layout (with `module`, only that module's: HRMS imports Permanent / Trainee). */
+export async function importTypes(module: EmployeeModule | null = null): Promise<ImportType[]> {
   const list = await rows(pool, "SELECT code, name FROM employee_types WHERE UPPER(status) = 'ACTIVE' ORDER BY sort_order, name");
+  const modules = module ? await employeeTypeModules(pool) : null;
   const out: ImportType[] = [];
   for (const t of list) {
+    if (modules && modules.get(String(t.code)) !== module) continue;
     const layout = await layoutOfEmployeeType(pool, String(t.code));
     if (layout) out.push({ code: String(t.code), name: String(t.name), layout });
   }
@@ -324,6 +326,7 @@ async function run(req: Request, file: ParsedFile, commit: boolean, hashes: (lin
 /** What the import would do, row by row. Nothing is kept. */
 export async function reviewEmployeeImport(req: Request, body: unknown): Promise<EmployeeImportReview> {
   const input = parseRequest(body);
+  await assertTypeInModule(pool, req, input.typeCode);
   const file = await parseFile(input.typeCode, input.csv);
   // Hashing is slow and the passwords are thrown away: any hash will do for the review.
   return (await run(req, file, false, () => '$2b$12$review.only.not.a.real.password.hash.......', 'review')).review;
@@ -337,6 +340,7 @@ export interface ImportedAccount { id: number; temporaryPassword: string | null 
  */
 export async function applyEmployeeImport(req: Request, body: unknown): Promise<{ review: EmployeeImportReview; accounts: ImportedAccount[]; sendWelcome: boolean }> {
   const input = parseRequest(body);
+  await assertTypeInModule(pool, req, input.typeCode);
   const file = await parseFile(input.typeCode, input.csv);
   const passwords = new Map<number, { password: string | null; hash: string }>();
   if (input.sendWelcome) {

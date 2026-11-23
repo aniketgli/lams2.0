@@ -95,9 +95,11 @@ export const AttendanceView: React.FC = () => {
 
   // ---- Dates and data ---------------------------------------------------------
   const today = localToday();
-  // Opens on this month; only an administrator may look further back than 1 January of last year.
-  const defaultFrom = firstOfMonth(today);
-  const defaultTo = lastOfMonth(today);
+  // An administrator, HoD or reporting manager opens on today (the stats and the table show today's attendance);
+  // everyone else on this month. Only an administrator may look further back than 1 January of last year.
+  const opensOnToday = role === 'administrator' || isManager;
+  const defaultFrom = opensOnToday ? today : firstOfMonth(today);
+  const defaultTo = opensOnToday ? today : lastOfMonth(today);
   const earliest = earliestViewable(role, today);
   const [from, setFrom] = useState(defaultFrom);
   const [to, setTo] = useState(defaultTo);

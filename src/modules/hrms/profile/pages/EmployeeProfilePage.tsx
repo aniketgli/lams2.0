@@ -173,6 +173,9 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const salutationOptions = (masterOptions.salutation ?? []).map((r) => ({ label: r.name, value: r.code }));
   const genderOptions = (masterOptions.gender ?? []).map((r) => ({ label: r.name, value: r.code }));
   const employeeTypeOptions = (masterOptions.employeeType ?? []).map((r) => ({ label: r.name, value: r.code }));
+  // HRMS has the employee types set to HRMS in Master Settings → Employee Types (Permanent, Trainee); the others are PMS.
+  const hrmsTypeCodes = useMemo(() => new Set((masterOptions.employeeType ?? [])
+    .filter((r) => String(r.fields?.module ?? 'HRMS').toUpperCase() !== 'PMS').map((r) => r.code)), [masterOptions.employeeType]);
   const instituteOptions = (masterOptions.institute ?? []).map((r) => ({ label: r.name, value: r.code }));
   // Banks master; an employee's saved bank stays selectable even if it was later made inactive.
   const bankOptions = (current: string) => {
@@ -223,8 +226,12 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const isAdmin = currentUser.role === 'administrator';
   const isAudit = currentUser.role === 'audit';
   const isManager = currentUser.role === 'reporting_manager' || currentUser.role === 'reviewing_manager';
+  // Employee Manager: adds, edits and imports HRMS employees; no roles, passwords, status or deletion (server checks it).
+  const isEmployeeManager = currentUser.role === 'employee_manager';
+  const canManageEmployees = isAdmin || isEmployeeManager;
+  const canManageEmployee = (u: { employmentType?: string | null }) => isAdmin || (isEmployeeManager && hrmsTypeCodes.has(String(u.employmentType ?? '')));
   const canAccessAdminSubTabs = isAdmin || isAudit;
-  const showMyProfile = !isAdmin && !isAudit && !isManager;
+  const showMyProfile = !isAdmin && !isAudit && !isManager && !isEmployeeManager;
   const [auditorView, setAuditorView] = useState<'directory' | 'activity'>('directory');
   /** The header's Employee transfer / Manager replacement buttons ask the mapping panel to open that order form. */
   const [mappingOrder, setMappingOrder] = useState<{ kind: 'transfer' | 'replace'; n: number }>({ kind: 'transfer', n: 0 });
@@ -282,6 +289,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   // only for these people and refuses any other profile, whatever the screen shows.
   const accessibleProfiles = useMemo(() => {
     if (isAdmin || isAudit) return users;
+    if (isEmployeeManager) return users.filter((u) => hrmsTypeCodes.has(String(u.employmentType ?? '')));
     if (isManager) {
       return users.filter((u) => {
         if (u.id === currentUser.id) return false;
@@ -291,7 +299,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
       });
     }
     return users.filter((u) => u.id === currentUser.id);
-  }, [currentUser, users, isAdmin, isAudit, isManager]);
+  }, [currentUser, users, isAdmin, isAudit, isManager, isEmployeeManager, hrmsTypeCodes]);
 
   // Dynamic Designations List
   const designationsList = useMemo(() => {
@@ -837,11 +845,12 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
           hod: 'hrms_reviewing', reviewingmanager: 'hrms_reviewing', hrmsreviewing: 'hrms_reviewing',
           administrator: 'hrms_admin', admin: 'hrms_admin', hrmsadmin: 'hrms_admin',
           auditor: 'auditor', audit: 'auditor',
-          leavebalancemanager: 'hrms_leave_balance', hrmsleavebalance: 'hrms_leave_balance', leavebalance: 'hrms_leave_balance'
+          leavebalancemanager: 'hrms_leave_balance', hrmsleavebalance: 'hrms_leave_balance', leavebalance: 'hrms_leave_balance',
+          employeemanager: 'hrms_employee_manager', hrmsemployeemanager: 'hrms_employee_manager'
         };
         const matrixRoleAliases: Record<string, Record<string, string>> = {
           lams: hrmsRoleMap,
-          pms: { admin: 'pms_admin', administrator: 'pms_admin', hod: 'pms_pi', reportingmanager: 'pms_co_pi', user: 'pms_researcher', auditor: 'auditor' },
+          pms: { admin: 'pms_admin', administrator: 'pms_admin', hod: 'pms_pi', reportingmanager: 'pms_co_pi', user: 'pms_researcher', auditor: 'auditor', leavebalancemanager: 'pms_leave_balance', employeemanager: 'pms_employee_manager' },
           sims: { admin: 'sims_admin', administrator: 'sims_admin', hod: 'sims_approver', reportingmanager: 'sims_store_keeper', user: 'sims_indenter', auditor: 'auditor' },
           finance: { admin: 'fin_admin', administrator: 'fin_admin', hod: 'fin_officer', reportingmanager: 'fin_accountant', user: 'fin_claimant', auditor: 'auditor' },
           fms: { admin: 'fms_admin', administrator: 'fms_admin', hod: 'fms_officer', reportingmanager: 'fms_supervisor', user: 'fms_requester', auditor: 'auditor' }
@@ -1487,7 +1496,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
             ? 'User Controls & Roles'
             : activeTab === 'transfers'
             ? 'Employees Mapping'
-            : (isAdmin || isAudit)
+            : (isAdmin || isAudit || isEmployeeManager)
             ? 'Employee Profiles & Directory'
             : isManager
             ? 'My Team'
@@ -1507,13 +1516,13 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
             : 'Personal employment record, service tenure, cadre details & official contact information'
         }
         rightAction={
-          isAdmin && !isAudit ? (
+          canManageEmployees && !isAudit ? (
             activeTab === 'profile' || !activeTab ? (
               <>
                 <PageHeaderButton icon={Upload} onClick={() => setImportOpen(true)}>Import employees</PageHeaderButton>
                 <PageHeaderButton icon={Plus} onClick={handleOpenCreateEmployeeModal}>New employee</PageHeaderButton>
               </>
-            ) : activeTab === 'transfers' ? (
+            ) : activeTab === 'transfers' && isAdmin ? (
               <>
                 <PageHeaderButton icon={ArrowLeftRight} onClick={() => setMappingOrder((o) => ({ kind: 'transfer', n: o.n + 1 }))}>Employee transfer</PageHeaderButton>
                 <PageHeaderButton icon={RefreshCw} variant="secondary" onClick={() => setMappingOrder((o) => ({ kind: 'replace', n: o.n + 1 }))}>Manager replacement</PageHeaderButton>
@@ -1545,10 +1554,10 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
       {isAudit && activeTab === 'profile' && auditorView === 'activity' && <EmployeeActivityLog toolbarStart={auditorSwitch} />}
 
-      {!showMyProfile && !(isAudit && auditorView === 'activity') && (activeTab === 'profile' || (!isAdmin && !isAudit)) && (
+      {!showMyProfile && !(isAudit && auditorView === 'activity') && (activeTab === 'profile' || (!isAdmin && !isAudit && !isEmployeeManager)) && (
         <div className="space-y-5">
           {/* Search / filter / export bar (same layout on every page) */}
-          {(isAdmin || isAudit || isManager) && (
+          {(isAdmin || isAudit || isManager || isEmployeeManager) && (
             <FilterToolbar
               start={isAudit ? auditorSwitch : null}
               exports={canExportDirectory ? {
@@ -1621,7 +1630,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
           )}
 
           {/* Directory Rendering Switcher */}
-          {((isAdmin || isAudit || isManager) && directoryViewMode !== 'detail') ? (
+          {((isAdmin || isAudit || isManager || isEmployeeManager) && directoryViewMode !== 'detail') ? (
             /* ================================================================ */
             /* VIEW 1: CATEGORY CARDS GRID */
             /* ================================================================ */
@@ -1644,8 +1653,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                   instituteName={(code) => (masterOptions.institute ?? []).find((r) => r.code === code)?.name || ''}
                   managerName={(id) => (id && users.find((m) => m.id === id)?.name) || '—'}
                   onView={(u) => { setSelectedUserId(u.id); setDirectoryViewMode('detail'); }}
-                  onEdit={isAdmin ? (u) => openEditEmployee(u) : undefined}
-                  canEdit={(u) => u.id !== currentUser.id}
+                  onEdit={canManageEmployees ? (u) => openEditEmployee(u) : undefined}
+                  canEdit={(u) => u.id !== currentUser.id && canManageEmployee(u)}
                   onHistory={isAdmin ? (u) => setHistoryUser(u) : undefined}
                 />
               ) : (
@@ -1796,7 +1805,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                           )}
 
                           {/* An administrator's own profile is edited by another administrator. */}
-                          {isAdmin && !u.isSystem && u.id !== currentUser.id && (
+                          {canManageEmployee(u) && !u.isSystem && u.id !== currentUser.id && (
                             <button
                               onClick={() => {
                                 openEditEmployee(u);
@@ -1820,7 +1829,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
               <EmployeeProfileView
                 userId={selectedUser.id}
                 canEditPhoto={isAdmin && !selectedUser.isSystem}
-                onBack={(isAdmin || isAudit || isManager) ? () => setDirectoryViewMode(lastListMode) : undefined}
+                onBack={(isAdmin || isAudit || isManager || isEmployeeManager) ? () => setDirectoryViewMode(lastListMode) : undefined}
                 onPhotoChanged={async () => {
                   await Promise.all([reloadEmployees(), selectedUser.id === currentUser.id ? refreshSession() : Promise.resolve()]);
                 }}
@@ -2404,7 +2413,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                         }}
                         options={[
                           { label: 'Select Employee Type', value: '' },
-                          ...employeeTypeOptions
+                          // HRMS types only; an employee being edited keeps their own type in the list.
+                          ...employeeTypeOptions.filter((o) => hrmsTypeCodes.has(o.value) || (editedEmployee && o.value === editedEmployee.employmentType))
                         ]}
                         className="w-full"
                       />

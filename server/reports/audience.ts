@@ -17,7 +17,7 @@ export interface RoleHolder { userId: number; role: RoleId }
 export interface Recipient { userId: number; viewer: Viewer; everyone: boolean }
 
 /** Widest first. */
-const WIDTH: RoleId[] = ['administrator', 'audit', 'reviewing_manager', 'reporting_manager', 'leave_balance_manager', 'general_staff'];
+const WIDTH: RoleId[] = ['administrator', 'audit', 'reviewing_manager', 'reporting_manager', 'leave_balance_manager', 'employee_manager', 'general_staff'];
 const SEES_EVERYONE = new Set<RoleId>(['administrator', 'audit']);
 export const EVERYONE_VIEWER: Viewer = { id: 0, role: 'administrator' };
 

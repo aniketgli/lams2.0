@@ -182,7 +182,8 @@ async function validate(def: MasterDef, body: unknown, existing: MasterRecord | 
     }
   }
 
-  if (!errors.name) {
+  // A name kept as it was is not checked again: two old rows with the same name can still have their other fields edited.
+  if (!errors.name && !(existing && existing.name.toLowerCase() === name.toLowerCase())) {
     const dupName = await selectRows(def, 'AND LOWER(name) = LOWER(?) AND id <> ?', [name, existing ? Number(existing.id) : 0]);
     if (dupName.length) errors.name = `Another ${def.noun.toLowerCase()} already has this name.`;
   }

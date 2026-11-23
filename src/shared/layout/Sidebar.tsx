@@ -38,6 +38,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   // Which links appear comes from the same page map the router enforces.
   const show = (pageId: string) => canOpenPage(pageId, currentUser.role);
   const onlyBalance = currentUser.role === 'leave_balance_manager';
+  const onlyEmployees = currentUser.role === 'employee_manager';
 
   const handleNavClick = (id: string) => {
     setActiveTab(id);
@@ -99,7 +100,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <span>Leave Balance</span>
               </button>
             )}
-            {activeModule === 'lams' && !onlyBalance && (
+            {/* Employee Manager: the Profiles page only (add, edit, import employees). */}
+            {activeModule === 'lams' && onlyEmployees && (
+              <button
+                onClick={() => {
+                  setExpandedGroup(null);
+                  handleNavClick('profile');
+                }}
+                className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-medium transition-all text-left cursor-pointer ${
+                  activeTab === 'profile'
+                    ? 'bg-primary/10 text-primary font-bold border-l-3 border-primary shadow-2xs'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                }`}
+              >
+                <PageIcon id="profile" className={`w-4 h-4 shrink-0 ${activeTab === 'profile' ? 'text-primary' : 'text-slate-400'}`} />
+                <span>Profiles</span>
+              </button>
+            )}
+            {activeModule === 'lams' && !onlyBalance && !onlyEmployees && (
               <>
               
 

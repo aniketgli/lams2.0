@@ -17,6 +17,10 @@ import { lookupTable } from '../lib/lookups';
 /** How an institute's employees' biometric IDs look (institutes.biometric_id_format). */
 export const BIOMETRIC_ID_FORMATS = ['4 digits', 'Letters and digits'] as const;
 
+/** Which module an employee type's employees belong to (employee_types.module). */
+export const EMPLOYEE_MODULES = ['HRMS', 'PMS'] as const;
+export type EmployeeModule = (typeof EMPLOYEE_MODULES)[number];
+
 export const FORM_LAYOUTS = [
   { code: 'permanent', name: 'Permanent staff (department, designation, category)' },
   { code: 'contractual', name: 'Contractual staff (department, designation, category)' },
@@ -235,11 +239,15 @@ export const MASTERS: MasterDef[] = [
     usage: [{ what: 'employee profiles', sql: COUNT('employee_profiles', 'gender'), by: 'code' }],
   },
   {
-    kind: 'lookup', key: 'employeeType', lookupType: 'employee_type', table: lookupTable('employee_type'), columnFields: { formLayout: 'form_layout' }, group: 'lists',
+    kind: 'lookup', key: 'employeeType', lookupType: 'employee_type', table: lookupTable('employee_type'), columnFields: { formLayout: 'form_layout', module: 'module' }, group: 'lists',
     label: 'Employee Types', noun: 'Employee type',
     description: 'Each type uses one form layout, which decides the fields asked for.',
     noCreate: true, codeEditable: true,
-    fields: [{ key: 'formLayout', label: 'Form layout', type: 'layout', required: true, hidden: true }],
+    fields: [
+      { key: 'formLayout', label: 'Form layout', type: 'layout', required: true, hidden: true },
+      // HRMS: Permanent and Trainee; PMS: every other type (employee_types.module, migrations/20261225_hrms_pms_split.sql).
+      { key: 'module', label: 'Module', type: 'choice', choices: EMPLOYEE_MODULES, required: true },
+    ],
     usage: [
       { what: 'employee profiles', sql: COUNT('employee_profiles', 'employment_type'), by: 'code' },
       { what: 'designations', sql: COUNT('designations', 'employee_type_code'), by: 'code' },

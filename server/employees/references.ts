@@ -20,6 +20,48 @@ async function rows(q: Querier, sql: string, params: unknown[]): Promise<RowData
   return result;
 }
 
+// ---------------------------------------------------------------------------
+// HRMS / PMS: which module an employee type belongs to (employee_types.module)
+// ---------------------------------------------------------------------------
+
+export type EmployeeModule = 'HRMS' | 'PMS';
+/** Layouts of the HRMS types, used only until migrations/20261225_hrms_pms_split.sql adds employee_types.module. */
+const HRMS_LAYOUTS = new Set(['permanent', 'diploma_trainee']);
+
+/** The module whose employees the signed-in session manages: the module it is working in. */
+export function sessionEmployeeModule(req: { auth?: { activeModule?: string | null } | null }): EmployeeModule | null {
+  const module = normalizeModule(req.auth?.activeModule ?? '');
+  return module === 'hrms' ? 'HRMS' : module === 'pms' ? 'PMS' : null;
+}
+
+/** Every employee type with its module (inactive ones too: an existing employee keeps their type). */
+export async function employeeTypeModules(q: Querier): Promise<Map<string, EmployeeModule>> {
+  let list: RowDataPacket[];
+  try {
+    list = await rows(q, 'SELECT code, module, form_layout FROM employee_types', []);
+  } catch (error) {
+    if ((error as { code?: string })?.code !== 'ER_BAD_FIELD_ERROR') throw error;
+    list = (await rows(q, 'SELECT code, form_layout FROM employee_types', [])).map((r) => ({ ...r, module: HRMS_LAYOUTS.has(String(r.form_layout)) ? 'HRMS' : 'PMS' }) as RowDataPacket);
+  }
+  return new Map(list.map((r) => [String(r.code), String(r.module).toUpperCase() === 'PMS' ? 'PMS' : 'HRMS'] as const));
+}
+
+/**
+ * A new employee, an imported one, or a change of employee type must use a type of the session's module: the HRMS
+ * form offers Permanent and Trainee, the PMS one the other types. An employee who keeps their type is not checked.
+ */
+export async function assertTypeInModule(q: Querier, req: { auth?: { activeModule?: string | null } | null }, code: unknown, kept: string | null = null): Promise<void> {
+  const type = String(code ?? '').trim();
+  if (!type || (kept !== null && type === kept)) return;
+  const module = sessionEmployeeModule(req);
+  const of = (await employeeTypeModules(q)).get(type);
+  if (!module || !of) return; // unknown type: the form check names it
+  if (of !== module) {
+    const message = `This employee type belongs to ${of}. ${module} employees are ${module === 'HRMS' ? 'Permanent and Trainee' : 'the project / contract types'} (Master Settings → Employee Types).`;
+    throw badRequest('Please correct the highlighted fields.', { employmentType: message });
+  }
+}
+
 /** Form layout of an active employee type, or null if the type is unknown or inactive. */
 export async function layoutOfEmployeeType(q: Querier, code: unknown): Promise<FormLayout | null> {
   if (typeof code !== 'string' || !code.trim()) return null;
