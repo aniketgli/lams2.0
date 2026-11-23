@@ -146,7 +146,7 @@ export async function checkReferences(q: Querier, input: EmployeeInput, layout: 
     if (!row || String(row.status).toLowerCase() !== 'active') return null;
     const system = Number(row.is_system ?? 0) === 1;
     if (system && !(await isSystemAdministrator(q, String(row.biometric_id)))) return null;
-    if (row.institute && input.institute && String(row.institute) !== input.institute) return null;
+    // A manager may belong to another institute (a SACON employee can report to someone at WII).
     const kept = String(current?.[kind === 'reporting' ? 'reporting_manager_id' : 'reviewing_manager_id'] ?? '') === String(row.id);
     if (!kept) {
       const ok = system
@@ -161,7 +161,7 @@ export async function checkReferences(q: Querier, input: EmployeeInput, layout: 
   if (input.reportingManagerId) {
     // An employee may be their own reporting manager (a Director is).
     const manager = await activeAccount(input.reportingManagerId, 'reporting');
-    if (!manager) errors.reportingManagerId = roleError.reporting ?? 'Choose an active employee of the same organization as the reporting manager.';
+    if (!manager) errors.reportingManagerId = roleError.reporting ?? 'Choose an active employee as the reporting manager.';
     else reportingManagerName = String(manager.name);
   }
 
@@ -177,7 +177,7 @@ export async function checkReferences(q: Querier, input: EmployeeInput, layout: 
     if (reviewingManagerId && !errors.reviewingManagerId) {
       // An employee may be their own HoD (a Director is).
       const hod = await activeAccount(reviewingManagerId, 'hod');
-      if (!hod) errors.reviewingManagerId = roleError.hod ?? 'Choose an active employee of the same organization as the HoD.';
+      if (!hod) errors.reviewingManagerId = roleError.hod ?? 'Choose an active employee as the HoD.';
       else hodName = String(hod.name);
     }
   }

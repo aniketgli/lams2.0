@@ -122,7 +122,7 @@ async function lockTargets(conn: Q, ids: number[]): Promise<Target[]> {
 }
 
 /**
- * A manager / HoD must be an active, non-system employee of the same organization as the person, holding the
+ * A manager / HoD must be an active, non-system employee (of any institute) holding the
  * Reporting Manager / HoD role (managerRoles.ts).
  */
 async function managerFor(conn: Q, id: number, institute: string | null, cache: Map<string, Person | null>, kind: ManagerKind): Promise<Person | null> {
@@ -132,7 +132,7 @@ async function managerFor(conn: Q, id: number, institute: string | null, cache: 
     `SELECT u.id, u.name, u.biometric_id, u.status, u.is_system, p.institute FROM users u
        LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE u.id = ? LIMIT 1`, [id]);
   let result: Person | null = null;
-  if (row && Number(row.is_system ?? 0) !== 1 && String(row.status).toLowerCase() === 'active' && !(row.institute && institute && String(row.institute) !== institute)
+  if (row && Number(row.is_system ?? 0) !== 1 && String(row.status).toLowerCase() === 'active'
     && await holdsManagerRole(conn, String(row.biometric_id), kind)) {
     result = { id: String(row.id), name: String(row.name), biometricId: String(row.biometric_id) };
   }
@@ -244,14 +244,14 @@ export async function transferEmployees(req: Request, body: unknown): Promise<Or
       }
       if (input.reportingManagerId && String(input.reportingManagerId) !== idOf(target.data.reportingManagerId)) {
         const manager = await managerFor(conn, input.reportingManagerId, target.institute, managers, 'reporting');
-        if (!manager) problems.push(`${target.name}: choose an active employee of the same organization, with the Reporting Manager role, as the reporting manager.`);
+        if (!manager) problems.push(`${target.name}: choose an active employee with the Reporting Manager role as the reporting manager.`);
         else change.reportingManager = manager;
       }
       if (input.reviewingManagerId && String(input.reviewingManagerId) !== idOf(target.data.reviewingManagerId)) {
         if (!rules?.hod) problems.push(`${target.name}: this employee type has no HoD.`);
         else {
           const hod = await managerFor(conn, input.reviewingManagerId, target.institute, managers, 'hod');
-          if (!hod) problems.push(`${target.name}: choose an active employee of the same organization, with the HoD role, as the HoD.`);
+          if (!hod) problems.push(`${target.name}: choose an active employee with the HoD role as the HoD.`);
           else change.reviewingManager = hod;
         }
       }
@@ -301,12 +301,12 @@ export async function replaceManager(req: Request, body: unknown): Promise<Order
       const hodChange = hodWanted && idOf(target.data.reviewingManagerId) === out;
       if (rmChange) {
         const incoming = await managerFor(conn, input.incomingManagerId, target.institute, managers, 'reporting');
-        if (!incoming) { problems.push(`${target.name}: the incoming manager must be an active employee of the same organization with the Reporting Manager role.`); continue; }
+        if (!incoming) { problems.push(`${target.name}: the incoming manager must be an active employee with the Reporting Manager role.`); continue; }
         change.reportingManager = incoming;
       }
       if (hodChange) {
         const incoming = await managerFor(conn, input.incomingManagerId, target.institute, managers, 'hod');
-        if (!incoming) { problems.push(`${target.name}: the incoming HoD must be an active employee of the same organization with the HoD role.`); continue; }
+        if (!incoming) { problems.push(`${target.name}: the incoming HoD must be an active employee with the HoD role.`); continue; }
         change.reviewingManager = incoming;
       }
       if (change.reportingManager || change.reviewingManager) changes.push(change);

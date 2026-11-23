@@ -1296,14 +1296,13 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
 
   // Memoized active employees (excluding deactivated)
   /**
-   * Reporting manager / HoD choices on the employee form: active employees of the same organization who hold the
+   * Reporting manager / HoD choices on the employee form: active employees (of any institute) who hold the
    * Reporting Manager / HoD role (the server checks the same). The employee may be their own (a Director is).
    * The Administrator (system account) is offered while no employee holds the role yet. The manager an employee
    * already has stays listed, so an older profile can still be saved.
    */
   const managersWithRole = (role: 'reporting_manager' | 'reviewing_manager', current: string) => {
-    const employees = users.filter((u) =>
-      u.status !== 'deactivated' && (!newUserForm.institute || !u.institute || u.institute === newUserForm.institute));
+    const employees = users.filter((u) => u.status !== 'deactivated');
     const hasRole = (u: (typeof users)[number]) => (u.roles ?? [u.role]).includes(role);
     const holders = employees.filter(hasRole);
     const admins = systemUsers.filter((u) => u.status !== 'deactivated' && (u.roles ?? [u.role]).includes('administrator'));
