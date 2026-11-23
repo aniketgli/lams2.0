@@ -95,6 +95,30 @@ async function main(): Promise<void> {
   await c.getByRole('button', { name: /back to sign in/i }).click();
   check('…and "Back to sign in" returns to the sign-in form', await onLogin(c));
 
+  // 6. PMS: its administrator opens the Employees page (shared with HRMS) from the PMS sidebar.
+  const d = await (await browser.newContext()).newPage();
+  const errors: string[] = [];
+  d.on('pageerror', (e) => errors.push(e.message));
+  await d.goto(`${BASE}/login`);
+  await d.fill('input[placeholder="Enter your email address"]', 'pmsadmin@wii.gov.in');
+  await d.fill('input[placeholder="Enter your password"]', PASSWORD);
+  await d.click('button[type="submit"]');
+  await d.waitForFunction(() => !document.querySelector('input[placeholder="Enter your email address"]'), undefined, { timeout: 15000 }).catch(() => undefined);
+  await d.evaluate(async () => {
+    const post = (url: string, body: unknown) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(body) });
+    await post('/api/access/module', { moduleId: 'pms' });
+    await post('/api/access/active-role', { moduleId: 'pms', role: 'Administrator' });
+  });
+  await d.goto(`${BASE}/pms/employees`);
+  const header = await d.getByText('Employee Profiles & Directory').first().waitFor({ state: 'visible', timeout: 15000 }).then(() => true, () => false);
+  const newButton = await d.getByRole('button', { name: /new employee/i }).count();
+  const sidebar = await d.getByRole('button', { name: /^projects$/i }).count();
+  const roleName = await d.getByText('PMS Administrator').count();
+  check('PMS: the Employees page opens with "New employee", the PMS sidebar and the PMS role name',
+    header && newButton > 0 && sidebar > 0 && roleName > 0 && errors.length === 0 && d.url().endsWith('/pms/employees'),
+    header ? `button ${newButton}, sidebar ${sidebar}, role ${roleName}, errors ${errors.join(' | ')}, url ${d.url()}` : (await d.locator('body').innerText()).replace(/\s+/g, ' ').slice(0, 300));
+  if (process.env.SCREENSHOT_DIR) await d.screenshot({ path: `${process.env.SCREENSHOT_DIR}/pms-employees.png`, fullPage: true }).catch(() => undefined);
+
   if (logs.length) console.log(`\nSession messages in the browser:\n  ${logs.join('\n  ')}`);
   await browser.close();
   console.log(`\n${failed ? `${failed} check(s) failed.` : 'Browser sign-in works.'}`);
