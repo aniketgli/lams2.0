@@ -113,3 +113,21 @@ export function spansForExtension(joining: string | null, oldTo: string | null, 
   return { before: [{ from: joining || oldTo, to: oldTo }], added: { from: start, to: newTo }, reason: `"Valid up to" extended from ${oldTo} to ${newTo}` };
 }
 
+
+/**
+ * No Dues (leave clearance) for one leave type and leave year. The year's balance was credited for the months up
+ * to "Valid up to"; the employee leaves earlier, on the relieving date. Entitled = the balance (incl. carried
+ * forward) minus the pro-rata days of the credited months that were not worked (a started month counts as worked).
+ * Leave used beyond that is excess, to be recovered.
+ */
+export function clearanceFor(opts: {
+  quota: number; credited: number; used: number; creditedSpan: Span; workedSpan: Span; year: Span;
+}): { creditedMonths: number; workedMonths: number; notWorkedDays: number; entitled: number; excess: number } {
+  const creditedMonths = monthsTouched(opts.creditedSpan, opts.year);
+  const workedMonths = monthsTouched(opts.workedSpan, opts.year);
+  for (const m of workedMonths) creditedMonths.add(m);
+  const notWorkedDays = Math.max(0, proRataDays(opts.quota, creditedMonths.size) - proRataDays(opts.quota, workedMonths.size));
+  const entitled = Math.max(0, Math.round((opts.credited - notWorkedDays) * 2) / 2);
+  const excess = Math.max(0, Math.round((opts.used - entitled) * 2) / 2);
+  return { creditedMonths: creditedMonths.size, workedMonths: workedMonths.size, notWorkedDays, entitled, excess };
+}

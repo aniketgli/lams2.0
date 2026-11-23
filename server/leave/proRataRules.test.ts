@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { cycleYearFor, daysToAdd, entitlement, leaveYearRange, monthsTouched, proRataDays, spanLabel } from './proRataRules';
+import { clearanceFor, cycleYearFor, daysToAdd, entitlement, leaveYearRange, monthsTouched, proRataDays, spanLabel } from './proRataRules';
 import { spanForNewEmployee, spansForExtension } from './proRataRules';
 
 const FY26 = leaveYearRange(2026, 'FY');
@@ -52,5 +52,29 @@ describe('pro-rata leave quota', () => {
   test('shortened or unchanged validity adds nothing', () => {
     expect(spansForExtension('2026-04-01', '2026-12-31', '2026-10-31', false, '2026-05-01')).toBeNull();
     expect(spansForExtension('2026-04-01', '2026-12-31', '2026-12-31', false, '2026-05-01')).toBeNull();
+  });
+});
+
+describe('No Dues leave clearance', () => {
+  const year = leaveYearRange(2026, 'CY');
+  test('leaving early: the months after the relieving date are taken back, excess is what was used beyond', () => {
+    // CL20, valid Jan–Dec (credited 20), leaves on 10 Jun (Jan–Jun worked = 10 days), used 14 → 4 excess
+    const r = clearanceFor({ quota: 20, credited: 20, used: 14, creditedSpan: { from: '2026-01-01', to: '2026-12-31' }, workedSpan: { from: '2026-01-01', to: '2026-06-10' }, year });
+    expect(r).toEqual({ creditedMonths: 12, workedMonths: 6, notWorkedDays: 10, entitled: 10, excess: 4 });
+  });
+  test('used within the entitlement: no excess', () => {
+    const r = clearanceFor({ quota: 30, credited: 30, used: 8, creditedSpan: { from: '2026-01-01', to: '2026-12-31' }, workedSpan: { from: '2026-01-01', to: '2026-04-01' }, year });
+    expect(r.entitled).toBe(10);
+    expect(r.excess).toBe(0);
+  });
+  test('carried forward days stay in the entitlement', () => {
+    const r = clearanceFor({ quota: 20, credited: 25, used: 14, creditedSpan: { from: '2026-01-01', to: '2026-12-31' }, workedSpan: { from: '2026-01-01', to: '2026-06-30' }, year });
+    expect(r.entitled).toBe(15);
+    expect(r.excess).toBe(0);
+  });
+  test('relieving on the last valid day: nothing taken back', () => {
+    const r = clearanceFor({ quota: 20, credited: 6.5, used: 7, creditedSpan: { from: '2026-09-15', to: '2026-12-31' }, workedSpan: { from: '2026-09-15', to: '2026-12-31' }, year });
+    expect(r.notWorkedDays).toBe(0);
+    expect(r.excess).toBe(0.5);
   });
 });

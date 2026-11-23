@@ -60,7 +60,7 @@ export const COMMUTED_AFTER_MATERNITY_DAYS = 60;
 export const MAX_RANGE_DAYS = 400;
 
 export const LEAVE_SCOPE: ActivityScope = {
-  keys: ['leave_request', 'leave_balance', 'leave_joining', 'leave_export', 'leave_data_export', 'leave_balance_data_export'],
+  keys: ['leave_request', 'leave_balance', 'leave_joining', 'leave_no_dues', 'leave_export', 'leave_data_export', 'leave_balance_data_export'],
   areaLabels: { leave_request: 'Leave request', leave_balance: 'Leave balance', leave_joining: 'Joining report', leave_export: 'Log download', leave_data_export: 'Data download', leave_balance_data_export: 'Balance download' },
   actionLabels: { CREATE: 'Applied / set', UPDATE: 'Edited', STATUS: 'Approved / forwarded / rejected', DELETE: 'Deleted' },
   exportKey: 'leave_export',

@@ -184,6 +184,24 @@ async function main(): Promise<void> {
   const pr = profileOf(researcher.body?.employee);
   check('New researcher: project stored, PI defaults to the reporting manager, valid until from the account', researcher.status === 201 && researcher.body?.employee?.department === 'Tiger Project' && pr.piName === 'QA Manager' && pr.validUntilDate === '2027-12-31',
     `${researcher.status} ${researcher.status === 201 ? JSON.stringify({ d: researcher.body?.employee?.department, pi: pr.piName, v: pr.validUntilDate }) : researcher.text.slice(0, 300)}`);
+
+  // ---- No Dues (leave clearance) for a leaving project employee: worked out, then issued (audit log) -------------
+  const fellowId = researcher.body?.employee?.id;
+  if (fellowId) {
+    const nd = await req('GET', `/api/hrms/leave/no-dues?userId=${fellowId}&relievingDate=2027-06-15`);
+    check('No Dues: clearance of a project employee is worked out per leave type', nd.status === 200 && Array.isArray(nd.body?.rows) && typeof nd.body?.totalExcess === 'number' && nd.body?.relievingDate === '2027-06-15',
+      `${nd.status} ${nd.text.slice(0, 200)}`);
+    check('No Dues: entitled never above credited, excess never negative', (nd.body?.rows ?? []).every((r: any) => r.entitled <= r.credited && r.excess >= 0), JSON.stringify(nd.body?.rows ?? []).slice(0, 200));
+    const badDate = await req('GET', `/api/hrms/leave/no-dues?userId=${fellowId}&relievingDate=2027-02-30`);
+    check('No Dues: an invalid relieving date is refused', badDate.status === 400, String(badDate.status));
+    const issued = await req('POST', '/api/hrms/leave/no-dues', { userId: fellowId, relievingDate: '2027-06-15' });
+    check('No Dues: issuing records the clearance', issued.status === 200 && typeof issued.body?.issuedAt === 'string', `${issued.status} ${issued.text.slice(0, 160)}`);
+  } else check('No Dues: project employee for the clearance check', false);
+  const permId = created.body?.employee?.id;
+  if (permId) {
+    const perm = await req('GET', `/api/hrms/leave/no-dues?userId=${permId}&relievingDate=2027-06-15`);
+    check('No Dues: refused for a permanent employee (not pro-rata)', perm.status === 400, String(perm.status));
+  }
   const dup = await req('POST', '/api/hrms/employees', { ...body, biometricId: '3003', email: 'ci.dup@wii.gov.in', phone: '9876500003', panNumber: 'ABCDE9878K', bankAccountNumber: '323456789012' });
   check('The same Aadhaar for a second employee is refused', dup.status === 409, `${dup.status} ${dup.text.slice(0, 160)}`);
 
