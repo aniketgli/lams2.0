@@ -225,14 +225,9 @@ async function main(): Promise<void> {
     const unit = await req('POST', '/api/hrms/masters/organizations', { name: 'CI SACON Office', code: 'CISACOFF', status: 'ACTIVE', fields: { institute: 'CISACON', type: 'Department' } });
     check('…with an office of its own', unit.status === 201, `${unit.status} ${unit.text.slice(0, 160)}`);
     const sac = { ...body, institute: 'CISACON', department: 'CI SACON Office', reportingManagerId: '', reviewingManagerId: '', aadhaarNumber: '', phone: '' };
-    // The test managers belong to WII; for this check they belong to no institute (managers must share the employee's).
-    const mysql = await import('mysql2/promise');
-    const db = await mysql.createConnection(String(process.env.DATABASE_URL));
-    await db.query("UPDATE employee_profiles SET institute = NULL WHERE biometric_id IN ('1002', '1003')");
+    // Reporting manager and HoD are WII employees: a manager may belong to another institute.
     const sacEmp = await req('POST', '/api/hrms/employees', { ...sac, biometricId: 'sac1001', email: 'ci.sac1001@wii.gov.in', panNumber: 'ABCDE9888K', bankAccountNumber: '1323456789012', reportingManagerId: rmId, reviewingManagerId: hodId });
-    await db.query("UPDATE employee_profiles SET institute = 'WII' WHERE biometric_id IN ('1002', '1003')");
-    await db.end();
-    check('An employee of that institute is saved with biometric ID SAC1001 (stored in capitals)', sacEmp.status === 201 && sacEmp.body?.employee?.biometricId === 'SAC1001', `${sacEmp.status} ${sacEmp.text.slice(0, 200)}`);
+    check('An employee of that institute (managers from WII) is saved with biometric ID SAC1001 (stored in capitals)', sacEmp.status === 201 && sacEmp.body?.employee?.biometricId === 'SAC1001', `${sacEmp.status} ${sacEmp.text.slice(0, 200)}`);
     const wiiLetters = await req('POST', '/api/hrms/employees', { ...body, biometricId: 'SAC1002', email: 'ci.sac1002@wii.gov.in', phone: '', aadhaarNumber: '', panNumber: 'ABCDE9889K', bankAccountNumber: '1423456789012' });
     check('A WII employee still needs a 4-digit biometric ID', wiiLetters.status === 400 && /4 digits/.test(String(wiiLetters.body?.details?.biometricId)), `${wiiLetters.status} ${JSON.stringify(wiiLetters.body?.details ?? {}).slice(0, 160)}`);
     const sacLogin = await fetch(`${BASE}/api/hrms/photos/SAC1001`, { headers: { Cookie: cookie } });
