@@ -24,6 +24,7 @@ import {
 import { deleteOwnPhoto, deletePhotoFor, loadPhoto, saveOwnPhoto, savePhotoFor } from './photos';
 import { activityCsv, activityTable, employeeDirectoryCsv, employeeDirectoryTable, listActivity, parseActivityFilter } from './activity';
 import { getMyProfile, getProfileFor } from './myProfile';
+import { sessionEmployeeModule } from './references';
 import { listMappingLog, mappingCsv, mappingData, mappingTable, replaceManager, transferEmployees } from './mapping';
 import { parseLogFilter } from './mappingRules';
 import { sendCsvReport } from '../lib/csvResponse';
@@ -36,6 +37,12 @@ import { sendCsvReport } from '../lib/csvResponse';
 const router = Router();
 
 const viewerOf = (req: Request): Viewer => hrmsViewerOf(req);
+
+/**
+ * Adding, editing and importing employees: the administrator, or an Employee Manager (only the employees of its own
+ * module, checked in store.ts / bulkImport.ts). Roles, passwords, status and deletion stay with the administrator.
+ */
+const canManageEmployees = [requireAuth, requireActiveRole('hrms', 'administrator', 'employee_manager')];
 
 function accountId(raw: unknown): number {
   const value = String(raw ?? '').trim();
@@ -182,19 +189,19 @@ router.get('/employees', isAuthenticated, asyncHandler(async (req, res) => {
 
 // ---- Bulk import of new employees (one employee type per file) --------------------------------------
 // Before /employees/:userId so "import" is never read as an ID.
-router.get('/employees/import/types', isAdmin, asyncHandler(async (_req, res) => {
-  res.json({ types: await importTypes() });
+router.get('/employees/import/types', ...canManageEmployees, asyncHandler(async (req, res) => {
+  res.json({ types: await importTypes(sessionEmployeeModule(req)) });
 }));
 
-router.get('/employees/import/template', isAdmin, asyncHandler(async (req, res) => {
+router.get('/employees/import/template', ...canManageEmployees, asyncHandler(async (req, res) => {
   res.json(await importTemplate((req.query as Record<string, unknown>).type));
 }));
 
-router.post('/employees/import/review', isAdmin, limitHeavy('employee-import', 30), asyncHandler(async (req, res) => {
+router.post('/employees/import/review', ...canManageEmployees, limitHeavy('employee-import', 30), asyncHandler(async (req, res) => {
   res.json(await reviewEmployeeImport(req, req.body));
 }));
 
-router.post('/employees/import', isAdmin, limitHeavy('employee-import-apply', 10), asyncHandler(async (req, res) => {
+router.post('/employees/import', ...canManageEmployees, limitHeavy('employee-import-apply', 10), asyncHandler(async (req, res) => {
   const { review, accounts, sendWelcome } = await applyEmployeeImport(req, req.body);
   clearAccessCache();
   if (sendWelcome) welcomeInTurn(accounts, portalUrlOf(req));
@@ -238,7 +245,7 @@ async function temporaryPasswordFor(identity: { email?: string | null; biometric
 const passwordNote = (password: string, email: string) =>
   `Temporary password: ${password} (also emailed to ${email}). They will be asked to choose their own password at sign-in.`;
 
-router.post('/employees', isAdmin, asyncHandler(async (req, res) => {
+router.post('/employees', ...canManageEmployees, asyncHandler(async (req, res) => {
   const body = (req.body ?? {}) as Record<string, unknown>;
   const temp = await temporaryPasswordFor({ email: typeof body.email === 'string' ? body.email : null, biometricId: typeof body.biometricId === 'string' ? body.biometricId : null });
   const employee = await createEmployee(req, req.body, temp.hash);
@@ -250,7 +257,7 @@ router.post('/employees', isAdmin, asyncHandler(async (req, res) => {
   });
 }));
 
-router.put('/employees/:userId', isAdmin, asyncHandler(async (req, res) => {
+router.put('/employees/:userId', ...canManageEmployees, asyncHandler(async (req, res) => {
   const { record, changed } = await updateEmployee(req, accountId(req.params.userId), req.body);
   notifyEmployeeUpdated(record, changed, portalUrlOf(req));
   res.json({ employee: record, changed, message: changed.length ? 'Employee profile updated.' : 'No changes to save.' });

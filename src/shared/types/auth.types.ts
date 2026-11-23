@@ -1,6 +1,6 @@
 import { EnterpriseModuleId, ModuleRoleDef } from './module.types';
 
-export type UserRole = 'administrator' | 'reporting_manager' | 'reviewing_manager' | 'general_staff' | 'audit' | 'leave_balance_manager';
+export type UserRole = 'administrator' | 'reporting_manager' | 'reviewing_manager' | 'general_staff' | 'audit' | 'leave_balance_manager' | 'employee_manager';
 
 export type EmploymentType = 
   | 'permanent'
@@ -147,6 +147,17 @@ export const MODULE_ROLE_DEFINITIONS: Record<EnterpriseModuleId, ModuleRoleDef[]
       level: 'staff'
     },
     {
+      id: 'hrms_employee_manager',
+      name: 'Employee Manager',
+      shortName: 'Employee Manager',
+      description: 'Adds, edits and imports HRMS employees (Permanent, Trainee). No roles, passwords or deactivation.',
+      moduleId: 'lams',
+      color: 'cyan',
+      badgeBg: 'bg-cyan-100 border-cyan-300',
+      badgeText: 'text-cyan-800',
+      level: 'staff'
+    },
+    {
       id: 'auditor',
       name: 'Auditor',
       shortName: 'Auditor',
@@ -201,6 +212,28 @@ export const MODULE_ROLE_DEFINITIONS: Record<EnterpriseModuleId, ModuleRoleDef[]
       color: 'emerald',
       badgeBg: 'bg-emerald-100 border-emerald-300',
       badgeText: 'text-emerald-800',
+      level: 'staff'
+    },
+    {
+      id: 'pms_leave_balance',
+      name: 'Leave Balance Manager',
+      shortName: 'Leave Balance Manager',
+      description: 'Sees and sets the leave balance of every PMS employee, and nothing else.',
+      moduleId: 'pms',
+      color: 'teal',
+      badgeBg: 'bg-teal-100 border-teal-300',
+      badgeText: 'text-teal-800',
+      level: 'staff'
+    },
+    {
+      id: 'pms_employee_manager',
+      name: 'Employee Manager',
+      shortName: 'Employee Manager',
+      description: 'Adds, edits and imports PMS employees (project staff, contractual, scholars, interns).',
+      moduleId: 'pms',
+      color: 'cyan',
+      badgeBg: 'bg-cyan-100 border-cyan-300',
+      badgeText: 'text-cyan-800',
       level: 'staff'
     },
     {

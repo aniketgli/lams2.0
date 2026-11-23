@@ -33,7 +33,7 @@ const MODULE_COLUMNS: ModuleColumnDef[] = [
   { id: 'fms', label: 'Facility', shortLabel: 'Facility' }
 ];
 
-type Tier = 'admin' | 'l2' | 'l1' | 'staff' | 'balance' | 'audit';
+type Tier = 'admin' | 'l2' | 'l1' | 'staff' | 'balance' | 'employees' | 'audit';
 
 interface RoleRowDef {
   tierId: Tier;
@@ -60,6 +60,10 @@ const ROLE_ROWS: RoleRowDef[] = [
   {
     tierId: 'balance',
     title: 'Leave Balance Manager'
+  },
+  {
+    tierId: 'employees',
+    title: 'Employee Manager'
   },
   {
     tierId: 'audit',
@@ -100,7 +104,14 @@ export const ROLE_MATRIX_CELL_MAP: Record<Tier, Record<EnterpriseModuleId, strin
   },
   balance: {
     lams: 'hrms_leave_balance',
-    pms: '',
+    pms: 'pms_leave_balance',
+    sims: '',
+    finance: '',
+    fms: ''
+  },
+  employees: {
+    lams: 'hrms_employee_manager',
+    pms: 'pms_employee_manager',
     sims: '',
     finance: '',
     fms: ''

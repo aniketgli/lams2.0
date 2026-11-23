@@ -56,10 +56,18 @@ describe('role catalog', () => {
 
   test('the built-in list matches the migration', async () => {
     const sql = await Bun.file(new URL('../../migrations/20261203_role_catalog.sql', import.meta.url)).text();
+    // Roles added after the aliases moved to their own table (role_aliases).
+    const later = await Bun.file(new URL('../../migrations/20261225_hrms_pms_split.sql', import.meta.url)).text();
+    const added = catalog.filter((r) => later.includes(`('${r.moduleId}', '${r.roleId}', '${r.name}', '${r.accessRole}'`));
+    expect(added.length).toBe(3);
     for (const r of catalog) {
       expect(ROLE_IDS).toContain(r.accessRole);
-      expect(sql).toContain(`('${r.moduleId}', '${r.roleId}', '${r.name.replace(/'/g, "''")}', '${r.accessRole}', '${r.aliases.replace(/'/g, "''")}'`);
+      if (added.includes(r)) {
+        for (const alias of r.aliases.split(',')) expect(later).toContain(`('${r.moduleId}', '${r.roleId}', '${alias}')`);
+      } else {
+        expect(sql).toContain(`('${r.moduleId}', '${r.roleId}', '${r.name.replace(/'/g, "''")}', '${r.accessRole}', '${r.aliases.replace(/'/g, "''")}'`);
+      }
     }
-    expect((sql.match(/^\s+\('/gm) ?? []).length).toBe(catalog.length);
+    expect((sql.match(/^\s+\('/gm) ?? []).length).toBe(catalog.length - added.length);
   });
 });
