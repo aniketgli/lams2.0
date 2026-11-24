@@ -66,7 +66,7 @@ export async function listRecords(def: MasterDef, { activeOnly = false } = {}): 
   return rows.map((row) => toRecord(def, row));
 }
 
-async function getRecord(def: MasterDef, id: number, q: Querier = pool): Promise<MasterRecord | null> {
+export async function getRecord(def: MasterDef, id: number, q: Querier = pool): Promise<MasterRecord | null> {
   const rows = await selectRows(def, 'AND id = ?', [id], q);
   return rows[0] ? toRecord(def, rows[0]) : null;
 }

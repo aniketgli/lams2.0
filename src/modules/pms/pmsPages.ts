@@ -25,6 +25,8 @@ export const PMS_PAGES: PmsPage[] = [
   // The PMS Employee Manager has only this page: it adds, edits and imports PMS employees.
   { id: 'profile', slug: 'employees', roles: [...ALL, 'employee_manager'] },
   { id: 'projects', slug: 'projects', roles: ALL },
+  // Only the masters PMS uses (PmsMasterSettingsPage); shared ones stay in HRMS.
+  { id: 'master', slug: 'master-settings', roles: ['administrator', 'audit'] },
 ];
 
 export const PMS_HOME = 'dashboard';

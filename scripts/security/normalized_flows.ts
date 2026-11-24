@@ -386,7 +386,9 @@ async function main(): Promise<void> {
     check('PMS Administrator can be chosen as the active PMS role', asPms.status === 200, `${asPms.status} ${asPms.text.slice(0, 160)}`);
     const pmsOptions = await req('GET', '/api/hrms/masters/options');
     const pmsCatalog = await req('GET', '/api/hrms/masters/catalog');
-    check('PMS loads the dropdown lists for the employee form, not the HRMS master screens', pmsOptions.status === 200 && Array.isArray(pmsOptions.body?.employeeType) && pmsCatalog.status === 403, `${pmsOptions.status} / ${pmsCatalog.status}`);
+    const shiftsMaster = await req('GET', '/api/hrms/masters/audit');
+    check('PMS loads the dropdown lists for the employee form, and the PMS masters only (not HRMS master screens)', pmsOptions.status === 200 && Array.isArray(pmsOptions.body?.employeeType)
+      && pmsCatalog.status === 200 && !(pmsCatalog.body?.masters ?? []).some((m: any) => m.key === 'banks') && shiftsMaster.status === 403, `${pmsOptions.status} / ${pmsCatalog.status} / ${shiftsMaster.status}`);
     const pmsTypes = (await req('GET', '/api/hrms/employees/import/types')).body?.types ?? [];
     check('PMS bulk import offers only the PMS employee types', pmsTypes.some((t: any) => t.code === 'project') && !pmsTypes.some((t: any) => t.code === 'permanent'), JSON.stringify(pmsTypes.map((t: any) => t.code)));
     const pmsBody = {
@@ -471,6 +473,24 @@ async function main(): Promise<void> {
     const listed = await req('GET', '/api/pms/projects');
     check('Projects: the list has both projects with their agency', listed.status === 200 && (listed.body?.projects ?? []).filter((p: any) => String(p.code).startsWith('CI-PRJ-2026-') && p.fundingAgency === 'CI Science Fund').length === 2,
       `${listed.status} ${(listed.body?.projects ?? []).length}`);
+    // ---- PMS Master Settings: only the masters PMS uses ---------------------------------------------------------
+    const pmsCat = await req('GET', '/api/hrms/masters/catalog');
+    const catKeys = (pmsCat.body?.masters ?? []).map((m: any) => m.key);
+    const banks = await req('GET', '/api/hrms/masters/banks');
+    check('PMS Master Settings: only the PMS masters (designations, M.Sc, PhD); banks stay in HRMS', pmsCat.status === 200 && catKeys.includes('designations') && catKeys.includes('phdEnrollment') && !catKeys.includes('banks') && banks.status === 403,
+      `${pmsCat.status} ${catKeys.join(',')} · banks ${banks.status}`);
+    const pmsDesig = await req('POST', '/api/hrms/masters/designations', { name: 'CI Project Associate', code: 'CIPA', status: 'ACTIVE', fields: { empType: 'project', cadre: '' } });
+    const hrmsDesig = await req('POST', '/api/hrms/masters/designations', { name: 'CI Scientist Z', code: 'CISZ', status: 'ACTIVE', fields: { empType: 'permanent', cadre: '' } });
+    const desigList = await req('GET', '/api/hrms/masters/designations');
+    check('PMS designations: a PMS-type one is added, a Permanent one is refused, the list is PMS only', pmsDesig.status === 201 && hrmsDesig.status === 400
+      && (desigList.body?.records ?? []).every((r: any) => r.fields?.empType && r.fields.empType !== 'permanent'), `${pmsDesig.status} ${pmsDesig.text.slice(0, 120)} · ${hrmsDesig.status} · ${(desigList.body?.records ?? []).length}`);
+    const ltHrms = await req('POST', '/api/hrms/leave-types', { name: 'CI X', code: 'CIX', employeeTypes: ['permanent'] });
+    const ltShared = await req('PUT', '/api/hrms/leave-types/1', { name: 'CL', code: 'CL', employeeTypes: ['project'] });
+    const ltList = await req('GET', '/api/hrms/leave-types?scope=master');
+    const lgHrms = await req('POST', '/api/hrms/leave-groups', { code: 'CIX', name: 'CI X', leaveYear: 'CY', leaveTypeIds: ['1'], status: 'active' });
+    check('PMS leave masters: HRMS / shared leave types and groups are refused; the master list holds PMS ones only',
+      ltHrms.status === 400 && ltShared.status === 403 && lgHrms.status === 400 && ltList.status === 200 && (ltList.body?.employeeTypes ?? []).every((t: any) => t.code !== 'permanent'),
+      `${ltHrms.status}/${ltShared.status}/${lgHrms.status}/${ltList.status} types ${(ltList.body?.types ?? []).length}`);
     const pmsRoles = await req('PUT', `/api/hrms/employees/${pmsNew.body?.employee?.id ?? 0}/module-roles`, { moduleRoles: { pms: ['pms_admin'] } });
     check('PMS has no User Controls: roles are given in HRMS only', pmsRoles.status === 403, String(pmsRoles.status));
     await req('POST', '/api/auth/login', { email: 'admin@wii.gov.in', password: PASSWORD });

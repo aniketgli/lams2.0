@@ -121,7 +121,7 @@ export const LeavePolicyMaster: React.FC<{ readOnly?: boolean }> = ({ readOnly =
     setLoading(true);
     setLoadError(undefined);
     try {
-      setData(await leaveTypeApi.list());
+      setData(await leaveTypeApi.list('master'));
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : 'Could not load the leave types.');
     } finally {
