@@ -1,6 +1,6 @@
 import { usePeopleModule } from '../../../../shared/hooks/usePeopleModule';
 import React, { useState } from 'react';
-import { Plus, Upload } from 'lucide-react';
+import { Plus, Scale, Upload } from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
 import { PageHeader, PageHeaderButton } from '../../../../shared/components/PageHeader';
 import { FilterToolbar } from '../../../../shared/components/FilterToolbar';
@@ -69,6 +69,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ initia
     : null;
   const [applySignal, setApplySignal] = useState(0);
   const [importSignal, setImportSignal] = useState(0);
+  const [reconcileSignal, setReconcileSignal] = useState(0);
 
   const subtitle = balances
     ? (managesBalances ? 'Leave balance of every employee for the leave year; set or adjust a balance'
@@ -87,7 +88,10 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ initia
         title={balances ? 'Leave Balance' : 'Leave Management'}
         subtitle={subtitle}
         rightAction={balances && managesBalances ? (
-          <PageHeaderButton icon={Upload} onClick={() => setImportSignal((n) => n + 1)}>Import leave</PageHeaderButton>
+          <div className="flex items-center gap-2">
+            <PageHeaderButton icon={Scale} onClick={() => setReconcileSignal((n) => n + 1)}>Reconcile leave</PageHeaderButton>
+            <PageHeaderButton icon={Upload} onClick={() => setImportSignal((n) => n + 1)}>Import leave</PageHeaderButton>
+          </div>
         ) : canApply && !balances && view === 'requests' ? (
           <PageHeaderButton icon={Plus} onClick={() => setApplySignal((n) => n + 1)}>Apply leave</PageHeaderButton>
         ) : undefined}
@@ -95,7 +99,7 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ initia
 
       {balances ? (isAudit && balanceView === 'activity'
         ? <ActivityLogPanel source={BALANCE_ACTIVITY} toolbarStart={balanceSwitch} />
-        : <LeaveBalancesView importSignal={importSignal} toolbarStart={balanceSwitch} />) : (
+        : <LeaveBalancesView importSignal={importSignal} reconcileSignal={reconcileSignal} toolbarStart={balanceSwitch} />) : (
         <>
           {view === 'types' && (isAdmin || isAudit) ? (
             <>

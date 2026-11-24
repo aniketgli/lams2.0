@@ -10,6 +10,7 @@ import { logThenDownload } from '../../../../shared/services/downloadAudit';
 import { NoticeBar, useNotice } from '../../master/components/masterUi';
 import { BalanceList, BalanceRow, leaveApi } from '../leaveApi';
 import { LeaveImportModal } from './LeaveImportModal';
+import { LeaveReconcileModal } from './LeaveReconcileModal';
 import { UserAvatar } from '../../../../shared/components/UserAvatar';
 
 /**
@@ -20,7 +21,7 @@ import { UserAvatar } from '../../../../shared/components/UserAvatar';
 const PAGE_SIZES = [25, 50, 100];
 const days = (n: number) => String(Math.round(n * 10) / 10);
 
-export const LeaveBalancesView: React.FC<{ importSignal?: number; toolbarStart?: React.ReactNode }> = ({ importSignal = 0, toolbarStart }) => {
+export const LeaveBalancesView: React.FC<{ importSignal?: number; reconcileSignal?: number; toolbarStart?: React.ReactNode }> = ({ importSignal = 0, reconcileSignal = 0, toolbarStart }) => {
   const { currentUser, users } = useApp();
   const avatarOf = useMemo(() => new Map(users.map((u) => [String(u.id), (u as { avatar?: string }).avatar || null])), [users]);
   const role = currentUser.role;
@@ -50,6 +51,8 @@ export const LeaveBalancesView: React.FC<{ importSignal?: number; toolbarStart?:
 
   const [importing, setImporting] = useState(false);
   useEffect(() => { if (importSignal > 0 && isAdmin) setImporting(true); }, [importSignal, isAdmin]);
+  const [reconciling, setReconciling] = useState(false);
+  useEffect(() => { if (reconcileSignal > 0 && isAdmin) setReconciling(true); }, [reconcileSignal, isAdmin]);
 
   const [search, setSearch] = useState('');
   const [employees, setEmployees] = useState<string[]>(['all']);
@@ -122,6 +125,10 @@ export const LeaveBalancesView: React.FC<{ importSignal?: number; toolbarStart?:
   return (
     <div className="space-y-5">
       <NoticeBar notice={notice} onClose={clearNotice} />
+      {isAdmin && (
+        <LeaveReconcileModal open={reconciling} year={year} onClose={() => setReconciling(false)}
+          onDone={(message) => { setReconciling(false); showNotice('success', message); void load(true); }} />
+      )}
       {isAdmin && (
         <LeaveImportModal open={importing} year={year} onClose={() => setImporting(false)}
           onImported={(message) => { setImporting(false); showNotice('success', message); void load(true); }} />

@@ -1,5 +1,6 @@
 import { applyImport, importTemplate, reviewImport } from './balanceImport';
 import { issueLeaveClearance, leaveClearance } from './noDues';
+import { reconcileApply, reconcilePreview } from './reconcile';
 import { Router, type Request, type Response } from 'express';
 import { asyncHandler, attachmentDisposition, forbidden } from '../lib/http';
 import { limitHeavy } from '../middleware/apiRateLimit';
@@ -147,6 +148,14 @@ router.get('/leave/balances/import/template', requireAuth, asyncHandler(async (r
   res.json(await importTemplate((await viewerOf(req)), q.year, q.cycle));
 }));
 
+// Reconcile leave: the pro-rata quota worked out again from the rules vs the days credited (reconcile.ts).
+router.get('/leave/balances/reconcile', requireAuth, asyncHandler(async (req, res) => {
+  res.json(await reconcilePreview((await viewerOf(req)), (req.query as Record<string, unknown>).year));
+}));
+router.post('/leave/balances/reconcile', requireAuth, limitHeavy('balance-reconcile', 10), asyncHandler(async (req, res) => {
+  const result = await reconcileApply(req, (await viewerOf(req)), req.body);
+  res.json({ ...result, message: `${result.applied} balance(s) corrected${result.skipped.length ? `, ${result.skipped.length} skipped` : ''}.` });
+}));
 router.get('/leave/balances/history', requireAuth, asyncHandler(async (req, res) => {
   res.json(await leaveHistory((await viewerOf(req)), (req.query as Record<string, unknown>).userId));
 }));

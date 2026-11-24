@@ -1,5 +1,6 @@
 import { LEAVE_TYPE_SELECT } from './leaveTypeSql';
 import { inScope } from '../lib/peopleScope';
+import { employeeTypeModules } from '../employees/references';
 import { profileJsonSql, profileObject } from '../employees/profileSql';
 import { MAX_LIST_ROWS, listLimitProblem, visibilityClause, canSeeEmployee } from '../lib/visibility';
 import { INCREMENT, NOW, assertUndo, decide, moveStatus, undoProblem, undoTarget, type UndoCheck } from '../lib/approvalFlow';
@@ -1502,7 +1503,16 @@ export interface BalanceRow {
 /** The Leave Balance page: administrators, auditors and Leave Balance Managers. (The dashboard and the apply form read a person's own balance through listBalances.) */
 export async function listBalancesPage(viewer: Viewer, yearRaw: unknown): ReturnType<typeof listBalances> {
   if (!canManageBalances(viewer.role) && viewer.role !== 'audit') throw forbidden('Only an administrator, auditor or Leave Balance Manager can see leave balances.');
-  return listBalances(viewer, yearRaw);
+  const list = await listBalances(viewer, yearRaw);
+  // Only the leave types of this module's employees: a column is shown when at least one listed employee may take it
+  // or has days in it (HRMS: the Permanent / Trainee leaves; PMS: those of the project / contract types).
+  const used = new Set(list.rows.flatMap((r) => Object.entries(r.balances).filter(([, b]) => b !== null).map(([id]) => id)));
+  const moduleTypes = viewer.module ? await employeeTypeModules(pool) : null;
+  return {
+    ...list,
+    types: list.types.filter((t) => used.has(t.id)),
+    employeeTypes: moduleTypes ? list.employeeTypes.filter((t) => (moduleTypes.get(t.code) ?? 'HRMS') === viewer.module) : list.employeeTypes,
+  };
 }
 
 export async function listBalances(viewer: Viewer, yearRaw: unknown): Promise<{ year: number; years: number[]; employeeTypes: Array<{ code: string; name: string }>; types: Array<{ id: string; code: string; name: string; isDebited: boolean }>; rows: BalanceRow[] }> {
