@@ -126,6 +126,16 @@ async function main(): Promise<void> {
   const attendanceOk = await d.getByText(/Biometric Attendance/i).first().waitFor({ state: 'visible', timeout: 15000 }).then(() => true, () => false);
   await d.goto(`${BASE}/pms/leave`);
   const leaveOk = await d.getByRole('button', { name: /apply leave/i }).first().waitFor({ state: 'visible', timeout: 15000 }).then(() => true, () => false);
+  await d.goto(`${BASE}/pms/projects`);
+  const newProject = await d.getByRole('button', { name: /new project/i }).first().waitFor({ state: 'visible', timeout: 15000 }).then(() => true, () => false);
+  if (newProject) {
+    await d.getByRole('button', { name: /new project/i }).first().click();
+    await d.getByText('Sanctioned amount (₹)').first().waitFor({ state: 'visible', timeout: 10000 }).catch(() => undefined);
+    if (process.env.SCREENSHOT_DIR) await d.screenshot({ path: `${process.env.SCREENSHOT_DIR}/pms-project-form.png`, fullPage: true }).catch(() => undefined);
+  }
+  const formOpen = await d.getByText('Sanctioned amount (₹)').count();
+  check('PMS Projects: the RC office sees "New project" and the project form opens', newProject && formOpen > 0 && errors.length === 0, `button ${newProject}, form ${formOpen}, errors ${errors.join(' | ')}`);
+  await d.goto(`${BASE}/pms/leave`);
   check('PMS: dashboard, attendance and leave pages open without errors', attendanceOk && leaveOk && errors.length === 0 && d.url().endsWith('/pms/leave'),
     `attendance ${attendanceOk}, leave ${leaveOk}, errors ${errors.join(' | ')}`);
 
