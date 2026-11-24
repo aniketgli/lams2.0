@@ -98,7 +98,7 @@ function parseInput(body: unknown, admin: boolean): { strategy: ImportStrategy; 
 }
 
 /** Checks every row against the database. Writes nothing. */
-async function plan(q: Q, input: { strategy: ImportStrategy; csv: string }): Promise<{ review: ImportReview; planned: Planned[] }> {
+async function plan(q: Q, input: { strategy: ImportStrategy; csv: string }, scope?: ReadonlySet<string>): Promise<{ review: ImportReview; planned: Planned[] }> {
   const table = parseDelimited(input.csv);
   if (table.length === 0) throw badRequest('The file is empty.', { csv: 'The file is empty.' });
   const heads = table[0].map(key);
@@ -138,6 +138,7 @@ async function plan(q: Q, input: { strategy: ImportStrategy; csv: string }): Pro
     }
     const person = people.get(biometricId);
     if (!person) { fail(`No active employee has the Biometric_ID ${biometricId}.`); continue; }
+    if (scope && !scope.has(String(person.id))) { fail(`${person.name} (${biometricId}) belongs to the other module (HRMS / PMS).`); continue; }
     row.employee = person.name;
     const policy = types.get(leaveCode.toUpperCase());
     if (!policy) { fail(`${leaveCode} is not an active leave type.`); continue; }
@@ -188,10 +189,10 @@ async function plan(q: Q, input: { strategy: ImportStrategy; csv: string }): Pro
 }
 
 /** What the import would do, row by row. Never writes. */
-export async function reviewImport(viewer: { role: string | null }, body: unknown): Promise<ImportReview> {
+export async function reviewImport(viewer: { role: string | null; scope?: ReadonlySet<string> }, body: unknown): Promise<ImportReview> {
   const input = parseInput(body, canManageBalances(viewer.role));
   try {
-    return (await plan(pool, input)).review;
+    return (await plan(pool, input, viewer.scope)).review;
   } catch (error) {
     missingTable(error);
     throw error;
@@ -199,11 +200,11 @@ export async function reviewImport(viewer: { role: string | null }, body: unknow
 }
 
 /** Writes the import. Every row is checked again; one problem row stops the whole import. */
-export async function applyImport(req: Request, viewer: { role: string | null }, body: unknown): Promise<ImportReview> {
+export async function applyImport(req: Request, viewer: { role: string | null; scope?: ReadonlySet<string> }, body: unknown): Promise<ImportReview> {
   const input = parseInput(body, canManageBalances(viewer.role));
   try {
     return await inTransaction(async (conn) => {
-      const { review, planned } = await plan(conn, input);
+      const { review, planned } = await plan(conn, input, viewer.scope);
       if (review.summary.errors) {
         throw new HttpError(400, `${review.summary.errors} row(s) have problems. Nothing was imported; fix the file and review again.`, 'IMPORT_INVALID', { csv: `${review.summary.errors} row(s) have problems.` });
       }

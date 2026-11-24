@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { WIILogo } from '../components/WIILogo';
 import { PAGE_ICONS, canOpenPage } from '../../modules/hrms/hrmsPages';
-import { PMS_PAGES, canOpenPmsPage } from '../../modules/pms/pmsPages';
+import { canOpenPmsPage } from '../../modules/pms/pmsPages';
 import {
   ChevronDown,
   ChevronRight,
+  Briefcase,
   Users,
   X
 } from 'lucide-react';
@@ -37,7 +38,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [expandedGroup, setExpandedGroup] = useState<'attendance' | 'leave' | 'employee' | null>(null);
 
   // Which links appear comes from the same page map the router enforces.
-  const show = (pageId: string) => canOpenPage(pageId, currentUser.role);
+  // HRMS and PMS share these pages (PMS: pmsPages.ts, without User Controls / Employee Mapping / Master / Reports).
+  const people = activeModule === 'lams' || activeModule === 'pms';
+  const show = (pageId: string) => (activeModule === 'pms' ? canOpenPmsPage(pageId, currentUser.role) : canOpenPage(pageId, currentUser.role));
   const onlyBalance = currentUser.role === 'leave_balance_manager';
   const onlyEmployees = currentUser.role === 'employee_manager';
 
@@ -85,7 +88,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <nav className="p-3 space-y-1 flex-1 overflow-y-auto">
             {/* If in LAMS: show LAMS 2.0 navigation items */}
             {/* Leave Balance Manager: that one page only, as a single link. */}
-            {activeModule === 'lams' && onlyBalance && (
+            {people && onlyBalance && (
               <button
                 onClick={() => {
                   setExpandedGroup(null);
@@ -101,30 +104,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <span>Leave Balance</span>
               </button>
             )}
-            {/* PMS: its pages (pmsPages.ts), one link each. */}
-            {activeModule === 'pms' && PMS_PAGES.filter((page) => canOpenPmsPage(page.id, currentUser.role)).map((page) => {
-              const Icon = page.icon;
-              const active = activeTab === page.id;
-              return (
-                <button
-                  key={page.id}
-                  onClick={() => {
-                    setExpandedGroup(null);
-                    handleNavClick(page.id);
-                  }}
-                  className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-medium transition-all text-left cursor-pointer ${
-                    active
-                      ? 'bg-primary/10 text-primary font-bold border-l-3 border-primary shadow-2xs'
-                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                  }`}
-                >
-                  <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-primary' : 'text-slate-400'}`} />
-                  <span>{page.label}</span>
-                </button>
-              );
-            })}
             {/* Employee Manager: the Profiles page only (add, edit, import employees). */}
-            {activeModule === 'lams' && onlyEmployees && (
+            {people && onlyEmployees && (
               <button
                 onClick={() => {
                   setExpandedGroup(null);
@@ -140,7 +121,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <span>Profiles</span>
               </button>
             )}
-            {activeModule === 'lams' && !onlyBalance && !onlyEmployees && (
+            {people && !onlyBalance && !onlyEmployees && (
               <>
               
 
@@ -374,6 +355,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </div>
                   )}
                 </div>
+                )}
+
+                {/* PMS: Projects */}
+                {show('projects') && (
+                  <button
+                    onClick={() => {
+                      setExpandedGroup(null);
+                      handleNavClick('projects');
+                    }}
+                    className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-medium transition-all text-left cursor-pointer ${
+                      activeTab === 'projects'
+                        ? 'bg-primary/10 text-primary font-bold border-l-3 border-primary shadow-2xs'
+                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                    }`}
+                  >
+                    <Briefcase className={`w-4 h-4 shrink-0 ${activeTab === 'projects' ? 'text-primary' : 'text-slate-400'}`} />
+                    <span>Projects</span>
+                  </button>
                 )}
 
                 {/* 5. Master Settings (For Administrator & Audit) */}

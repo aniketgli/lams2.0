@@ -1,4 +1,5 @@
 import { LEAVE_TYPE_SELECT } from './leaveTypeSql';
+import { inScope } from '../lib/peopleScope';
 import { profileJsonSql, profileObject } from '../employees/profileSql';
 import { MAX_LIST_ROWS, listLimitProblem, visibilityClause, canSeeEmployee } from '../lib/visibility';
 import { INCREMENT, NOW, assertUndo, decide, moveStatus, undoProblem, undoTarget, type UndoCheck } from '../lib/approvalFlow';
@@ -68,7 +69,8 @@ export const LEAVE_SCOPE: ActivityScope = {
   filePrefix: 'WII_Leave_Activity',
 };
 
-export interface Viewer { id: number; role: RoleId | null }
+/** module / scope: HRMS or PMS and the user ids of its employees (server/lib/peopleScope.ts, lib/visibility.ts). */
+export interface Viewer { id: number; role: RoleId | null; module?: 'HRMS' | 'PMS' | null; scope?: ReadonlySet<string> }
 
 export interface LeaveRequest {
   id: string;
@@ -216,9 +218,10 @@ function canSee(viewer: Viewer, row: RowDataPacket): boolean {
 }
 
 /** Whose balance the viewer may see: as for requests, plus everyone for a Leave Balance Manager (balances only, not requests). */
-const canSeeBalance = (viewer: Viewer, row: RowDataPacket): boolean => canSee(viewer, row) || viewer.role === 'leave_balance_manager';
+const canSeeBalance = (viewer: Viewer, row: RowDataPacket): boolean => canSee(viewer, row) || (viewer.role === 'leave_balance_manager' && inScope(viewer, row.user_id));
 
 function canDecide(viewer: Viewer, row: RowDataPacket): boolean {
+  if (!inScope(viewer, row.user_id)) return false; // another module's employee (HRMS / PMS)
   const status = String(row.status);
   if (status !== 'pending_l1' && status !== 'pending_l2') return false;
   if (viewer.role === 'administrator') return true;
@@ -231,6 +234,7 @@ function canDecide(viewer: Viewer, row: RowDataPacket): boolean {
 /** Edit / delete are open up to the start date; once it has passed (always so for a leave applied after its date) the leave is locked for everyone. */
 export const DATE_PASSED_MESSAGE = 'The leave date has passed, so it can no longer be edited or deleted.';
 function canModify(viewer: Viewer, row: RowDataPacket, today = todayInIndia()): boolean {
+  if (!inScope(viewer, row.user_id)) return false; // another module's employee (HRMS / PMS)
   if (String(row.status) !== 'pending_l1' || row.linked_to || isoDate(row.start_date) < today) return false; // a linked station leave follows its leave request
   if (viewer.role === 'administrator') return true;
   return viewer.role === 'general_staff' && Number(row.user_id) === viewer.id;
@@ -250,6 +254,7 @@ function undoCheck(viewer: Viewer, row: RowDataPacket): UndoCheck {
 }
 
 function canUndo(viewer: Viewer, row: RowDataPacket): boolean {
+  if (!inScope(viewer, row.user_id)) return false; // another module's employee (HRMS / PMS)
   return undoProblem(undoCheck(viewer, row)) === null;
 }
 
@@ -1024,6 +1029,7 @@ export async function previewLeave(viewer: Viewer, query: Record<string, unknown
     }
   })();
   const target = viewer.role === 'administrator' ? Number(input?.userId ?? 0) : viewer.id;
+  if (!inScope(viewer, target)) throw forbidden('This employee belongs to the other module (HRMS / PMS).');
   const none = { startDate: String(query.startDate ?? ''), endDate: String(query.endDate ?? ''), requestedStart: String(query.startDate ?? ''), requestedEnd: String(query.endDate ?? '') };
   if (!input || !target) return { days: 0, cycleYear: 0, cycle: '', balance: null, error: null, prefix: null, suffix: null, stationOk: false, ...none };
   try {
@@ -1039,6 +1045,7 @@ export async function previewLeave(viewer: Viewer, query: Record<string, unknown
 /** The worked weekly offs / holidays that can be taken as a compensatory off now: the dropdown of the apply form. */
 export async function compOffOptions(viewer: Viewer, query: Record<string, unknown>, exceptId = 0): Promise<{ credits: Array<{ date: string; in: string; out: string; hours: number; reason: string; validUntil: string }> }> {
   const target = viewer.role === 'administrator' ? Number(query.userId ?? 0) : viewer.role === 'general_staff' ? viewer.id : 0;
+  if (!inScope(viewer, target)) throw forbidden('This employee belongs to the other module (HRMS / PMS).');
   if (!Number.isInteger(target) || target <= 0) return { credits: [] };
   exceptId = /^\d{1,20}$/.test(String(query.exceptId ?? '')) ? Number(query.exceptId) : exceptId;
   const person = await personById(target);
@@ -1055,6 +1062,7 @@ export async function compOffOptions(viewer: Viewer, query: Record<string, unkno
 /** The restricted holidays of the Holiday Calendar the employee can still apply for: the dropdown of the Restricted Holiday form. */
 export async function restrictedHolidayOptions(viewer: Viewer, query: Record<string, unknown>, today = todayInIndia()): Promise<{ holidays: Array<{ date: string; name: string }> }> {
   const target = viewer.role === 'administrator' ? Number(query.userId ?? 0) : viewer.role === 'general_staff' ? viewer.id : 0;
+  if (!inScope(viewer, target)) throw forbidden('This employee belongs to the other module (HRMS / PMS).');
   if (!Number.isInteger(target) || target <= 0) return { holidays: [] };
   const exceptId = /^\d{1,20}$/.test(String(query.exceptId ?? '')) ? Number(query.exceptId) : 0;
   try {
@@ -1077,6 +1085,7 @@ export async function balancePreview(
 ): Promise<{ cycle: string; balance: Balance | null }> {
   const typeId = String(query.leaveTypeId ?? '');
   const target = viewer.role === 'administrator' ? Number(query.userId ?? 0) : viewer.id;
+  if (!inScope(viewer, target)) throw forbidden('This employee belongs to the other module (HRMS / PMS).');
   if (!/^\d{1,20}$/.test(typeId) || !target) return { cycle: '', balance: null };
   const date = isValidIsoDate(String(query.date ?? '')) ? String(query.date) : today;
   try {
@@ -1107,6 +1116,7 @@ export async function occupiedDates(
   const empty = { days: [], joined: [], workdays: [] };
   if (viewer.role !== 'administrator' && viewer.role !== 'general_staff') return empty;
   const target = viewer.role === 'administrator' ? Number(query.userId ?? 0) : viewer.id;
+  if (!inScope(viewer, target)) throw forbidden('This employee belongs to the other module (HRMS / PMS).');
   if (!target) return empty;
   const exceptId = /^\d{1,20}$/.test(String(query.exceptId ?? '')) ? Number(query.exceptId) : 0;
   const from = addDays(today, -60);
@@ -1271,6 +1281,7 @@ export async function createRequest(req: Request, viewer: Viewer, body: unknown)
   } else {
     throw forbidden('Your current role cannot apply for leave.');
   }
+  if (!inScope(viewer, targetId)) throw forbidden('This employee belongs to the other module (HRMS / PMS).');
   try {
     const done = await inTransaction(async (conn) => {
       // Serialise one employee's applications so two requests cannot both pass the balance check.
@@ -1452,8 +1463,9 @@ export async function applicableEmployees(viewer: Viewer): Promise<{ id: string;
     `SELECT u.id, u.biometric_id, u.name, p.designation, ${profileJsonSql('p')} AS profile_data FROM users u
        LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id
       WHERE LOWER(u.status) = 'active' AND u.is_system = 0 ORDER BY u.name`);
-  const allowed = await applyTypeIds(found.map((r) => Number(r.id)));
-  return found.map((r) => ({ id: String(r.id), biometricId: String(r.biometric_id), name: String(r.name), designation: String(r.designation ?? ''), isPwd: profileData(r.profile_data).isPwd === true || profileData(r.profile_data).isPwd === 'true', leaveTypeIds: allowed.get(Number(r.id)) ?? [] }));
+  const inModule = found.filter((r) => inScope(viewer, r.id));
+  const allowed = await applyTypeIds(inModule.map((r) => Number(r.id)));
+  return inModule.map((r) => ({ id: String(r.id), biometricId: String(r.biometric_id), name: String(r.name), designation: String(r.designation ?? ''), isPwd: profileData(r.profile_data).isPwd === true || profileData(r.profile_data).isPwd === 'true', leaveTypeIds: allowed.get(Number(r.id)) ?? [] }));
 }
 
 /**
@@ -1632,6 +1644,7 @@ export async function setBalance(req: Request, viewer: Viewer, body: unknown): P
   const asOfRaw = v.optionalString('asOf', { max: 10 });
   if (asOfRaw && !/^\d{4}-\d{2}-\d{2}$/.test(asOfRaw)) v.errors.asOf ||= 'Enter the date as YYYY-MM-DD.';
   v.assert();
+  if (!inScope(viewer, userId)) throw forbidden('This employee belongs to the other module (HRMS / PMS).');
   try {
     return await inTransaction(async (conn) => {
       const emp = await loadEmployee(conn, Number(userId));

@@ -1,10 +1,11 @@
 import { applyImport, importTemplate, reviewImport } from './balanceImport';
 import { issueLeaveClearance, leaveClearance } from './noDues';
 import { Router, type Request, type Response } from 'express';
-import { asyncHandler, attachmentDisposition } from '../lib/http';
+import { asyncHandler, attachmentDisposition, forbidden } from '../lib/http';
 import { limitHeavy } from '../middleware/apiRateLimit';
 import { Validator } from '../lib/validate';
-import { requireActiveRole, requireAuth, isAuditor, hrmsViewerOf } from '../middleware/auth.middleware';
+import { requireActiveRole, requireAuth, isAuditor, requirePeopleRole } from '../middleware/auth.middleware';
+import { inScope, scopedViewerOf } from '../lib/peopleScope';
 import { activityCsv, activityTable, listActivity, parseActivityFilter } from '../employees/activity';
 import {
   LEAVE_TYPE_SCOPE, createLeaveType, deleteLeaveType, leaveTypeId, leaveTypeOptions, listLeaveTypes, updateLeaveType,
@@ -96,11 +97,12 @@ router.delete('/leave-groups/:id', ...isAdmin, asyncHandler(async (req, res) => 
 }));
 
 // ---- Leave requests and balances -------------------------------------------------------------
-const viewerOf = (req: Request) => hrmsViewerOf(req);
+// HRMS or PMS: the viewer's role in the module and the user ids of its employees (server/lib/peopleScope.ts).
+const viewerOf = (req: Request) => scopedViewerOf(req);
 
 router.get('/leave/requests', requireAuth, asyncHandler(async (req, res) => {
   const q = req.query as Record<string, unknown>;
-  const viewer = viewerOf(req);
+  const viewer = (await viewerOf(req));
   const [list, employees, types, allowed] = await Promise.all([listRequests(viewer, { from: q.from, to: q.to }), applicableEmployees(viewer), listLeaveTypes(), applyTypeIds([viewer.id])]);
   // The leave types the signed-in user may apply for: their leave group, gender (MAT / CCL for women, PAT for men),
   // employee type and disability. An administrator applying for someone else uses that employee's leaveTypeIds.
@@ -112,57 +114,64 @@ router.get('/leave/requests', requireAuth, asyncHandler(async (req, res) => {
 }));
 
 router.get('/leave/balance-preview', requireAuth, asyncHandler(async (req, res) => {
-  res.json(await balancePreview(viewerOf(req), req.query as Record<string, unknown>));
+  res.json(await balancePreview((await viewerOf(req)), req.query as Record<string, unknown>));
 }));
 
 router.get('/leave/restricted-holidays', requireAuth, asyncHandler(async (req, res) => {
-  res.json(await restrictedHolidayOptions(viewerOf(req), req.query as Record<string, unknown>));
+  res.json(await restrictedHolidayOptions((await viewerOf(req)), req.query as Record<string, unknown>));
 }));
 
 router.get('/leave/comp-off', requireAuth, asyncHandler(async (req, res) => {
-  res.json(await compOffOptions(viewerOf(req), req.query as Record<string, unknown>));
+  res.json(await compOffOptions((await viewerOf(req)), req.query as Record<string, unknown>));
 }));
 
 router.get('/leave/occupied', requireAuth, asyncHandler(async (req, res) => {
-  res.json(await occupiedDates(viewerOf(req), req.query as Record<string, unknown>));
+  res.json(await occupiedDates((await viewerOf(req)), req.query as Record<string, unknown>));
 }));
 
 router.get('/leave/preview', requireAuth, asyncHandler(async (req, res) => {
-  res.json(await previewLeave(viewerOf(req), req.query as Record<string, unknown>));
+  res.json(await previewLeave((await viewerOf(req)), req.query as Record<string, unknown>));
 }));
 
 router.get('/leave/balances', requireAuth, asyncHandler(async (req, res) => {
-  res.json(await listBalancesPage(viewerOf(req), (req.query as Record<string, unknown>).year));
+  res.json(await listBalancesPage((await viewerOf(req)), (req.query as Record<string, unknown>).year));
 }));
 
 router.put('/leave/balances', requireAuth, asyncHandler(async (req, res) => {
-  const balance = await setBalance(req, viewerOf(req), req.body);
+  const balance = await setBalance(req, (await viewerOf(req)), req.body);
   res.json({ balance, message: 'Leave balance saved.' });
 }));
 
 router.get('/leave/balances/import/template', requireAuth, asyncHandler(async (req, res) => {
   const q = req.query as Record<string, unknown>;
-  res.json(await importTemplate(viewerOf(req), q.year, q.cycle));
+  res.json(await importTemplate((await viewerOf(req)), q.year, q.cycle));
 }));
 
 router.get('/leave/balances/history', requireAuth, asyncHandler(async (req, res) => {
-  res.json(await leaveHistory(viewerOf(req), (req.query as Record<string, unknown>).userId));
+  res.json(await leaveHistory((await viewerOf(req)), (req.query as Record<string, unknown>).userId));
 }));
 
 router.post('/leave/balances/import/review', requireAuth, limitHeavy('balance-import', 30), asyncHandler(async (req, res) => {
-  res.json(await reviewImport(viewerOf(req), req.body));
+  res.json(await reviewImport((await viewerOf(req)), req.body));
 }));
 
 router.post('/leave/balances/import', requireAuth, limitHeavy('balance-import-apply', 10), asyncHandler(async (req, res) => {
-  const result = await applyImport(req, viewerOf(req), req.body);
+  const result = await applyImport(req, (await viewerOf(req)), req.body);
   res.json({ ...result, message: `${result.summary.ok} balance(s) updated${result.summary.unchanged ? `, ${result.summary.unchanged} unchanged` : ''}.` });
 }));
 
 // No Dues — leave clearance of a fixed-term employee who is leaving (noDues.ts). Administrator only.
-router.get('/leave/no-dues', ...isAdmin, asyncHandler(async (req, res) => {
+// HRMS or PMS administrator, for an employee of its own module (No Dues is mostly for PMS: project / contract staff).
+const isPeopleAdmin = [requireAuth, requirePeopleRole('administrator')];
+const assertInModule = async (req: Request, userId: unknown) => {
+  if (!inScope(await viewerOf(req), userId)) throw forbidden('This employee belongs to the other module (HRMS / PMS).');
+};
+router.get('/leave/no-dues', ...isPeopleAdmin, asyncHandler(async (req, res) => {
+  await assertInModule(req, req.query.userId);
   res.json(await leaveClearance(req.query.userId, req.query.relievingDate));
 }));
-router.post('/leave/no-dues', ...isAdmin, asyncHandler(async (req, res) => {
+router.post('/leave/no-dues', ...isPeopleAdmin, asyncHandler(async (req, res) => {
+  await assertInModule(req, req.body?.userId);
   res.json(await issueLeaveClearance(req, req.body?.userId, req.body?.relievingDate));
 }));
 
@@ -180,21 +189,21 @@ router.get('/leave/activity/export-pdf', ...isAuditor, asyncHandler(async (req, 
 
 // ---- Joining reports (after a 2-stage leave) -------------------------------------------------------
 router.get('/leave/joining', requireAuth, asyncHandler(async (req, res) => {
-  res.json(await listJoining(viewerOf(req)));
+  res.json(await listJoining((await viewerOf(req))));
 }));
 router.get('/leave/joining/prepare', requireAuth, asyncHandler(async (req, res) => {
-  res.json(await prepareJoining(viewerOf(req), (req.query as Record<string, unknown>).requestId));
+  res.json(await prepareJoining((await viewerOf(req)), (req.query as Record<string, unknown>).requestId));
 }));
 router.post('/leave/joining', requireAuth, asyncHandler(async (req, res) => {
-  const item = await submitJoining(req, viewerOf(req), req.body);
+  const item = await submitJoining(req, (await viewerOf(req)), req.body);
   res.status(201).json({ item, message: 'Joining report submitted.' });
 }));
 router.put('/leave/joining/:requestId', requireAuth, asyncHandler(async (req, res) => {
-  const item = await correctJoining(req, viewerOf(req), req.params.requestId, req.body);
+  const item = await correctJoining(req, (await viewerOf(req)), req.params.requestId, req.body);
   res.json({ item, message: 'Joining report submitted again.' });
 }));
 router.get('/leave/joining/:requestId/fitness', requireAuth, asyncHandler(async (req, res) => {
-  const file = await fitnessOf(viewerOf(req), req.params.requestId);
+  const file = await fitnessOf((await viewerOf(req)), req.params.requestId);
   res.setHeader('Content-Type', file.mime);
   res.setHeader('Content-Disposition', attachmentDisposition(file.name, 'certificate'));
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -202,29 +211,29 @@ router.get('/leave/joining/:requestId/fitness', requireAuth, asyncHandler(async 
   res.send(file.data);
 }));
 router.post('/leave/joining/:requestId/decision', requireAuth, asyncHandler(async (req, res) => {
-  const { item, outcome } = await decideJoining(req, viewerOf(req), req.params.requestId, req.body);
+  const { item, outcome } = await decideJoining(req, (await viewerOf(req)), req.params.requestId, req.body);
   res.json({ item, outcome, message: outcome === 'approved' ? 'Joining report approved.' : outcome === 'forwarded' ? 'Joining report forwarded to the HoD.' : 'Joining report rejected.' });
 }));
 router.post('/leave/joining/:requestId/undo', requireAuth, asyncHandler(async (req, res) => {
   const v = new Validator(req.body ?? {});
   const reason = v.optionalString('reason', { max: 400 });
   v.assert();
-  const item = await undoJoining(req, viewerOf(req), req.params.requestId, reason);
+  const item = await undoJoining(req, (await viewerOf(req)), req.params.requestId, reason);
   res.json({ item, message: 'The step was undone. The report is pending again.' });
 }));
 
 router.post('/leave/requests', requireAuth, asyncHandler(async (req, res) => {
-  const request = await createRequest(req, viewerOf(req), req.body);
+  const request = await createRequest(req, (await viewerOf(req)), req.body);
   res.status(201).json({ request, message: 'Leave request submitted.' });
 }));
 
 router.put('/leave/requests/:id', requireAuth, asyncHandler(async (req, res) => {
-  const { request, changed } = await updateRequest(req, viewerOf(req), requestId(req.params.id), req.body);
+  const { request, changed } = await updateRequest(req, (await viewerOf(req)), requestId(req.params.id), req.body);
   res.json({ request, changed, message: changed.length ? 'Request updated.' : 'No changes to save.' });
 }));
 
 router.get('/leave/requests/:id/certificate', requireAuth, asyncHandler(async (req, res) => {
-  const file = await certificateOf(viewerOf(req), requestId(req.params.id));
+  const file = await certificateOf((await viewerOf(req)), requestId(req.params.id));
   res.setHeader('Content-Type', file.mime);
   res.setHeader('Content-Disposition', attachmentDisposition(file.name, 'certificate'));
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -233,7 +242,7 @@ router.get('/leave/requests/:id/certificate', requireAuth, asyncHandler(async (r
 }));
 
 router.post('/leave/requests/:id/decision', requireAuth, asyncHandler(async (req, res) => {
-  const { request, outcome } = await decideRequest(req, viewerOf(req), requestId(req.params.id), req.body);
+  const { request, outcome } = await decideRequest(req, (await viewerOf(req)), requestId(req.params.id), req.body);
   res.json({ request, outcome, message: outcome === 'approved' ? 'Leave approved.' : outcome === 'forwarded' ? 'Leave forwarded to the HoD.' : 'Leave rejected.' });
 }));
 
@@ -241,7 +250,7 @@ router.post('/leave/requests/:id/undo', requireAuth, asyncHandler(async (req, re
   const v = new Validator(req.body ?? {});
   const reason = v.optionalString('reason', { max: 400 });
   v.assert();
-  const request = await undoDecision(req, viewerOf(req), requestId(req.params.id), reason);
+  const request = await undoDecision(req, (await viewerOf(req)), requestId(req.params.id), reason);
   res.json({ request, message: 'Step undone.' });
 }));
 
@@ -249,7 +258,7 @@ router.delete('/leave/requests/:id', requireAuth, asyncHandler(async (req, res) 
   const v = new Validator(req.body ?? {});
   const reason = v.optionalString('reason', { max: 500 });
   v.assert();
-  await deleteRequest(req, viewerOf(req), requestId(req.params.id), reason);
+  await deleteRequest(req, (await viewerOf(req)), requestId(req.params.id), reason);
   res.json({ success: true, message: 'Request deleted.' });
 }));
 

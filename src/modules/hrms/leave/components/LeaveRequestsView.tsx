@@ -17,7 +17,7 @@ import { ConfirmDialog, NoticeBar, useNotice } from '../../master/components/mas
 import { CompOffCredit, JoiningItem, LeaveBalance, LeaveInput, LeaveList, LeavePreview, LeaveRequest, LeaveStatus, leaveApi } from '../leaveApi';
 import { JoiningDetails, JoiningStatusLine, useJoining } from './JoiningPanel';
 import { actionBtn } from '../../../../shared/components/actionStyles';
-import { decidedBy, pendingAt, pendingAtManager, statusPerson } from '../../../../shared/services/statusLine';
+import { decidedBy, managerTitleLong, pendingAt, pendingAtManager, statusPerson } from '../../../../shared/services/statusLine';
 import { KeepDates } from '../../../../shared/components/KeepDates';
 import { earliestViewable, yearEnd, yearStart } from '../../../../shared/services/dateWindow';
 
@@ -1014,9 +1014,9 @@ export const LeaveRequestsView: React.FC<{ applySignal: number; toolbarStart?: R
               ['Days', `${viewing.daysCount}${halves(viewing) ? ` (${halves(viewing)})` : ''}`],
               ['From', formatDate(viewing.startDate)],
               ['To', formatDate(viewing.endDate)],
-              ['Approval', viewing.stages === 2 ? 'Reporting Manager, then HoD' : 'Reporting Manager'],
+              ['Approval', viewing.stages === 2 ? `${managerTitleLong()}, then HoD` : managerTitleLong()],
               ['Applied', `${formatStamp(viewing.appliedAt)} by ${viewing.appliedByName || viewing.name}`],
-              ['Reporting manager', viewing.managerName ?? '—'],
+              [managerTitleLong(), viewing.managerName ?? '—'],
               ['HoD', viewing.reviewerName ?? '—'],
             ] as const).map(([k, v]) => (
               <div key={k}><dt className="font-semibold text-slate-500">{k}</dt><dd className="text-slate-900 font-medium">{v}</dd></div>

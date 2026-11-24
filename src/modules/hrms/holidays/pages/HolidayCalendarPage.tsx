@@ -1,3 +1,4 @@
+import { usePeopleModule } from '../../../../shared/hooks/usePeopleModule';
 import React, { useEffect, useMemo, useState } from 'react';
 import { CalendarCheck, CalendarClock, ChevronLeft, ChevronRight, LayoutGrid, List, Pencil, Plus, Sparkles, Tag, Trash2 } from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
@@ -69,8 +70,10 @@ interface HolidayCalendarPageProps {
 
 export const HolidayCalendarPage: React.FC<HolidayCalendarPageProps> = () => {
   const { currentUser, holidays, reloadHolidays } = useApp();
-  const isAdmin = currentUser.role === 'administrator';
-  const isAudit = currentUser.role === 'audit';
+  // PMS shows the holiday calendar read-only: holidays are kept in HRMS.
+  const isPms = usePeopleModule() === 'PMS';
+  const isAdmin = currentUser.role === 'administrator' && !isPms;
+  const isAudit = currentUser.role === 'audit' && !isPms;
 
   const [notice, showNotice, clearNotice] = useNotice();
   const [auditorView, setAuditorView] = useState<'calendar' | 'activity'>('calendar');

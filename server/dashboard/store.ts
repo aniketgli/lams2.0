@@ -15,7 +15,8 @@ import type { RoleId } from '../lib/roles';
  * Visibility comes from the same rules as the Manual Attendance, Outdoor Duty and Leave screens.
  */
 
-export interface DashboardViewer { id: number; role: RoleId | null }
+/** module / scope: HRMS or PMS and the user ids of its employees (server/lib/peopleScope.ts). */
+export interface DashboardViewer { id: number; role: RoleId | null; module?: 'HRMS' | 'PMS' | null; scope?: ReadonlySet<string> }
 
 export interface QueueItem {
   id: string;

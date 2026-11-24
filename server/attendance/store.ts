@@ -5,6 +5,7 @@ import { HttpError, badRequest } from '../lib/http';
 import { isValidIsoDate, todayInIndia } from '../lib/validate';
 import { cachedReference } from '../lib/referenceCache';
 import type { RoleId } from '../lib/roles';
+import { inScope } from '../lib/peopleScope';
 import { MAX_RANGE_DAYS_ONE, sizeProblem } from './limits';
 import { DayRecord, Punch, ShiftRule, buildDay, datesBetween, employeeCodeVariants, normalizeEmployeeCode, shiftRule, toMinutes, weekdayOf } from './compute';
 import { historyProblem, monthEnd, monthStart } from '../lib/dateWindow';
@@ -18,7 +19,8 @@ import { historyProblem, monthEnd, monthStart } from '../lib/dateWindow';
  * everyone else only themselves.
  */
 
-export interface AttendanceViewer { id: number; role: RoleId | null }
+/** scope: the user ids of the module's employees (HRMS or PMS, server/lib/peopleScope.ts). */
+export interface AttendanceViewer { id: number; role: RoleId | null; scope?: ReadonlySet<string> }
 
 export interface AttendanceRow extends DayRecord {
   userId: string;
@@ -97,7 +99,7 @@ async function employeesInScope(viewer: AttendanceViewer, onlyUserId: string | n
     }
     throw error;
   }
-  return found.map((r) => ({
+  return found.filter((r) => inScope(viewer, r.id)).map((r) => ({
     userId: String(r.id),
     biometricId: normalizeEmployeeCode(r.biometric_id),
     joining: dateText(r.joining_date),

@@ -1,4 +1,5 @@
 import { profileJsonSql } from '../employees/profileSql';
+import { inScope } from '../lib/peopleScope';
 import { canSeeEmployee } from '../lib/visibility';
 import type { Request } from 'express';
 import type { RowDataPacket } from 'mysql2/promise';
@@ -136,10 +137,12 @@ function canSee(viewer: Viewer, row: RowDataPacket): boolean {
 const reportStatus = (row: RowDataPacket): JoiningStatus | null => (row.report_id ? (String(row.report_status) as JoiningStatus) : null);
 
 function mayFile(viewer: Viewer, row: RowDataPacket): boolean {
+  if (!inScope(viewer, row.user_id)) return false; // another module's employee (HRMS / PMS)
   return isAdmin(viewer) || (viewer.role === 'general_staff' && Number(row.user_id) === viewer.id);
 }
 
 function canDecide(viewer: Viewer, row: RowDataPacket): boolean {
+  if (!inScope(viewer, row.user_id)) return false; // another module's employee (HRMS / PMS)
   const status = reportStatus(row);
   if (status !== 'pending_l1' && status !== 'pending_l2') return false;
   if (isAdmin(viewer)) return true;
