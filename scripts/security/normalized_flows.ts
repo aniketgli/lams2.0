@@ -373,13 +373,13 @@ async function main(): Promise<void> {
     await req('POST', '/api/access/active-role', { moduleId: 'hrms', role: 'Administrator' });
   } else check('Employee Manager: seed user 1005 and the new employee', false);
 
-  // ---- PMS: its administrator adds PMS employees, whose approver is a PI; HRMS employees are out of its reach -------
+  // ---- PMS: same rules as HRMS; its administrator adds PMS employees; HRMS employees are out of its reach -------
   await freshMinute();
   const piUser = byBio('1006');
   const pmsAdmin = byBio('1007');
   if (piUser && pmsAdmin && scientist) {
-    const piGrant = await req('PUT', `/api/hrms/employees/${piUser.id}/module-roles`, { moduleRoles: { lams: ['hrms_reporting', 'hrms_staff'], pms: ['pms_pi'] } });
-    check('PMS PI role can be given (next to HRMS roles)', piGrant.status === 200, `${piGrant.status} ${piGrant.text.slice(0, 160)}`);
+    const piGrant = await req('PUT', `/api/hrms/employees/${piUser.id}/module-roles`, { moduleRoles: { lams: ['hrms_reporting', 'hrms_staff'], pms: ['pms_co_pi'] } });
+    check('PMS Reporting Manager role can be given (next to HRMS roles)', piGrant.status === 200, `${piGrant.status} ${piGrant.text.slice(0, 160)}`);
     await req('POST', '/api/auth/login', { email: 'pmsadmin@wii.gov.in', password: PASSWORD });
     await req('POST', '/api/access/module', { moduleId: 'pms' });
     const asPms = await req('POST', '/api/access/active-role', { moduleId: 'pms', role: 'Administrator' });
@@ -394,9 +394,9 @@ async function main(): Promise<void> {
       aadhaarNumber: aadhaarFrom('56789012345'), panNumber: 'ABCDE9891K', bankAccountNumber: '423456789012',
     };
     const noPi = await req('POST', '/api/hrms/employees', { ...pmsBody, reportingManagerId: rmId });
-    check('PMS: the approver must hold the PI role (an HRMS reporting manager is refused)', noPi.status === 400 && /PI role/.test(String(noPi.body?.details?.reportingManagerId)), `${noPi.status} ${JSON.stringify(noPi.body?.details ?? {}).slice(0, 160)}`);
+    check('PMS: the reporting manager must hold the PMS Reporting Manager role (the HRMS role alone is refused)', noPi.status === 400 && /Reporting Manager role in PMS/.test(String(noPi.body?.details?.reportingManagerId)), `${noPi.status} ${JSON.stringify(noPi.body?.details ?? {}).slice(0, 160)}`);
     const pmsNew = await req('POST', '/api/hrms/employees', { ...pmsBody, reportingManagerId: String(piUser.id) });
-    check('PMS Administrator adds a Project staff employee with a PI (PMS staff role)', pmsNew.status === 201 && /PMS Research Fellow/.test(String(pmsNew.body?.message)) && (pmsNew.body?.employee?.moduleRoles?.pms ?? []).length === 1 && !(pmsNew.body?.employee?.moduleRoles?.hrms ?? []).length,
+    check('PMS Administrator adds a Project staff employee with a PMS Reporting Manager (PMS User role)', pmsNew.status === 201 && /PMS User/.test(String(pmsNew.body?.message)) && (pmsNew.body?.employee?.moduleRoles?.pms ?? []).length === 1 && !(pmsNew.body?.employee?.moduleRoles?.hrms ?? []).length,
       `${pmsNew.status} ${pmsNew.text.slice(0, 200)}`);
     const pmsPerm = await req('POST', '/api/hrms/employees', { ...body, biometricId: '3031', email: 'ci.pmsperm@wii.gov.in', phone: '9876500031', aadhaarNumber: aadhaarFrom('67890123456'), panNumber: 'ABCDE9892K', bankAccountNumber: '523456789012' });
     check('PMS refuses a Permanent (HRMS) employee', pmsPerm.status === 400 && /HRMS/.test(String(pmsPerm.body?.details?.employmentType)), `${pmsPerm.status} ${JSON.stringify(pmsPerm.body?.details ?? {}).slice(0, 160)}`);

@@ -17,10 +17,9 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   employee_manager: 'Employee Manager',
 };
 
-/** What a role is called in a module: in PMS the reporting manager is the PI and the user a Research Fellow / Staff. */
-const PMS_ROLE_LABELS: Partial<Record<UserRole, string>> = { reporting_manager: 'PI', general_staff: 'Research Fellow / Staff', administrator: 'PMS Administrator' };
-export function roleLabel(role: UserRole, module?: string | null): string {
-  return (module === 'pms' ? PMS_ROLE_LABELS[role] : undefined) ?? ROLE_LABELS[role];
+/** What a role is called: the same names in HRMS and PMS (the module argument is kept for callers). */
+export function roleLabel(role: UserRole, _module?: string | null): string {
+  return ROLE_LABELS[role];
 }
 
 /** Order roles appear in the role switcher. */

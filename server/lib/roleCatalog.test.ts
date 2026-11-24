@@ -39,7 +39,7 @@ describe('role catalog', () => {
       { moduleId: 'pms', roleId: 'Co-PI' },
     ])).toEqual([
       { moduleId: 'hrms', roleId: 'Administrator' },
-      { moduleId: 'pms', roleId: 'Co-Principal Investigator (Co-PI)' },
+      { moduleId: 'pms', roleId: 'Reporting Manager' },
     ]);
     expect(() => validateGrants(catalog, [{ moduleId: 'hrms', roleId: 'Super User' }, { moduleId: 'hrms', roleId: 'User' }]))
       .toThrow('hrms: Super User');
@@ -60,14 +60,19 @@ describe('role catalog', () => {
     const later = await Bun.file(new URL('../../migrations/20261225_hrms_pms_split.sql', import.meta.url)).text();
     const added = catalog.filter((r) => later.includes(`('${r.moduleId}', '${r.roleId}', '${r.name}', '${r.accessRole}'`));
     expect(added.length).toBe(3);
+    const likeHrms = await Bun.file(new URL('../../migrations/20261227_pms_roles_like_hrms.sql', import.meta.url)).text();
+    const renamed = ['pms_admin', 'pms_pi', 'pms_co_pi', 'pms_researcher'];
     for (const r of catalog) {
       expect(ROLE_IDS).toContain(r.accessRole);
       if (added.includes(r)) {
         for (const alias of r.aliases.split(',')) expect(later).toContain(`('${r.moduleId}', '${r.roleId}', '${alias}')`);
-      } else if (r.roleId === 'pms_pi') {
-        // migrations/20261226_pms_pi_approver.sql: the PI acts as the reporting manager in PMS.
-        expect(sql).toContain(`('pms', 'pms_pi', '${r.name}', 'reviewing_manager', '${r.aliases}'`);
-        expect(r.accessRole).toBe('reporting_manager');
+      } else if (renamed.includes(r.roleId)) {
+        // migrations/20261227_pms_roles_like_hrms.sql: the PMS roles carry the HRMS names and access.
+        expect(likeHrms).toContain(`UPDATE role_catalog SET name = '${r.name}', access_role = '${r.accessRole}',`);
+        expect(likeHrms).toContain(`WHERE module_id = 'pms' AND role_id = '${r.roleId}';`);
+        const hrms = catalog.find((h) => h.moduleId === 'hrms' && h.name === r.name);
+        expect(hrms?.accessRole).toBe(r.accessRole);
+        expect(sql).toContain(`('pms', '${r.roleId}', '`);
       } else {
         expect(sql).toContain(`('${r.moduleId}', '${r.roleId}', '${r.name.replace(/'/g, "''")}', '${r.accessRole}', '${r.aliases.replace(/'/g, "''")}'`);
       }

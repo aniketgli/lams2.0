@@ -43,8 +43,8 @@ const viewerOf = (req: Request): Viewer => peopleViewerOf(req);
  * Adding, editing and importing employees: the administrator, or an Employee Manager (only the employees of its own
  * module, checked in store.ts / bulkImport.ts). Roles, passwords, status and deletion stay with the administrator.
  */
-/** The role a new employee gets: HRMS User, or in PMS Research Fellow / Staff. */
-const staffRoleName = (req: Request) => (sessionEmployeeModule(req) === 'PMS' ? 'PMS Research Fellow / Staff' : 'HRMS User');
+/** The role a new employee gets: User of HRMS, or of PMS. */
+const staffRoleName = (req: Request) => (sessionEmployeeModule(req) === 'PMS' ? 'PMS User' : 'HRMS User');
 
 const canManageEmployees = [requireAuth, requirePeopleRole('administrator', 'employee_manager')];
 
