@@ -85,7 +85,7 @@ async function main(): Promise<void> {
   // 5. Forgot password screen on the sign-in page.
   const c = await (await browser.newContext()).newPage();
   await c.goto(`${BASE}/login`);
-  await c.getByRole('button', { name: /reset it with a code/i }).click();
+  await c.getByRole('button', { name: /forgot password/i }).click();
   await c.fill('input[placeholder="Enter your email address"]', 'staff@wii.gov.in');
   await c.getByRole('button', { name: /send code/i }).click();
   const sent = await c.getByText(/a 6-digit code has been sent/i).first().waitFor({ state: 'visible', timeout: 10000 }).then(() => true, () => false);
