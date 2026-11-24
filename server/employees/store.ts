@@ -41,7 +41,7 @@ const AUDIT_PASSWORD = 'employee_password';
 
 /** Role every new employee starts with (the role-matrix spelling for HRMS "User"). */
 const NEW_EMPLOYEE_GRANT = { moduleId: 'hrms', roleId: 'hrms_staff' } as const;
-/** A new PMS employee (project / contract types) gets the PMS staff role instead of HRMS User. */
+/** A new PMS employee (project / contract types) gets the PMS User role instead of HRMS User. */
 const NEW_PMS_EMPLOYEE_GRANT = { moduleId: 'pms', roleId: 'pms_researcher' } as const;
 
 const ROLE_RANK: RoleId[] = ['administrator', 'audit', 'leave_balance_manager', 'employee_manager', 'reviewing_manager', 'reporting_manager', 'general_staff'];

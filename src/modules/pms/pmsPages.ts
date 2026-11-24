@@ -5,7 +5,7 @@ import type { UserRole } from '../../types';
  * this list (as hrmsPages.ts does for HRMS). The data behind each page is protected by the server.
  *
  * PMS shares the HRMS screens (dashboard, attendance, leave, holidays, employees): the server limits each to the PMS
- * employees (the project / contract employee types, Master Settings → Employee Types → Module) and the PI approves.
+ * employees (the project / contract employee types, Master Settings → Employee Types → Module), with the same rules as HRMS.
  * PMS has no User Controls or Employee Mapping: roles stay in HRMS.
  */
 

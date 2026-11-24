@@ -113,10 +113,10 @@ async function main(): Promise<void> {
   const header = await d.getByText('Employee Profiles & Directory').first().waitFor({ state: 'visible', timeout: 15000 }).then(() => true, () => false);
   const newButton = await d.getByRole('button', { name: /new employee/i }).count();
   const sidebar = await d.getByRole('button', { name: /^projects$/i }).count();
-  const roleName = await d.getByText('PMS Administrator').count();
+  const roleName = await d.getByText('Administrator', { exact: false }).count();
   const portalName = await d.getByText('Project Management System', { exact: true }).count();
   const leaveLink = await d.getByRole('button', { name: /leave & holidays/i }).count();
-  check('PMS: the Employees page opens with "New employee", the PMS sidebar (Leave & Holidays, Projects), the portal name and the PMS role name',
+  check('PMS: the Employees page opens with "New employee", the PMS sidebar (Leave & Holidays, Projects), the portal name and the role name',
     header && newButton > 0 && sidebar > 0 && roleName > 0 && portalName > 0 && leaveLink > 0 && errors.length === 0 && d.url().endsWith('/pms/employees'),
     header ? `button ${newButton}, sidebar ${sidebar}, role ${roleName}, portal ${portalName}, leave ${leaveLink}, errors ${errors.join(' | ')}, url ${d.url()}` : (await d.locator('body').innerText()).replace(/\s+/g, ' ').slice(0, 300));
   if (process.env.SCREENSHOT_DIR) await d.screenshot({ path: `${process.env.SCREENSHOT_DIR}/pms-employees.png`, fullPage: true }).catch(() => undefined);

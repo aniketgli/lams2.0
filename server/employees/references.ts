@@ -181,7 +181,7 @@ export async function checkReferences(q: Querier, input: EmployeeInput, layout: 
                        JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE u.id = ? LIMIT 1`, [selfId])
     : [];
   const roleError: Record<ManagerKind, string | null> = { reporting: null, hod: null };
-  // A PMS employee's reporting manager is their PI (PMS role); an HRMS employee's, the HRMS Reporting Manager / HoD.
+  // The manager roles of the employee's module: PMS employees need the PMS Reporting Manager / HoD, HRMS ones the HRMS roles.
   const people: PeopleModule = (await employeeTypeModules(q)).get(String(input.employmentType ?? '')) ?? 'HRMS';
   const activeAccount = async (id: string, kind: ManagerKind) => {
     const [row] = await rows(q,
