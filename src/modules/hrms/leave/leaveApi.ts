@@ -362,6 +362,9 @@ export const leaveApi = {
     return api<{ cycle: string; balance: LeaveBalance | null }>(`${base}/balance-preview?${q.toString()}`);
   },
   balances: (year: number) => api<BalanceList>(`${base}/balances?year=${year}`),
+  reconcilePreview: (year: number) => api<{ year: number; checked: number; rows: ReconcileRow[] }>(`${base}/balances/reconcile?year=${year}`),
+  reconcileApply: (year: number, items: Array<{ userId: string; leaveTypeId: string }>) =>
+    api<{ year: number; applied: number; skipped: Array<{ name: string; code: string; reason: string }>; message: string }>(`${base}/balances/reconcile`, { method: 'POST', body: { year, items } }),
   importTemplate: (year: number, cycle: 'CY' | 'FY') =>
     api<{ year: number; headers: string[]; rows: Array<Array<string | number>> }>(`${base}/balances/import/template?year=${year}&cycle=${cycle}`),
   reviewImport: (input: { strategy: ImportStrategy; csv: string }) =>
@@ -382,3 +385,11 @@ export const leaveApi = {
     api<{ item: JoiningItem; message: string }>(`${base}/joining/${encodeURIComponent(requestId)}/undo`, { method: 'POST', body: { reason: reason || undefined } }),
   downloadFitness: (requestId: string) => downloadCsv(`${base}/joining/${encodeURIComponent(requestId)}/fitness`, 'fitness-certificate'),
 };
+
+/** One leave type whose credited days differ from the pro-rata rule (server/leave/reconcile.ts). */
+export interface ReconcileRow {
+  userId: string; biometricId: string; name: string; employmentType: string;
+  leaveTypeId: string; code: string; cycleYear: number; cycle: string; period: string;
+  yearlyQuota: number; credited: number | null; expected: number; difference: number;
+  carryForward: number; usedOrPending: number; asOf: string | null; problem: string | null;
+}

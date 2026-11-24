@@ -423,6 +423,15 @@ async function main(): Promise<void> {
     const ndPms = await req('GET', `/api/hrms/leave/no-dues?userId=${pmsFellowId}&relievingDate=2027-03-31`);
     const ndHrms = await req('GET', `/api/hrms/leave/no-dues?userId=${scientist}&relievingDate=2027-03-31`);
     check('PMS No Dues: for PMS employees, not for HRMS ones', ndPms.status === 200 && ndHrms.status === 403, `${ndPms.status} ${ndPms.text.slice(0, 120)} · ${ndHrms.status}`);
+    const recPms = await req('GET', '/api/hrms/leave/balances/reconcile?year=2026');
+    check('PMS: Reconcile leave works out the pro-rata employees', recPms.status === 200 && Array.isArray(recPms.body?.rows) && recPms.body?.checked >= 0, `${recPms.status} ${recPms.text.slice(0, 160)}`);
+    const recNone = await req('POST', '/api/hrms/leave/balances/reconcile', { year: 2026, items: [] });
+    check('Reconcile leave: nothing ticked is refused', recNone.status === 400, String(recNone.status));
+    const recHrms = await req('POST', '/api/hrms/leave/balances/reconcile', { year: 2026, items: [{ userId: String(scientist), leaveTypeId: '1' }] });
+    check('Reconcile leave: an HRMS employee cannot be corrected from PMS', recHrms.status === 200 && recHrms.body?.applied === 0 && (recHrms.body?.skipped ?? []).length === 1, `${recHrms.status} ${recHrms.text.slice(0, 160)}`);
+    const balPage = await req('GET', '/api/hrms/leave/balances?year=2026');
+    check('PMS Leave Balance lists PMS employees and their leave types only', balPage.status === 200 && !(balPage.body?.rows ?? []).some((r: any) => r.userId === String(scientist))
+      && (balPage.body?.employeeTypes ?? []).every((t: any) => t.code !== 'permanent'), `${balPage.status} ${(balPage.body?.rows ?? []).length} rows, types ${(balPage.body?.types ?? []).map((t: any) => t.code).join(',')}`);
     const pmsRoles = await req('PUT', `/api/hrms/employees/${pmsNew.body?.employee?.id ?? 0}/module-roles`, { moduleRoles: { pms: ['pms_admin'] } });
     check('PMS has no User Controls: roles are given in HRMS only', pmsRoles.status === 403, String(pmsRoles.status));
     await req('POST', '/api/auth/login', { email: 'admin@wii.gov.in', password: PASSWORD });

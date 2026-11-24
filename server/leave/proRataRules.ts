@@ -131,3 +131,16 @@ export function clearanceFor(opts: {
   const excess = Math.max(0, Math.round((opts.used - entitled) * 2) / 2);
   return { creditedMonths: creditedMonths.size, workedMonths: workedMonths.size, notWorkedDays, entitled, excess };
 }
+
+/**
+ * Reconcile leave (reconcile.ts): the credit the rule gives for one leave year — the months from joining (or the
+ * year's start) to "Valid up to" (or the year's end) within it. Null when the employee did not work in that year.
+ */
+export function expectedCredit(opts: { joining: string | null; validUpto: string | null; basis: Basis; quota: number; cycleYear: number }): { span: Span; year: Span; days: number } | null {
+  const year = leaveYearRange(opts.cycleYear, opts.basis);
+  const from = opts.joining && opts.joining > year.from ? opts.joining : year.from;
+  const to = opts.validUpto && opts.validUpto < year.to ? opts.validUpto : year.to;
+  if (from > to) return null;
+  const span = { from, to };
+  return { span, year, days: entitlement(opts.quota, [span], year).days };
+}
