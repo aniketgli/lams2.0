@@ -6,7 +6,8 @@ import { badRequest } from '../lib/http';
 import { isValidIsoDate } from '../lib/validate';
 import { writeMasterAuditSql } from '../masters/audit';
 import { ROLE_LABELS, RoleId } from '../lib/roles';
-import { EmployeeRecord, Viewer, canSeeFullProfile, listEmployees } from './store';
+import { EmployeeRecord, Viewer, canSeeFullProfile, listEmployees, withScope } from './store';
+import { employeeTypeModules } from './references';
 
 /**
  * Auditor tools for employee records: a CSV download of the directory and
@@ -56,8 +57,13 @@ export type ExportFormat = 'csv' | 'pdf';
 export async function employeeDirectoryTable(req: Request, viewer: Viewer, format: ExportFormat): Promise<{ headers: string[]; rows: unknown[][] }> {
   // Only people the viewer may see in full: everyone for administrators and auditors,
   // their own team for a reporting manager / HoD.
+  // The directory of HRMS lists the HRMS employees, that of PMS the PMS ones (employee_types.module).
+  const moduleTypes = await employeeTypeModules(pool);
+  const module = viewer.module ?? 'HRMS';
+  const scoped = await withScope(viewer);
   const records: EmployeeRecord[] = (await listEmployees(viewer))
-    .filter((r) => canSeeFullProfile(viewer, r) && (viewer.role === 'administrator' || viewer.role === 'audit' || r.id !== String(viewer.id)));
+    .filter((r) => (moduleTypes.get(String(r.employmentType ?? '')) ?? 'HRMS') === module)
+    .filter((r) => canSeeFullProfile(scoped, r) && (viewer.role === 'administrator' || viewer.role === 'audit' || r.id !== String(viewer.id)));
   const [types, institutes] = await Promise.all([lookupNames('employee_type'), lookupNames('institute')]);
   const nameById = new Map(records.map((r) => [r.id, `${r.name} (${r.biometricId})`]));
 

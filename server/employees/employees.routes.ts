@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../../src/db';
 import { user_project_histories, users } from '../../src/db/schema';
 import { limitHeavy } from '../middleware/apiRateLimit';
-import { isAdmin, isAuthenticated, requireActiveRole, requireAuth, isAuditor, hrmsViewerOf } from '../middleware/auth.middleware';
+import { isAdmin, isAuthenticated, requireActiveRole, requireAuth, isAuditor, peopleViewerOf, requirePeopleRole } from '../middleware/auth.middleware';
 import { EmailService } from '../integrations/email/email.service';
 import { brandedMail, portalUrlOf } from '../notifications/notify';
 import { notifyAccountStatus, notifyEmployeeDeleted, notifyEmployeeUpdated, notifyMappingBatch, notifyWelcome } from '../notifications/events';
@@ -36,13 +36,17 @@ import { sendCsvReport } from '../lib/csvResponse';
  */
 const router = Router();
 
-const viewerOf = (req: Request): Viewer => hrmsViewerOf(req);
+// HRMS and PMS share these routes; the store limits PMS to the PMS employees (Viewer.module).
+const viewerOf = (req: Request): Viewer => peopleViewerOf(req);
 
 /**
  * Adding, editing and importing employees: the administrator, or an Employee Manager (only the employees of its own
  * module, checked in store.ts / bulkImport.ts). Roles, passwords, status and deletion stay with the administrator.
  */
-const canManageEmployees = [requireAuth, requireActiveRole('hrms', 'administrator', 'employee_manager')];
+/** The role a new employee gets: HRMS User, or in PMS Research Fellow / Staff. */
+const staffRoleName = (req: Request) => (sessionEmployeeModule(req) === 'PMS' ? 'PMS Research Fellow / Staff' : 'HRMS User');
+
+const canManageEmployees = [requireAuth, requirePeopleRole('administrator', 'employee_manager')];
 
 function accountId(raw: unknown): number {
   const value = String(raw ?? '').trim();
@@ -100,7 +104,7 @@ router.get('/photos/:biometricId', isAuthenticated, asyncHandler(async (req, res
 /** The mapping register is read by the administrator (who makes the orders) and the auditor. */
 const isAdminOrAuditor = [requireAuth, requireActiveRole('hrms', 'administrator', 'audit')];
 /** Directory downloads: everyone who has a directory (each gets only the people they may see). */
-const canExportDirectory = [requireAuth, requireActiveRole('hrms', 'administrator', 'audit', 'reporting_manager', 'reviewing_manager')];
+const canExportDirectory = [requireAuth, requirePeopleRole('administrator', 'audit', 'reporting_manager', 'reviewing_manager')];
 
 
 router.get('/employees/export.csv', ...canExportDirectory, asyncHandler(async (req, res) => {
@@ -183,7 +187,7 @@ router.delete('/employees/:biometricId/photo', isAdmin, asyncHandler(async (req,
 router.get('/employees', isAuthenticated, asyncHandler(async (req, res) => {
   const viewer = viewerOf(req);
   // The system accounts are listed only for the Profiles table, and only to the administrator and auditor.
-  const system = req.query.system === '1' && (viewer.role === 'administrator' || viewer.role === 'audit');
+  const system = req.query.system === '1' && viewer.module !== 'PMS' && (viewer.role === 'administrator' || viewer.role === 'audit');
   res.json(system ? await listEmployees(viewer, 'system') : req.query.system === '1' ? [] : await listEmployees(viewer));
 }));
 
@@ -207,7 +211,7 @@ router.post('/employees/import', ...canManageEmployees, limitHeavy('employee-imp
   if (sendWelcome) welcomeInTurn(accounts, portalUrlOf(req));
   res.status(201).json({
     ...review,
-    message: `${review.summary.ok} employee(s) added with the HRMS User role. ${sendWelcome
+    message: `${review.summary.ok} employee(s) added with the ${staffRoleName(req)} role. ${sendWelcome
       ? 'Each one is being emailed a temporary password (one email every 2 seconds).'
       : 'They sign in with the default password of Master Settings → Organization and must change it.'}`,
   });
@@ -253,7 +257,7 @@ router.post('/employees', ...canManageEmployees, asyncHandler(async (req, res) =
   res.status(201).json({
     employee,
     temporaryPassword: temp.password,
-    message: `Employee ${employee.name} saved with the HRMS User role. ${passwordNote(temp.password, employee.email)}`,
+    message: `Employee ${employee.name} saved with the ${staffRoleName(req)} role. ${passwordNote(temp.password, employee.email)}`,
   });
 }));
 

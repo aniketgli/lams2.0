@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { WIILogo } from '../components/WIILogo';
 import { PAGE_ICONS, canOpenPage } from '../../modules/hrms/hrmsPages';
+import { PMS_PAGES, canOpenPmsPage } from '../../modules/pms/pmsPages';
 import {
   ChevronDown,
   ChevronRight,
@@ -100,6 +101,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <span>Leave Balance</span>
               </button>
             )}
+            {/* PMS: its pages (pmsPages.ts), one link each. */}
+            {activeModule === 'pms' && PMS_PAGES.filter((page) => canOpenPmsPage(page.id, currentUser.role)).map((page) => {
+              const Icon = page.icon;
+              const active = activeTab === page.id;
+              return (
+                <button
+                  key={page.id}
+                  onClick={() => {
+                    setExpandedGroup(null);
+                    handleNavClick(page.id);
+                  }}
+                  className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-xs font-medium transition-all text-left cursor-pointer ${
+                    active
+                      ? 'bg-primary/10 text-primary font-bold border-l-3 border-primary shadow-2xs'
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  }`}
+                >
+                  <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-primary' : 'text-slate-400'}`} />
+                  <span>{page.label}</span>
+                </button>
+              );
+            })}
             {/* Employee Manager: the Profiles page only (add, edit, import employees). */}
             {activeModule === 'lams' && onlyEmployees && (
               <button

@@ -141,10 +141,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Reloaded when the module or role changes: what the directory shows in full depends on both (PMS: PMS employees).
   useEffect(() => {
     if (!isAuthenticated) return;
     void reloadEmployees();
-  }, [isAuthenticated, reloadEmployees]);
+  }, [isAuthenticated, reloadEmployees, session?.activeModule, session?.activeRole]);
 
   const odRequests = NO_OD_REQUESTS; // outdoor duty is served by /api/hrms/outdoor-duty; this legacy list stays empty for the placeholder Finance view
 

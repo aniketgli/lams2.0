@@ -41,6 +41,8 @@ const AUDIT_PASSWORD = 'employee_password';
 
 /** Role every new employee starts with (the role-matrix spelling for HRMS "User"). */
 const NEW_EMPLOYEE_GRANT = { moduleId: 'hrms', roleId: 'hrms_staff' } as const;
+/** A new PMS employee (project / contract types) gets the PMS staff role instead of HRMS User. */
+const NEW_PMS_EMPLOYEE_GRANT = { moduleId: 'pms', roleId: 'pms_researcher' } as const;
 
 const ROLE_RANK: RoleId[] = ['administrator', 'audit', 'leave_balance_manager', 'employee_manager', 'reviewing_manager', 'reporting_manager', 'general_staff'];
 
@@ -192,36 +194,44 @@ function publicView(record: EmployeeRecord): EmployeeRecord {
 
 export interface Viewer {
   id: number; role: RoleId | null;
-  /** Employee Manager: the employee types of its module, whose employees it adds and edits (withManagedTypes). */
+  /** HRMS or PMS (the module the request is made in); missing means HRMS. */
+  module?: 'HRMS' | 'PMS' | null;
+  /**
+   * The employee types whose employees this viewer administers (withScope): set in PMS (its administrator and
+   * auditor see and change only PMS employees in full) and for an Employee Manager (its own module's types).
+   * Not set for the HRMS administrator / auditor, who see every employee (User Controls covers both modules).
+   */
   managedTypes?: ReadonlySet<string>;
 }
 
-/** An Employee Manager viewer with the employee types it manages (those of HRMS: the HRMS screens call this). */
-export async function withManagedTypes(viewer: Viewer, module: 'HRMS' | 'PMS' = 'HRMS'): Promise<Viewer> {
-  if (viewer.role !== 'employee_manager') return viewer;
+/** The viewer with the employee types of its module, when its view is limited to them (see Viewer.managedTypes). */
+export async function withScope(viewer: Viewer): Promise<Viewer> {
+  const module = viewer.module ?? 'HRMS';
+  if (module !== 'PMS' && viewer.role !== 'employee_manager') return viewer;
   const modules = await employeeTypeModules(pool);
   return { ...viewer, managedTypes: new Set([...modules].filter(([, m]) => m === module).map(([code]) => code)) };
 }
 
+const ADMINISTERS: readonly (RoleId | null)[] = ['administrator', 'audit', 'employee_manager'];
+const inScope = (viewer: Viewer, record: EmployeeRecord): boolean => Boolean(viewer.managedTypes?.has(String(record.employmentType ?? '')));
 const managesRecord = (viewer: Viewer, record: EmployeeRecord): boolean =>
-  viewer.role === 'employee_manager' && Boolean(viewer.managedTypes?.has(String(record.employmentType ?? '')));
+  ADMINISTERS.includes(viewer.role) && (viewer.managedTypes ? inScope(viewer, record) : viewer.role !== 'employee_manager');
 
 /**
- * An Employee Manager edits only the employees of its own module (an administrator, every employee).
- * Their type decides: an HRMS Employee Manager the Permanent / Trainee employees.
+ * Who may change an employee: in HRMS the administrator any employee and the Employee Manager the HRMS employees;
+ * in PMS the administrator and the Employee Manager only PMS employees. Their type decides.
  */
 async function assertManagesEmployee(conn: PoolConnection, req: Request, record: EmployeeRecord): Promise<void> {
-  if (req.auth?.activeRole !== 'employee_manager') return;
   const module = sessionEmployeeModule(req);
+  if (module !== 'PMS' && req.auth?.activeRole !== 'employee_manager') return;
   const of = (await employeeTypeModules(conn)).get(String(record.employmentType ?? ''));
-  if (!module || of !== module) throw new HttpError(403, `${record.name} is not a ${module ?? ''} employee: an Employee Manager edits only the employees of its own module.`, 'FORBIDDEN');
+  if (!module || of !== module) throw new HttpError(403, `${record.name} is not a ${module ?? ''} employee: they are managed in ${of ?? 'the other module'}.`, 'FORBIDDEN');
 }
 
 /** Full details for administrators, auditors, the employee and their managers; basic details otherwise. */
 export function canSeeFullProfile(viewer: Viewer, record: EmployeeRecord): boolean {
-  if (viewer.role === 'administrator' || viewer.role === 'audit') return true;
+  if (ADMINISTERS.includes(viewer.role)) return managesRecord(viewer, record) || record.id === String(viewer.id);
   if (record.id === String(viewer.id)) return true;
-  if (managesRecord(viewer, record)) return true;
   // Reporting managers / HoDs see their own people, and only while acting in that role.
   if (viewer.role !== 'reporting_manager' && viewer.role !== 'reviewing_manager') return false;
   const data = parseProfileData(record.profileData);
@@ -230,7 +240,7 @@ export function canSeeFullProfile(viewer: Viewer, record: EmployeeRecord): boole
 
 /** `regular` (default): every employee except the system accounts. `system`: only those, for the Profiles table. */
 export async function listEmployees(viewerIn: Viewer, which: 'regular' | 'system' = 'regular'): Promise<EmployeeRecord[]> {
-  const viewer = await withManagedTypes(viewerIn);
+  const viewer = await withScope(viewerIn);
   const found = await rows(pool, `${SELECT_EMPLOYEES} WHERE u.is_system = ${which === 'system' ? 1 : 0} ORDER BY u.name`);
   const grants = await loadGrants(pool, null);
   const identities = await loadIdentities(pool, null);
@@ -254,11 +264,11 @@ async function findEmployee(q: Querier, id: number, lock = false, fullIdentity =
 }
 
 export async function getEmployee(viewerIn: Viewer, id: number): Promise<EmployeeRecord> {
-  const viewer = await withManagedTypes(viewerIn);
+  const viewer = await withScope(viewerIn);
   const found = await findEmployee(pool, id, false, viewer.role === 'administrator' || viewer.role === 'employee_manager');
   if (!found) throw notFound('Employee not found.');
-  // The full Aadhaar / account number is for the edit form: an Employee Manager reads them only for its own employees.
-  if (viewer.role === 'employee_manager' && !managesRecord(viewer, found.record)) {
+  // The full Aadhaar / account number is for the edit form: only for the employees this viewer administers.
+  if ((viewer.role === 'administrator' || viewer.role === 'employee_manager') && !managesRecord(viewer, found.record)) {
     const masked = await findEmployee(pool, id, false, false);
     if (masked) found.record = masked.record;
   }
@@ -463,28 +473,29 @@ export async function insertEmployee(conn: PoolConnection, req: Request, body: u
   );
   await saveIdentity(conn, input.biometricId, newData);
 
-  // A new employee holds exactly one role: HRMS User. Rows left behind for this
+  const NEW_GRANT = (await employeeTypeModules(conn)).get(String(input.employmentType ?? '')) === 'PMS' ? NEW_PMS_EMPLOYEE_GRANT : NEW_EMPLOYEE_GRANT;
+  // A new employee holds exactly one role: HRMS User (PMS: Research Fellow / Staff). Rows left behind for this
   // biometric ID (e.g. imported data) are switched off, never reused.
   await conn.query(
     `UPDATE user_module_roles SET status = 'inactive', last_updated_by = ?
       WHERE biometric_id = ? AND LOWER(status) = 'active' AND NOT (module_id = ? AND role_id = ?)`,
-    [actor, input.biometricId, NEW_EMPLOYEE_GRANT.moduleId, NEW_EMPLOYEE_GRANT.roleId],
+    [actor, input.biometricId, NEW_GRANT.moduleId, NEW_GRANT.roleId],
   );
   const [existingGrant] = await rows(conn,
     'SELECT id FROM user_module_roles WHERE biometric_id = ? AND module_id = ? AND role_id = ? LIMIT 1',
-    [input.biometricId, NEW_EMPLOYEE_GRANT.moduleId, NEW_EMPLOYEE_GRANT.roleId]);
+    [input.biometricId, NEW_GRANT.moduleId, NEW_GRANT.roleId]);
   if (existingGrant) {
     await conn.query("UPDATE user_module_roles SET status = 'active', last_updated_by = ? WHERE id = ?", [actor, existingGrant.id]);
   } else {
     await conn.query(
       "INSERT INTO user_module_roles (biometric_id, module_id, role_id, status, last_updated_by) VALUES (?, ?, ?, 'active', ?)",
-      [input.biometricId, NEW_EMPLOYEE_GRANT.moduleId, NEW_EMPLOYEE_GRANT.roleId, actor],
+      [input.biometricId, NEW_GRANT.moduleId, NEW_GRANT.roleId, actor],
     );
   }
 
   const created = (await findEmployee(conn, userId))!.record;
   await writeMasterAuditSql(conn, req, { masterKey: AUDIT_EMPLOYEE, recordId: input.biometricId, recordLabel: input.name, action: 'CREATE', after: { ...auditView(created), password: passwordNote } });
-  await writeMasterAuditSql(conn, req, { masterKey: AUDIT_ROLES, recordId: input.biometricId, recordLabel: input.name, action: 'CREATE', after: grantsView([NEW_EMPLOYEE_GRANT]) });
+  await writeMasterAuditSql(conn, req, { masterKey: AUDIT_ROLES, recordId: input.biometricId, recordLabel: input.name, action: 'CREATE', after: grantsView([NEW_GRANT]) });
   // Contract / Project / PhD / Intern: this leave year's quota, pro-rata from joining to "Valid up to".
   await creditProRata(conn, req, userId, { before: [], added: spanForNewEmployee(input.joiningDate, accountValidUpto(input, layout)), reason: 'new employee' });
   return userId;

@@ -131,7 +131,25 @@ export function requireActiveRole(moduleId: ModuleId, ...roles: RoleId[]): Reque
   };
 }
 
-export { hrmsRoleOf, hrmsViewerOf } from '../lib/hrmsViewer';
+export { hrmsRoleOf, hrmsViewerOf, peopleModuleOf, peopleRoleOf, peopleViewerOf } from '../lib/hrmsViewer';
+
+/**
+ * Like requireActiveRole('hrms', ...), but also allowed while PMS is the active module: for the routes HRMS and PMS
+ * share (employees, attendance, leave). The data is then limited to that module's employees by the route's store.
+ */
+export function requirePeopleRole(...roles: RoleId[]): RequestHandler {
+  return (req, _res, next) => {
+    const auth = req.auth;
+    if (!auth) return next(unauthorized());
+    if ((auth.activeModule !== 'hrms' && auth.activeModule !== 'pms') || !auth.activeRole) {
+      return next(forbidden('Open this module and choose a role first.', 'NO_ACTIVE_ROLE'));
+    }
+    if (!roles.includes(auth.activeRole)) {
+      return next(forbidden('Your current role does not allow this action.', 'ROLE_NOT_ALLOWED'));
+    }
+    next();
+  };
+}
 
 /** Requires an active session in the given module, with any role. */
 export function requireModule(moduleId: ModuleId): RequestHandler {

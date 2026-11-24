@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { UserRole } from '../../types';
 import { useSession } from '../../auth/SessionContext';
-import { ROLE_LABELS, ROLE_ORDER } from '../../auth/access';
+import { ROLE_ORDER, roleLabel } from '../../auth/access';
 import { WIILogo } from '../components/WIILogo';
 import { UserAvatar } from '../components/UserAvatar';
 import { Menu, ArrowLeft, ChevronDown, Check } from 'lucide-react';
@@ -45,7 +45,7 @@ export const Header: React.FC<HeaderProps> = ({
   const assignedRoles = session?.modules.find((m) => m.moduleId === session.activeModule)?.roles ?? [];
   const rolesList = ROLE_ORDER.filter((role) => assignedRoles.includes(role));
   const activeRole = session?.activeRole ?? null;
-  const activeRoleLabel = activeRole ? ROLE_LABELS[activeRole] : '';
+  const activeRoleLabel = activeRole ? roleLabel(activeRole, session?.activeModule) : '';
   // Identity and salutation come from the server (users + employee_profiles.suffix).
   const name = session?.user.name ?? currentUser.name;
   const displayName = session?.user.salutation ? `${session.user.salutation} ${name}` : name;
@@ -132,7 +132,7 @@ export const Header: React.FC<HeaderProps> = ({
                           onClick={() => void handleRoleSwitch(role)}
                           aria-current={role === activeRole ? 'true' : undefined}
                           className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-xs transition-all text-left ${role === activeRole ? 'bg-primary/10 text-primary font-bold cursor-default' : 'font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 cursor-pointer disabled:opacity-50'}`}>
-                          <span>{ROLE_LABELS[role]}</span>
+                          <span>{roleLabel(role, session?.activeModule)}</span>
                           {role === activeRole && <Check className="w-3.5 h-3.5" aria-hidden="true" />}
                         </button>
                       ))}

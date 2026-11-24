@@ -64,6 +64,10 @@ describe('role catalog', () => {
       expect(ROLE_IDS).toContain(r.accessRole);
       if (added.includes(r)) {
         for (const alias of r.aliases.split(',')) expect(later).toContain(`('${r.moduleId}', '${r.roleId}', '${alias}')`);
+      } else if (r.roleId === 'pms_pi') {
+        // migrations/20261226_pms_pi_approver.sql: the PI acts as the reporting manager in PMS.
+        expect(sql).toContain(`('pms', 'pms_pi', '${r.name}', 'reviewing_manager', '${r.aliases}'`);
+        expect(r.accessRole).toBe('reporting_manager');
       } else {
         expect(sql).toContain(`('${r.moduleId}', '${r.roleId}', '${r.name.replace(/'/g, "''")}', '${r.accessRole}', '${r.aliases.replace(/'/g, "''")}'`);
       }

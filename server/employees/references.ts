@@ -4,7 +4,7 @@ import { pool } from '../../src/db';
 import { badRequest } from '../lib/http';
 import { normalizeModule, normalizeRole } from '../lib/roles';
 import { EmployeeInput, FormLayout, LAYOUT_RULES, MasterRef, isFormLayout } from './fields';
-import { type ManagerKind, holdsManagerRole, managerRoleMessage, someoneHoldsManagerRole } from './managerRoles';
+import { type ManagerKind, type PeopleModule, holdsManagerRole, managerRoleMessage, someoneHoldsManagerRole } from './managerRoles';
 
 /**
  * Database checks for the employee form: every dropdown value must be an
@@ -181,6 +181,8 @@ export async function checkReferences(q: Querier, input: EmployeeInput, layout: 
                        JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE u.id = ? LIMIT 1`, [selfId])
     : [];
   const roleError: Record<ManagerKind, string | null> = { reporting: null, hod: null };
+  // A PMS employee's reporting manager is their PI (PMS role); an HRMS employee's, the HRMS Reporting Manager / HoD.
+  const people: PeopleModule = (await employeeTypeModules(q)).get(String(input.employmentType ?? '')) ?? 'HRMS';
   const activeAccount = async (id: string, kind: ManagerKind) => {
     const [row] = await rows(q,
       `SELECT u.id, u.biometric_id, u.name, u.status, u.is_system, p.institute FROM users u
@@ -192,9 +194,9 @@ export async function checkReferences(q: Querier, input: EmployeeInput, layout: 
     const kept = String(current?.[kind === 'reporting' ? 'reporting_manager_id' : 'reviewing_manager_id'] ?? '') === String(row.id);
     if (!kept) {
       const ok = system
-        ? !(await someoneHoldsManagerRole(q, kind)) // the Administrator only until an employee holds the role
-        : await holdsManagerRole(q, String(row.biometric_id), kind);
-      if (!ok) { roleError[kind] = managerRoleMessage(kind); return null; }
+        ? !(await someoneHoldsManagerRole(q, kind, people)) // the Administrator only until an employee holds the role
+        : await holdsManagerRole(q, String(row.biometric_id), kind, people);
+      if (!ok) { roleError[kind] = managerRoleMessage(kind, people); return null; }
     }
     return row;
   };

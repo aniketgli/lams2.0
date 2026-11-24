@@ -173,9 +173,15 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const salutationOptions = (masterOptions.salutation ?? []).map((r) => ({ label: r.name, value: r.code }));
   const genderOptions = (masterOptions.gender ?? []).map((r) => ({ label: r.name, value: r.code }));
   const employeeTypeOptions = (masterOptions.employeeType ?? []).map((r) => ({ label: r.name, value: r.code }));
-  // HRMS has the employee types set to HRMS in Master Settings → Employee Types (Permanent, Trainee); the others are PMS.
-  const hrmsTypeCodes = useMemo(() => new Set((masterOptions.employeeType ?? [])
-    .filter((r) => String(r.fields?.module ?? 'HRMS').toUpperCase() !== 'PMS').map((r) => r.code)), [masterOptions.employeeType]);
+  // This page serves HRMS and PMS (the server limits each to its employees). HRMS has the employee types set to HRMS in
+  // Master Settings → Employee Types (Permanent, Trainee); PMS the others. PMS calls the reporting manager the PI.
+  const { session: peopleSession } = useSession();
+  const peopleModule: 'HRMS' | 'PMS' = peopleSession?.activeModule === 'pms' ? 'PMS' : 'HRMS';
+  const isPms = peopleModule === 'PMS';
+  const rmLabel = isPms ? 'PI' : 'Reporting Manager';
+  const moduleTypeCodes = useMemo(() => new Set((masterOptions.employeeType ?? [])
+    .filter((r) => (String(r.fields?.module ?? 'HRMS').toUpperCase() === 'PMS' ? 'PMS' : 'HRMS') === peopleModule).map((r) => r.code)), [masterOptions.employeeType, peopleModule]);
+  const inModule = (u: { employmentType?: string | null }) => moduleTypeCodes.has(String(u.employmentType ?? ''));
   const instituteOptions = (masterOptions.institute ?? []).map((r) => ({ label: r.name, value: r.code }));
   // Banks master; an employee's saved bank stays selectable even if it was later made inactive.
   const bankOptions = (current: string) => {
@@ -229,8 +235,8 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   // Employee Manager: adds, edits and imports HRMS employees; no roles, passwords, status or deletion (server checks it).
   const isEmployeeManager = currentUser.role === 'employee_manager';
   const canManageEmployees = isAdmin || isEmployeeManager;
-  const canManageEmployee = (u: { employmentType?: string | null }) => isAdmin || (isEmployeeManager && hrmsTypeCodes.has(String(u.employmentType ?? '')));
-  const canAccessAdminSubTabs = isAdmin || isAudit;
+  const canManageEmployee = (u: { employmentType?: string | null }) => (isAdmin && (!isPms || inModule(u))) || (isEmployeeManager && inModule(u));
+  const canAccessAdminSubTabs = (isAdmin || isAudit) && !isPms;
   const showMyProfile = !isAdmin && !isAudit && !isManager && !isEmployeeManager;
   const [auditorView, setAuditorView] = useState<'directory' | 'activity'>('directory');
   /** The header's Employee transfer / Manager replacement buttons ask the mapping panel to open that order form. */
@@ -288,18 +294,19 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   // Who appears in the directory, by active role. The server sends full details
   // only for these people and refuses any other profile, whatever the screen shows.
   const accessibleProfiles = useMemo(() => {
-    if (isAdmin || isAudit) return users;
-    if (isEmployeeManager) return users.filter((u) => hrmsTypeCodes.has(String(u.employmentType ?? '')));
+    // The directory lists this module's employees (User Controls, in HRMS, lists everyone).
+    if (isAdmin || isAudit || isEmployeeManager) return users.filter(inModule);
     if (isManager) {
       return users.filter((u) => {
         if (u.id === currentUser.id) return false;
+        if (!inModule(u)) return false; // HRMS: HRMS employees; PMS (the PI): PMS employees
         if (u.reportingManagerId === currentUser.id) return true;
         if (u.reviewingManagerId === currentUser.id) return true;
         return false;
       });
     }
     return users.filter((u) => u.id === currentUser.id);
-  }, [currentUser, users, isAdmin, isAudit, isManager, isEmployeeManager, hrmsTypeCodes]);
+  }, [currentUser, users, isAdmin, isAudit, isManager, isEmployeeManager, moduleTypeCodes]);
 
   // Dynamic Designations List
   const designationsList = useMemo(() => {
@@ -1312,7 +1319,12 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
    */
   const managersWithRole = (role: 'reporting_manager' | 'reviewing_manager', current: string) => {
     const employees = users.filter((u) => u.status !== 'deactivated');
-    const hasRole = (u: (typeof users)[number]) => (u.roles ?? [u.role]).includes(role);
+    // PMS: the PI is anyone holding the PMS role "Principal Investigator (PI)" (an HRMS scientist too).
+    const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const PI_NAMES = new Set(['pmspi', 'principalinvestigatorpi', 'principalinvestigator', 'projectpi', 'pi']);
+    const hasRole = (u: (typeof users)[number]) => isPms
+      ? role === 'reporting_manager' && (u.moduleRoles?.pms ?? []).some((r: string) => PI_NAMES.has(norm(r)))
+      : (u.roles ?? [u.role]).includes(role);
     const holders = employees.filter(hasRole);
     const admins = systemUsers.filter((u) => u.status !== 'deactivated' && (u.roles ?? [u.role]).includes('administrator'));
     const kept = [...employees, ...admins].filter((u) => u.id === current && !holders.includes(u));
@@ -1655,7 +1667,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                   onView={(u) => { setSelectedUserId(u.id); setDirectoryViewMode('detail'); }}
                   onEdit={canManageEmployees ? (u) => openEditEmployee(u) : undefined}
                   canEdit={(u) => u.id !== currentUser.id && canManageEmployee(u)}
-                  onHistory={isAdmin ? (u) => setHistoryUser(u) : undefined}
+                  onHistory={isAdmin && !isPms ? (u) => setHistoryUser(u) : undefined}
                 />
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1794,7 +1806,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                             <span>View Full Profile</span>
                           </button>
 
-                          {isAdmin && !u.isSystem && (
+                          {isAdmin && !isPms && !u.isSystem && (
                             <button
                               onClick={() => setHistoryUser(u)}
                               className={actionBtn('neutral')}
@@ -1828,7 +1840,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
             <div>
               <EmployeeProfileView
                 userId={selectedUser.id}
-                canEditPhoto={isAdmin && !selectedUser.isSystem}
+                canEditPhoto={isAdmin && !isPms && !selectedUser.isSystem}
                 onBack={(isAdmin || isAudit || isManager || isEmployeeManager) ? () => setDirectoryViewMode(lastListMode) : undefined}
                 onPhotoChanged={async () => {
                   await Promise.all([reloadEmployees(), selectedUser.id === currentUser.id ? refreshSession() : Promise.resolve()]);
@@ -2414,7 +2426,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                         options={[
                           { label: 'Select Employee Type', value: '' },
                           // HRMS types only; an employee being edited keeps their own type in the list.
-                          ...employeeTypeOptions.filter((o) => hrmsTypeCodes.has(o.value) || (editedEmployee && o.value === editedEmployee.employmentType))
+                          ...employeeTypeOptions.filter((o) => moduleTypeCodes.has(o.value) || (editedEmployee && o.value === editedEmployee.employmentType))
                         ]}
                         className="w-full"
                       />
@@ -2532,14 +2544,14 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                         {/* Reporting manager */}
                         <div>
                           <label className="block text-slate-700 font-bold mb-1 text-xs">
-                            Reporting Manager <span className="text-blue-600 font-bold ml-0.5">*</span>
+                            {rmLabel} <span className="text-blue-600 font-bold ml-0.5">*</span>
                           </label>
                           <AppSelect
                             value={newUserForm.reportingManagerId}
-                            placeholder="Select Reporting Manager"
+                            placeholder={`Select ${rmLabel}`}
                             onChange={(val) => setNewUserForm({ ...newUserForm, reportingManagerId: val })}
                             options={[
-                              { label: 'Select Reporting Manager', value: '' },
+                              { label: `Select ${rmLabel}`, value: '' },
                               ...formReportingManagers.map((u) => ({
                                 label: `${u.name} (${u.designation || 'Manager'} - ${u.department || 'General'})`,
                                 value: u.id
@@ -2732,14 +2744,14 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                         {/* Reporting manager */}
                         <div>
                           <label className="block text-slate-700 font-bold mb-1 text-xs">
-                            Reporting Manager <span className="text-blue-600 font-bold ml-0.5">*</span>
+                            {rmLabel} <span className="text-blue-600 font-bold ml-0.5">*</span>
                           </label>
                           <AppSelect
                             value={newUserForm.reportingManagerId}
-                            placeholder="Select Reporting Manager"
+                            placeholder={`Select ${rmLabel}`}
                             onChange={(val) => setNewUserForm({ ...newUserForm, reportingManagerId: val })}
                             options={[
-                              { label: 'Select Reporting Manager', value: '' },
+                              { label: `Select ${rmLabel}`, value: '' },
                               ...formReportingManagers.map((u) => ({
                                 label: `${u.name} (${u.designation || 'Manager'} - ${u.department || 'General'})`,
                                 value: u.id
@@ -2857,17 +2869,17 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                         {/* Reporting manager */}
                         <div>
                           <label className="block text-slate-700 font-bold mb-1 text-xs">
-                            Reporting Manager <span className="text-blue-600 font-bold ml-0.5">*</span>
+                            {rmLabel} <span className="text-blue-600 font-bold ml-0.5">*</span>
                           </label>
                           <AppSelect
                             value={newUserForm.reportingManagerId}
-                            placeholder="Select Reporting Manager"
+                            placeholder={`Select ${rmLabel}`}
                             onChange={(val) => {
                               const sel = users.find((u) => u.id === val);
                               setNewUserForm({ ...newUserForm, reportingManagerId: val, piName: sel ? sel.name : newUserForm.piName });
                             }}
                             options={[
-                              { label: 'Select Reporting Manager', value: '' },
+                              { label: `Select ${rmLabel}`, value: '' },
                               ...formReportingManagers.map((u) => ({
                                 label: `${u.name} (${u.designation || 'PI'} - ${u.department || 'General'})`,
                                 value: u.id
@@ -2994,14 +3006,14 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                         {/* Reporting manager */}
                         <div>
                           <label className="block text-slate-700 font-bold mb-1 text-xs">
-                            Reporting Manager <span className="text-blue-600 font-bold ml-0.5">*</span>
+                            {rmLabel} <span className="text-blue-600 font-bold ml-0.5">*</span>
                           </label>
                           <AppSelect
                             value={newUserForm.reportingManagerId}
-                            placeholder="Select Reporting Manager"
+                            placeholder={`Select ${rmLabel}`}
                             onChange={(val) => setNewUserForm({ ...newUserForm, reportingManagerId: val })}
                             options={[
-                              { label: 'Select Reporting Manager', value: '' },
+                              { label: `Select ${rmLabel}`, value: '' },
                               ...formReportingManagers.map((u) => ({
                                 label: `${u.name} (${u.designation || 'Manager'} - ${u.department || 'General'})`,
                                 value: u.id
@@ -3115,14 +3127,14 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                         {/* Reporting manager */}
                         <div>
                           <label className="block text-slate-700 font-bold mb-1 text-xs">
-                            Reporting Manager <span className="text-blue-600 font-bold ml-0.5">*</span>
+                            {rmLabel} <span className="text-blue-600 font-bold ml-0.5">*</span>
                           </label>
                           <AppSelect
                             value={newUserForm.reportingManagerId}
-                            placeholder="Select Reporting Manager"
+                            placeholder={`Select ${rmLabel}`}
                             onChange={(val) => setNewUserForm({ ...newUserForm, reportingManagerId: val })}
                             options={[
-                              { label: 'Select Reporting Manager', value: '' },
+                              { label: `Select ${rmLabel}`, value: '' },
                               ...formReportingManagers.map((u) => ({
                                 label: `${u.name} (${u.designation || 'Guide'} - ${u.department || 'General'})`,
                                 value: u.id
@@ -3222,17 +3234,17 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                         {/* Reporting manager */}
                         <div>
                           <label className="block text-slate-700 font-bold mb-1 text-xs">
-                            Reporting Manager <span className="text-blue-600 font-bold ml-0.5">*</span>
+                            {rmLabel} <span className="text-blue-600 font-bold ml-0.5">*</span>
                           </label>
                           <AppSelect
                             value={newUserForm.reportingManagerId}
-                            placeholder="Select Reporting Manager"
+                            placeholder={`Select ${rmLabel}`}
                             onChange={(val) => {
                               const sel = users.find((u) => u.id === val);
                               setNewUserForm({ ...newUserForm, reportingManagerId: val, piName: sel ? sel.name : newUserForm.piName });
                             }}
                             options={[
-                              { label: 'Select Reporting Manager', value: '' },
+                              { label: `Select ${rmLabel}`, value: '' },
                               ...formReportingManagers.map((u) => ({
                                 label: `${u.name} (${u.designation || 'Guide'} - ${u.department || 'General'})`,
                                 value: u.id
@@ -3345,14 +3357,14 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
                         {/* Reporting manager */}
                         <div>
                           <label className="block text-slate-700 font-bold mb-1 text-xs">
-                            Reporting Manager <span className="text-blue-600 font-bold ml-0.5">*</span>
+                            {rmLabel} <span className="text-blue-600 font-bold ml-0.5">*</span>
                           </label>
                           <AppSelect
                             value={newUserForm.reportingManagerId}
-                            placeholder="Select Reporting Manager"
+                            placeholder={`Select ${rmLabel}`}
                             onChange={(val) => setNewUserForm({ ...newUserForm, reportingManagerId: val })}
                             options={[
-                              { label: 'Select Reporting Manager', value: '' },
+                              { label: `Select ${rmLabel}`, value: '' },
                               ...formReportingManagers.map((u) => ({
                                 label: `${u.name} (${u.designation || 'Manager'} - ${u.department || 'General'})`,
                                 value: u.id
