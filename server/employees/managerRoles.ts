@@ -14,14 +14,8 @@ export const MANAGER_ROLE = { reporting: 'reporting_manager', hod: 'reviewing_ma
 export type ManagerKind = keyof typeof MANAGER_ROLE;
 
 type Q = Pick<PoolConnection, 'query'>;
-/** Whose employees: HRMS (Permanent, Trainee) or PMS (the project / contract types), by the employee's type. */
+/** Whose employees: HRMS (Permanent, Trainee) or PMS (the project / contract types), by the employee's type; same rules. */
 export type PeopleModule = 'HRMS' | 'PMS';
-
-/**
- * PMS has one approver, the PI: a PMS employee's "reporting manager" is an account holding the PMS role
- * "Principal Investigator (PI)" (role id pms_pi, which acts as the reporting manager in PMS). PMS has no HoD.
- */
-const PMS_PI_ROLE = 'pms_pi';
 
 async function managerRolesOf(q: Q, module: PeopleModule, where: string, params: unknown[]): Promise<Array<{ biometricId: string; kind: ManagerKind }>> {
   const [rows] = await q.query<RowDataPacket[]>(
@@ -32,16 +26,15 @@ async function managerRolesOf(q: Q, module: PeopleModule, where: string, params:
   for (const r of rows) {
     const entry = findRole(catalog, r.module_id, r.role_id);
     if (!entry) continue;
-    if (module === 'HRMS' && entry.moduleId === 'hrms') {
-      if (entry.accessRole === MANAGER_ROLE.reporting) out.push({ biometricId: String(r.biometric_id), kind: 'reporting' });
-      if (entry.accessRole === MANAGER_ROLE.hod) out.push({ biometricId: String(r.biometric_id), kind: 'hod' });
-    }
-    if (module === 'PMS' && entry.moduleId === 'pms' && entry.roleId === PMS_PI_ROLE) out.push({ biometricId: String(r.biometric_id), kind: 'reporting' });
+    // The same rule in both modules: the Reporting Manager / HoD role of the employee's module.
+    if (entry.moduleId !== (module === 'PMS' ? 'pms' : 'hrms')) continue;
+    if (entry.accessRole === MANAGER_ROLE.reporting) out.push({ biometricId: String(r.biometric_id), kind: 'reporting' });
+    if (entry.accessRole === MANAGER_ROLE.hod) out.push({ biometricId: String(r.biometric_id), kind: 'hod' });
   }
   return out;
 }
 
-/** Whether the account holds the manager role of `kind` (HRMS: Reporting Manager / HoD; PMS: PI). */
+/** Whether the account holds the manager role of `kind` (Reporting Manager / HoD) in the employee's module. */
 export async function holdsManagerRole(q: Q, biometricId: string, kind: ManagerKind, module: PeopleModule = 'HRMS'): Promise<boolean> {
   const roles = await managerRolesOf(q, module, 'g.biometric_id = ?', [biometricId]);
   return roles.some((r) => r.kind === kind);
@@ -53,9 +46,9 @@ export async function someoneHoldsManagerRole(q: Q, kind: ManagerKind, module: P
   return roles.some((r) => r.kind === kind);
 }
 
-export const managerRoleMessage = (kind: ManagerKind, module: PeopleModule = 'HRMS'): string =>
-  module === 'PMS'
-    ? 'Choose an employee who has the PI role in PMS (User Controls → roles, PMS column).'
-    : kind === 'reporting'
-      ? 'Choose an employee who has the Reporting Manager role (User Controls → roles).'
-      : 'Choose an employee who has the HoD role (User Controls → roles).';
+export const managerRoleMessage = (kind: ManagerKind, module: PeopleModule = 'HRMS'): string => {
+  const where = module === 'PMS' ? ' in PMS (User Controls → roles, PMS column)' : ' (User Controls → roles)';
+  return kind === 'reporting'
+    ? `Choose an employee who has the Reporting Manager role${where}.`
+    : `Choose an employee who has the HoD role${where}.`;
+};

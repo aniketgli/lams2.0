@@ -174,11 +174,11 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
   const genderOptions = (masterOptions.gender ?? []).map((r) => ({ label: r.name, value: r.code }));
   const employeeTypeOptions = (masterOptions.employeeType ?? []).map((r) => ({ label: r.name, value: r.code }));
   // This page serves HRMS and PMS (the server limits each to its employees). HRMS has the employee types set to HRMS in
-  // Master Settings → Employee Types (Permanent, Trainee); PMS the others. PMS calls the reporting manager the PI.
+  // Master Settings → Employee Types (Permanent, Trainee); PMS the others. The rules are the same in both.
   const { session: peopleSession } = useSession();
   const peopleModule: 'HRMS' | 'PMS' = peopleSession?.activeModule === 'pms' ? 'PMS' : 'HRMS';
   const isPms = peopleModule === 'PMS';
-  const rmLabel = isPms ? 'PI' : 'Reporting Manager';
+  const rmLabel = 'Reporting Manager';
   const moduleTypeCodes = useMemo(() => new Set((masterOptions.employeeType ?? [])
     .filter((r) => (String(r.fields?.module ?? 'HRMS').toUpperCase() === 'PMS' ? 'PMS' : 'HRMS') === peopleModule).map((r) => r.code)), [masterOptions.employeeType, peopleModule]);
   const inModule = (u: { employmentType?: string | null }) => moduleTypeCodes.has(String(u.employmentType ?? ''));
@@ -857,7 +857,9 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
         };
         const matrixRoleAliases: Record<string, Record<string, string>> = {
           lams: hrmsRoleMap,
-          pms: { admin: 'pms_admin', administrator: 'pms_admin', hod: 'pms_pi', reportingmanager: 'pms_co_pi', user: 'pms_researcher', auditor: 'auditor', leavebalancemanager: 'pms_leave_balance', employeemanager: 'pms_employee_manager' },
+          pms: { admin: 'pms_admin', administrator: 'pms_admin', hod: 'pms_pi', reportingmanager: 'pms_co_pi', user: 'pms_researcher', auditor: 'auditor', leavebalancemanager: 'pms_leave_balance', employeemanager: 'pms_employee_manager',
+            // grants saved under the former PMS names
+            'pmsadministrator/deanr&d': 'pms_admin', 'principalinvestigator(pi)': 'pms_pi', 'coprincipalinvestigator(copi)': 'pms_co_pi', 'researchfellow/staff': 'pms_researcher' },
           sims: { admin: 'sims_admin', administrator: 'sims_admin', hod: 'sims_approver', reportingmanager: 'sims_store_keeper', user: 'sims_indenter', auditor: 'auditor' },
           finance: { admin: 'fin_admin', administrator: 'fin_admin', hod: 'fin_officer', reportingmanager: 'fin_accountant', user: 'fin_claimant', auditor: 'auditor' },
           fms: { admin: 'fms_admin', administrator: 'fms_admin', hod: 'fms_officer', reportingmanager: 'fms_supervisor', user: 'fms_requester', auditor: 'auditor' }
@@ -1319,11 +1321,14 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
    */
   const managersWithRole = (role: 'reporting_manager' | 'reviewing_manager', current: string) => {
     const employees = users.filter((u) => u.status !== 'deactivated');
-    // PMS: the PI is anyone holding the PMS role "Principal Investigator (PI)" (an HRMS scientist too).
+    // The manager roles of this module: in PMS the PMS Reporting Manager / HoD (an HRMS employee may hold them too).
     const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, '');
-    const PI_NAMES = new Set(['pmspi', 'principalinvestigatorpi', 'principalinvestigator', 'projectpi', 'pi']);
+    const PMS_NAMES: Record<string, Set<string>> = {
+      reporting_manager: new Set(['reportingmanager', 'pmscopi', 'copi', 'coprincipalinvestigatorcopi', 'coprincipalinvestigator', 'rm']),
+      reviewing_manager: new Set(['hod', 'pmspi', 'pi', 'principalinvestigatorpi', 'principalinvestigator', 'reviewingmanager', 'projectpi']),
+    };
     const hasRole = (u: (typeof users)[number]) => isPms
-      ? role === 'reporting_manager' && (u.moduleRoles?.pms ?? []).some((r: string) => PI_NAMES.has(norm(r)))
+      ? (u.moduleRoles?.pms ?? []).some((r: string) => PMS_NAMES[role]?.has(norm(r)))
       : (u.roles ?? [u.role]).includes(role);
     const holders = employees.filter(hasRole);
     const admins = systemUsers.filter((u) => u.status !== 'deactivated' && (u.roles ?? [u.role]).includes('administrator'));
