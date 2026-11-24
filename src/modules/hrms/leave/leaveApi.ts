@@ -65,7 +65,8 @@ export interface LeaveTypeList {
 }
 
 export const leaveTypeApi = {
-  list: () => api<LeaveTypeList>('/hrms/leave-types'),
+  /** scope 'master': the master screen (in PMS only PMS's own leave types; HRMS lists every type either way). */
+  list: (scope?: 'master') => api<LeaveTypeList>(`/hrms/leave-types${scope ? `?scope=${scope}` : ''}`),
   create: (input: LeaveTypeInput) => api<{ leaveType: LeaveTypeRecord; message: string }>('/hrms/leave-types', { method: 'POST', body: input }),
   update: (id: string, input: LeaveTypeInput) => api<{ leaveType: LeaveTypeRecord; message: string }>(`/hrms/leave-types/${encodeURIComponent(id)}`, { method: 'PUT', body: input }),
   remove: (id: string, reason?: string) => api<{ message: string }>(`/hrms/leave-types/${encodeURIComponent(id)}`, { method: 'DELETE', body: { reason } }),
@@ -93,7 +94,7 @@ export interface LeaveGroupList {
 }
 
 export const leaveGroupApi = {
-  list: () => api<LeaveGroupList>('/hrms/leave-groups'),
+  list: (scope?: 'master') => api<LeaveGroupList>(`/hrms/leave-groups${scope ? `?scope=${scope}` : ''}`),
   create: (input: LeaveGroupInput) => api<{ group: LeaveGroupRecord; message: string }>('/hrms/leave-groups', { method: 'POST', body: input }),
   update: (id: string, input: LeaveGroupInput) => api<{ group: LeaveGroupRecord; message: string }>(`/hrms/leave-groups/${encodeURIComponent(id)}`, { method: 'PUT', body: input }),
   remove: (id: string, reason?: string) => api<{ message: string }>(`/hrms/leave-groups/${encodeURIComponent(id)}`, { method: 'DELETE', body: { reason } }),

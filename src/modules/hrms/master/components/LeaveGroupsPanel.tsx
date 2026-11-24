@@ -39,7 +39,7 @@ export const LeaveGroupsPanel: React.FC<{ readOnly?: boolean }> = ({ readOnly = 
     setLoading(true);
     setLoadError(undefined);
     try {
-      setData(await leaveGroupApi.list());
+      setData(await leaveGroupApi.list('master'));
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : 'Could not load the leave groups.');
     } finally {

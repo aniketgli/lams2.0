@@ -20,6 +20,7 @@ import { LoginPage } from './auth/pages/LoginPage';
 import { LobbyPage } from './lobby/pages/LobbyPage';
 import { ChangePasswordPage } from './auth/pages/ChangePasswordPage';
 import { ProjectsPage } from './modules/pms/ProjectsPage';
+import { PmsMasterSettingsPage } from './modules/pms/PmsMasterSettingsPage';
 import { ProjectSummaryStrip } from './modules/pms/components/ProjectSummaryStrip';
 import { pmsHomeFor, pmsPath } from './modules/pms/pmsPages';
 import { InventoryView } from './modules/inventory/InventoryView';
@@ -149,6 +150,7 @@ const AppContent: React.FC = () => {
             {tab === 'holiday_calendar' && <HolidayCalendarPage onNavigate={goTo} />}
             {tab === 'profile' && <EmployeeProfilePage key="pms-profile" initialTab="profile" />}
             {tab === 'projects' && <ProjectsPage />}
+            {tab === 'master' && <PmsMasterSettingsPage />}
           </React.Fragment>
         )}
         {screen.kind === 'module' && screen.module === 'sims' && <InventoryView onReturnToLobby={() => setActiveModule('lobby')} />}

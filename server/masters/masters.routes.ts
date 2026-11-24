@@ -1,12 +1,13 @@
-import { Router, type Response } from 'express';
+import { Router, type Request, type RequestHandler, type Response } from 'express';
 import { activityCsv, activityTable, listActivity, parseActivityFilter, type ActivityScope } from '../employees/activity';
 import type { RowDataPacket } from 'mysql2';
 import { pool } from '../../src/db';
-import { asyncHandler, badRequest, notFound } from '../lib/http';
+import { asyncHandler, badRequest, forbidden, notFound } from '../lib/http';
 import { isValidIsoDate } from '../lib/validate';
-import { requireActiveRole, requireAuth, requireModule } from '../middleware/auth.middleware';
+import { requireActiveRole, requireAuth, requireModule, requirePeopleRole } from '../middleware/auth.middleware';
 import { FORM_LAYOUTS, MASTERS, MasterDef, auditMasterLabels, findMaster, masterActivityScope, tabOrder } from './definitions';
-import { activeOptions, createRecord, deleteRecord, listRecords, setStatus, updateRecord } from './store';
+import { activeOptions, createRecord, deleteRecord, getRecord, listRecords, setStatus, updateRecord } from './store';
+import { employeeTypeModules } from '../employees/references';
 import { sendCsvReport } from '../lib/csvResponse';
 
 /**
@@ -22,15 +23,31 @@ import { sendCsvReport } from '../lib/csvResponse';
  *   DELETE /:key/:id                delete (only if not in use)             admin
  */
 const router = Router();
-// The dropdown lists (/options) serve the employee screens HRMS and PMS share; everything else is HRMS's.
+/**
+ * HRMS keeps every master. PMS (its Administrator; its Auditor reads) keeps only the masters PMS uses: the
+ * designations of the PMS employee types and the M.Sc / PhD masters (PMS_MASTER_KEYS); it also reads the
+ * dropdown lists (/options) for the employee screens HRMS and PMS share. Everything else stays HRMS's.
+ */
+export const PMS_MASTER_KEYS: readonly string[] = ['designations', 'mscStreams', 'mscBatches', 'phdEnrollment', 'fundingCategory'];
+const pmsPath = (path: string): boolean => {
+  if (path === '/options' || path === '/catalog') return true;
+  const key = path.split('/')[1] ?? '';
+  return PMS_MASTER_KEYS.includes(key);
+};
 const hrmsModule = requireModule('hrms');
 router.use(requireAuth, (req, res, next) => {
-  if (req.method === 'GET' && req.path === '/options' && req.auth?.activeModule === 'pms') return next();
+  if (req.auth?.activeModule === 'pms' && pmsPath(req.path)) return next();
   return hrmsModule(req, res, next);
 });
 
-const canView = requireActiveRole('hrms', 'administrator', 'audit');
-const canEdit = requireActiveRole('hrms', 'administrator');
+/** HRMS: the HRMS roles; PMS: the same roles in PMS (the router already limits PMS to its masters). */
+const masterRole = (...roles: Parameters<typeof requirePeopleRole>) => {
+  const hrms = requireActiveRole('hrms', ...roles);
+  const people = requirePeopleRole(...roles);
+  return ((req, res, next) => (req.auth?.activeModule === 'pms' ? people(req, res, next) : hrms(req, res, next))) as RequestHandler;
+};
+const canView = masterRole('administrator', 'audit');
+const canEdit = masterRole('administrator');
 
 const MASTER_SCOPE: ActivityScope = {
   ...masterActivityScope(),
@@ -65,9 +82,10 @@ function idFrom(raw: string): number {
   return id;
 }
 
-router.get('/catalog', canView, (_req, res) => {
+router.get('/catalog', canView, (req, res) => {
+  const pms = req.auth?.activeModule === 'pms';
   res.json({
-    masters: MASTERS.map((m) => ({
+    masters: MASTERS.filter((m) => !pms || PMS_MASTER_KEYS.includes(m.key)).map((m) => ({
       key: m.key, label: m.label, noun: m.noun, group: m.group, description: m.description, fields: m.fields, kind: m.kind, tab: tabOrder(m.key), noCreate: Boolean(m.noCreate), codeEditable: Boolean(m.codeEditable), swapStatusWith: m.swapStatusWith ?? null,
       ...(m.kind === 'lookup' ? { lookupType: m.lookupType } : {}),
     })),
@@ -151,23 +169,46 @@ router.get('/audit', canView, asyncHandler(async (req, res) => {
   });
 }));
 
+// PMS keeps the designations of the PMS employee types only (the others are HRMS's or shared by both).
+const pmsDesignations = (req: Request, key: string) => req.auth?.activeModule === 'pms' && key === 'designations';
+const pmsTypes = async () => new Set([...(await employeeTypeModules(pool))].filter(([, m]) => m === 'PMS').map(([code]) => code));
+async function assertPmsDesignation(req: Request, key: string, id: number | null, body: unknown): Promise<void> {
+  if (!pmsDesignations(req, key)) return;
+  const types = await pmsTypes();
+  if (id !== null) {
+    const existing = await getRecord(masterFrom(key), id);
+    if (existing && !types.has(String(existing.fields?.empType ?? ''))) throw forbidden('This designation is not a PMS one: it is kept in HRMS.');
+  }
+  if (body !== undefined) {
+    const empType = String(((body as { fields?: Record<string, unknown> } | null)?.fields ?? {}).empType ?? '');
+    if (!types.has(empType)) throw badRequest('Please correct the highlighted fields.', { empType: 'Choose a PMS employment type (Contractual, Project staff …).' });
+  }
+}
+
 router.get('/:key', canView, asyncHandler(async (req, res) => {
-  res.json({ records: await listRecords(masterFrom(req.params.key)) });
+  const records = await listRecords(masterFrom(req.params.key));
+  if (!pmsDesignations(req, req.params.key)) { res.json({ records }); return; }
+  const types = await pmsTypes();
+  res.json({ records: records.filter((r) => types.has(String(r.fields?.empType ?? ''))) });
 }));
 
 router.post('/:key', canEdit, asyncHandler(async (req, res) => {
+  await assertPmsDesignation(req, req.params.key, null, req.body);
   res.status(201).json({ record: await createRecord(masterFrom(req.params.key), req.body, req) });
 }));
 
 router.put('/:key/:id', canEdit, asyncHandler(async (req, res) => {
+  await assertPmsDesignation(req, req.params.key, idFrom(req.params.id), req.body);
   res.json({ record: await updateRecord(masterFrom(req.params.key), idFrom(req.params.id), req.body, req) });
 }));
 
 router.patch('/:key/:id/status', canEdit, asyncHandler(async (req, res) => {
+  await assertPmsDesignation(req, req.params.key, idFrom(req.params.id), undefined);
   res.json({ record: await setStatus(masterFrom(req.params.key), idFrom(req.params.id), req.body?.status, req, req.body?.reason) });
 }));
 
 router.delete('/:key/:id', canEdit, asyncHandler(async (req, res) => {
+  await assertPmsDesignation(req, req.params.key, idFrom(req.params.id), undefined);
   await deleteRecord(masterFrom(req.params.key), idFrom(req.params.id), req, req.body?.reason);
   res.json({ success: true });
 }));

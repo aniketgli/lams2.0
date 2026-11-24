@@ -135,6 +135,10 @@ async function main(): Promise<void> {
   }
   const formOpen = await d.getByText('Sanctioned amount (₹)').count();
   check('PMS Projects: the RC office sees "New project" and the project form opens', newProject && formOpen > 0 && errors.length === 0, `button ${newProject}, form ${formOpen}, errors ${errors.join(' | ')}`);
+  await d.goto(`${BASE}/pms/master-settings`);
+  const masterOk = await d.getByRole('button', { name: /leave groups/i }).first().waitFor({ state: 'visible', timeout: 15000 }).then(() => true, () => false);
+  const shiftsTab = await d.getByRole('button', { name: /^shifts$/i }).count();
+  check('PMS Master Settings: leave types, leave groups and profile masters only (no Shifts)', masterOk && shiftsTab === 0 && errors.length === 0, `tabs ${masterOk}, shifts ${shiftsTab}, errors ${errors.join(' | ')}`);
   await d.goto(`${BASE}/pms/leave`);
   check('PMS: dashboard, attendance and leave pages open without errors', attendanceOk && leaveOk && errors.length === 0 && d.url().endsWith('/pms/leave'),
     `attendance ${attendanceOk}, leave ${leaveOk}, errors ${errors.join(' | ')}`);

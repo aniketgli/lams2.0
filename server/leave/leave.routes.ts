@@ -1,11 +1,14 @@
 import { applyImport, importTemplate, reviewImport } from './balanceImport';
 import { issueLeaveClearance, leaveClearance } from './noDues';
 import { reconcileApply, reconcilePreview } from './reconcile';
+import { type Owner, assertPmsLeaveGroup, assertPmsLeaveType, inPms, leaveTypeOwners, ownerOfGroup } from './moduleScope';
+import { employeeTypeModules } from '../employees/references';
+import { pool } from '../../src/db';
 import { Router, type Request, type Response } from 'express';
 import { asyncHandler, attachmentDisposition, forbidden } from '../lib/http';
 import { limitHeavy } from '../middleware/apiRateLimit';
 import { Validator } from '../lib/validate';
-import { requireActiveRole, requireAuth, isAuditor, requirePeopleRole } from '../middleware/auth.middleware';
+import { requireAuth, isAuditor, requirePeopleRole } from '../middleware/auth.middleware';
 import { inScope, scopedViewerOf } from '../lib/peopleScope';
 import { activityCsv, activityTable, listActivity, parseActivityFilter } from '../employees/activity';
 import {
@@ -30,11 +33,16 @@ import { sendCsvReport } from '../lib/csvResponse';
  *   logs:     auditor, with CSV / PDF downloads that are logged too
  */
 const router = Router();
-const isAdmin = [requireAuth, requireActiveRole('hrms', 'administrator')];
+/** Leave types and groups: the HRMS Administrator, or the PMS one for PMS's own (moduleScope.ts). */
+const isLeaveAdmin = [requireAuth, requirePeopleRole('administrator')];
 
-router.get('/leave-types', requireAuth, asyncHandler(async (_req, res) => {
+router.get('/leave-types', requireAuth, asyncHandler(async (req, res) => {
   const [types, options] = await Promise.all([listLeaveTypes(), leaveTypeOptions()]);
-  res.json({ types, ...options });
+  if (!inPms(req)) { res.json({ types, ...options }); return; }
+  // PMS: the master screen lists PMS's leave types; elsewhere PMS's and shared ones. New ones are for PMS types.
+  const [owners, modules] = await Promise.all([leaveTypeOwners(), employeeTypeModules(pool)]);
+  const keep = (req.query.scope === 'master' ? ['PMS'] : ['PMS', 'shared']) as Owner[];
+  res.json({ types: types.filter((t) => keep.includes(owners.get(t.id) ?? 'shared')), employeeTypes: options.employeeTypes.filter((t) => modules.get(t.code) === 'PMS') });
 }));
 
 router.get('/leave-types/activity', ...isAuditor, asyncHandler(async (req, res) => {
@@ -49,17 +57,20 @@ router.get('/leave-types/activity/export-pdf', ...isAuditor, asyncHandler(async 
   res.json({ generatedAt: new Date().toISOString(), ...table });
 }));
 
-router.post('/leave-types', ...isAdmin, asyncHandler(async (req, res) => {
+router.post('/leave-types', ...isLeaveAdmin, asyncHandler(async (req, res) => {
+  await assertPmsLeaveType(req, null, req.body);
   const leaveType = await createLeaveType(req, req.body);
   res.status(201).json({ leaveType, message: `Leave type "${leaveType.name}" created.` });
 }));
 
-router.put('/leave-types/:id', ...isAdmin, asyncHandler(async (req, res) => {
+router.put('/leave-types/:id', ...isLeaveAdmin, asyncHandler(async (req, res) => {
+  await assertPmsLeaveType(req, leaveTypeId(req.params.id), req.body);
   const leaveType = await updateLeaveType(req, leaveTypeId(req.params.id), req.body);
   res.json({ leaveType, message: `Leave type "${leaveType.name}" updated.` });
 }));
 
-router.delete('/leave-types/:id', ...isAdmin, asyncHandler(async (req, res) => {
+router.delete('/leave-types/:id', ...isLeaveAdmin, asyncHandler(async (req, res) => {
+  await assertPmsLeaveType(req, leaveTypeId(req.params.id), undefined);
   const v = new Validator(req.body ?? {});
   const reason = v.optionalString('reason', { max: 500 });
   v.assert();
@@ -68,8 +79,13 @@ router.delete('/leave-types/:id', ...isAdmin, asyncHandler(async (req, res) => {
 }));
 
 // ---- Leave groups: everyone signed in reads, administrator changes, auditor reads the log ----------
-router.get('/leave-groups', requireAuth, asyncHandler(async (_req, res) => {
-  res.json(await listLeaveGroups());
+router.get('/leave-groups', requireAuth, asyncHandler(async (req, res) => {
+  const list = await listLeaveGroups();
+  if (!inPms(req)) { res.json(list); return; }
+  // PMS: the master screen lists PMS's groups; the employee form PMS's and shared ones. Only PMS leave types to choose.
+  const owners = await leaveTypeOwners();
+  const keep = (req.query.scope === 'master' ? ['PMS'] : ['PMS', 'shared']) as Owner[];
+  res.json({ ...list, groups: list.groups.filter((g) => keep.includes(ownerOfGroup(g.leaveTypeIds, owners))), leaveTypes: list.leaveTypes.filter((t) => owners.get(t.id) === 'PMS') });
 }));
 router.get('/leave-groups/activity', ...isAuditor, asyncHandler(async (req, res) => {
   res.json(await listActivity(parseActivityFilter(req.query as Record<string, unknown>, LEAVE_GROUP_SCOPE), LEAVE_GROUP_SCOPE));
@@ -81,15 +97,18 @@ router.get('/leave-groups/activity/export-pdf', ...isAuditor, asyncHandler(async
   const table = await activityTable(req, parseActivityFilter(req.query as Record<string, unknown>, LEAVE_GROUP_SCOPE), 'pdf', LEAVE_GROUP_SCOPE);
   res.json({ generatedAt: new Date().toISOString(), ...table });
 }));
-router.post('/leave-groups', ...isAdmin, asyncHandler(async (req, res) => {
+router.post('/leave-groups', ...isLeaveAdmin, asyncHandler(async (req, res) => {
+  await assertPmsLeaveGroup(req, null, req.body);
   const group = await createLeaveGroup(req, req.body);
   res.status(201).json({ group, message: `Leave group "${group.name}" created.` });
 }));
-router.put('/leave-groups/:id', ...isAdmin, asyncHandler(async (req, res) => {
+router.put('/leave-groups/:id', ...isLeaveAdmin, asyncHandler(async (req, res) => {
+  await assertPmsLeaveGroup(req, leaveTypeId(req.params.id), req.body);
   const group = await updateLeaveGroup(req, leaveTypeId(req.params.id), req.body);
   res.json({ group, message: `Leave group "${group.name}" updated.` });
 }));
-router.delete('/leave-groups/:id', ...isAdmin, asyncHandler(async (req, res) => {
+router.delete('/leave-groups/:id', ...isLeaveAdmin, asyncHandler(async (req, res) => {
+  await assertPmsLeaveGroup(req, leaveTypeId(req.params.id), undefined);
   const v = new Validator(req.body ?? {});
   const reason = v.optionalString('reason', { max: 500 });
   v.assert();
