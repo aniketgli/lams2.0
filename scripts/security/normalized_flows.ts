@@ -386,7 +386,9 @@ async function main(): Promise<void> {
     check('PMS Administrator can be chosen as the active PMS role', asPms.status === 200, `${asPms.status} ${asPms.text.slice(0, 160)}`);
     const pmsOptions = await req('GET', '/api/hrms/masters/options');
     const pmsCatalog = await req('GET', '/api/hrms/masters/catalog');
-    check('PMS loads the dropdown lists for the employee form, not the HRMS master screens', pmsOptions.status === 200 && Array.isArray(pmsOptions.body?.employeeType) && pmsCatalog.status === 403, `${pmsOptions.status} / ${pmsCatalog.status}`);
+    const shiftsMaster = await req('GET', '/api/hrms/masters/audit');
+    check('PMS loads the dropdown lists for the employee form, and the PMS masters only (not HRMS master screens)', pmsOptions.status === 200 && Array.isArray(pmsOptions.body?.employeeType)
+      && pmsCatalog.status === 200 && !(pmsCatalog.body?.masters ?? []).some((m: any) => m.key === 'banks') && shiftsMaster.status === 403, `${pmsOptions.status} / ${pmsCatalog.status} / ${shiftsMaster.status}`);
     const pmsTypes = (await req('GET', '/api/hrms/employees/import/types')).body?.types ?? [];
     check('PMS bulk import offers only the PMS employee types', pmsTypes.some((t: any) => t.code === 'project') && !pmsTypes.some((t: any) => t.code === 'permanent'), JSON.stringify(pmsTypes.map((t: any) => t.code)));
     const pmsBody = {
