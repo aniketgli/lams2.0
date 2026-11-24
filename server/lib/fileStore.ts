@@ -9,6 +9,7 @@
  *   <UPLOAD_DIR>/photos/0336-1731650000000-1a2b3c4d.jpg
  *   <UPLOAD_DIR>/certificates/leave-12-1731650000000-....pdf
  *   <UPLOAD_DIR>/fitness/report-4-1731650000000-....pdf
+ *   <UPLOAD_DIR>/projects/project-7-sanction-1731650000000-....pdf   (PMS project documents)
  *
  * Files are written to a temporary name and renamed (never half-written), readable only by the app user
  * (0640, folders 0750), and every read checks that the path stays inside UPLOAD_DIR. A file is written
@@ -19,10 +20,10 @@ import { randomBytes } from 'node:crypto';
 import { mkdir, readdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-export type FileKind = 'photos' | 'certificates' | 'fitness';
-export const FILE_KINDS: readonly FileKind[] = ['photos', 'certificates', 'fitness'];
+export type FileKind = 'photos' | 'certificates' | 'fitness' | 'projects';
+export const FILE_KINDS: readonly FileKind[] = ['photos', 'certificates', 'fitness', 'projects'];
 
-const SAFE_REL = /^(photos|certificates|fitness)\/[A-Za-z0-9][A-Za-z0-9._-]{0,150}$/;
+const SAFE_REL = /^(photos|certificates|fitness|projects)\/[A-Za-z0-9][A-Za-z0-9._-]{0,150}$/;
 const SAFE_PREFIX = /^[A-Za-z0-9-]{1,40}$/;
 const SAFE_EXT = /^[a-z0-9]{1,5}$/;
 

@@ -19,7 +19,8 @@ import { LogoViewerModal } from './shared/modals/LogoViewerModal';
 import { LoginPage } from './auth/pages/LoginPage';
 import { LobbyPage } from './lobby/pages/LobbyPage';
 import { ChangePasswordPage } from './auth/pages/ChangePasswordPage';
-import { PMSView } from './modules/pms/PMSView';
+import { ProjectsPage } from './modules/pms/ProjectsPage';
+import { ProjectSummaryStrip } from './modules/pms/components/ProjectSummaryStrip';
 import { pmsHomeFor, pmsPath } from './modules/pms/pmsPages';
 import { InventoryView } from './modules/inventory/InventoryView';
 import { FMSView } from './modules/fms/FMSView';
@@ -133,7 +134,12 @@ const AppContent: React.FC = () => {
         {screen.kind === 'pms' && (
           // PMS: the HRMS screens with the same rules (the server limits them to PMS employees), and Projects.
           <React.Fragment key={activeRole ?? 'none'}>
-            {tab === 'dashboard' && <DashboardPage onNavigate={goTo} />}
+            {tab === 'dashboard' && (
+              <div className="space-y-5">
+                <ProjectSummaryStrip onOpen={() => goTo('projects')} />
+                <DashboardPage onNavigate={goTo} />
+              </div>
+            )}
             {(tab === 'attendance' || tab === 'manual_attendance' || tab === 'od') && (
               <AttendanceManagementPage key={`pms-${tab}`} initialTab={tab} />
             )}
@@ -142,7 +148,7 @@ const AppContent: React.FC = () => {
             )}
             {tab === 'holiday_calendar' && <HolidayCalendarPage onNavigate={goTo} />}
             {tab === 'profile' && <EmployeeProfilePage key="pms-profile" initialTab="profile" />}
-            {tab === 'projects' && <PMSView onReturnToLobby={() => setActiveModule('lobby')} />}
+            {tab === 'projects' && <ProjectsPage />}
           </React.Fragment>
         )}
         {screen.kind === 'module' && screen.module === 'sims' && <InventoryView onReturnToLobby={() => setActiveModule('lobby')} />}

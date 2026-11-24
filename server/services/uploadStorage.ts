@@ -7,11 +7,18 @@ const SOURCES: Record<FileKind, { table: string }> = {
   photos: { table: 'employee_photos' },
   certificates: { table: 'leave_certificates' },
   fitness: { table: 'leave_joining_certificates' },
+  projects: { table: 'project_files' },
 };
 
 async function referenced(kind: FileKind): Promise<Set<string>> {
-  const [rows] = await pool.query<RowDataPacket[]>(`SELECT storage_path FROM ${SOURCES[kind].table} WHERE storage_path IS NOT NULL`);
-  return new Set(rows.map((r) => String(r.storage_path)));
+  try {
+    const [rows] = await pool.query<RowDataPacket[]>(`SELECT storage_path FROM ${SOURCES[kind].table} WHERE storage_path IS NOT NULL`);
+    return new Set(rows.map((r) => String(r.storage_path)));
+  } catch (error) {
+    // A table a later migration adds (project_files): no row, so no file of that kind can be in use yet.
+    if ((error as { code?: string })?.code === 'ER_NO_SUCH_TABLE') return new Set();
+    throw error;
+  }
 }
 
 const DAY = 24 * 60 * 60 * 1000;

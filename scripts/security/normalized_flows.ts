@@ -432,11 +432,52 @@ async function main(): Promise<void> {
     const balPage = await req('GET', '/api/hrms/leave/balances?year=2026');
     check('PMS Leave Balance lists PMS employees and their leave types only', balPage.status === 200 && !(balPage.body?.rows ?? []).some((r: any) => r.userId === String(scientist))
       && (balPage.body?.employeeTypes ?? []).every((t: any) => t.code !== 'permanent'), `${balPage.status} ${(balPage.body?.rows ?? []).length} rows, types ${(balPage.body?.types ?? []).map((t: any) => t.code).join(',')}`);
+    // ---- PMS Projects (RC office): funding agency, a project, its stages, a document, bulk import ----------------
+    const agency = await req('POST', '/api/pms/funding-agencies', { name: 'CI Science Fund', code: 'CISF' });
+    check('Projects: the RC office adds a funding agency', agency.status === 201, `${agency.status} ${agency.text.slice(0, 160)}`);
+    const projectBody = {
+      code: 'CI-PRJ-2026-01', title: 'CI Tiger Corridor Study', category: 'external', fundingAgencyId: agency.body?.agency?.id,
+      sanctionedAmount: '1,25,00,000', startDate: '2026-04-01', endDate: '2029-03-31', piUserId: String(piUser.id), coPiUserIds: [String(scientist)],
+      department: 'Animal Ecology', sites: 'Madhya Pradesh',
+    };
+    const project = await req('POST', '/api/pms/projects', projectBody);
+    const pid = project.body?.project?.id;
+    check('Projects: the RC office creates a project (Proposed, amount, PI, Co-PI, duration)', project.status === 201 && project.body?.project?.stage === 'proposed'
+      && project.body?.project?.sanctionedAmount === 12500000 && project.body?.project?.coPis?.length === 1 && project.body?.project?.durationMonths === 36,
+      `${project.status} ${project.text.slice(0, 200)}`);
+    const dupProject = await req('POST', '/api/pms/projects', { ...projectBody, title: 'CI Another Title' });
+    check('Projects: a second project with the same code is refused', dupProject.status === 400 && Boolean(dupProject.body?.details?.code), `${dupProject.status} ${JSON.stringify(dupProject.body?.details ?? {})}`);
+    const skip = await req('PATCH', `/api/pms/projects/${pid}/stage`, { stage: 'ongoing' });
+    const review = await req('PATCH', `/api/pms/projects/${pid}/stage`, { stage: 'under_review' });
+    const rejectNoReason = await req('PATCH', `/api/pms/projects/${pid}/stage`, { stage: 'rejected' });
+    const approve = await req('PATCH', `/api/pms/projects/${pid}/stage`, { stage: 'approved' });
+    check('Projects: stages follow the rules (no skipping, a reason to reject)', skip.status === 400 && review.status === 200 && rejectNoReason.status === 400 && approve.status === 200 && approve.body?.project?.stage === 'approved',
+      `${skip.status}/${review.status}/${rejectNoReason.status}/${approve.status}`);
+    const pdf = `data:application/pdf;base64,${Buffer.from('%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF').toString('base64')}`;
+    const upload = await req('PUT', `/api/pms/projects/${pid}/files/sanction`, { name: 'Sanction order.pdf', data: pdf });
+    const notPdf = await req('PUT', `/api/pms/projects/${pid}/files/proposal`, { name: 'x.pdf', data: `data:application/pdf;base64,${Buffer.from('hello').toString('base64')}` });
+    const fetched = await req('GET', `/api/pms/projects/${pid}/files/sanction`);
+    check('Projects: the sanction order (PDF) is uploaded and served; a non-PDF is refused', upload.status === 200 && upload.body?.project?.files?.sanction?.name === 'Sanction order.pdf'
+      && notPdf.status === 400 && fetched.status === 200 && fetched.text.startsWith('%PDF'), `${upload.status}/${notPdf.status}/${fetched.status}`);
+    const csv = ['Project_Code,Title,Category,Funding_Agency,Sanctioned_Amount,Start_Date,End_Date,PI_Biometric_ID,Stage',
+      `CI-PRJ-2026-02,CI Wetland Birds,Grant-in-aid,CISF,500000,01-04-2026,31-03-2028,${piUser.biometricId},Ongoing`,
+      'CI-PRJ-2026-03,CI Desert Fox,External,NO SUCH AGENCY,,,,,'].join('\n');
+    const badReview = await req('POST', '/api/pms/projects/import/review', { csv });
+    const goodCsv = csv.split('\n').slice(0, 2).join('\n');
+    const imported = await req('POST', '/api/pms/projects/import', { csv: goodCsv });
+    const refused = await req('POST', '/api/pms/projects/import', { csv });
+    check('Projects: bulk import reviews every row and imports all or none', badReview.status === 200 && badReview.body?.summary?.errors === 1 && badReview.body?.summary?.ok === 1
+      && imported.status === 201 && imported.body?.summary?.ok === 1 && refused.status === 400, `${badReview.status} ${JSON.stringify(badReview.body?.summary)} · ${imported.status} · ${refused.status}`);
+    const listed = await req('GET', '/api/pms/projects');
+    check('Projects: the list has both projects with their agency', listed.status === 200 && (listed.body?.projects ?? []).filter((p: any) => String(p.code).startsWith('CI-PRJ-2026-') && p.fundingAgency === 'CI Science Fund').length === 2,
+      `${listed.status} ${(listed.body?.projects ?? []).length}`);
     const pmsRoles = await req('PUT', `/api/hrms/employees/${pmsNew.body?.employee?.id ?? 0}/module-roles`, { moduleRoles: { pms: ['pms_admin'] } });
     check('PMS has no User Controls: roles are given in HRMS only', pmsRoles.status === 403, String(pmsRoles.status));
     await req('POST', '/api/auth/login', { email: 'admin@wii.gov.in', password: PASSWORD });
     await req('POST', '/api/access/module', { moduleId: 'hrms' });
     await req('POST', '/api/access/active-role', { moduleId: 'hrms', role: 'Administrator' });
+    const hrmsProjects = await req('POST', '/api/pms/projects', { code: 'CI-HRMS-X', title: 'CI from HRMS' });
+    check('Projects are kept in PMS: the HRMS administrator cannot create one', hrmsProjects.status === 403, String(hrmsProjects.status));
     const hrmsDir = (await req('GET', '/api/hrms/employees/export-pdf')).body?.rows ?? [];
     check('The HRMS directory download lists HRMS employees only', !JSON.stringify(hrmsDir).includes('CI PMS Fellow') && JSON.stringify(hrmsDir).includes('CI New Scientist'), `${hrmsDir.length} rows`);
   } else check('PMS: seed users 1006 / 1007 and the HRMS employee', false);
