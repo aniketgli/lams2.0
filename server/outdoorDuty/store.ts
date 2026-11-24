@@ -1,4 +1,5 @@
 import { profileJsonSql } from '../employees/profileSql';
+import { inScope } from '../lib/peopleScope';
 import { MAX_LIST_ROWS, listLimitProblem, visibilityClause, canSeeEmployee } from '../lib/visibility';
 import type { Request } from 'express';
 import type { RowDataPacket } from 'mysql2/promise';
@@ -46,7 +47,8 @@ export const OD_SCOPE: ActivityScope = {
   filePrefix: 'WII_Outdoor_Duty_Activity',
 };
 
-export interface Viewer { id: number; role: RoleId | null }
+/** module / scope: HRMS or PMS and the user ids of its employees (server/lib/peopleScope.ts, lib/visibility.ts). */
+export interface Viewer { id: number; role: RoleId | null; module?: 'HRMS' | 'PMS' | null; scope?: ReadonlySet<string> }
 
 export interface OdRequest {
   id: string;
@@ -149,6 +151,7 @@ const notStarted = (row: RowDataPacket, today: string) => today <= isoDate(row.s
 const noManager = (row: RowDataPacket) => !row.manager_id;
 
 function canDecide(viewer: Viewer, row: RowDataPacket): boolean {
+  if (!inScope(viewer, row.user_id)) return false; // another module's employee (HRMS / PMS)
   if (String(row.status) !== 'pending') return false;
   if (viewer.role === 'administrator') return noManager(row);
   if (Number(row.user_id) === viewer.id) return false;
@@ -156,6 +159,7 @@ function canDecide(viewer: Viewer, row: RowDataPacket): boolean {
 }
 
 function canModify(viewer: Viewer, row: RowDataPacket, today = todayInIndia()): boolean {
+  if (!inScope(viewer, row.user_id)) return false; // another module's employee (HRMS / PMS)
   if (String(row.status) !== 'pending' || !notStarted(row, today)) return false;
   return viewer.role === 'administrator' || (viewer.role === 'general_staff' && Number(row.user_id) === viewer.id);
 }
@@ -171,6 +175,7 @@ function undoCheck(viewer: Viewer, row: RowDataPacket) {
 }
 
 function canUndo(viewer: Viewer, row: RowDataPacket): boolean {
+  if (!inScope(viewer, row.user_id)) return false; // another module's employee (HRMS / PMS)
   return undoProblem(undoCheck(viewer, row)) === null;
 }
 
@@ -338,6 +343,7 @@ export async function createRequest(req: Request, viewer: Viewer, body: unknown)
   } else {
     throw forbidden('Your current role cannot apply for outdoor duty.');
   }
+  if (!inScope(viewer, targetId)) throw forbidden('This employee belongs to the other module (HRMS / PMS).');
   const target = await loadTarget(pool, targetId);
   checkDates(viewer, input, target.joining);
   try {

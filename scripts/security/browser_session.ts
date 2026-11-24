@@ -114,10 +114,20 @@ async function main(): Promise<void> {
   const newButton = await d.getByRole('button', { name: /new employee/i }).count();
   const sidebar = await d.getByRole('button', { name: /^projects$/i }).count();
   const roleName = await d.getByText('PMS Administrator').count();
-  check('PMS: the Employees page opens with "New employee", the PMS sidebar and the PMS role name',
-    header && newButton > 0 && sidebar > 0 && roleName > 0 && errors.length === 0 && d.url().endsWith('/pms/employees'),
-    header ? `button ${newButton}, sidebar ${sidebar}, role ${roleName}, errors ${errors.join(' | ')}, url ${d.url()}` : (await d.locator('body').innerText()).replace(/\s+/g, ' ').slice(0, 300));
+  const portalName = await d.getByText('Project Management System', { exact: true }).count();
+  const leaveLink = await d.getByRole('button', { name: /leave & holidays/i }).count();
+  check('PMS: the Employees page opens with "New employee", the PMS sidebar (Leave & Holidays, Projects), the portal name and the PMS role name',
+    header && newButton > 0 && sidebar > 0 && roleName > 0 && portalName > 0 && leaveLink > 0 && errors.length === 0 && d.url().endsWith('/pms/employees'),
+    header ? `button ${newButton}, sidebar ${sidebar}, role ${roleName}, portal ${portalName}, leave ${leaveLink}, errors ${errors.join(' | ')}, url ${d.url()}` : (await d.locator('body').innerText()).replace(/\s+/g, ' ').slice(0, 300));
   if (process.env.SCREENSHOT_DIR) await d.screenshot({ path: `${process.env.SCREENSHOT_DIR}/pms-employees.png`, fullPage: true }).catch(() => undefined);
+  await d.goto(`${BASE}/pms/dashboard`);
+  await d.waitForTimeout(2500);
+  await d.goto(`${BASE}/pms/attendance`);
+  const attendanceOk = await d.getByText(/Biometric Attendance/i).first().waitFor({ state: 'visible', timeout: 15000 }).then(() => true, () => false);
+  await d.goto(`${BASE}/pms/leave`);
+  const leaveOk = await d.getByRole('button', { name: /apply leave/i }).first().waitFor({ state: 'visible', timeout: 15000 }).then(() => true, () => false);
+  check('PMS: dashboard, attendance and leave pages open without errors', attendanceOk && leaveOk && errors.length === 0 && d.url().endsWith('/pms/leave'),
+    `attendance ${attendanceOk}, leave ${leaveOk}, errors ${errors.join(' | ')}`);
 
   if (logs.length) console.log(`\nSession messages in the browser:\n  ${logs.join('\n  ')}`);
   await browser.close();

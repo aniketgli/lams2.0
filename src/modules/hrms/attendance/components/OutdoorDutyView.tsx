@@ -1,3 +1,4 @@
+import { usePeopleModule } from '../../../../shared/hooks/usePeopleModule';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Briefcase, CalendarDays, Check, CheckCircle2, Clock, Eye, Globe, MapPin, Pencil, Plus, RotateCcw, Trash2, X } from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
@@ -97,6 +98,7 @@ export const OutdoorDutyView: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [notice, showNotice, clearNotice] = useNotice();
   const [auditorView, setAuditorView] = useState<'records' | 'activity'>('records');
+  const isPmsScreen = usePeopleModule() === 'PMS';
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -386,7 +388,8 @@ export const OutdoorDutyView: React.FC = () => {
   const employeeOptions = [...new Map(requests.map((r) => [r.userId, `${r.name} (${r.biometricId})`])).entries()]
     .sort((a, b) => a[1].localeCompare(b[1])).map(([value, label]) => ({ label, value }));
 
-  const auditorSwitch = isAudit ? (
+  // The activity log is HRMS's: PMS shows the records only.
+  const auditorSwitch = isAudit && !isPmsScreen ? (
     <SegmentedControl ariaLabel="Auditor view" value={auditorView} onChange={setAuditorView} options={[{ value: 'records', label: 'Requests' }, { value: 'activity', label: 'Activity log' }]} />
   ) : null;
 

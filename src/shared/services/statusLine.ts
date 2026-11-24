@@ -28,5 +28,15 @@ export function decidedBy(role: string | null | undefined, name: string | null |
 export const statusPerson = (line: string): string => line.replace(/^(at|by) /, '');
 
 /** Waiting at the reporting manager; without one, an administrator decides. */
+/**
+ * What the approver is called: the reporting manager (R.M.) in HRMS, the PI in PMS. App.tsx sets it for the module on
+ * screen, so the screens HRMS and PMS share name the approver right.
+ */
+let managerTitle: { short: string; long: string } = { short: 'R.M.', long: 'Reporting Manager' };
+export const setManagerTitle = (module: 'HRMS' | 'PMS'): void => {
+  managerTitle = module === 'PMS' ? { short: 'PI', long: 'PI' } : { short: 'R.M.', long: 'Reporting Manager' };
+};
+export const managerTitleLong = (): string => managerTitle.long;
+
 export const pendingAtManager = (managerName: string | null | undefined): string =>
-  managerName ? pendingAt('R.M.', managerName) : pendingAt('Admin', null);
+  managerName ? pendingAt(managerTitle.short, managerName) : pendingAt('Admin', null);

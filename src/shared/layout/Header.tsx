@@ -4,6 +4,7 @@ import { UserRole } from '../../types';
 import { useSession } from '../../auth/SessionContext';
 import { ROLE_ORDER, roleLabel } from '../../auth/access';
 import { WIILogo } from '../components/WIILogo';
+import { PORTAL_NAMES } from '../portalNames';
 import { UserAvatar } from '../components/UserAvatar';
 import { Menu, ArrowLeft, ChevronDown, Check } from 'lucide-react';
 
@@ -24,6 +25,7 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const { currentUser } = useApp();
   const { session, switchRole } = useSession();
+  const portal = session?.activeModule ? PORTAL_NAMES[session.activeModule] ?? null : null;
 
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -89,6 +91,17 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="flex lg:hidden items-center pointer-events-none select-none">
             <WIILogo variant="horizontal" size="md" textColor="text-slate-900" />
           </div>
+
+          {/* The portal's name, next to the logo */}
+          {portal && (
+            <div className="flex items-center min-w-0 select-none">
+              <span className="hidden sm:block lg:hidden w-px h-7 bg-slate-200 mr-3" aria-hidden />
+              <div className="min-w-0 leading-tight">
+                <div className="text-sm font-extrabold text-slate-900 truncate">{portal.title}</div>
+                <div className="hidden sm:block text-[11px] font-medium text-slate-500 truncate">{portal.subtitle}</div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right Side: User Profile */}

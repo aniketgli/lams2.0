@@ -160,6 +160,13 @@ export function requireModule(moduleId: ModuleId): RequestHandler {
   };
 }
 
+/** HRMS or PMS open: for the routes the two share. */
+export const requirePeopleModule: RequestHandler = (req, _res, next) => {
+  if (!req.auth) return next(unauthorized());
+  if (req.auth.activeModule !== 'hrms' && req.auth.activeModule !== 'pms') return next(forbidden('Open this module first.', 'NO_ACTIVE_ROLE'));
+  next();
+};
+
 // ---------------------------------------------------------------------------
 // Backwards-compatible names used by the existing HRMS and integration routes.
 // Express accepts arrays of handlers anywhere a handler is expected.

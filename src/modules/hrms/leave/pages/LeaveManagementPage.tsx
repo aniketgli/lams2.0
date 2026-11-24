@@ -1,3 +1,4 @@
+import { usePeopleModule } from '../../../../shared/hooks/usePeopleModule';
 import React, { useState } from 'react';
 import { Plus, Upload } from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
@@ -50,17 +51,19 @@ export const LeaveManagementPage: React.FC<LeaveManagementPageProps> = ({ initia
   const role = currentUser.role;
   const isAdmin = role === 'administrator';
   const isAudit = role === 'audit';
+  const isPms = usePeopleModule() === 'PMS';
   const canApply = isAdmin || role === 'general_staff';
   const balances = initialTab === 'leave_balance';
   // Administrator and Leave Balance Manager set balances on the Leave Balance page.
   const managesBalances = isAdmin || role === 'leave_balance_manager';
   const [view, setView] = useState<LeaveView>('requests');
   const [balanceView, setBalanceView] = useState<'balances' | 'activity'>('balances');
-  const balanceSwitch = isAudit
+  const balanceSwitch = isAudit && !isPms
     ? <SegmentedControl ariaLabel="Leave balance views" value={balanceView} onChange={setBalanceView} options={[{ value: 'balances', label: 'Leave balance' }, { value: 'activity', label: 'Activity log' }]} />
     : null;
-  const viewTabs: Array<readonly [LeaveView, string]> = isAdmin ? [['requests', 'Requests'], ['types', 'Leave Types'], ['nodues', 'No Dues']]
-    : isAudit ? [['requests', 'Requests'], ['types', 'Leave Types'], ['activity', 'Activity log']] : [['requests', 'Requests']];
+  // PMS: leave types and the activity log are kept in HRMS (Master Settings come to PMS separately).
+  const viewTabs: Array<readonly [LeaveView, string]> = isAdmin ? (isPms ? [['requests', 'Requests'], ['nodues', 'No Dues']] : [['requests', 'Requests'], ['types', 'Leave Types'], ['nodues', 'No Dues']])
+    : isAudit && !isPms ? [['requests', 'Requests'], ['types', 'Leave Types'], ['activity', 'Activity log']] : [['requests', 'Requests']];
   const viewSwitch = viewTabs.length > 1
     ? <SegmentedControl ariaLabel="Leave views" value={view} onChange={setView} options={viewTabs.map(([value, label]) => ({ value, label }))} />
     : null;

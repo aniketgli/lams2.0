@@ -406,6 +406,23 @@ async function main(): Promise<void> {
     const seenHrms = pmsList.find((e: any) => e.id === String(scientist));
     const seenPms = pmsList.find((e: any) => e.biometricId === '3030');
     check('PMS Administrator sees PMS employees in full, HRMS employees only by name', Boolean(seenPms?.phone) && Boolean(seenHrms) && !seenHrms?.phone, JSON.stringify({ pms: seenPms?.phone, hrms: seenHrms?.phone }));
+    // Attendance, leave and the dashboard in PMS: its own employees only.
+    const pmsFellowId = pmsNew.body?.employee?.id;
+    const pmsLeave = await req('GET', '/api/hrms/leave/requests');
+    const leaveIds = (pmsLeave.body?.employees ?? []).map((e: any) => String(e.id));
+    check('PMS leave: apply-for list has the PMS employee, not the HRMS one', pmsLeave.status === 200 && leaveIds.includes(String(pmsFellowId)) && !leaveIds.includes(String(scientist)), `${pmsLeave.status} ${leaveIds.length}`);
+    const today = new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
+    const attPms = await req('GET', `/api/hrms/attendance?from=${today}&to=${today}&userId=${pmsFellowId}`);
+    const attHrms = await req('GET', `/api/hrms/attendance?from=${today}&to=${today}&userId=${scientist}`);
+    check('PMS attendance: the PMS employee is shown, the HRMS one is not', attPms.status === 200 && attHrms.status === 200 && (attHrms.body?.records ?? []).length === 0,
+      `${attPms.status}/${(attPms.body?.records ?? []).length} · ${attHrms.status}/${(attHrms.body?.records ?? []).length}`);
+    const balHrms = await req('PUT', '/api/hrms/leave/balances', { userId: String(scientist), leaveTypeId: '1', year: 2026, total: 5 });
+    check('PMS cannot set the leave balance of an HRMS employee', balHrms.status === 403, `${balHrms.status} ${balHrms.text.slice(0, 120)}`);
+    const pmsDash = await req('GET', '/api/hrms/dashboard');
+    check('PMS dashboard opens', pmsDash.status === 200 && pmsDash.body?.role === 'administrator', `${pmsDash.status} ${pmsDash.text.slice(0, 120)}`);
+    const ndPms = await req('GET', `/api/hrms/leave/no-dues?userId=${pmsFellowId}&relievingDate=2027-03-31`);
+    const ndHrms = await req('GET', `/api/hrms/leave/no-dues?userId=${scientist}&relievingDate=2027-03-31`);
+    check('PMS No Dues: for PMS employees, not for HRMS ones', ndPms.status === 200 && ndHrms.status === 403, `${ndPms.status} ${ndPms.text.slice(0, 120)} · ${ndHrms.status}`);
     const pmsRoles = await req('PUT', `/api/hrms/employees/${pmsNew.body?.employee?.id ?? 0}/module-roles`, { moduleRoles: { pms: ['pms_admin'] } });
     check('PMS has no User Controls: roles are given in HRMS only', pmsRoles.status === 403, String(pmsRoles.status));
     await req('POST', '/api/auth/login', { email: 'admin@wii.gov.in', password: PASSWORD });

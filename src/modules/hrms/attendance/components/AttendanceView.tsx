@@ -1,3 +1,4 @@
+import { usePeopleModule } from '../../../../shared/hooks/usePeopleModule';
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlarmClock, CalendarCheck, ChevronLeft, ChevronRight, Clock, LayoutGrid, List, UserX } from 'lucide-react';
 import { useApp } from '../../../../context/AppContext';
@@ -89,6 +90,7 @@ export const AttendanceView: React.FC = () => {
   const isAudit = role === 'audit';
   const isAdminOrAudit = role === 'administrator' || role === 'audit';
   const [auditorView, setAuditorView] = useState<'records' | 'activity'>('records');
+  const isPmsScreen = usePeopleModule() === 'PMS';
   const isManager = role === 'reporting_manager' || role === 'reviewing_manager';
   const teamView = isAdminOrAudit || isManager;
   const showManagerFilter = isAdminOrAudit || role === 'reviewing_manager';
@@ -341,7 +343,8 @@ export const AttendanceView: React.FC = () => {
   const employeeOptions = [...new Map(rows.map((r) => [r.userId, `${r.name} (${r.biometricId})`])).entries()]
     .sort((a, b) => a[1].localeCompare(b[1])).map(([value, label]) => ({ label, value }));
 
-  const auditorSwitch = isAudit ? (
+  // The activity log is HRMS's: PMS shows the records only.
+  const auditorSwitch = isAudit && !isPmsScreen ? (
     <SegmentedControl ariaLabel="Auditor view" value={auditorView} onChange={setAuditorView} options={[{ value: 'records', label: 'Attendance' }, { value: 'activity', label: 'Activity log' }]} />
   ) : null;
 

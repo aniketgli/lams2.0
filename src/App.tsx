@@ -21,6 +21,7 @@ import { LobbyPage } from './lobby/pages/LobbyPage';
 import { ChangePasswordPage } from './auth/pages/ChangePasswordPage';
 import { PMSView } from './modules/pms/PMSView';
 import { pmsHomeFor, pmsPath } from './modules/pms/pmsPages';
+import { setManagerTitle } from './shared/services/statusLine';
 import { InventoryView } from './modules/inventory/InventoryView';
 import { FMSView } from './modules/fms/FMSView';
 import { FinanceView } from './modules/finance/FinanceView';
@@ -99,6 +100,8 @@ const AppContent: React.FC = () => {
   const tab = screen.kind === 'hrms' || screen.kind === 'pms' ? screen.page : homePageFor(activeRole);
   const goTo = (pageId: string) => navigate(screen.kind === 'pms' ? pmsPath(pageId) : hrmsPath(pageId));
   const home = screen.kind === 'pms' ? pmsHomeFor(activeRole) : homePageFor(activeRole);
+  // The shared screens call the approver R.M. in HRMS and PI in PMS (status lines, details).
+  setManagerTitle(screen.kind === 'pms' ? 'PMS' : 'HRMS');
 
   return (
     <>
@@ -131,10 +134,18 @@ const AppContent: React.FC = () => {
         )}
 
         {screen.kind === 'pms' && (
-          // PMS: Projects, and the employee screens shared with HRMS (the server limits them to PMS employees).
+          // PMS: the HRMS screens (the server limits them to PMS employees; the PI approves), and Projects.
           <React.Fragment key={activeRole ?? 'none'}>
-            {tab === 'projects' && <PMSView onReturnToLobby={() => setActiveModule('lobby')} />}
+            {tab === 'dashboard' && <DashboardPage onNavigate={goTo} />}
+            {(tab === 'attendance' || tab === 'manual_attendance' || tab === 'od') && (
+              <AttendanceManagementPage key={`pms-${tab}`} initialTab={tab} />
+            )}
+            {(tab === 'leave' || tab === 'leave_balance') && (
+              <LeaveManagementPage key={`pms-${tab}`} onNavigate={goTo} initialTab={tab} />
+            )}
+            {tab === 'holiday_calendar' && <HolidayCalendarPage onNavigate={goTo} />}
             {tab === 'profile' && <EmployeeProfilePage key="pms-profile" initialTab="profile" />}
+            {tab === 'projects' && <PMSView onReturnToLobby={() => setActiveModule('lobby')} />}
           </React.Fragment>
         )}
         {screen.kind === 'module' && screen.module === 'sims' && <InventoryView onReturnToLobby={() => setActiveModule('lobby')} />}
