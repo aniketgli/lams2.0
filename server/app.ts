@@ -18,6 +18,7 @@ import outdoorDutyRoutes from './outdoorDuty/outdoorDuty.routes';
 import { reportRoutes } from './reports/reports.routes';
 import leaveRoutes from './leave/leave.routes';
 import dashboardRoutes from './dashboard/dashboard.routes';
+import projectRoutes from './projects/projects.routes';
 import mastersRoutes from './masters/masters.routes';
 import settingsRoutes from './masters/settings.routes';
 import { apiNotFound, errorHandler } from './middleware/errorHandler';
@@ -69,7 +70,10 @@ export async function createApp(httpServer?: HttpServer) {
   app.set('trust proxy', trustProxySetting());
   app.use(securityHeaders);
   app.use(compressJson);
-  app.use(express.json({ limit: '2mb' }));
+  // JSON bodies up to 2 MB; a PMS project document (proposal / sanction order PDF, up to 8 MB as base64) up to 12 MB.
+  const jsonBody = express.json({ limit: '2mb' });
+  const projectFileBody = express.json({ limit: '12mb' });
+  app.use((req, res, next) => (req.method === 'PUT' && /^\/api\/pms\/projects\/\d+\/files\/(proposal|sanction)$/.test(req.path) ? projectFileBody : jsonBody)(req, res, next));
 
   app.use(keepOneSessionCookie);
   app.use(session({
@@ -121,6 +125,7 @@ export async function createApp(httpServer?: HttpServer) {
   api.use('/hrms', leaveRoutes); // leave types (policy), balances and requests
   api.use('/hrms', reportRoutes); // scheduled report emails (administrator; the auditor reads)
   api.use('/hrms', downloadRoutes); // download log for screens that build their files in the browser
+  api.use('/pms', projectRoutes); // PMS projects and funding agencies (RC office)
   api.use(apiNotFound);
   app.use('/api', api);
 
