@@ -55,6 +55,10 @@ jobs:
               grep -v "Using a password" /tmp/mig.out | tail -4
             done
           done
+      - name: TEMP data script check
+        run: |
+          mysql -h127.0.0.1 -uroot -proot lams2_test -e "INSERT IGNORE INTO designations (name, code, employee_type_code, status) VALUES ('Technical Assistant','CI-TA','permanent','ACTIVE')" || true
+          for run in 1 2; do mysql -h127.0.0.1 -uroot -proot -t lams2_test < scripts/sql/data/pms_designations_project_staff.sql; done
       - name: Check the normalized data
         run: bash scripts/sql/ci/verify_normalization.sh lams2_test
       - name: Seed test accounts
