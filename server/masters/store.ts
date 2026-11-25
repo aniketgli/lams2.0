@@ -183,9 +183,15 @@ async function validate(def: MasterDef, body: unknown, existing: MasterRecord | 
   }
 
   // A name kept as it was is not checked again: two old rows with the same name can still have their other fields edited.
-  if (!errors.name && !(existing && existing.name.toLowerCase() === name.toLowerCase())) {
-    const dupName = await selectRows(def, 'AND LOWER(name) = LOWER(?) AND id <> ?', [name, existing ? Number(existing.id) : 0]);
-    if (dupName.length) errors.name = `Another ${def.noun.toLowerCase()} already has this name.`;
+  // Designations: one name may be used once per employment type (HRMS "Technical Assistant" for Permanent and the
+  // PMS one for Project Staff, migrations/20261229_designation_name_per_type.sql), so the type is part of the check.
+  const perType = def.key === 'designations';
+  const sameType = perType && existing && (existing.fields.empType ?? '') === (fields.empType ?? '');
+  if (!errors.name && !(existing && existing.name.toLowerCase() === name.toLowerCase() && (!perType || sameType))) {
+    const dupName = perType
+      ? await selectRows(def, 'AND LOWER(name) = LOWER(?) AND COALESCE(employee_type_code, \'\') = ? AND id <> ?', [name, fields.empType ?? '', existing ? Number(existing.id) : 0])
+      : await selectRows(def, 'AND LOWER(name) = LOWER(?) AND id <> ?', [name, existing ? Number(existing.id) : 0]);
+    if (dupName.length) errors.name = perType ? 'Another designation of this employment type already has this name.' : `Another ${def.noun.toLowerCase()} already has this name.`;
   }
   if (!errors.code && (!existing || existing.code !== code)) {
     const dupCode = await selectRows(def, 'AND code = ? AND id <> ?', [code, existing ? Number(existing.id) : 0]);

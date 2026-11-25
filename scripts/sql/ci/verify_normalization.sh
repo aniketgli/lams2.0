@@ -50,9 +50,10 @@ eq "SELECT COUNT(*) FROM role_aliases WHERE module_id='hrms' AND role_id='admini
 # Step 6: foreign keys and their effect
 eq "SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA=DATABASE() AND CONSTRAINT_TYPE='FOREIGN KEY'" "$(q "SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA=DATABASE() AND CONSTRAINT_TYPE='FOREIGN KEY'")" "fk count"
 [ "$(q "SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA=DATABASE() AND CONSTRAINT_TYPE='FOREIGN KEY'")" -ge 60 ] || fail "too few foreign keys" "SELECT TABLE_NAME, CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA=DATABASE() AND CONSTRAINT_TYPE='FOREIGN KEY'"
-$M -e "UPDATE employee_profiles SET designation_name='No Such Post' WHERE biometric_id='2001'" 2>&1 | grep -q "foreign key constraint fails" || fail "an unknown designation was accepted"
+# Designations: since migrations/20261229_designation_name_per_type.sql a name is unique per employment type and the
+# profile → designation foreign key is gone (the app checks it): the same name twice for one type is refused.
+$M -e "INSERT INTO designations (name, code, employee_type_code, status) SELECT name, CONCAT(code, '-CI2'), employee_type_code, status FROM designations WHERE name='Technical Assistant'" 2>&1 | grep -q "Duplicate entry" || fail "a designation name was accepted twice for one employment type"
 $M -e "INSERT INTO employee_identity (biometric_id, aadhaar_hash) VALUES ('2003', 'h2001')" 2>&1 | grep -q "Duplicate entry" || fail "a duplicate Aadhaar was accepted"
-$M -e "UPDATE designations SET name='Renamed' WHERE name='Technical Assistant'" 2>&1 | grep -q "foreign key constraint fails" || fail "a used designation was renamed"
 $M -e "UPDATE employee_types SET code='permanent2' WHERE code='permanent'" 2>/dev/null
 eq "SELECT employment_type FROM employee_profiles WHERE biometric_id='2001'" "permanent2" "employee type code change did not follow"
 eq "SELECT employee_type_code FROM designations WHERE name='Technical Assistant'" "permanent2" "designation employee type did not follow"

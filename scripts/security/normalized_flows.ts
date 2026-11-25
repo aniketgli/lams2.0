@@ -484,6 +484,13 @@ async function main(): Promise<void> {
     const desigList = await req('GET', '/api/hrms/masters/designations');
     check('PMS designations: a PMS-type one is added, a Permanent one is refused, the list has PMS and shared ones only', pmsDesig.status === 201 && hrmsDesig.status === 400
       && (desigList.body?.records ?? []).some((r: any) => r.name === 'CI Project Associate') && (desigList.body?.records ?? []).every((r: any) => r.fields?.empType !== 'permanent'), `${pmsDesig.status} ${pmsDesig.text.slice(0, 120)} · ${hrmsDesig.status} · ${(desigList.body?.records ?? []).length}`);
+    const sameName = await req('POST', '/api/hrms/masters/designations', { name: 'Technical Assistant', code: 'PMS-TA-CI', status: 'ACTIVE', fields: { empType: 'project', cadre: '' } });
+    const sameAgain = await req('POST', '/api/hrms/masters/designations', { name: 'Technical Assistant', code: 'PMS-TA-CI2', status: 'ACTIVE', fields: { empType: 'project', cadre: '' } });
+    check('Designations: PMS may use an HRMS designation name for its own type, but only once per type', sameName.status === 201 && sameAgain.status === 400 && Boolean(sameAgain.body?.details?.name),
+      `${sameName.status} ${sameName.text.slice(0, 120)} · ${sameAgain.status}`);
+    const pmsTa = await req('POST', '/api/hrms/employees', { ...pmsBody, biometricId: '3032', name: 'CI PMS TA', email: 'ci.pmsta@wii.gov.in', phone: '9876500032',
+      aadhaarNumber: aadhaarFrom('78901234567'), panNumber: 'ABCDE9893K', bankAccountNumber: '623456789012', reportingManagerId: String(piUser.id), designation: 'Technical Assistant' });
+    check('A Project Staff employee can take the PMS "Technical Assistant"', pmsTa.status === 201, `${pmsTa.status} ${pmsTa.text.slice(0, 200)}`);
     const ltHrms = await req('POST', '/api/hrms/leave-types', { name: 'CI X', code: 'CIX', employeeTypes: ['permanent'] });
     const ltShared = await req('PUT', '/api/hrms/leave-types/1', { name: 'CL', code: 'CL', employeeTypes: ['project'] });
     const ltList = await req('GET', '/api/hrms/leave-types?scope=master');
