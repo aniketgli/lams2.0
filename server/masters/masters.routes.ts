@@ -169,46 +169,60 @@ router.get('/audit', canView, asyncHandler(async (req, res) => {
   });
 }));
 
-// PMS keeps the designations of the PMS employee types only (the others are HRMS's or shared by both).
-const pmsDesignations = (req: Request, key: string) => req.auth?.activeModule === 'pms' && key === 'designations';
-const pmsTypes = async () => new Set([...(await employeeTypeModules(pool))].filter(([, m]) => m === 'PMS').map(([code]) => code));
-async function assertPmsDesignation(req: Request, key: string, id: number | null, body: unknown): Promise<void> {
-  if (!pmsDesignations(req, key)) return;
-  const types = await pmsTypes();
+/**
+ * Designations: one table for both modules, each tied to an employment type (or to none: "every type").
+ * The Master Settings of each module lists the designations of its own employee types and the shared ones:
+ * HRMS the Permanent / Trainee ones, PMS the Project Staff / Contractual … ones (employee_types.module).
+ * A module adds and edits only its own; a shared one is changed in HRMS only (it reaches both).
+ */
+const moduleOf = (req: Request): 'HRMS' | 'PMS' => (req.auth?.activeModule === 'pms' ? 'PMS' : 'HRMS');
+const typesOf = async (module: 'HRMS' | 'PMS') => new Set([...(await employeeTypeModules(pool))].filter(([, m]) => m === module).map(([code]) => code));
+async function assertModuleDesignation(req: Request, key: string, id: number | null, body: unknown): Promise<void> {
+  if (key !== 'designations') return;
+  const module = moduleOf(req);
+  const types = await typesOf(module);
   if (id !== null) {
     const existing = await getRecord(masterFrom(key), id);
-    if (existing && !types.has(String(existing.fields?.empType ?? ''))) throw forbidden('This designation is not a PMS one: it is kept in HRMS.');
+    const type = String(existing?.fields?.empType ?? '');
+    if (existing && !(types.has(type) || (!type && module === 'HRMS'))) {
+      throw forbidden(type ? `This designation is for a ${module === 'PMS' ? 'HRMS' : 'PMS'} employee type: change it in ${module === 'PMS' ? 'HRMS' : 'PMS'}.` : 'This designation is for every employee type: change it in HRMS.');
+    }
   }
   if (body !== undefined) {
     const empType = String(((body as { fields?: Record<string, unknown> } | null)?.fields ?? {}).empType ?? '');
-    if (!types.has(empType)) throw badRequest('Please correct the highlighted fields.', { empType: 'Choose a PMS employment type (Contractual, Project staff …).' });
+    if (!(types.has(empType) || (!empType && module === 'HRMS'))) {
+      throw badRequest('Please correct the highlighted fields.', {
+        empType: module === 'PMS' ? 'Choose a PMS employment type (Project Staff, Contractual …).' : 'Choose an HRMS employment type (Permanent, Trainee), or leave it empty for every type.',
+      });
+    }
   }
 }
 
 router.get('/:key', canView, asyncHandler(async (req, res) => {
   const records = await listRecords(masterFrom(req.params.key));
-  if (!pmsDesignations(req, req.params.key)) { res.json({ records }); return; }
-  const types = await pmsTypes();
-  res.json({ records: records.filter((r) => types.has(String(r.fields?.empType ?? ''))) });
+  if (req.params.key !== 'designations') { res.json({ records }); return; }
+  // This module's designations and the shared ones (no employment type).
+  const types = await typesOf(moduleOf(req));
+  res.json({ records: records.filter((r) => !r.fields?.empType || types.has(String(r.fields.empType))) });
 }));
 
 router.post('/:key', canEdit, asyncHandler(async (req, res) => {
-  await assertPmsDesignation(req, req.params.key, null, req.body);
+  await assertModuleDesignation(req, req.params.key, null, req.body);
   res.status(201).json({ record: await createRecord(masterFrom(req.params.key), req.body, req) });
 }));
 
 router.put('/:key/:id', canEdit, asyncHandler(async (req, res) => {
-  await assertPmsDesignation(req, req.params.key, idFrom(req.params.id), req.body);
+  await assertModuleDesignation(req, req.params.key, idFrom(req.params.id), req.body);
   res.json({ record: await updateRecord(masterFrom(req.params.key), idFrom(req.params.id), req.body, req) });
 }));
 
 router.patch('/:key/:id/status', canEdit, asyncHandler(async (req, res) => {
-  await assertPmsDesignation(req, req.params.key, idFrom(req.params.id), undefined);
+  await assertModuleDesignation(req, req.params.key, idFrom(req.params.id), undefined);
   res.json({ record: await setStatus(masterFrom(req.params.key), idFrom(req.params.id), req.body?.status, req, req.body?.reason) });
 }));
 
 router.delete('/:key/:id', canEdit, asyncHandler(async (req, res) => {
-  await assertPmsDesignation(req, req.params.key, idFrom(req.params.id), undefined);
+  await assertModuleDesignation(req, req.params.key, idFrom(req.params.id), undefined);
   await deleteRecord(masterFrom(req.params.key), idFrom(req.params.id), req, req.body?.reason);
   res.json({ success: true });
 }));

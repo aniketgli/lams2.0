@@ -482,8 +482,8 @@ async function main(): Promise<void> {
     const pmsDesig = await req('POST', '/api/hrms/masters/designations', { name: 'CI Project Associate', code: 'CIPA', status: 'ACTIVE', fields: { empType: 'project', cadre: '' } });
     const hrmsDesig = await req('POST', '/api/hrms/masters/designations', { name: 'CI Scientist Z', code: 'CISZ', status: 'ACTIVE', fields: { empType: 'permanent', cadre: '' } });
     const desigList = await req('GET', '/api/hrms/masters/designations');
-    check('PMS designations: a PMS-type one is added, a Permanent one is refused, the list is PMS only', pmsDesig.status === 201 && hrmsDesig.status === 400
-      && (desigList.body?.records ?? []).every((r: any) => r.fields?.empType && r.fields.empType !== 'permanent'), `${pmsDesig.status} ${pmsDesig.text.slice(0, 120)} · ${hrmsDesig.status} · ${(desigList.body?.records ?? []).length}`);
+    check('PMS designations: a PMS-type one is added, a Permanent one is refused, the list has PMS and shared ones only', pmsDesig.status === 201 && hrmsDesig.status === 400
+      && (desigList.body?.records ?? []).some((r: any) => r.name === 'CI Project Associate') && (desigList.body?.records ?? []).every((r: any) => r.fields?.empType !== 'permanent'), `${pmsDesig.status} ${pmsDesig.text.slice(0, 120)} · ${hrmsDesig.status} · ${(desigList.body?.records ?? []).length}`);
     const ltHrms = await req('POST', '/api/hrms/leave-types', { name: 'CI X', code: 'CIX', employeeTypes: ['permanent'] });
     const ltShared = await req('PUT', '/api/hrms/leave-types/1', { name: 'CL', code: 'CL', employeeTypes: ['project'] });
     const ltList = await req('GET', '/api/hrms/leave-types?scope=master');
@@ -496,6 +496,13 @@ async function main(): Promise<void> {
     await req('POST', '/api/auth/login', { email: 'admin@wii.gov.in', password: PASSWORD });
     await req('POST', '/api/access/module', { moduleId: 'hrms' });
     await req('POST', '/api/access/active-role', { moduleId: 'hrms', role: 'Administrator' });
+    const hrmsDesigList = await req('GET', '/api/hrms/masters/designations');
+    const hrmsPmsDesig = await req('POST', '/api/hrms/masters/designations', { name: 'CI Field Assistant X', code: 'CIFAX', status: 'ACTIVE', fields: { empType: 'project', cadre: '' } });
+    const pmsDesigId = (pmsDesig.body?.record?.id) as string | undefined;
+    const hrmsEditPms = pmsDesigId ? await req('PATCH', `/api/hrms/masters/designations/${pmsDesigId}/status`, { status: 'INACTIVE', reason: 'ci' }) : { status: 0 };
+    check('HRMS designations: the list has no PMS designation, and PMS ones are added / changed only in PMS',
+      hrmsDesigList.status === 200 && !(hrmsDesigList.body?.records ?? []).some((r: any) => r.name === 'CI Project Associate') && hrmsPmsDesig.status === 400 && hrmsEditPms.status === 403,
+      `${hrmsDesigList.status} · ${hrmsPmsDesig.status} · ${hrmsEditPms.status}`);
     const hrmsProjects = await req('POST', '/api/pms/projects', { code: 'CI-HRMS-X', title: 'CI from HRMS' });
     check('Projects are kept in PMS: the HRMS administrator cannot create one', hrmsProjects.status === 403, String(hrmsProjects.status));
     const hrmsDir = (await req('GET', '/api/hrms/employees/export-pdf')).body?.rows ?? [];
