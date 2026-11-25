@@ -112,8 +112,12 @@ async function main(): Promise<void> {
       report(Number(tables?.n) === 2 ? 'PASS' : 'FAIL', 'employee_identity / employee_bank_accounts exist', Number(tables?.n) === 2 ? '' : 'run migrations/20261219_04_employee_profile.sql');
       const fks = await one(c, `SELECT COUNT(*) AS n FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE()`);
       const fkTables = await one(c, `SELECT COUNT(*) AS n FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE()
-                                       AND CONSTRAINT_NAME IN ('fk_profiles_designation', 'fk_profiles_employee_type', 'fk_shift_days_shift')`);
-      report(Number(fkTables?.n) === 3 ? 'PASS' : 'FAIL', 'Foreign keys', Number(fkTables?.n) === 3 ? `${Number(fks?.n)} in all` : 'run migrations/20261219_01 … 06');
+                                       AND CONSTRAINT_NAME IN ('fk_profiles_employee_type', 'fk_shift_days_shift')`);
+      report(Number(fkTables?.n) === 2 ? 'PASS' : 'FAIL', 'Foreign keys', Number(fkTables?.n) === 2 ? `${Number(fks?.n)} in all` : 'run migrations/20261219_01 … 06');
+      // A designation name is unique per employment type (migrations/20261229_designation_name_per_type.sql).
+      const perType = await one(c, `SELECT COUNT(*) AS n FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE()
+                                      AND TABLE_NAME = 'designations' AND INDEX_NAME = 'uq_designations_name_type'`);
+      report(Number(perType?.n) > 0 ? 'PASS' : 'WARN', 'Designation names unique per employment type', Number(perType?.n) > 0 ? '' : 'run migrations/20261229_designation_name_per_type.sql');
     } catch (e) { report('FAIL', 'Profile columns', (e as Error).message); }
 
     // 3b. Every active role grant names a role of the role catalog (otherwise it gives no access) ----

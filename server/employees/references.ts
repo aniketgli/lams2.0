@@ -141,7 +141,10 @@ export async function checkReferences(q: Querier, input: EmployeeInput, layout: 
 
   // A designation may be tied to one employee type; if so it must be this one.
   if (rules.designation && input.designation) {
-    const [row] = await rows(q, "SELECT employee_type_code, cadre_code FROM designations WHERE name = ? AND UPPER(status) = 'ACTIVE' LIMIT 1", [input.designation]);
+    // The same name may exist once per employment type: prefer the one of this type, then a shared one.
+    const [row] = await rows(q,
+      `SELECT employee_type_code, cadre_code FROM designations WHERE name = ? AND UPPER(status) = 'ACTIVE'
+        ORDER BY (employee_type_code = ?) DESC, (employee_type_code IS NULL) DESC LIMIT 1`, [input.designation, input.employmentType]);
     if (!row) errors.designation = 'Choose an active designation from Master Settings.';
     else if (row.employee_type_code && String(row.employee_type_code) !== input.employmentType) errors.designation = 'This designation is not for the selected employee type.';
     else if (rules.category && input.employeeCategory && row.cadre_code && String(row.cadre_code) !== input.employeeCategory) errors.designation = 'This designation is not for the selected cadre.';
