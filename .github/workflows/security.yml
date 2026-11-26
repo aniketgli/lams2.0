@@ -77,6 +77,8 @@ jobs:
       - name: Attack it
         # A minute's pause first, so the per-minute write limit is not already used up by the steps above.
         run: sleep 61 && SECURITY_REPORT=/tmp/security-report.md SECURITY_UPLOAD_DIR=/tmp/lams2-uploads bun scripts/security/pentest.ts
+      - name: Data script for the first PMS projects (twice; the second run must add nothing)
+        run: bash scripts/sql/ci/check_pms_projects_data.sh lams2_test
       - name: Server log
         if: always()
         run: tail -150 /tmp/server.log
