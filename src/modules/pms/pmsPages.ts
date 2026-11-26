@@ -24,7 +24,8 @@ export const PMS_PAGES: PmsPage[] = [
   { id: 'holiday_calendar', slug: 'holidays', roles: ALL },
   // The PMS Employee Manager has only this page: it adds, edits and imports PMS employees.
   { id: 'profile', slug: 'employees', roles: [...ALL, 'employee_manager'] },
-  { id: 'projects', slug: 'projects', roles: ALL },
+  // Projects: the RC office (Administrator) every project, a PI the projects where they are the PI, the Auditor reads.
+  { id: 'projects', slug: 'projects', roles: ['administrator', 'audit', 'project_pi'] },
   // Only the masters PMS uses (PmsMasterSettingsPage); shared ones stay in HRMS.
   { id: 'master', slug: 'master-settings', roles: ['administrator', 'audit'] },
 ];
@@ -40,7 +41,7 @@ export function canOpenPmsPage(pageId: string, role: UserRole | null | undefined
   return Boolean(page && role && page.roles.includes(role));
 }
 
-/** The page a role lands on: the dashboard, or the first page it may open (Leave Balance / Employee Manager). */
+/** The page a role lands on: the dashboard, or the first page it may open (Leave Balance / Employee Manager / PI: Projects). */
 export function pmsHomeFor(role: UserRole | null | undefined): string {
   if (!role || canOpenPmsPage(PMS_HOME, role)) return PMS_HOME;
   return PMS_PAGES.find((page) => page.roles.includes(role))?.id ?? PMS_HOME;

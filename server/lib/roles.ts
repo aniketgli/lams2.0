@@ -10,7 +10,7 @@
 export const MODULE_IDS = ['hrms', 'pms', 'stock', 'facility', 'finance'] as const;
 export type ModuleId = (typeof MODULE_IDS)[number];
 
-export const ROLE_IDS = ['administrator', 'audit', 'reviewing_manager', 'reporting_manager', 'general_staff', 'leave_balance_manager', 'employee_manager'] as const;
+export const ROLE_IDS = ['administrator', 'audit', 'reviewing_manager', 'reporting_manager', 'general_staff', 'leave_balance_manager', 'employee_manager', 'project_pi'] as const;
 export type RoleId = (typeof ROLE_IDS)[number];
 
 /** Display labels used by the UI. */
@@ -22,6 +22,7 @@ export const ROLE_LABELS: Record<RoleId, string> = {
   general_staff: 'User',
   leave_balance_manager: 'Leave Balance Manager',
   employee_manager: 'Employee Manager',
+  project_pi: 'PI',
 };
 
 /**
@@ -35,6 +36,12 @@ export const canManageBalances = (role: string | null | undefined): boolean => (
  * Employee Manager: adds, edits and imports the employees of its own module (an HRMS Employee Manager the employee
  * types set to HRMS, a PMS one those set to PMS). It cannot give roles, reset passwords, deactivate or delete.
  */
+/**
+ * PI (PMS only): opens Projects and manages the projects where they are the PI (employees, funds, activities,
+ * details and documents). Leave and attendance approvals stay with the Reporting Manager.
+ */
+export const PROJECT_PI_ROLE: RoleId = 'project_pi';
+
 export const EMPLOYEE_MANAGER_ROLES: readonly RoleId[] = ['administrator', 'employee_manager'];
 
 /**
@@ -42,7 +49,7 @@ export const EMPLOYEE_MANAGER_ROLES: readonly RoleId[] = ['administrator', 'empl
  * Lower index wins. Staff first keeps the least-privileged view as the default;
  * users switch up to a manager/admin role explicitly.
  */
-const DEFAULT_ROLE_ORDER: RoleId[] = ['general_staff', 'reporting_manager', 'reviewing_manager', 'leave_balance_manager', 'employee_manager', 'audit', 'administrator'];
+const DEFAULT_ROLE_ORDER: RoleId[] = ['general_staff', 'reporting_manager', 'reviewing_manager', 'project_pi', 'leave_balance_manager', 'employee_manager', 'audit', 'administrator'];
 
 const MODULE_ALIASES: Record<string, ModuleId> = {
   hrms: 'hrms', lams: 'hrms',

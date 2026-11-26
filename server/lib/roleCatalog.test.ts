@@ -11,9 +11,11 @@ describe('role catalog', () => {
     expect(findRole(catalog, 'hrms', 'Leave Balance Manager')?.accessRole).toBe('leave_balance_manager');
     expect(findRole(catalog, 'pms', 'Co-PI')?.roleId).toBe('pms_co_pi');
     expect(findRole(catalog, 'pms', 'PMS Admin')?.roleId).toBe('pms_admin');
-    // PMS has no HoD role (migrations/20261230_pms_no_hod.sql switches it off).
+    // PMS has no HoD; its role pms_pi is the PI (migrations/20261231_pms_pi_project_workspace.sql).
     expect(findRole(catalog, 'pms', 'HoD')).toBeNull();
-    expect(findRole(catalog, 'pms', 'Project PI')).toBeNull();
+    expect(findRole(catalog, 'pms', 'Project PI')?.accessRole).toBe('project_pi');
+    expect(findRole(catalog, 'pms', 'Principal Investigator (PI)')?.roleId).toBe('pms_pi');
+    expect(findRole(catalog, 'hrms', 'PI')).toBeNull();
   });
 
   test('every HRMS spelling the server accepted before still resolves to the same role', () => {
@@ -63,11 +65,16 @@ describe('role catalog', () => {
     const added = catalog.filter((r) => later.includes(`('${r.moduleId}', '${r.roleId}', '${r.name}', '${r.accessRole}'`));
     expect(added.length).toBe(3);
     const likeHrms = await Bun.file(new URL('../../migrations/20261227_pms_roles_like_hrms.sql', import.meta.url)).text();
-    const renamed = ['pms_admin', 'pms_pi', 'pms_co_pi', 'pms_researcher'];
+    const renamed = ['pms_admin', 'pms_co_pi', 'pms_researcher'];
+    const piMigration = await Bun.file(new URL('../../migrations/20261231_pms_pi_project_workspace.sql', import.meta.url)).text();
     for (const r of catalog) {
       expect(ROLE_IDS).toContain(r.accessRole);
       if (added.includes(r)) {
         for (const alias of r.aliases.split(',')) expect(later).toContain(`('${r.moduleId}', '${r.roleId}', '${alias}')`);
+      } else if (r.roleId === 'pms_pi') {
+        // migrations/20261231_pms_pi_project_workspace.sql: the PMS PI, with its own access.
+        expect(piMigration).toContain(`SET name = '${r.name}', access_role = '${r.accessRole}', is_active = 1`);
+        expect(sql).toContain(`('pms', 'pms_pi', '`);
       } else if (renamed.includes(r.roleId)) {
         // migrations/20261227_pms_roles_like_hrms.sql: the PMS roles carry the HRMS names and access.
         expect(likeHrms).toContain(`UPDATE role_catalog SET name = '${r.name}', access_role = '${r.accessRole}',`);
@@ -79,9 +86,9 @@ describe('role catalog', () => {
         expect(sql).toContain(`('${r.moduleId}', '${r.roleId}', '${r.name.replace(/'/g, "''")}', '${r.accessRole}', '${r.aliases.replace(/'/g, "''")}'`);
       }
     }
-    // One role of the first migration is switched off later (migrations/20261230_pms_no_hod.sql: the PMS HoD).
+    // The PMS HoD (pms_pi) was switched off (20261230) and comes back as the PI (20261231).
     const noHod = await Bun.file(new URL('../../migrations/20261230_pms_no_hod.sql', import.meta.url)).text();
     expect(noHod).toContain("UPDATE role_catalog SET is_active = 0 WHERE module_id = 'pms' AND role_id = 'pms_pi';");
-    expect((sql.match(/^\s+\('/gm) ?? []).length).toBe(catalog.length - added.length + 1);
+    expect((sql.match(/^\s+\('/gm) ?? []).length).toBe(catalog.length - added.length);
   });
 });

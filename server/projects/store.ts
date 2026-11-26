@@ -1,11 +1,12 @@
 import type { Request } from 'express';
 import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
 import { pool } from '../../src/db';
-import { HttpError, badRequest, notFound } from '../lib/http';
+import { HttpError, badRequest, forbidden, notFound } from '../lib/http';
 import { inTransaction } from '../lib/tx';
 import { readBlob, storeBlob } from '../lib/fileStore';
 import { writeMasterAuditSql } from '../masters/audit';
-import { managerRoleHolders } from '../employees/managerRoles';
+import { accessRoleHolders } from '../employees/managerRoles';
+import { PROJECT_PI_ROLE } from '../lib/roles';
 import {
   CATEGORY_LABELS, type Category, type ProjectInput, STAGE_LABELS, type Stage, parseProjectInput, stageProblem,
 } from './projectRules';
@@ -105,8 +106,37 @@ async function decorate(q: Q, found: RowDataPacket[]): Promise<Project[]> {
   });
 }
 
-export async function listProjects(): Promise<Project[]> {
+/** All projects, or (a PI) only those where `piUserId` is the PI. */
+export async function listProjects(filter: { piUserId?: number } = {}): Promise<Project[]> {
+  if (filter.piUserId) return decorate(pool, await rows(pool, `${SELECT} WHERE p.pi_user_id = ? ORDER BY p.updated_at DESC, p.id DESC`, [filter.piUserId]));
   return decorate(pool, await rows(pool, `${SELECT} ORDER BY p.updated_at DESC, p.id DESC`));
+}
+
+// ---------------------------------------------------------------------------
+// Who may see / change a project
+// ---------------------------------------------------------------------------
+
+/**
+ * The RC office (PMS Administrator) sees and changes every project; the PMS Auditor reads every project; a PI
+ * (active role PI) sees and changes only the projects where they are the PI. Anyone else: no access.
+ */
+export type ProjectActor = { kind: 'admin' } | { kind: 'audit' } | { kind: 'pi'; userId: number };
+export function projectActorOf(req: Request): ProjectActor | null {
+  const role = req.auth?.activeModule === 'pms' ? req.auth?.activeRole : null;
+  if (role === 'administrator') return { kind: 'admin' };
+  if (role === 'audit') return { kind: 'audit' };
+  if (role === PROJECT_PI_ROLE && req.auth?.account.id) return { kind: 'pi', userId: Number(req.auth.account.id) };
+  return null;
+}
+
+/** The project when `req` may read it (write: also change it); 404 for a project the PI does not lead. */
+export async function projectFor(q: Q, req: Request, id: number, write: boolean): Promise<Project> {
+  const actor = projectActorOf(req);
+  if (!actor) throw forbidden('Your current role does not allow this action.');
+  const project = await getProject(q, id);
+  if (actor.kind === 'pi' && Number(project.pi?.id ?? 0) !== actor.userId) throw notFound('Project not found.');
+  if (write && actor.kind === 'audit') throw forbidden('The Auditor can only read.');
+  return project;
 }
 
 export async function getProject(q: Q, id: number): Promise<Project> {
@@ -123,10 +153,10 @@ const snapshot = (p: Project) => ({
   department: p.department, sites: p.sites, objectives: p.objectives, remarks: p.remarks, stage: p.stageLabel,
 });
 
-/** Who can be a PI: an active employee holding the PMS Reporting Manager role (given in HRMS → User Controls). */
+/** Who can be a PI: an active employee holding the PMS PI role (given in HRMS → User Controls → PMS column → PI). */
 export interface PiOption { id: string; name: string; biometricId: string; designation: string | null }
 export async function listPiOptions(q: Q = pool): Promise<PiOption[]> {
-  const holders = [...await managerRoleHolders(q, 'reporting', 'PMS')];
+  const holders = [...await accessRoleHolders(q, 'PMS', PROJECT_PI_ROLE)];
   if (!holders.length) return [];
   const found = await rows(q,
     `SELECT u.id, u.name, u.biometric_id, p.designation FROM users u LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id
@@ -134,11 +164,11 @@ export async function listPiOptions(q: Q = pool): Promise<PiOption[]> {
   return found.map((u) => ({ id: String(u.id), name: String(u.name), biometricId: String(u.biometric_id), designation: u.designation ? String(u.designation) : null }));
 }
 
-export const PI_ROLE_MESSAGE = 'Choose the PI from the list: an employee with the PMS Reporting Manager role (HRMS → User Controls).';
+export const PI_ROLE_MESSAGE = 'Choose the PI from the list: an employee with the PMS PI role (HRMS → User Controls → PMS column).';
 
 /**
  * Checks the references (agency, PI, Co-PIs) and the uniqueness of code and title; field errors otherwise.
- * The PI is chosen from the PMS Reporting Managers. A PI typed by name is matched to exactly one of them; an older
+ * The PI is chosen from the PMS PIs (role PI). A PI typed by name is matched to exactly one of them; an older
  * project whose PI is only a name keeps it while that name is unchanged (`before`).
  */
 async function checkReferences(q: Q, input: ProjectInput, selfId: number | null, before: Project | null = null): Promise<{ input: ProjectInput; piName: string | null }> {
@@ -162,7 +192,7 @@ async function checkReferences(q: Q, input: ProjectInput, selfId: number | null,
       const key = String(input.piName).trim().toLowerCase().replace(/\s+/g, ' ');
       const matches = options.filter((o) => o.name.trim().toLowerCase().replace(/\s+/g, ' ') === key);
       if (matches.length === 1) { input = { ...input, piUserId: Number(matches[0].id), piName: null }; piName = matches[0].name; }
-      else errors.piUserId = matches.length ? 'More than one PMS Reporting Manager has this name; choose the PI from the list.' : PI_ROLE_MESSAGE;
+      else errors.piUserId = matches.length ? 'More than one PMS PI has this name; choose the PI from the list.' : PI_ROLE_MESSAGE;
     }
   }
   if (input.coPiUserIds.length) {
@@ -235,7 +265,11 @@ export async function updateProject(req: Request, id: number, body: unknown): Pr
   let input = parseProjectInput(body);
   return inTransaction(async (conn) => {
     await rows(conn, 'SELECT id FROM projects WHERE id = ? FOR UPDATE', [id]);
-    const before = await getProject(conn, id);
+    const before = await projectFor(conn, req, id, true);
+    // A PI changes the details of their project, but not its code, title or PI (the RC office does).
+    if (projectActorOf(req)?.kind === 'pi') {
+      input = { ...input, code: before.code, title: before.title, piUserId: before.pi ? Number(before.pi.id) : null, piName: before.pi ? null : before.piName };
+    }
     if (!input.code) input = { ...input, code: before.code }; // a blank code keeps the present one
     // Employee profiles and career histories point to a project by its title: then title and code stay as they are.
     if ((before.title !== input.title || before.code.toLowerCase() !== input.code!.toLowerCase()) && before.staff > 0) {
@@ -309,7 +343,7 @@ export async function saveProjectFile(req: Request, id: number, kind: ProjectFil
   const cleaned = (typeof name === 'string' ? name : '').replace(/[\\/\r\n"]/g, '_').replace(/\s+/g, ' ').trim().slice(0, 120).replace(/\.pdf$/i, '');
   const fileName = `${cleaned || `${kind}`}.pdf`;
   return inTransaction(async (conn) => {
-    const before = await getProject(conn, id);
+    const before = await projectFor(conn, req, id, true);
     const stored = await storeBlob('projects', `project-${id}-${kind}`, 'pdf', bytes);
     await conn.query(
       `INSERT INTO project_files (project_id, kind, file_name, mime_type, size_bytes, data, storage_path, uploaded_by) VALUES (?, ?, ?, 'application/pdf', ?, ?, ?, ?)

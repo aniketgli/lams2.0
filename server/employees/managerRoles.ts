@@ -58,3 +58,20 @@ export const managerRoleMessage = (kind: ManagerKind, module: PeopleModule = 'HR
     ? `Choose an employee who has the Reporting Manager role${where}.`
     : `Choose an employee who has the HoD role${where}.`;
 };
+
+/**
+ * The active employees (not system accounts) holding a role with this access in a module, by biometric ID: e.g.
+ * the PMS PIs (project_pi), who can be chosen as the PI of a project.
+ */
+export async function accessRoleHolders(q: Q, module: PeopleModule, accessRole: RoleId): Promise<Set<string>> {
+  const [rows] = await q.query<RowDataPacket[]>(
+    `SELECT g.biometric_id, g.module_id, g.role_id FROM user_module_roles g JOIN users u ON u.biometric_id = g.biometric_id
+      WHERE LOWER(g.status) = 'active' AND LOWER(u.status) = 'active' AND u.is_system = 0`);
+  const catalog = await loadCatalog();
+  const out = new Set<string>();
+  for (const r of rows) {
+    const entry = findRole(catalog, r.module_id, r.role_id);
+    if (entry && entry.moduleId === (module === 'PMS' ? 'pms' : 'hrms') && entry.accessRole === accessRole) out.add(String(r.biometric_id));
+  }
+  return out;
+}

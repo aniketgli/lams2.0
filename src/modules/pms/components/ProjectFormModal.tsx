@@ -16,10 +16,12 @@ interface Props {
   open: boolean;
   project: Project | null;
   agencies: Agency[];
-  /** Who can be PI: the PMS Reporting Managers (server/projects listPiOptions). */
+  /** Who can be PI: the PMS PIs (server/projects listPiOptions). */
   piOptions: PiOption[];
   stages: Record<Stage, string>;
   categories: Record<Category, string>;
+  /** A PI editing their project: the code, title and PI stay as they are (the RC office changes them). */
+  limited?: boolean;
   onClose: () => void;
   onSaved: (project: Project, message: string) => void;
 }
@@ -52,7 +54,7 @@ const Label: React.FC<{ text: string; required?: boolean; children: React.ReactN
   </div>
 );
 
-export const ProjectFormModal: React.FC<Props> = ({ open, project, agencies, piOptions, stages, categories, onClose, onSaved }) => {
+export const ProjectFormModal: React.FC<Props> = ({ open, project, agencies, piOptions, stages, categories, limited = false, onClose, onSaved }) => {
   const { users } = useApp();
   const [form, setForm] = useState<ProjectForm>(EMPTY);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -77,7 +79,7 @@ export const ProjectFormModal: React.FC<Props> = ({ open, project, agencies, piO
     .map((u) => ({ value: String(u.id), label: `${u.name} (B.I. ${(u as { biometricId?: string }).biometricId ?? ''})${u.designation ? ` · ${u.designation}` : ''}` }))
     .sort((a, b) => a.label.localeCompare(b.label)), [users]);
   const labelOf = (id: string) => people.find((p) => p.value === id)?.label ?? id;
-  // The PI is chosen from the PMS Reporting Managers; the PI already on a project stays in the list.
+  // The PI is chosen from the PMS PIs; the PI already on a project stays in the list.
   const piChoices = useMemo(() => {
     const list = piOptions.map((o) => ({ value: o.id, label: `${o.name} (B.I. ${o.biometricId})${o.designation ? ` · ${o.designation}` : ''}` }));
     if (project?.pi && !list.some((o) => o.value === project.pi!.id)) list.push({ value: project.pi.id, label: `${project.pi.name} (B.I. ${project.pi.biometricId})` });
@@ -112,7 +114,7 @@ export const ProjectFormModal: React.FC<Props> = ({ open, project, agencies, piO
       size="2xl"
       icon={project ? Pencil : FolderPlus}
       title={project ? `Edit project ${project.code}` : 'New project'}
-      subtitle="RC office: the project's record. Only the title is required; the rest can be filled in later."
+      subtitle={limited ? 'PI: the details of your project. The code, title and PI are changed by the RC office.' : "RC office: the project's record. Only the title is required; the rest can be filled in later."}
       footer={(
         <div className="flex justify-end gap-2 w-full">
           <Button variant="outline" size="sm" onClick={onClose} disabled={busy}>Cancel</Button>
@@ -124,13 +126,13 @@ export const ProjectFormModal: React.FC<Props> = ({ open, project, agencies, piO
         {message && <div role="alert" className="px-3 py-2 rounded-xl border bg-error-subtle border-error-border text-error font-semibold">{message}</div>}
         <Section title="Basic">
           <Label text="Project code" error={errors.code}>
-            <Input value={form.code} onChange={(e) => set('code', e.target.value)} placeholder={project ? 'e.g. WII-DST-2024-09' : 'Blank: given automatically (WII-PRJ-0001 …)'} size="sm" />
+            <Input value={form.code} onChange={(e) => set('code', e.target.value)} disabled={limited} placeholder={project ? 'e.g. WII-DST-2024-09' : 'Blank: given automatically (WII-PRJ-0001 …)'} size="sm" />
           </Label>
           <Label text="Short name" error={errors.shortName}>
             <Input value={form.shortName} onChange={(e) => set('shortName', e.target.value)} placeholder="e.g. Tiger Genetics" size="sm" />
           </Label>
           <Label text="Title" required wide error={errors.title}>
-            <Input value={form.title} onChange={(e) => set('title', e.target.value)} placeholder="Full title of the project" size="sm" />
+            <Input value={form.title} onChange={(e) => set('title', e.target.value)} disabled={limited} placeholder="Full title of the project" size="sm" />
           </Label>
           <Label text="Category" error={errors.category}>
             <AppSelect value={form.category} onChange={(v) => set('category', v as Category | '')} placeholder="Choose the category"
@@ -160,12 +162,12 @@ export const ProjectFormModal: React.FC<Props> = ({ open, project, agencies, piO
 
         <Section title="People">
           <Label text="PI (Principal Investigator)" error={errors.piUserId || errors.piName}>
-            <AppSelect value={form.piUserId} onChange={(v) => { set('piUserId', v); set('piName', ''); }} searchable
-              placeholder={piChoices.length ? 'Choose the PI' : 'No one has the PMS Reporting Manager role yet'} options={[{ value: '', label: '—' }, ...piChoices]} />
+            <AppSelect value={form.piUserId} onChange={(v) => { set('piUserId', v); set('piName', ''); }} searchable disabled={limited}
+              placeholder={piChoices.length ? 'Choose the PI' : 'No one has the PMS PI role yet'} options={[{ value: '', label: '—' }, ...piChoices]} />
             <p className="mt-1 text-[11px] text-slate-500">
               {!form.piUserId && form.piName
                 ? <>On record: <span className="font-semibold">{form.piName}</span> (not linked to an employee). Choose the PI to link.</>
-                : 'Employees with the PMS Reporting Manager role (given in HRMS → User Controls).'}
+                : 'Employees with the PMS PI role (given in HRMS → User Controls).'}
             </p>
           </Label>
           <Label text="Department / Faculty" error={errors.department}>

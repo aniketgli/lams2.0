@@ -857,7 +857,7 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
         };
         const matrixRoleAliases: Record<string, Record<string, string>> = {
           lams: hrmsRoleMap,
-          pms: { admin: 'pms_admin', administrator: 'pms_admin', hod: 'pms_pi', reportingmanager: 'pms_co_pi', user: 'pms_researcher', auditor: 'auditor', leavebalancemanager: 'pms_leave_balance', employeemanager: 'pms_employee_manager',
+          pms: { admin: 'pms_admin', administrator: 'pms_admin', hod: 'pms_pi', pi: 'pms_pi', projectpi: 'pms_pi', reportingmanager: 'pms_co_pi', user: 'pms_researcher', auditor: 'auditor', leavebalancemanager: 'pms_leave_balance', employeemanager: 'pms_employee_manager',
             // grants saved under the former PMS names
             'pmsadministrator/deanr&d': 'pms_admin', 'principalinvestigator(pi)': 'pms_pi', 'coprincipalinvestigator(copi)': 'pms_co_pi', 'researchfellow/staff': 'pms_researcher' },
           sims: { admin: 'sims_admin', administrator: 'sims_admin', hod: 'sims_approver', reportingmanager: 'sims_store_keeper', user: 'sims_indenter', auditor: 'auditor' },
@@ -876,9 +876,6 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
             normalizeRole(definition.name) === normalized
           );
           const roleKey = match?.id || matrixRoleAliases[moduleKey]?.[normalized] || rawRole;
-          // A role switched off in the catalog (PMS HoD: migrations/20261230_pms_no_hod.sql) has no matrix cell and gives
-          // no access; it is left out here, so saving the matrix is not refused for it.
-          if (moduleKey === 'pms' && roleKey === 'pms_pi') continue;
           if (roleKey && !next[moduleKey].includes(roleKey)) next[moduleKey].push(roleKey);
         }
         setEditUserModuleRolesState(next);

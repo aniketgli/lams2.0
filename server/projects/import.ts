@@ -46,7 +46,7 @@ async function parse(csv: string): Promise<Parsed[]> {
     return agencies.find((a) => String(a.name).toLowerCase() === k || String(a.code).toLowerCase() === k);
   };
   const userOf = (bio: string) => people.find((p) => String(p.biometric_id).toUpperCase() === bio.trim().toUpperCase());
-  // The PI is one of the PMS Reporting Managers, by biometric ID or by name (exactly one with that name).
+  // The PI is one of the PMS PIs, by biometric ID or by name (exactly one with that name).
   const piOptions = await listPiOptions();
   const nameKey = (t: string) => t.trim().toLowerCase().replace(/\s+/g, ' ');
 
@@ -75,11 +75,11 @@ async function parse(csv: string): Promise<Parsed[]> {
     let pi: { id: string } | null = null;
     if (piBio) {
       pi = piOptions.find((o) => o.biometricId.toUpperCase() === piBio.toUpperCase()) ?? null;
-      if (!pi) problems.push(userOf(piBio) ? `PI_Biometric_ID: ${piBio} does not have the PMS Reporting Manager role.` : `PI_Biometric_ID: no active employee ${piBio}.`);
+      if (!pi) problems.push(userOf(piBio) ? `PI_Biometric_ID: ${piBio} does not have the PMS PI role.` : `PI_Biometric_ID: no active employee ${piBio}.`);
     } else if (piText) {
       const matches = piOptions.filter((o) => nameKey(o.name) === nameKey(piText));
       if (matches.length === 1) pi = matches[0];
-      else problems.push(matches.length ? `PI_Name: more than one PMS Reporting Manager is named "${piText}"; use PI_Biometric_ID.` : `PI_Name: "${piText}" — ${PI_ROLE_MESSAGE}`);
+      else problems.push(matches.length ? `PI_Name: more than one PMS PI is named "${piText}"; use PI_Biometric_ID.` : `PI_Name: "${piText}" — ${PI_ROLE_MESSAGE}`);
     }
     const coBios = get('CoPI_Biometric_IDs').split(/[;|]/).map((s) => s.trim()).filter(Boolean);
     const co = coBios.map((b) => ({ b, u: userOf(b) }));

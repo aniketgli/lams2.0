@@ -378,8 +378,8 @@ async function main(): Promise<void> {
   const piUser = byBio('1006');
   const pmsAdmin = byBio('1007');
   if (piUser && pmsAdmin && scientist) {
-    const piGrant = await req('PUT', `/api/hrms/employees/${piUser.id}/module-roles`, { moduleRoles: { lams: ['hrms_reporting', 'hrms_staff'], pms: ['pms_co_pi'] } });
-    check('PMS Reporting Manager role can be given (next to HRMS roles)', piGrant.status === 200, `${piGrant.status} ${piGrant.text.slice(0, 160)}`);
+    const piGrant = await req('PUT', `/api/hrms/employees/${piUser.id}/module-roles`, { moduleRoles: { lams: ['hrms_reporting', 'hrms_staff'], pms: ['pms_co_pi', 'pms_pi'] } });
+    check('PMS Reporting Manager and PI roles can be given (next to HRMS roles)', piGrant.status === 200, `${piGrant.status} ${piGrant.text.slice(0, 160)}`);
     await req('POST', '/api/auth/login', { email: 'pmsadmin@wii.gov.in', password: PASSWORD });
     await req('POST', '/api/access/module', { moduleId: 'pms' });
     const asPms = await req('POST', '/api/access/active-role', { moduleId: 'pms', role: 'Administrator' });
@@ -476,14 +476,14 @@ async function main(): Promise<void> {
     await freshMinute(); // the write rate limit
     const piName = String(piUser.name ?? '');
     const minimal = await req('POST', '/api/pms/projects', { title: 'CI Only Title And PI', piName });
-    check('Projects: only the title and the PI (a PMS Reporting Manager, by name) are enough; the code is given automatically', minimal.status === 201
+    check('Projects: only the title and the PI (a PMS PI, by name) are enough; the code is given automatically', minimal.status === 201
       && /^WII-PRJ-\d{4}$/.test(String(minimal.body?.project?.code ?? '')) && String(minimal.body?.project?.pi?.id ?? '') === String(piUser.id),
       `${minimal.status} ${minimal.text.slice(0, 200)}`);
     const projectsList = await req('GET', '/api/pms/projects');
     const piChoices = (projectsList.body?.piOptions ?? []).map((o: any) => String(o.id));
     const notRm = await req('POST', '/api/pms/projects', { title: 'CI PI Without Role', piUserId: String(scientist) });
     const unknownPi = await req('POST', '/api/pms/projects', { title: 'CI PI Unknown', piName: 'Dr. Nobody Of CI' });
-    check('Projects: the PI list holds the PMS Reporting Managers only; anyone else as PI is refused', piChoices.includes(String(piUser.id)) && !piChoices.includes(String(scientist))
+    check('Projects: the PI list holds the PMS PIs only; anyone else as PI is refused', piChoices.includes(String(piUser.id)) && !piChoices.includes(String(scientist))
       && notRm.status === 400 && Boolean(notRm.body?.details?.piUserId) && unknownPi.status === 400 && Boolean(unknownPi.body?.details?.piUserId),
       `${piChoices.length} choices · ${notRm.status} · ${unknownPi.status}`);
     const minimalCsv = ['Title,PI_Name', `CI Imported Title Only,${piName}`, 'CI Imported Second,'].join('\n');
@@ -534,6 +534,64 @@ async function main(): Promise<void> {
       `${cadreDesig.status} ${cadreDesig.text.slice(0, 160)}`);
     const pmsRoles = await req('PUT', `/api/hrms/employees/${pmsNew.body?.employee?.id ?? 0}/module-roles`, { moduleRoles: { pms: ['pms_admin'] } });
     check('PMS has no User Controls: roles are given in HRMS only', pmsRoles.status === 403, String(pmsRoles.status));
+    // ---- Project workspace: employees (RC office), then the PI on their own projects --------------------------
+    await freshMinute(); // the write rate limit
+    const addEmp = await req('POST', `/api/pms/projects/${pid}/employees`, { userIds: [String(pmsFellowId)], reportingManagerId: String(piUser.id) });
+    const addHrmsEmp = await req('POST', `/api/pms/projects/${pid}/employees`, { userIds: [String(scientist)] });
+    const empList = await req('GET', `/api/pms/projects/${pid}/employees`);
+    const onProject = (empList.body?.employees ?? []).find((e: any) => e.id === String(pmsFellowId));
+    check('Project employees: the RC office puts a PMS employee on the project with a PMS Reporting Manager; an HRMS employee is refused',
+      addEmp.status === 200 && addHrmsEmp.status === 400 && onProject?.reportingManager?.id === String(piUser.id)
+      && !(empList.body?.candidates ?? []).some((c: any) => c.id === String(scientist)) && (empList.body?.managers ?? []).some((m: any) => m.id === String(piUser.id)),
+      `${addEmp.status} ${addEmp.text.slice(0, 120)} · ${addHrmsEmp.status} · ${JSON.stringify(onProject ?? null).slice(0, 160)}`);
+    const otherProject = (listed2.body?.projects ?? []).find((p: any) => p.title === 'CI Imported Second');
+    await req('POST', '/api/auth/login', { email: 'rm2@wii.gov.in', password: PASSWORD });
+    await req('POST', '/api/access/module', { moduleId: 'pms' });
+    const asRm = await req('POST', '/api/access/active-role', { moduleId: 'pms', role: 'Reporting Manager' });
+    const rmProjects = await req('GET', '/api/pms/projects');
+    const asPi = await req('POST', '/api/access/active-role', { moduleId: 'pms', role: 'PI' });
+    const piList = await req('GET', '/api/pms/projects');
+    const piProjects = (piList.body?.projects ?? []) as any[];
+    const otherGet = otherProject ? await req('GET', `/api/pms/projects/${otherProject.id}`) : { status: 0 };
+    check('PI role: Projects shows only the PI\'s own projects; another project is not found; the Reporting Manager role has no Projects',
+      asRm.status === 200 && rmProjects.status === 403 && asPi.status === 200 && piList.status === 200 && piProjects.some((p) => p.id === pid)
+      && piProjects.every((p) => p.pi?.id === String(piUser.id)) && !piProjects.some((p) => p.title === 'CI Imported Second') && otherGet.status === 404,
+      `${asRm.status}/${rmProjects.status} · ${asPi.status} ${asPi.text.slice(0, 80)} · ${piProjects.length} · other ${otherGet.status}`);
+    const piEdit = await req('PUT', `/api/pms/projects/${pid}`, { ...projectBody, code: 'CI-HACK', title: 'CI Hacked Title', piUserId: String(pmsAdmin.id), remarks: 'Updated by the PI' });
+    const piCreate = await req('POST', '/api/pms/projects', { title: 'CI Made By PI' });
+    const piStage = await req('PATCH', `/api/pms/projects/${pid}/stage`, { stage: 'ongoing' });
+    check('PI edits the details of their project but not its code, title or PI; cannot create projects or change the stage',
+      piEdit.status === 200 && piEdit.body?.project?.code === 'CI-PRJ-2026-01' && piEdit.body?.project?.title === 'CI Tiger Corridor Study'
+      && piEdit.body?.project?.pi?.id === String(piUser.id) && piEdit.body?.project?.remarks === 'Updated by the PI' && piCreate.status === 403 && piStage.status === 403,
+      `${piEdit.status} ${piEdit.text.slice(0, 160)} · ${piCreate.status} · ${piStage.status}`);
+    const head = await req('POST', `/api/pms/projects/${pid}/funds/heads`, { name: 'Manpower', sanctioned: '1,00,000' });
+    const headId = (head.body?.heads ?? [])[0]?.id;
+    const receipt = await req('POST', `/api/pms/projects/${pid}/funds/receipts`, { receivedOn: '2026-04-10', amount: '50000', reference: 'UTR123' });
+    const spent = await req('POST', `/api/pms/projects/${pid}/funds/expenditures`, { spentOn: '2026-05-01', amount: '20000', headId, description: 'Field assistant salary' });
+    const headInUse = headId ? await req('DELETE', `/api/pms/projects/${pid}/funds/heads/${headId}`, { reason: 'ci' }) : { status: 0 };
+    const badSpend = await req('POST', `/api/pms/projects/${pid}/funds/expenditures`, { spentOn: '2026-05-01', amount: '0', description: 'x' });
+    check('Project funds: budget head, instalment and expenditure; totals and balance; a head in use cannot be removed',
+      head.status === 201 && receipt.status === 201 && spent.status === 201 && spent.body?.totals?.received === 50000 && spent.body?.totals?.spent === 20000
+      && spent.body?.totals?.balance === 30000 && spent.body?.heads?.[0]?.spent === 20000 && headInUse.status === 400 && badSpend.status === 400,
+      `${head.status}/${receipt.status}/${spent.status} ${JSON.stringify(spent.body?.totals ?? {})} · ${headInUse.status} · ${badSpend.status}`);
+    const act = await req('POST', `/api/pms/projects/${pid}/activities`, { title: 'CI Camera-trap survey', startDate: '2026-04-01', dueDate: '2026-06-30', status: 'in_progress', progress: 40 });
+    const actId = act.body?.activities?.[0]?.id;
+    const actDone = actId ? await req('PUT', `/api/pms/projects/${pid}/activities/${actId}`, { title: 'CI Camera-trap survey', status: 'done', progress: 10 }) : { status: 0, body: null };
+    const actBad = await req('POST', `/api/pms/projects/${pid}/activities`, { title: 'CI Bad dates', startDate: '2026-06-01', dueDate: '2026-05-01' });
+    const actGone = actId ? await req('DELETE', `/api/pms/projects/${pid}/activities/${actId}`, { reason: 'ci' }) : { status: 0, body: null };
+    check('Project activities: added, marked done (progress 100), wrong dates refused, removed',
+      act.status === 201 && actDone.status === 200 && actDone.body?.activities?.[0]?.progress === 100 && actBad.status === 400 && actGone.status === 200 && (actGone.body?.activities ?? []).length === 0,
+      `${act.status}/${actDone.status}/${actBad.status}/${actGone.status}`);
+    const docUp = await req('POST', `/api/pms/projects/${pid}/documents`, { title: 'CI Utilisation certificate', name: 'uc.pdf', data: pdf });
+    const docId = docUp.body?.documents?.[0]?.id;
+    const docGet = docId ? await req('GET', `/api/pms/projects/${pid}/documents/${docId}`) : { status: 0, text: '' };
+    const docOther = otherProject ? await req('GET', `/api/pms/projects/${otherProject.id}/documents`) : { status: 0 };
+    check('Project documents: the PI uploads a PDF and opens it; another project\'s documents are not found',
+      docUp.status === 201 && docGet.status === 200 && docGet.text.startsWith('%PDF') && docOther.status === 404,
+      `${docUp.status} ${docUp.text.slice(0, 120)} · ${docGet.status} · ${docOther.status}`);
+    await req('POST', '/api/auth/login', { email: 'pmsadmin@wii.gov.in', password: PASSWORD });
+    await req('POST', '/api/access/module', { moduleId: 'pms' });
+    await req('POST', '/api/access/active-role', { moduleId: 'pms', role: 'Administrator' });
     await req('POST', '/api/auth/login', { email: 'admin@wii.gov.in', password: PASSWORD });
     await req('POST', '/api/access/module', { moduleId: 'hrms' });
     await req('POST', '/api/access/active-role', { moduleId: 'hrms', role: 'Administrator' });

@@ -22,7 +22,7 @@ import { ChangePasswordPage } from './auth/pages/ChangePasswordPage';
 import { ProjectsPage } from './modules/pms/ProjectsPage';
 import { PmsMasterSettingsPage } from './modules/pms/PmsMasterSettingsPage';
 import { ProjectSummaryStrip } from './modules/pms/components/ProjectSummaryStrip';
-import { pmsHomeFor, pmsPath } from './modules/pms/pmsPages';
+import { canOpenPmsPage, pmsHomeFor, pmsPath } from './modules/pms/pmsPages';
 import { InventoryView } from './modules/inventory/InventoryView';
 import { FMSView } from './modules/fms/FMSView';
 import { FinanceView } from './modules/finance/FinanceView';
@@ -137,7 +137,7 @@ const AppContent: React.FC = () => {
           <React.Fragment key={activeRole ?? 'none'}>
             {tab === 'dashboard' && (
               <div className="space-y-5">
-                <ProjectSummaryStrip onOpen={() => goTo('projects')} />
+                {canOpenPmsPage('projects', activeRole) && <ProjectSummaryStrip onOpen={() => goTo('projects')} />}
                 <DashboardPage onNavigate={goTo} />
               </div>
             )}
