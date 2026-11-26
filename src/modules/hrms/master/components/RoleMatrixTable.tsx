@@ -33,7 +33,7 @@ const MODULE_COLUMNS: ModuleColumnDef[] = [
   { id: 'fms', label: 'Facility', shortLabel: 'Facility' }
 ];
 
-type Tier = 'admin' | 'l2' | 'l1' | 'staff' | 'balance' | 'employees' | 'audit';
+type Tier = 'admin' | 'l2' | 'pi' | 'l1' | 'staff' | 'balance' | 'employees' | 'audit';
 
 interface RoleRowDef {
   tierId: Tier;
@@ -48,6 +48,10 @@ const ROLE_ROWS: RoleRowDef[] = [
   {
     tierId: 'l2',
     title: 'HoD'
+  },
+  {
+    tierId: 'pi',
+    title: 'PI'
   },
   {
     tierId: 'l1',
@@ -87,6 +91,14 @@ export const ROLE_MATRIX_CELL_MAP: Record<Tier, Record<EnterpriseModuleId, strin
     sims: 'sims_approver',
     finance: 'fin_officer',
     fms: 'fms_officer'
+  },
+  // PMS only: the Principal Investigator manages the projects where they are the PI.
+  pi: {
+    lams: '',
+    pms: 'pms_pi',
+    sims: '',
+    finance: '',
+    fms: ''
   },
   l1: {
     lams: 'hrms_reporting',

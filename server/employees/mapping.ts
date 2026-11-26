@@ -9,7 +9,7 @@ import { todayInIndia } from '../lib/validate';
 import { writeMasterAuditSql } from '../masters/audit';
 import { LAYOUT_RULES } from './fields';
 import { activeMasterValue, layoutOfEmployeeType } from './references';
-import { type ManagerKind, holdsManagerRole } from './managerRoles';
+import { type ManagerKind, type PeopleModule, holdsManagerRole } from './managerRoles';
 import { LogFilter, ReplaceInput, TransferInput, parseReplace, parseTransfer } from './mappingRules';
 import { toCsv } from './activity';
 
@@ -125,15 +125,15 @@ async function lockTargets(conn: Q, ids: number[]): Promise<Target[]> {
  * A manager / HoD must be an active, non-system employee (of any institute) holding the
  * Reporting Manager / HoD role (managerRoles.ts).
  */
-async function managerFor(conn: Q, id: number, institute: string | null, cache: Map<string, Person | null>, kind: ManagerKind): Promise<Person | null> {
-  const key = `${id}|${institute ?? ''}|${kind}`;
+async function managerFor(conn: Q, id: number, institute: string | null, cache: Map<string, Person | null>, kind: ManagerKind, module: PeopleModule = 'HRMS'): Promise<Person | null> {
+  const key = `${id}|${institute ?? ''}|${kind}|${module}`;
   if (cache.has(key)) return cache.get(key)!;
   const [row] = await rows(conn,
     `SELECT u.id, u.name, u.biometric_id, u.status, u.is_system, p.institute FROM users u
        LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id WHERE u.id = ? LIMIT 1`, [id]);
   let result: Person | null = null;
   if (row && Number(row.is_system ?? 0) !== 1 && String(row.status).toLowerCase() === 'active'
-    && await holdsManagerRole(conn, String(row.biometric_id), kind)) {
+    && await holdsManagerRole(conn, String(row.biometric_id), kind, module)) {
     result = { id: String(row.id), name: String(row.name), biometricId: String(row.biometric_id) };
   }
   cache.set(key, result);
@@ -216,9 +216,16 @@ async function apply(conn: PoolConnection, req: Request, kind: 'transfer' | 'man
 
 export interface OrderResult { batchId: string; changed: number; unchanged: number; message: string }
 
+/**
+ * Options for an order given from another screen (PMS → Projects): the manager roles of that module, and a check of
+ * each employee (a message refuses that employee).
+ */
+export interface TransferOptions { module?: PeopleModule; check?: (target: { name: string; employmentType: string | null; department: string }) => Promise<string | null> }
+
 /** Moves employees to another department and / or gives them another reporting manager / HoD. */
-export async function transferEmployees(req: Request, body: unknown): Promise<OrderResult> {
+export async function transferEmployees(req: Request, body: unknown, options: TransferOptions = {}): Promise<OrderResult> {
   const input: TransferInput = parseTransfer(body, todayInIndia());
+  const module = options.module ?? 'HRMS';
   return inTransaction(async (conn) => {
     const targets = await lockTargets(conn, input.userIds);
     const names = new Map<string, Person | null>();
@@ -229,6 +236,8 @@ export async function transferEmployees(req: Request, body: unknown): Promise<Or
 
     for (const target of targets) {
       if (target.status.toLowerCase() !== 'active') { problems.push(`${target.name}: the account is not active.`); continue; }
+      const refused = options.check ? await options.check(target) : null;
+      if (refused) { problems.push(`${target.name}: ${refused}`); continue; }
       const layout = await layoutOfEmployeeType(conn, target.employmentType);
       const rules = layout ? LAYOUT_RULES[layout] : null;
       const change: Change = { target };
@@ -243,14 +252,14 @@ export async function transferEmployees(req: Request, body: unknown): Promise<Or
         }
       }
       if (input.reportingManagerId && String(input.reportingManagerId) !== idOf(target.data.reportingManagerId)) {
-        const manager = await managerFor(conn, input.reportingManagerId, target.institute, managers, 'reporting');
-        if (!manager) problems.push(`${target.name}: choose an active employee with the Reporting Manager role as the reporting manager.`);
+        const manager = await managerFor(conn, input.reportingManagerId, target.institute, managers, 'reporting', module);
+        if (!manager) problems.push(`${target.name}: choose an active employee with the${module === 'PMS' ? ' PMS' : ''} Reporting Manager role as the reporting manager.`);
         else change.reportingManager = manager;
       }
       if (input.reviewingManagerId && String(input.reviewingManagerId) !== idOf(target.data.reviewingManagerId)) {
         if (!rules?.hod) problems.push(`${target.name}: this employee type has no HoD.`);
         else {
-          const hod = await managerFor(conn, input.reviewingManagerId, target.institute, managers, 'hod');
+          const hod = await managerFor(conn, input.reviewingManagerId, target.institute, managers, 'hod', module);
           if (!hod) problems.push(`${target.name}: choose an active employee with the HoD role as the HoD.`);
           else change.reviewingManager = hod;
         }

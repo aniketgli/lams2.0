@@ -1,36 +1,34 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { ArrowRightLeft, Briefcase, FileText, Pencil, Upload } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ArrowRightLeft, FileText, Pencil, Plus, Upload } from 'lucide-react';
 import { Button, Input, Modal } from '../../../shared/components';
 import { AppSelect } from '../../../shared/components/AppSelect';
 import { AppDatePicker } from '../../../shared/components/AppDatePicker';
 import { ApiError } from '../../../shared/services/api';
-import { Project, Stage, formatDay, formatRupees, projectsApi } from '../projectsApi';
+import { PROJECT_FILE_MAX_BYTES as MAX_BYTES, Project, ProjectDocument, Stage, formatDay, formatRupees, projectsApi, readAsDataUrl } from '../projectsApi';
+import { ConfirmDialog } from '../../hrms/master/components/masterUi';
 import { StageBadge } from './StageBadge';
+import { ErrorLine, Field, Panel, RowActions } from './workspaceUi';
 
 /**
- * A project's details. The RC office also edits it, moves its stage (the server applies the stage rules: some
- * moves need a reason, an extension a later end date) and uploads the proposal / sanction order (PDF, ≤ 8 MB).
+ * Details & documents of a project (first tab of its workspace). The RC office and the project's PI edit the details
+ * and upload documents (the PI cannot change the code, title or PI); only the RC office moves the stage (the server
+ * applies the stage rules: some moves need a reason, an extension a later end date). Documents: the proposal and the
+ * sanction order, and any other PDF (≤ 8 MB each).
  */
 interface Props {
-  project: Project | null;
+  project: Project;
+  /** Edit the details and upload documents: the RC office, or the project's PI. */
   canEdit: boolean;
+  /** Move the stage: the RC office only. */
+  canChangeStage: boolean;
   stages: Record<Stage, string>;
   next: Record<Stage, Stage[]>;
-  onClose: () => void;
   onEdit: (project: Project) => void;
   onChanged: (project: Project, message: string) => void;
+  onMessage: (message: string) => void;
 }
 
-const MAX_BYTES = 8 * 1024 * 1024;
-
-const readAsDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
-  const reader = new FileReader();
-  reader.onload = () => resolve(String(reader.result));
-  reader.onerror = () => reject(reader.error);
-  reader.readAsDataURL(file);
-});
-
-export const ProjectDetailModal: React.FC<Props> = ({ project, canEdit, stages, next, onClose, onEdit, onChanged }) => {
+export const ProjectDetailsPanel: React.FC<Props> = ({ project, canEdit, canChangeStage, stages, next, onEdit, onChanged, onMessage }) => {
   const [to, setTo] = useState<Stage | ''>('');
   const [reason, setReason] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -40,8 +38,7 @@ export const ProjectDetailModal: React.FC<Props> = ({ project, canEdit, stages, 
   const fileInput = useRef<HTMLInputElement>(null);
   const [uploadKind, setUploadKind] = useState<'proposal' | 'sanction'>('proposal');
 
-  useEffect(() => { setTo(''); setReason(''); setEndDate(''); setError(null); }, [project?.id, project?.stage]);
-  if (!project) return null;
+  useEffect(() => { setTo(''); setReason(''); setEndDate(''); setError(null); }, [project.id, project.stage]);
 
   const moveStage = async () => {
     if (!to) return;
@@ -104,20 +101,8 @@ export const ProjectDetailModal: React.FC<Props> = ({ project, canEdit, stages, 
   };
 
   return (
-    <Modal
-      isOpen
-      onClose={onClose}
-      size="2xl"
-      icon={Briefcase}
-      title={project.title}
-      subtitle={`${project.code}${project.fundingAgency ? ` · ${project.fundingAgency}` : ''}`}
-      footer={(
-        <div className="flex justify-between gap-2 w-full">
-          <div>{canEdit && <Button variant="outline" size="sm" leftIcon={<Pencil className="w-4 h-4" />} onClick={() => onEdit(project)}>Edit</Button>}</div>
-          <Button variant="secondary" size="sm" onClick={onClose}>Close</Button>
-        </div>
-      )}
-    >
+    <div className="space-y-4">
+      <Panel title="Details" action={canEdit ? <Button variant="outline" size="sm" leftIcon={<Pencil className="w-4 h-4" />} onClick={() => onEdit(project)}>Edit details</Button> : undefined}>
       <div className="space-y-4 text-xs">
         <div className="flex items-center gap-2"><span className="font-semibold text-slate-500">Stage</span><StageBadge stage={project.stage} label={project.stageLabel} /></div>
         {error && <div role="alert" className="px-3 py-2 rounded-xl border bg-error-subtle border-error-border text-error font-semibold">{error}</div>}
@@ -134,7 +119,7 @@ export const ProjectDetailModal: React.FC<Props> = ({ project, canEdit, stages, 
         )}
 
         <div className="space-y-2">
-          <div className="font-bold text-slate-700">Documents</div>
+          <div className="font-bold text-slate-700">Proposal and sanction order</div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {doc('proposal', 'Proposal')}
             {doc('sanction', 'Sanction order')}
@@ -142,7 +127,7 @@ export const ProjectDetailModal: React.FC<Props> = ({ project, canEdit, stages, 
           <input ref={fileInput} type="file" accept="application/pdf,.pdf" className="hidden" onChange={(e) => void upload(e.target.files?.[0])} />
         </div>
 
-        {canEdit && next[project.stage]?.length > 0 && (
+        {canChangeStage && next[project.stage]?.length > 0 && (
           <div className="border border-slate-200 rounded-2xl p-3 space-y-2">
             <div className="font-bold text-slate-700 flex items-center gap-1.5"><ArrowRightLeft className="w-4 h-4" />Change stage</div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
@@ -162,6 +147,90 @@ export const ProjectDetailModal: React.FC<Props> = ({ project, canEdit, stages, 
           </div>
         )}
       </div>
-    </Modal>
+      </Panel>
+      <OtherDocuments project={project} canEdit={canEdit} onMessage={onMessage} />
+    </div>
+  );
+};
+
+/** Other documents of the project (PDF): progress reports, utilisation certificates, MoUs … */
+const OtherDocuments: React.FC<{ project: Project; canEdit: boolean; onMessage: (m: string) => void }> = ({ project, canEdit, onMessage }) => {
+  const [docs, setDocs] = useState<ProjectDocument[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [title, setTitle] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [removing, setRemoving] = useState<ProjectDocument | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try { setDocs((await projectsApi.documents(project.id)).documents); } catch (e) { setError(e instanceof ApiError ? e.message : 'The documents could not be loaded.'); }
+  }, [project.id]);
+  useEffect(() => { void load(); }, [load]);
+
+  const upload = async () => {
+    if (!file) return;
+    if (file.size > MAX_BYTES) { setError('Use a PDF smaller than 8 MB.'); return; }
+    setBusy(true); setError(null);
+    try {
+      const r = await projectsApi.addDocument(project.id, { title: title.trim(), name: file.name, data: await readAsDataUrl(file) });
+      setDocs(r.documents); onMessage(r.message); setAdding(false); setTitle(''); setFile(null);
+    } catch (e) {
+      setError(e instanceof ApiError ? (e.details?.file ?? e.details?.title ?? e.message) : 'The document could not be uploaded.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const remove = async (reason: string) => {
+    if (!removing) return;
+    setBusy(true); setRemoveError(null);
+    try {
+      setDocs((await projectsApi.removeDocument(project.id, removing.id, reason)).documents); onMessage('The document was removed.'); setRemoving(null);
+    } catch (e) {
+      setRemoveError(e instanceof ApiError ? e.message : 'It could not be removed.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Panel title={`Other documents (${docs.length})`} action={canEdit ? <Button variant="outline" size="sm" leftIcon={<Plus className="w-4 h-4" />} onClick={() => setAdding(true)}>Upload document</Button> : undefined}>
+      <div className="space-y-2 text-xs">
+        <ErrorLine text={error} />
+        {docs.length === 0 && <p className="text-slate-500">No other documents. Progress reports, utilisation certificates, MoUs … can be kept here (PDF).</p>}
+        {docs.map((d) => (
+          <div key={d.id} className="flex items-center justify-between gap-2 border border-slate-200 rounded-xl px-3 py-2">
+            <div className="min-w-0">
+              <div className="font-bold text-slate-800">{d.title}</div>
+              <div className="text-slate-500 truncate">{d.fileName} · {Math.round(d.size / 1024)} KB · {new Date(d.uploadedAt).toLocaleDateString('en-IN')}{d.uploadedBy ? ` · ${d.uploadedBy}` : ''}</div>
+            </div>
+            <div className="flex gap-1.5 shrink-0 items-center">
+              <a href={projectsApi.documentUrl(project.id, d.id)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 font-semibold text-slate-700 hover:bg-slate-50"><FileText className="w-3.5 h-3.5" />View</a>
+              {canEdit && <RowActions onDelete={() => setRemoving(d)} />}
+            </div>
+          </div>
+        ))}
+      </div>
+      {adding && (
+        <Modal isOpen onClose={() => setAdding(false)} size="md" icon={Upload} title="Upload a document" subtitle={`${project.code} · ${project.title}`}
+          footer={(
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" size="sm" onClick={() => setAdding(false)}>Cancel</Button>
+              <Button variant="primary" size="sm" loading={busy} disabled={!file || !title.trim()} onClick={() => void upload()}>Upload</Button>
+            </div>
+          )}>
+          <div className="space-y-3 text-xs">
+            <ErrorLine text={error} />
+            <Field label="Title" required><Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Utilisation certificate 2025-26" size="sm" /></Field>
+            <Field label="PDF file (up to 8 MB)" required>
+              <input type="file" accept="application/pdf,.pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="block w-full text-xs" />
+            </Field>
+          </div>
+        </Modal>
+      )}
+      <ConfirmDialog open={removing !== null} title="Remove this document?" message={removing?.title ?? ''} confirmLabel="Remove" danger
+        busy={busy} error={removeError} onConfirm={(r) => void remove(r)} onCancel={() => { setRemoving(null); setRemoveError(null); }} />
+    </Panel>
   );
 };

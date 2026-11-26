@@ -132,7 +132,7 @@ export const ProjectImportModal: React.FC<Props> = ({ open, onClose, onImported 
             <p className="text-[11px] text-slate-500 mt-2">
               Fill one row per project below the two rows that start with #. Only Title is required: with just the title and PI_Name a
               project is created and its code given automatically (WII-PRJ-0001 …); fill the other columns when known. Dates as DD-MM-YYYY;
-              Funding_Agency by its name or code. The PI (PI_Name or PI_Biometric_ID) must have the PMS Reporting Manager role (HRMS → User
+              Funding_Agency by its name or code. The PI (PI_Name or PI_Biometric_ID) must have the PMS PI role (HRMS → User
               Controls); Co-PIs by biometric ID, separated by ;. Titles and codes must be new.
             </p>
           </section>

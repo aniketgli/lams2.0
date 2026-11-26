@@ -135,6 +135,20 @@ async function main(): Promise<void> {
   }
   const formOpen = await d.getByText('Sanctioned amount (₹)').count();
   check('PMS Projects: the RC office sees "New project" and the project form opens', newProject && formOpen > 0 && errors.length === 0, `button ${newProject}, form ${formOpen}, errors ${errors.join(' | ')}`);
+  // A project's workspace: Details & documents, Employees, Funds, Activities open without errors.
+  await d.evaluate(async () => {
+    await fetch('/api/pms/projects', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ title: 'CI Browser Project' }) });
+  });
+  await d.goto(`${BASE}/pms/projects`);
+  await d.getByText('CI Browser Project').first().click({ timeout: 15000 }).catch(() => undefined);
+  const tabsSeen: string[] = [];
+  for (const [tab, marker] of [['Employees', /employees on the project/i], ['Funds', /budget by head/i], ['Activities', /add activity/i], ['Details & documents', /other documents/i]] as const) {
+    await d.getByRole('tab', { name: tab }).first().click({ timeout: 10000 }).catch(() => undefined);
+    if (await d.getByText(marker).first().waitFor({ state: 'visible', timeout: 10000 }).then(() => true, () => false)) tabsSeen.push(tab);
+  }
+  if (process.env.SCREENSHOT_DIR) await d.screenshot({ path: `${process.env.SCREENSHOT_DIR}/pms-project-workspace.png`, fullPage: true }).catch(() => undefined);
+  check('PMS Projects: a project opens with the Details & documents, Employees, Funds and Activities tabs', tabsSeen.length === 4 && errors.length === 0,
+    `tabs ${tabsSeen.join(', ')}, errors ${errors.join(' | ')}`);
   await d.goto(`${BASE}/pms/master-settings`);
   const masterOk = await d.getByRole('tab', { name: /^designations$/i }).first().waitFor({ state: 'visible', timeout: 15000 }).then(() => true, () => false);
   await d.getByRole('columnheader', { name: /employment type/i }).first().waitFor({ state: 'visible', timeout: 10000 }).catch(() => undefined);

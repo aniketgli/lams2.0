@@ -32,13 +32,39 @@ export interface ProjectImportReview {
   rows: Array<{ line: number; code: string; title: string; status: 'ok' | 'error'; error: string | null }>;
 }
 
-/** A PI to choose: an employee with the PMS Reporting Manager role. */
+/** A PI to choose: an employee with the PMS PI role. */
 export interface PiOption { id: string; name: string; biometricId: string; designation: string | null }
 
 export interface ProjectList {
   projects: Project[]; agencies: Agency[]; piOptions?: PiOption[];
   stages: Record<Stage, string>; categories: Record<Category, string>; next: Record<Stage, Stage[]>;
 }
+
+// ---- Workspace of a project ----------------------------------------------------------------------------------
+export interface ProjectEmployee {
+  id: string; biometricId: string; name: string; status: string; designation: string | null; employmentType: string | null;
+  reportingManager: { id: string; name: string; biometricId: string } | null;
+}
+export interface PickPerson { id: string; name: string; biometricId: string; designation: string | null; department: string | null }
+export interface ProjectEmployees { employees: ProjectEmployee[]; candidates: PickPerson[]; managers: PickPerson[] }
+export interface OrderResult { changed: number; unchanged: number; message: string }
+
+export type FundKind = 'heads' | 'receipts' | 'expenditures';
+export interface BudgetHead { id: string; name: string; sanctioned: number; spent: number; remarks: string | null }
+export interface Receipt { id: string; receivedOn: string; amount: number; reference: string | null; remarks: string | null }
+export interface Expenditure { id: string; spentOn: string; amount: number; headId: string | null; head: string | null; description: string; voucherNo: string | null }
+export interface Funds {
+  heads: BudgetHead[]; receipts: Receipt[]; expenditures: Expenditure[];
+  totals: { sanctioned: number; budgeted: number; received: number; spent: number; balance: number };
+}
+
+export type ActivityStatus = 'planned' | 'in_progress' | 'on_hold' | 'done';
+export interface Activity {
+  id: string; title: string; description: string | null; startDate: string | null; dueDate: string | null;
+  status: ActivityStatus; statusLabel: string; progress: number; updatedAt: string | null;
+}
+export interface ActivityList { activities: Activity[]; statuses: Record<ActivityStatus, string> }
+export interface ProjectDocument { id: string; title: string; fileName: string; size: number; uploadedAt: string; uploadedBy: string | null }
 
 const base = '/pms';
 export const projectsApi = {
@@ -55,6 +81,27 @@ export const projectsApi = {
   reviewImport: (csv: string) => api<ProjectImportReview>(`${base}/projects/import/review`, { method: 'POST', body: { csv } }),
   applyImport: (csv: string) => api<ProjectImportReview & { message: string }>(`${base}/projects/import`, { method: 'POST', body: { csv } }),
   agencies: () => api<{ agencies: Agency[] }>(`${base}/funding-agencies`),
+  employees: (id: string) => api<ProjectEmployees>(`${base}/projects/${id}/employees`),
+  addEmployees: (id: string, input: { userIds: string[]; reportingManagerId?: string; effectiveDate?: string }) =>
+    api<OrderResult>(`${base}/projects/${id}/employees`, { method: 'POST', body: input }),
+  changeManager: (id: string, input: { userIds: string[]; reportingManagerId: string; effectiveDate?: string }) =>
+    api<OrderResult>(`${base}/projects/${id}/employees/manager`, { method: 'POST', body: input }),
+  funds: (id: string) => api<Funds>(`${base}/projects/${id}/funds`),
+  saveFund: (id: string, kind: FundKind, entryId: string | null, input: Record<string, string>) =>
+    api<Funds>(`${base}/projects/${id}/funds/${kind}${entryId ? `/${entryId}` : ''}`, { method: entryId ? 'PUT' : 'POST', body: input }),
+  deleteFund: (id: string, kind: FundKind, entryId: string, reason: string) =>
+    api<Funds>(`${base}/projects/${id}/funds/${kind}/${entryId}`, { method: 'DELETE', body: { reason } }),
+  activities: (id: string) => api<ActivityList>(`${base}/projects/${id}/activities`),
+  saveActivity: (id: string, entryId: string | null, input: Record<string, string | number>) =>
+    api<ActivityList>(`${base}/projects/${id}/activities${entryId ? `/${entryId}` : ''}`, { method: entryId ? 'PUT' : 'POST', body: input }),
+  deleteActivity: (id: string, entryId: string, reason: string) =>
+    api<ActivityList>(`${base}/projects/${id}/activities/${entryId}`, { method: 'DELETE', body: { reason } }),
+  documents: (id: string) => api<{ documents: ProjectDocument[] }>(`${base}/projects/${id}/documents`),
+  addDocument: (id: string, input: { title: string; name: string; data: string }) =>
+    api<{ documents: ProjectDocument[]; message: string }>(`${base}/projects/${id}/documents`, { method: 'POST', body: input }),
+  removeDocument: (id: string, docId: string, reason: string) =>
+    api<{ documents: ProjectDocument[] }>(`${base}/projects/${id}/documents/${docId}`, { method: 'DELETE', body: { reason } }),
+  documentUrl: (id: string, docId: string) => `/api${base}/projects/${id}/documents/${docId}`,
   saveAgency: (id: string | null, input: { name: string; code: string; status: 'ACTIVE' | 'INACTIVE' }) =>
     api<{ agency: Agency; message: string }>(id ? `${base}/funding-agencies/${id}` : `${base}/funding-agencies`, { method: id ? 'PUT' : 'POST', body: input }),
 };
@@ -62,3 +109,12 @@ export const projectsApi = {
 export const formatRupees = (n: number | null | undefined): string =>
   n === null || n === undefined ? '—' : `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 export const formatDay = (iso: string | null | undefined): string => (iso ? iso.split('-').reverse().join('-') : '—');
+
+/** A file as a data: URL (for the PDF uploads). */
+export const readAsDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => resolve(String(reader.result));
+  reader.onerror = () => reject(reader.error);
+  reader.readAsDataURL(file);
+});
+export const PROJECT_FILE_MAX_BYTES = 8 * 1024 * 1024;

@@ -15,6 +15,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   general_staff: 'User',
   leave_balance_manager: 'Leave Balance Manager',
   employee_manager: 'Employee Manager',
+  project_pi: 'PI',
 };
 
 /** What a role is called: the same names in HRMS and PMS (the module argument is kept for callers). */
@@ -23,7 +24,7 @@ export function roleLabel(role: UserRole, _module?: string | null): string {
 }
 
 /** Order roles appear in the role switcher. */
-export const ROLE_ORDER: UserRole[] = ['general_staff', 'reporting_manager', 'reviewing_manager', 'leave_balance_manager', 'employee_manager', 'audit', 'administrator'];
+export const ROLE_ORDER: UserRole[] = ['general_staff', 'reporting_manager', 'reviewing_manager', 'project_pi', 'leave_balance_manager', 'employee_manager', 'audit', 'administrator'];
 
 const SERVER_TO_UI: Record<ServerModuleId, EnterpriseModuleId> = {
   hrms: 'lams',

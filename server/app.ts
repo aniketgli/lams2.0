@@ -70,10 +70,12 @@ export async function createApp(httpServer?: HttpServer) {
   app.set('trust proxy', trustProxySetting());
   app.use(securityHeaders);
   app.use(compressJson);
-  // JSON bodies up to 2 MB; a PMS project document (proposal / sanction order PDF, up to 8 MB as base64) up to 12 MB.
+  // JSON bodies up to 2 MB; a PMS project document (proposal / sanction order / other document PDF, up to 8 MB as base64) up to 12 MB.
   const jsonBody = express.json({ limit: '2mb' });
   const projectFileBody = express.json({ limit: '12mb' });
-  app.use((req, res, next) => (req.method === 'PUT' && /^\/api\/pms\/projects\/\d+\/files\/(proposal|sanction)$/.test(req.path) ? projectFileBody : jsonBody)(req, res, next));
+  const isProjectFile = (req: express.Request) => (req.method === 'PUT' && /^\/api\/pms\/projects\/\d+\/files\/(proposal|sanction)$/.test(req.path))
+    || (req.method === 'POST' && /^\/api\/pms\/projects\/\d+\/documents$/.test(req.path));
+  app.use((req, res, next) => (isProjectFile(req) ? projectFileBody : jsonBody)(req, res, next));
 
   app.use(keepOneSessionCookie);
   app.use(session({

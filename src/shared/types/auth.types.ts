@@ -1,6 +1,6 @@
 import { EnterpriseModuleId, ModuleRoleDef } from './module.types';
 
-export type UserRole = 'administrator' | 'reporting_manager' | 'reviewing_manager' | 'general_staff' | 'audit' | 'leave_balance_manager' | 'employee_manager';
+export type UserRole = 'administrator' | 'reporting_manager' | 'reviewing_manager' | 'general_staff' | 'audit' | 'leave_balance_manager' | 'employee_manager' | 'project_pi';
 
 export type EmploymentType = 
   | 'permanent'
@@ -183,9 +183,9 @@ export const MODULE_ROLE_DEFINITIONS: Record<EnterpriseModuleId, ModuleRoleDef[]
     },
     {
       id: 'pms_pi',
-      name: 'HoD',
-      shortName: 'HoD',
-      description: 'Head of Department: second-level approval.',
+      name: 'PI',
+      shortName: 'PI',
+      description: 'Principal Investigator: manages the projects where they are the PI (employees, funds, activities, documents).',
       moduleId: 'pms',
       color: 'indigo',
       badgeBg: 'bg-indigo-100 border-indigo-300',

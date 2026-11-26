@@ -13,13 +13,14 @@ import { NoticeBar, useNotice } from '../hrms/master/components/masterUi';
 import { Project, ProjectList, Stage, formatDay, formatRupees, projectsApi } from './projectsApi';
 import { StageBadge } from './components/StageBadge';
 import { ProjectFormModal } from './components/ProjectFormModal';
-import { ProjectDetailModal } from './components/ProjectDetailModal';
+import { ProjectWorkspace } from './components/ProjectWorkspace';
 import { ProjectImportModal } from './components/ProjectImportModal';
 import { FundingAgenciesPanel } from './components/FundingAgenciesPanel';
 
 /**
- * PMS → Projects: every project's record, kept by the RC office (the PMS Administrator), who creates, edits, imports
- * and moves the stage. Everyone else in PMS reads it. Funding agencies are kept on the second tab.
+ * PMS → Projects: the RC office (the PMS Administrator) creates, edits, imports and moves the stage of every
+ * project; a PI sees the projects where they are the PI; the Auditor reads. Opening a project shows its workspace
+ * (details & documents, employees, funds, activities). Funding agencies are kept on the second tab.
  */
 const ACTIVE: Stage[] = ['ongoing', 'extended'];
 const SANCTIONED: Stage[] = ['approved', 'ongoing', 'extended', 'completed', 'closed'];
@@ -28,6 +29,7 @@ const PIPELINE: Stage[] = ['proposed', 'under_review'];
 export const ProjectsPage: React.FC = () => {
   const { currentUser } = useApp();
   const isRcOffice = currentUser.role === 'administrator';
+  const isPi = currentUser.role === 'project_pi';
   const [data, setData] = useState<ProjectList | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +40,7 @@ export const ProjectsPage: React.FC = () => {
   const [agencyFilter, setAgencyFilter] = useState<string[]>(['all']);
   const [categoryFilter, setCategoryFilter] = useState<string[]>(['all']);
   const [editing, setEditing] = useState<Project | 'new' | null>(null);
-  const [viewing, setViewing] = useState<Project | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
 
   const load = useCallback(async (silent = false) => {
@@ -55,6 +57,7 @@ export const ProjectsPage: React.FC = () => {
   useEffect(() => { void load(); }, [load]);
 
   const projects = data?.projects ?? [];
+  const opened = openId ? projects.find((p) => p.id === openId) ?? null : null;
   const stages = data?.stages ?? ({} as Record<Stage, string>);
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -109,8 +112,9 @@ export const ProjectsPage: React.FC = () => {
       <PageHeader
         icon={Briefcase}
         title="Projects"
-        subtitle={isRcOffice ? 'RC office: create, import and track every project from proposal to closure' : 'Research projects of the institute'}
-        rightAction={isRcOffice && view === 'projects' ? (
+        subtitle={isRcOffice ? 'RC office: create, import and track every project from proposal to closure'
+          : isPi ? 'Your projects as PI: employees, funds, activities and documents' : 'Research projects of the institute'}
+        rightAction={isRcOffice && view === 'projects' && !opened ? (
           <div className="flex items-center gap-2">
             <PageHeaderButton icon={Upload} variant="secondary" onClick={() => setImporting(true)}>Import projects</PageHeaderButton>
             <PageHeaderButton icon={FolderPlus} onClick={() => setEditing('new')}>New project</PageHeaderButton>
@@ -120,7 +124,11 @@ export const ProjectsPage: React.FC = () => {
       <NoticeBar notice={notice} onClose={clearNotice} />
       {error && <div role="alert" className="px-4 py-3 rounded-2xl border text-xs font-semibold bg-error-subtle border-error-border text-error">{error}</div>}
 
-      {view === 'agencies' ? (
+      {opened ? (
+        <ProjectWorkspace project={opened} canEdit={isRcOffice || isPi} canChangeStage={isRcOffice} stages={stages}
+          next={data?.next ?? ({} as ProjectList['next'])} onBack={() => setOpenId(null)} onEdit={(p) => setEditing(p)}
+          onChanged={(_p, m) => { showNotice('success', m); void load(true); }} onMessage={(m) => { showNotice('success', m); void load(true); }} />
+      ) : view === 'agencies' ? (
         <FundingAgenciesPanel agencies={data?.agencies ?? []} canEdit={isRcOffice} toolbarStart={viewSwitch}
           onSaved={(m) => { showNotice('success', m); void load(true); }} />
       ) : (
@@ -158,18 +166,16 @@ export const ProjectsPage: React.FC = () => {
             ]}
           />
 
-          <DataTable columns={columns} data={visible} loading={loading} keyExtractor={(p) => p.id} onRowClick={(p) => setViewing(p)}
+          <DataTable columns={columns} data={visible} loading={loading} keyExtractor={(p) => p.id} onRowClick={(p) => setOpenId(p.id)}
             emptyTitle={projects.length ? 'No project matches' : 'No projects yet'}
-            emptyDescription={projects.length ? 'Change the search or the filters.' : isRcOffice ? 'Create a project or import them from a CSV file.' : 'The RC office has not added any projects yet.'} />
+            emptyDescription={projects.length ? 'Change the search or the filters.' : isRcOffice ? 'Create a project or import them from a CSV file.'
+              : isPi ? 'You are not the PI of any project yet: the RC office chooses the PI of each project.' : 'The RC office has not added any projects yet.'} />
         </>
       )}
 
       <ProjectFormModal open={editing !== null} project={editing === 'new' ? null : editing} agencies={data?.agencies ?? []} piOptions={data?.piOptions ?? []} stages={stages}
-        categories={data?.categories ?? ({} as ProjectList['categories'])} onClose={() => setEditing(null)}
-        onSaved={(p, m) => { setEditing(null); setViewing(p); showNotice('success', m); void load(true); }} />
-      <ProjectDetailModal project={viewing} canEdit={isRcOffice} stages={stages} next={data?.next ?? ({} as ProjectList['next'])}
-        onClose={() => setViewing(null)} onEdit={(p) => { setViewing(null); setEditing(p); }}
-        onChanged={(p, m) => { setViewing(p); showNotice('success', m); void load(true); }} />
+        categories={data?.categories ?? ({} as ProjectList['categories'])} limited={!isRcOffice} onClose={() => setEditing(null)}
+        onSaved={(p, m) => { setEditing(null); setOpenId(p.id); showNotice('success', m); void load(true); }} />
       {isRcOffice && <ProjectImportModal open={importing} onClose={() => setImporting(false)} onImported={(m) => { setImporting(false); showNotice('success', m); void load(true); }} />}
     </div>
   );
