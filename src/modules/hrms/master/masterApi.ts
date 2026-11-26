@@ -44,6 +44,8 @@ export interface MasterDefinition {
 export interface MasterCatalog {
   masters: MasterDefinition[];
   formLayouts: { code: string; name: string }[];
+  /** lookupType → the /options key of its list (also for lists that are not a tab in this module). */
+  optionSources?: Record<string, string>;
   auditMasters: Record<string, string>;
   /** Areas offered in the auditor's activity log. */
   activityAreas: Array<{ value: string; label: string }>;

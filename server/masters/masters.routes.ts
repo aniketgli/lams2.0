@@ -90,6 +90,9 @@ router.get('/catalog', canView, (req, res) => {
       ...(m.kind === 'lookup' ? { lookupType: m.lookupType } : {}),
     })),
     formLayouts: FORM_LAYOUTS,
+    // Where a lookup field reads its options (/options key), also for lists that are not a tab here (PMS:
+    // the employment types of the designation form).
+    optionSources: Object.fromEntries(MASTERS.filter((m) => m.kind === 'lookup').map((m) => [m.lookupType, m.key])),
     auditMasters: auditMasterLabels(),
     activityAreas: MASTER_SCOPE.keys.map((value) => ({ value, label: MASTER_SCOPE.areaLabels[value] ?? value })),
   });
