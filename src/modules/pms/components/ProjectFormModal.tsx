@@ -6,7 +6,7 @@ import { AppSelect } from '../../../shared/components/AppSelect';
 import { AppDatePicker } from '../../../shared/components/AppDatePicker';
 import { Textarea } from '../../../shared/components/forms/Textarea';
 import { ApiError } from '../../../shared/services/api';
-import { Agency, Category, Project, ProjectForm, Stage, projectsApi } from '../projectsApi';
+import { Agency, Category, PiOption, Project, ProjectForm, Stage, projectsApi } from '../projectsApi';
 
 /**
  * Create / edit a project (RC office). Grouped as on paper: basic, sanction, people, work. A new project's stage is
@@ -16,6 +16,8 @@ interface Props {
   open: boolean;
   project: Project | null;
   agencies: Agency[];
+  /** Who can be PI: the PMS Reporting Managers (server/projects listPiOptions). */
+  piOptions: PiOption[];
   stages: Record<Stage, string>;
   categories: Record<Category, string>;
   onClose: () => void;
@@ -50,7 +52,7 @@ const Label: React.FC<{ text: string; required?: boolean; children: React.ReactN
   </div>
 );
 
-export const ProjectFormModal: React.FC<Props> = ({ open, project, agencies, stages, categories, onClose, onSaved }) => {
+export const ProjectFormModal: React.FC<Props> = ({ open, project, agencies, piOptions, stages, categories, onClose, onSaved }) => {
   const { users } = useApp();
   const [form, setForm] = useState<ProjectForm>(EMPTY);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -75,6 +77,12 @@ export const ProjectFormModal: React.FC<Props> = ({ open, project, agencies, sta
     .map((u) => ({ value: String(u.id), label: `${u.name} (B.I. ${(u as { biometricId?: string }).biometricId ?? ''})${u.designation ? ` · ${u.designation}` : ''}` }))
     .sort((a, b) => a.label.localeCompare(b.label)), [users]);
   const labelOf = (id: string) => people.find((p) => p.value === id)?.label ?? id;
+  // The PI is chosen from the PMS Reporting Managers; the PI already on a project stays in the list.
+  const piChoices = useMemo(() => {
+    const list = piOptions.map((o) => ({ value: o.id, label: `${o.name} (B.I. ${o.biometricId})${o.designation ? ` · ${o.designation}` : ''}` }));
+    if (project?.pi && !list.some((o) => o.value === project.pi!.id)) list.push({ value: project.pi.id, label: `${project.pi.name} (B.I. ${project.pi.biometricId})` });
+    return list;
+  }, [piOptions, project]);
   const agencyOptions = agencies.filter((a) => a.status === 'ACTIVE' || a.id === form.fundingAgencyId).map((a) => ({ value: a.id, label: `${a.name} (${a.code})` }));
 
   const save = async () => {
@@ -151,14 +159,15 @@ export const ProjectFormModal: React.FC<Props> = ({ open, project, agencies, sta
         </Section>
 
         <Section title="People">
-          <Label text="PI (Principal Investigator)" error={errors.piUserId}>
-            <AppSelect value={form.piUserId} onChange={(v) => { set('piUserId', v); if (v) set('piName', ''); }} searchable placeholder="Choose the PI from the employees" options={[{ value: '', label: '—' }, ...people]} />
+          <Label text="PI (Principal Investigator)" error={errors.piUserId || errors.piName}>
+            <AppSelect value={form.piUserId} onChange={(v) => { set('piUserId', v); set('piName', ''); }} searchable
+              placeholder={piChoices.length ? 'Choose the PI' : 'No one has the PMS Reporting Manager role yet'} options={[{ value: '', label: '—' }, ...piChoices]} />
+            <p className="mt-1 text-[11px] text-slate-500">
+              {!form.piUserId && form.piName
+                ? <>On record: <span className="font-semibold">{form.piName}</span> (not linked to an employee). Choose the PI to link.</>
+                : 'Employees with the PMS Reporting Manager role (given in HRMS → User Controls).'}
+            </p>
           </Label>
-          {!form.piUserId && (
-            <Label text="…or the PI's name" error={errors.piName}>
-              <Input value={form.piName} onChange={(e) => set('piName', e.target.value)} placeholder="When the PI is not in the employee list" size="sm" />
-            </Label>
-          )}
           <Label text="Department / Faculty" error={errors.department}>
             <Input value={form.department} onChange={(e) => set('department', e.target.value)} size="sm" />
           </Label>

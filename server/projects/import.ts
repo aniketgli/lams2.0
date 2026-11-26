@@ -6,7 +6,7 @@ import { inTransaction } from '../lib/tx';
 import { parseDelimited } from '../leave/balanceImport';
 import { parseDay } from '../employees/bulkImportRules';
 import { IMPORT_COLUMNS, MAX_PROJECT_IMPORT_ROWS, type ProjectInput, categoryFromText, parseProjectInput, stageFromText } from './projectRules';
-import { insertProject } from './store';
+import { PI_ROLE_MESSAGE, insertProject, listPiOptions } from './store';
 
 /**
  * Bulk import of projects (RC office): a CSV with the template's columns (projectRules.ts IMPORT_COLUMNS).
@@ -46,6 +46,9 @@ async function parse(csv: string): Promise<Parsed[]> {
     return agencies.find((a) => String(a.name).toLowerCase() === k || String(a.code).toLowerCase() === k);
   };
   const userOf = (bio: string) => people.find((p) => String(p.biometric_id).toUpperCase() === bio.trim().toUpperCase());
+  // The PI is one of the PMS Reporting Managers, by biometric ID or by name (exactly one with that name).
+  const piOptions = await listPiOptions();
+  const nameKey = (t: string) => t.trim().toLowerCase().replace(/\s+/g, ' ');
 
   const out: Parsed[] = [];
   const seenCode = new Set<string>(), seenTitle = new Set<string>();
@@ -68,9 +71,16 @@ async function parse(csv: string): Promise<Parsed[]> {
     const agencyText = get('Funding_Agency');
     const agency = agencyText ? agencyOf(agencyText) : null;
     if (agencyText && !agency) problems.push(`Funding_Agency: "${agencyText}" is not in Funding Agencies.`);
-    const piBio = get('PI_Biometric_ID');
-    const pi = piBio ? userOf(piBio) : null;
-    if (piBio && !pi) problems.push(`PI_Biometric_ID: no active employee ${piBio}.`);
+    const piBio = get('PI_Biometric_ID'), piText = get('PI_Name');
+    let pi: { id: string } | null = null;
+    if (piBio) {
+      pi = piOptions.find((o) => o.biometricId.toUpperCase() === piBio.toUpperCase()) ?? null;
+      if (!pi) problems.push(userOf(piBio) ? `PI_Biometric_ID: ${piBio} does not have the PMS Reporting Manager role.` : `PI_Biometric_ID: no active employee ${piBio}.`);
+    } else if (piText) {
+      const matches = piOptions.filter((o) => nameKey(o.name) === nameKey(piText));
+      if (matches.length === 1) pi = matches[0];
+      else problems.push(matches.length ? `PI_Name: more than one PMS Reporting Manager is named "${piText}"; use PI_Biometric_ID.` : `PI_Name: "${piText}" — ${PI_ROLE_MESSAGE}`);
+    }
     const coBios = get('CoPI_Biometric_IDs').split(/[;|]/).map((s) => s.trim()).filter(Boolean);
     const co = coBios.map((b) => ({ b, u: userOf(b) }));
     for (const c of co) if (!c.u) problems.push(`CoPI_Biometric_IDs: no active employee ${c.b}.`);
@@ -78,7 +88,7 @@ async function parse(csv: string): Promise<Parsed[]> {
       code, title, shortName: get('Short_Name'), category: category ?? '', fundingAgencyId: agency ? String(agency.id) : '',
       scheme: get('Scheme'), sanctionOrderNo: get('Sanction_Order_No'), sanctionDate: date('Sanction_Date') ?? '',
       sanctionedAmount: get('Sanctioned_Amount'), startDate: date('Start_Date') ?? '', endDate: date('End_Date') ?? '',
-      piUserId: pi ? String(pi.id) : '', piName: pi ? '' : get('PI_Name'), coPiUserIds: co.filter((c) => c.u).map((c) => String(c.u!.id)),
+      piUserId: pi ? String(pi.id) : '', piName: '', coPiUserIds: co.filter((c) => c.u).map((c) => String(c.u!.id)),
       department: get('Department'), sites: get('Sites'), objectives: get('Objectives'), remarks: get('Remarks'), stage: stage ?? '',
     };
     let input: ProjectInput | null = null;

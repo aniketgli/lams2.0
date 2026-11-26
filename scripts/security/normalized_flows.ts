@@ -473,17 +473,28 @@ async function main(): Promise<void> {
     const listed = await req('GET', '/api/pms/projects');
     check('Projects: the list has both projects with their agency', listed.status === 200 && (listed.body?.projects ?? []).filter((p: any) => String(p.code).startsWith('CI-PRJ-2026-') && p.fundingAgency === 'CI Science Fund').length === 2,
       `${listed.status} ${(listed.body?.projects ?? []).length}`);
-    const minimal = await req('POST', '/api/pms/projects', { title: 'CI Only Title And PI', piName: 'Dr. CI Outside PI' });
-    check('Projects: only the title and a typed PI name are enough; the code is given automatically', minimal.status === 201
-      && /^WII-PRJ-\d{4}$/.test(String(minimal.body?.project?.code ?? '')) && minimal.body?.project?.piName === 'Dr. CI Outside PI' && minimal.body?.project?.pi === null,
+    await freshMinute(); // the write rate limit
+    const piName = String(piUser.name ?? '');
+    const minimal = await req('POST', '/api/pms/projects', { title: 'CI Only Title And PI', piName });
+    check('Projects: only the title and the PI (a PMS Reporting Manager, by name) are enough; the code is given automatically', minimal.status === 201
+      && /^WII-PRJ-\d{4}$/.test(String(minimal.body?.project?.code ?? '')) && String(minimal.body?.project?.pi?.id ?? '') === String(piUser.id),
       `${minimal.status} ${minimal.text.slice(0, 200)}`);
-    const minimalCsv = ['Title,PI_Name', 'CI Imported Title Only,Dr. CI Typed PI', 'CI Imported Second,'].join('\n');
+    const projectsList = await req('GET', '/api/pms/projects');
+    const piChoices = (projectsList.body?.piOptions ?? []).map((o: any) => String(o.id));
+    const notRm = await req('POST', '/api/pms/projects', { title: 'CI PI Without Role', piUserId: String(scientist) });
+    const unknownPi = await req('POST', '/api/pms/projects', { title: 'CI PI Unknown', piName: 'Dr. Nobody Of CI' });
+    check('Projects: the PI list holds the PMS Reporting Managers only; anyone else as PI is refused', piChoices.includes(String(piUser.id)) && !piChoices.includes(String(scientist))
+      && notRm.status === 400 && Boolean(notRm.body?.details?.piUserId) && unknownPi.status === 400 && Boolean(unknownPi.body?.details?.piUserId),
+      `${piChoices.length} choices · ${notRm.status} · ${unknownPi.status}`);
+    const minimalCsv = ['Title,PI_Name', `CI Imported Title Only,${piName}`, 'CI Imported Second,'].join('\n');
     const minimalImport = await req('POST', '/api/pms/projects/import', { csv: minimalCsv });
+    const badPiImport = await req('POST', '/api/pms/projects/import/review', { csv: ['Title,PI_Name', 'CI Imported Bad PI,Dr. Nobody Of CI'].join('\n') });
     const listed2 = await req('GET', '/api/pms/projects');
     const auto = (listed2.body?.projects ?? []).filter((p: any) => String(p.title).startsWith('CI Imported '));
-    check('Projects: an import with only Title and PI_Name works, each row gets its own code', minimalImport.status === 201 && minimalImport.body?.summary?.ok === 2
-      && auto.length === 2 && new Set(auto.map((p: any) => p.code)).size === 2 && auto.every((p: any) => /^WII-PRJ-\d{4}$/.test(String(p.code))),
-      `${minimalImport.status} ${minimalImport.text.slice(0, 200)} · ${auto.map((p: any) => p.code).join(',')}`);
+    check('Projects: an import with only Title and PI_Name works, each row gets its own code; an unknown PI is refused', minimalImport.status === 201 && minimalImport.body?.summary?.ok === 2
+      && auto.length === 2 && new Set(auto.map((p: any) => p.code)).size === 2 && auto.every((p: any) => /^WII-PRJ-\d{4}$/.test(String(p.code)))
+      && badPiImport.status === 200 && badPiImport.body?.summary?.errors === 1,
+      `${minimalImport.status} ${minimalImport.text.slice(0, 200)} · ${auto.map((p: any) => p.code).join(',')} · ${badPiImport.status} ${JSON.stringify(badPiImport.body?.summary)}`);
     // ---- PMS Master Settings: only the masters PMS uses ---------------------------------------------------------
     const pmsCat = await req('GET', '/api/hrms/masters/catalog');
     const catKeys = (pmsCat.body?.masters ?? []).map((m: any) => m.key);
@@ -523,6 +534,8 @@ async function main(): Promise<void> {
       `${hrmsDesigList.status} · ${hrmsPmsDesig.status} · ${hrmsEditPms.status}`);
     const hrmsProjects = await req('POST', '/api/pms/projects', { code: 'CI-HRMS-X', title: 'CI from HRMS' });
     check('Projects are kept in PMS: the HRMS administrator cannot create one', hrmsProjects.status === 403, String(hrmsProjects.status));
+    const pmsHod = await req('PUT', `/api/hrms/employees/${pmsNew.body?.employee?.id ?? 0}/module-roles`, { moduleRoles: { pms: ['pms_pi'] } });
+    check('PMS has no HoD role: it cannot be given', pmsHod.status === 400, `${pmsHod.status} ${pmsHod.text.slice(0, 160)}`);
     const hrmsDir = (await req('GET', '/api/hrms/employees/export-pdf')).body?.rows ?? [];
     check('The HRMS directory download lists HRMS employees only', !JSON.stringify(hrmsDir).includes('CI PMS Fellow') && JSON.stringify(hrmsDir).includes('CI New Scientist'), `${hrmsDir.length} rows`);
   } else check('PMS: seed users 1006 / 1007 and the HRMS employee', false);

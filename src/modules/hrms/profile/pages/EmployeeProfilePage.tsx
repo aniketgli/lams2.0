@@ -876,6 +876,9 @@ export const EmployeeProfilePage: React.FC<EmployeeProfilePageProps> = ({ initia
             normalizeRole(definition.name) === normalized
           );
           const roleKey = match?.id || matrixRoleAliases[moduleKey]?.[normalized] || rawRole;
+          // A role switched off in the catalog (PMS HoD: migrations/20261230_pms_no_hod.sql) has no matrix cell and gives
+          // no access; it is left out here, so saving the matrix is not refused for it.
+          if (moduleKey === 'pms' && roleKey === 'pms_pi') continue;
           if (roleKey && !next[moduleKey].includes(roleKey)) next[moduleKey].push(roleKey);
         }
         setEditUserModuleRolesState(next);

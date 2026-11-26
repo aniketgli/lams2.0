@@ -46,6 +46,12 @@ export async function someoneHoldsManagerRole(q: Q, kind: ManagerKind, module: P
   return roles.some((r) => r.kind === kind);
 }
 
+/** The active employees (not system accounts) holding the manager role of `kind` in `module`, by biometric ID. */
+export async function managerRoleHolders(q: Q, kind: ManagerKind, module: PeopleModule = 'HRMS'): Promise<Set<string>> {
+  const roles = await managerRolesOf(q, module, 'u.is_system = 0', []);
+  return new Set(roles.filter((r) => r.kind === kind).map((r) => r.biometricId));
+}
+
 export const managerRoleMessage = (kind: ManagerKind, module: PeopleModule = 'HRMS'): string => {
   const where = module === 'PMS' ? ' in PMS (User Controls → roles, PMS column)' : ' (User Controls → roles)';
   return kind === 'reporting'
