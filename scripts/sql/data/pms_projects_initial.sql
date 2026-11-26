@@ -200,7 +200,8 @@ CREATE TEMPORARY TABLE tmp_pi_link AS
 SET @last := (SELECT COALESCE(MAX(CAST(SUBSTRING(code, 9) AS UNSIGNED)), 0) FROM projects WHERE code REGEXP '^WII-PRJ-[0-9]{4}$');
 
 INSERT INTO projects (name, code, pi_name, pi_user_id, stage, status)
-SELECT x.title, CONCAT('WII-PRJ-', LPAD(@last + ROW_NUMBER() OVER (ORDER BY x.seq), 4, '0')),
+-- CAST: the sum is a decimal in MySQL (it gave "WII-PRJ-80.0"); the code needs the whole number.
+SELECT x.title, CONCAT('WII-PRJ-', LPAD(CAST(@last + ROW_NUMBER() OVER (ORDER BY x.seq) AS UNSIGNED), 4, '0')),
        COALESCE(u.name COLLATE utf8mb4_unicode_ci, x.list_pi), u.id, 'ongoing', 'ACTIVE'
   FROM tmp_pms_projects x
   LEFT JOIN tmp_pi_link l ON l.list_name = x.list_pi
