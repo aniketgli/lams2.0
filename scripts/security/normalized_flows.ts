@@ -520,13 +520,18 @@ async function main(): Promise<void> {
     const pmsTa = await req('POST', '/api/hrms/employees', { ...pmsBody, biometricId: '3032', name: 'CI PMS TA', email: 'ci.pmsta@wii.gov.in', phone: '9876500032',
       aadhaarNumber: aadhaarFrom('78901234567'), panNumber: 'ABCDE9893K', bankAccountNumber: '623456789012', reportingManagerId: String(piUser.id), designation: 'Technical Assistant' });
     check('A Project Staff employee can take the PMS "Technical Assistant"', pmsTa.status === 201, `${pmsTa.status} ${pmsTa.text.slice(0, 200)}`);
-    const ltHrms = await req('POST', '/api/hrms/leave-types', { name: 'CI X', code: 'CIX', employeeTypes: ['permanent'] });
+    const ltPms = await req('POST', '/api/hrms/leave-types', { name: 'CI PMS X', code: 'CIPX', employeeTypes: ['project'] });
     const ltShared = await req('PUT', '/api/hrms/leave-types/1', { name: 'CL', code: 'CL', employeeTypes: ['project'] });
-    const ltList = await req('GET', '/api/hrms/leave-types?scope=master');
-    const lgHrms = await req('POST', '/api/hrms/leave-groups', { code: 'CIX', name: 'CI X', leaveYear: 'CY', leaveTypeIds: ['1'], status: 'active' });
-    check('PMS leave masters: HRMS / shared leave types and groups are refused; the master list holds PMS ones only',
-      ltHrms.status === 400 && ltShared.status === 403 && lgHrms.status === 400 && ltList.status === 200 && (ltList.body?.employeeTypes ?? []).every((t: any) => t.code !== 'permanent'),
-      `${ltHrms.status}/${ltShared.status}/${lgHrms.status}/${ltList.status} types ${(ltList.body?.types ?? []).length}`);
+    const ltList = await req('GET', '/api/hrms/leave-types');
+    const lgPms = await req('POST', '/api/hrms/leave-groups', { code: 'CIX', name: 'CI X', leaveYear: 'CY', leaveTypeIds: ['1'], status: 'active' });
+    check('PMS has no leave masters: leave types and groups (also for PMS types) are changed in HRMS only; PMS still reads them',
+      ltPms.status === 403 && ltShared.status === 403 && lgPms.status === 403 && ltList.status === 200,
+      `${ltPms.status}/${ltShared.status}/${lgPms.status}/${ltList.status} types ${(ltList.body?.types ?? []).length}`);
+    const cadreDesig = await req('POST', '/api/hrms/masters/designations', { name: 'CI Computer Assistant', code: 'CICA', status: 'ACTIVE', fields: { empType: 'project', cadre: 'Technical' } });
+    const pmsDesigDef = (pmsCat.body?.masters ?? []).find((m: any) => m.key === 'designations');
+    check('PMS designations have no cadre: not in the form, saved empty', cadreDesig.status === 201 && !cadreDesig.body?.record?.fields?.cadre
+      && Boolean(pmsDesigDef) && !(pmsDesigDef.fields ?? []).some((f: any) => f.key === 'cadre'),
+      `${cadreDesig.status} ${cadreDesig.text.slice(0, 160)}`);
     const pmsRoles = await req('PUT', `/api/hrms/employees/${pmsNew.body?.employee?.id ?? 0}/module-roles`, { moduleRoles: { pms: ['pms_admin'] } });
     check('PMS has no User Controls: roles are given in HRMS only', pmsRoles.status === 403, String(pmsRoles.status));
     await req('POST', '/api/auth/login', { email: 'admin@wii.gov.in', password: PASSWORD });

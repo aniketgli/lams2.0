@@ -82,11 +82,19 @@ function idFrom(raw: string): number {
   return id;
 }
 
+/** PMS designations have no cadre (cadres are HRMS's): the field is not shown in PMS and is saved empty there. */
+const fieldsFor = (m: MasterDef, pms: boolean) => (pms && m.key === 'designations' ? m.fields.filter((f) => f.key !== 'cadre') : m.fields);
+const withoutPmsCadre = (req: Request, key: string, body: unknown): unknown => {
+  if (key !== 'designations' || moduleOf(req) !== 'PMS' || !body || typeof body !== 'object') return body;
+  const b = body as { fields?: Record<string, unknown> };
+  return { ...b, fields: { ...(b.fields ?? {}), cadre: '' } };
+};
+
 router.get('/catalog', canView, (req, res) => {
   const pms = req.auth?.activeModule === 'pms';
   res.json({
     masters: MASTERS.filter((m) => !pms || PMS_MASTER_KEYS.includes(m.key)).map((m) => ({
-      key: m.key, label: m.label, noun: m.noun, group: m.group, description: m.description, fields: m.fields, kind: m.kind, tab: tabOrder(m.key), noCreate: Boolean(m.noCreate), codeEditable: Boolean(m.codeEditable), swapStatusWith: m.swapStatusWith ?? null,
+      key: m.key, label: m.label, noun: m.noun, group: m.group, description: m.description, fields: fieldsFor(m, pms), kind: m.kind, tab: tabOrder(m.key), noCreate: Boolean(m.noCreate), codeEditable: Boolean(m.codeEditable), swapStatusWith: m.swapStatusWith ?? null,
       ...(m.kind === 'lookup' ? { lookupType: m.lookupType } : {}),
     })),
     formLayouts: FORM_LAYOUTS,
@@ -211,12 +219,12 @@ router.get('/:key', canView, asyncHandler(async (req, res) => {
 
 router.post('/:key', canEdit, asyncHandler(async (req, res) => {
   await assertModuleDesignation(req, req.params.key, null, req.body);
-  res.status(201).json({ record: await createRecord(masterFrom(req.params.key), req.body, req) });
+  res.status(201).json({ record: await createRecord(masterFrom(req.params.key), withoutPmsCadre(req, req.params.key, req.body), req) });
 }));
 
 router.put('/:key/:id', canEdit, asyncHandler(async (req, res) => {
   await assertModuleDesignation(req, req.params.key, idFrom(req.params.id), req.body);
-  res.json({ record: await updateRecord(masterFrom(req.params.key), idFrom(req.params.id), req.body, req) });
+  res.json({ record: await updateRecord(masterFrom(req.params.key), idFrom(req.params.id), withoutPmsCadre(req, req.params.key, req.body), req) });
 }));
 
 router.patch('/:key/:id/status', canEdit, asyncHandler(async (req, res) => {
