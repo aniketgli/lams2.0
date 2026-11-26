@@ -1,3 +1,11 @@
+  const masterOk = await d.getByRole('tab', { name: /^designations$/i }).first().waitFor({ state: 'visible', timeout: 15000 }).then(() => true, () => false);
+  await d.getByRole('columnheader', { name: /employment type/i }).first().waitFor({ state: 'visible', timeout: 10000 }).catch(() => undefined);
+  const leaveTabs = await d.getByRole('tab', { name: /leave (types|groups)/i }).count();
+  const shiftsTab = await d.getByRole('tab', { name: /^shifts$/i }).count();
+  const cadreColumn = await d.getByRole('columnheader', { name: /cadre/i }).count();
+  check('PMS Master Settings: designations, M.Sc and PhD only (no leave types / groups, no Shifts); designations have no cadre',
+    masterOk && leaveTabs === 0 && shiftsTab === 0 && cadreColumn === 0 && errors.length === 0,
+    `designations ${masterOk}, leave tabs ${leaveTabs}, shifts ${shiftsTab}, cadre ${cadreColumn}, errors ${errors.join(' | ')}`);
 /**
  * Sign-in / sign-out in a real browser (Chrome on the CI runner), with two tabs of one browser sharing the cookie:
  * the situation in which users were bounced from the lobby back to "signed out after 15 minutes of inactivity".
