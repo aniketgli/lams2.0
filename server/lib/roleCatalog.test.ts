@@ -20,6 +20,7 @@ describe('role catalog', () => {
 
   test('every HRMS spelling the server accepted before still resolves to the same role', () => {
     for (const [alias, role] of Object.entries(ROLE_ALIASES_FOR_TEST)) {
+      if (role === 'project_pi') { expect(resolveGrant(catalog, 'pms', alias)?.role).toBe(role); continue; } // PMS only
       expect(resolveGrant(catalog, 'hrms', alias)?.role).toBe(role);
     }
   });

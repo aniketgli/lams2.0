@@ -3,7 +3,7 @@ import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
 import { pool } from '../../src/db';
 import { badRequest, notFound } from '../lib/http';
 import { inTransaction } from '../lib/tx';
-import { Validator } from '../lib/validate';
+import { Validator, todayInIndia } from '../lib/validate';
 import { readBlob, storeBlob } from '../lib/fileStore';
 import { writeMasterAuditSql } from '../masters/audit';
 import { employeeTypeModules } from '../employees/references';
@@ -118,7 +118,7 @@ export async function addProjectEmployees(req: Request, id: number, body: unknow
   const allowed = await projectTypes();
   return transferEmployees(req, {
     userIds: b.userIds, department: project.title, reportingManagerId: b.reportingManagerId || undefined,
-    effectiveDate: b.effectiveDate || undefined, notes: b.notes || `Added to project ${project.code}`,
+    effectiveDate: b.effectiveDate || todayInIndia(), notes: b.notes || `Added to project ${project.code}`,
   }, {
     module: 'PMS',
     check: async (t) => (allowed.has(t.employmentType ?? '') ? null : 'only PMS employees whose form has a project (Project staff, interns …) can be put on a project.'),
@@ -131,7 +131,7 @@ export async function changeProjectManager(req: Request, id: number, body: unkno
   const b = (body ?? {}) as Record<string, unknown>;
   if (!b.reportingManagerId) throw badRequest('Please correct the highlighted fields.', { reportingManagerId: 'Choose the reporting manager.' });
   return transferEmployees(req, {
-    userIds: b.userIds, reportingManagerId: b.reportingManagerId, effectiveDate: b.effectiveDate || undefined,
+    userIds: b.userIds, reportingManagerId: b.reportingManagerId, effectiveDate: b.effectiveDate || todayInIndia(),
     notes: b.notes || `Reporting manager changed in project ${project.code}`,
   }, {
     module: 'PMS',

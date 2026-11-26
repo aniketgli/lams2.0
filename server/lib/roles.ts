@@ -67,6 +67,8 @@ const ROLE_ALIASES: Record<string, RoleId> = {
   generalstaff: 'general_staff', user: 'general_staff', staff: 'general_staff', hrmsstaff: 'general_staff',
   leavebalancemanager: 'leave_balance_manager', hrmsleavebalance: 'leave_balance_manager', leavebalance: 'leave_balance_manager',
   employeemanager: 'employee_manager', hrmsemployeemanager: 'employee_manager',
+  // PMS only (the PI): not an HRMS role.
+  projectpi: 'project_pi', pi: 'project_pi',
 };
 
 export function normalizeModule(value: unknown): ModuleId | null {

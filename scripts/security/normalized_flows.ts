@@ -604,8 +604,8 @@ async function main(): Promise<void> {
       `${hrmsDesigList.status} · ${hrmsPmsDesig.status} · ${hrmsEditPms.status}`);
     const hrmsProjects = await req('POST', '/api/pms/projects', { code: 'CI-HRMS-X', title: 'CI from HRMS' });
     check('Projects are kept in PMS: the HRMS administrator cannot create one', hrmsProjects.status === 403, String(hrmsProjects.status));
-    const pmsHod = await req('PUT', `/api/hrms/employees/${pmsNew.body?.employee?.id ?? 0}/module-roles`, { moduleRoles: { pms: ['pms_pi'] } });
-    check('PMS has no HoD role: it cannot be given', pmsHod.status === 400, `${pmsHod.status} ${pmsHod.text.slice(0, 160)}`);
+    const pmsPiRole = await req('PUT', `/api/hrms/employees/${pmsNew.body?.employee?.id ?? 0}/module-roles`, { moduleRoles: { pms: ['pms_pi', 'pms_researcher'] } });
+    check('PMS has no HoD: its role pms_pi is given as the PI', pmsPiRole.status === 200, `${pmsPiRole.status} ${pmsPiRole.text.slice(0, 160)}`);
     const hrmsDir = (await req('GET', '/api/hrms/employees/export-pdf')).body?.rows ?? [];
     check('The HRMS directory download lists HRMS employees only', !JSON.stringify(hrmsDir).includes('CI PMS Fellow') && JSON.stringify(hrmsDir).includes('CI New Scientist'), `${hrmsDir.length} rows`);
   } else check('PMS: seed users 1006 / 1007 and the HRMS employee', false);
