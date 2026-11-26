@@ -164,7 +164,7 @@ export const ProjectsPage: React.FC = () => {
         </>
       )}
 
-      <ProjectFormModal open={editing !== null} project={editing === 'new' ? null : editing} agencies={data?.agencies ?? []} stages={stages}
+      <ProjectFormModal open={editing !== null} project={editing === 'new' ? null : editing} agencies={data?.agencies ?? []} piOptions={data?.piOptions ?? []} stages={stages}
         categories={data?.categories ?? ({} as ProjectList['categories'])} onClose={() => setEditing(null)}
         onSaved={(p, m) => { setEditing(null); setViewing(p); showNotice('success', m); void load(true); }} />
       <ProjectDetailModal project={viewing} canEdit={isRcOffice} stages={stages} next={data?.next ?? ({} as ProjectList['next'])}

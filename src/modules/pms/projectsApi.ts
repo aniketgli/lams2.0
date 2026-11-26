@@ -24,7 +24,7 @@ export interface Agency { id: string; name: string; code: string; status: 'ACTIV
 export interface ProjectForm {
   code: string; title: string; shortName: string; category: Category | ''; fundingAgencyId: string; scheme: string;
   sanctionOrderNo: string; sanctionDate: string; sanctionedAmount: string; startDate: string; endDate: string;
-  piUserId: string; coPiUserIds: string[]; department: string; sites: string; objectives: string; remarks: string; stage: Stage;
+  piUserId: string; piName: string; coPiUserIds: string[]; department: string; sites: string; objectives: string; remarks: string; stage: Stage;
 }
 
 export interface ProjectImportReview {
@@ -32,8 +32,11 @@ export interface ProjectImportReview {
   rows: Array<{ line: number; code: string; title: string; status: 'ok' | 'error'; error: string | null }>;
 }
 
+/** A PI to choose: an employee with the PMS Reporting Manager role. */
+export interface PiOption { id: string; name: string; biometricId: string; designation: string | null }
+
 export interface ProjectList {
-  projects: Project[]; agencies: Agency[];
+  projects: Project[]; agencies: Agency[]; piOptions?: PiOption[];
   stages: Record<Stage, string>; categories: Record<Category, string>; next: Record<Stage, Stage[]>;
 }
 

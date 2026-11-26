@@ -6,14 +6,14 @@ import { CATEGORY_LABELS, NEXT, STAGE_LABELS, importTemplate } from './projectRu
 import { applyProjectImport, reviewProjectImport } from './import';
 import {
   PROJECT_FILE_KINDS, type ProjectFileKind, changeStage, createProject, getProject, listAgencies, listProjects, loadProjectFile,
-  saveAgency, saveProjectFile, updateProject,
+  saveAgency, saveProjectFile, updateProject, listPiOptions,
 } from './store';
 import { pool } from '../../src/db';
 
 /**
  * PMS projects (/api/pms). Everyone working in PMS reads them; the RC office (the PMS Administrator) creates,
  * edits, imports, moves the stage, uploads the documents and keeps the funding agencies.
- *   GET    /projects                      list (with the stage rules and labels for the screen)
+ *   GET    /projects                      list (with the stage rules and labels, and the PIs to choose from)
  *   GET    /projects/:id
  *   POST   /projects                      create                          (administrator)
  *   PUT    /projects/:id                  edit                            (administrator)
@@ -43,8 +43,8 @@ const kindOf = (req: Request): ProjectFileKind => {
 };
 
 router.get('/projects', ...canRead, asyncHandler(async (_req, res) => {
-  const [projects, agencies] = await Promise.all([listProjects(), listAgencies()]);
-  res.json({ projects, agencies, stages: STAGE_LABELS, categories: CATEGORY_LABELS, next: NEXT });
+  const [projects, agencies, piOptions] = await Promise.all([listProjects(), listAgencies(), listPiOptions()]);
+  res.json({ projects, agencies, piOptions, stages: STAGE_LABELS, categories: CATEGORY_LABELS, next: NEXT });
 }));
 
 // Import routes come before /projects/:id so "import" is never read as an ID.

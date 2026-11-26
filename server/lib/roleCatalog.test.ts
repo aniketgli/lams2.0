@@ -11,7 +11,9 @@ describe('role catalog', () => {
     expect(findRole(catalog, 'hrms', 'Leave Balance Manager')?.accessRole).toBe('leave_balance_manager');
     expect(findRole(catalog, 'pms', 'Co-PI')?.roleId).toBe('pms_co_pi');
     expect(findRole(catalog, 'pms', 'PMS Admin')?.roleId).toBe('pms_admin');
-    expect(findRole(catalog, 'pms', 'Project PI')?.roleId).toBe('pms_pi');
+    // PMS has no HoD role (migrations/20261230_pms_no_hod.sql switches it off).
+    expect(findRole(catalog, 'pms', 'HoD')).toBeNull();
+    expect(findRole(catalog, 'pms', 'Project PI')).toBeNull();
   });
 
   test('every HRMS spelling the server accepted before still resolves to the same role', () => {
@@ -77,6 +79,9 @@ describe('role catalog', () => {
         expect(sql).toContain(`('${r.moduleId}', '${r.roleId}', '${r.name.replace(/'/g, "''")}', '${r.accessRole}', '${r.aliases.replace(/'/g, "''")}'`);
       }
     }
-    expect((sql.match(/^\s+\('/gm) ?? []).length).toBe(catalog.length - added.length);
+    // One role of the first migration is switched off later (migrations/20261230_pms_no_hod.sql: the PMS HoD).
+    const noHod = await Bun.file(new URL('../../migrations/20261230_pms_no_hod.sql', import.meta.url)).text();
+    expect(noHod).toContain("UPDATE role_catalog SET is_active = 0 WHERE module_id = 'pms' AND role_id = 'pms_pi';");
+    expect((sql.match(/^\s+\('/gm) ?? []).length).toBe(catalog.length - added.length + 1);
   });
 });

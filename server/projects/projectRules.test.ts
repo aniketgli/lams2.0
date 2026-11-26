@@ -9,6 +9,15 @@ describe('project form', () => {
     expect(p.stage).toBe('proposed');
     expect(p.coPiUserIds).toEqual([]);
   });
+  test('only a title and the PI\'s name: the code is given later (automatically)', () => {
+    const p = parseProjectInput({ title: 'Tiger Genetics', piName: 'Dr. Y.V. Jhala' });
+    expect(p.code).toBeNull();
+    expect(p.piName).toBe('Dr. Y.V. Jhala');
+    expect(() => parseProjectInput({ piName: 'Dr. X' })).toThrow(); // the title is required
+  });
+  test('a PI chosen from the employees wins over a typed name', () => {
+    expect(parseProjectInput({ ...base, piUserId: '5', piName: 'Typed' }).piName).toBeNull();
+  });
   test('amounts with commas, dates and people', () => {
     const p = parseProjectInput({ ...base, sanctionedAmount: '3,85,00,000', startDate: '2024-04-01', endDate: '2027-03-31', piUserId: '5', coPiUserIds: ['6', '7', '6'] });
     expect(p.sanctionedAmount).toBe(38500000);

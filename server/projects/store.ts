@@ -5,6 +5,7 @@ import { HttpError, badRequest, notFound } from '../lib/http';
 import { inTransaction } from '../lib/tx';
 import { readBlob, storeBlob } from '../lib/fileStore';
 import { writeMasterAuditSql } from '../masters/audit';
+import { managerRoleHolders } from '../employees/managerRoles';
 import {
   CATEGORY_LABELS, type Category, type ProjectInput, STAGE_LABELS, type Stage, parseProjectInput, stageProblem,
 } from './projectRules';
@@ -122,26 +123,74 @@ const snapshot = (p: Project) => ({
   department: p.department, sites: p.sites, objectives: p.objectives, remarks: p.remarks, stage: p.stageLabel,
 });
 
-/** Checks the references (agency, PI, Co-PIs) and the uniqueness of code and title; field errors otherwise. */
-async function checkReferences(q: Q, input: ProjectInput, selfId: number | null): Promise<{ piName: string | null }> {
+/** Who can be a PI: an active employee holding the PMS Reporting Manager role (given in HRMS → User Controls). */
+export interface PiOption { id: string; name: string; biometricId: string; designation: string | null }
+export async function listPiOptions(q: Q = pool): Promise<PiOption[]> {
+  const holders = [...await managerRoleHolders(q, 'reporting', 'PMS')];
+  if (!holders.length) return [];
+  const found = await rows(q,
+    `SELECT u.id, u.name, u.biometric_id, p.designation FROM users u LEFT JOIN employee_profiles p ON p.biometric_id = u.biometric_id
+      WHERE u.biometric_id IN (?) AND u.is_system = 0 AND LOWER(u.status) = 'active' ORDER BY u.name`, [holders]);
+  return found.map((u) => ({ id: String(u.id), name: String(u.name), biometricId: String(u.biometric_id), designation: u.designation ? String(u.designation) : null }));
+}
+
+export const PI_ROLE_MESSAGE = 'Choose the PI from the list: an employee with the PMS Reporting Manager role (HRMS → User Controls).';
+
+/**
+ * Checks the references (agency, PI, Co-PIs) and the uniqueness of code and title; field errors otherwise.
+ * The PI is chosen from the PMS Reporting Managers. A PI typed by name is matched to exactly one of them; an older
+ * project whose PI is only a name keeps it while that name is unchanged (`before`).
+ */
+async function checkReferences(q: Q, input: ProjectInput, selfId: number | null, before: Project | null = null): Promise<{ input: ProjectInput; piName: string | null }> {
   const errors: Record<string, string> = {};
   if (input.fundingAgencyId) {
     const [a] = await rows(q, 'SELECT status FROM funding_agencies WHERE id = ? LIMIT 1', [input.fundingAgencyId]);
     if (!a) errors.fundingAgencyId = 'Choose a funding agency from the list.';
   }
-  const people = [...(input.piUserId ? [input.piUserId] : []), ...input.coPiUserIds];
-  const found = people.length
-    ? await rows(q, "SELECT id, name FROM users WHERE id IN (?) AND is_system = 0 AND LOWER(status) = 'active'", [people])
-    : [];
-  const nameOf = new Map(found.map((u) => [Number(u.id), String(u.name)]));
-  if (input.piUserId && !nameOf.has(input.piUserId)) errors.piUserId = 'Choose an active employee as the PI.';
-  if (input.coPiUserIds.some((u) => !nameOf.has(u))) errors.coPiUserIds = 'Choose active employees as Co-PIs.';
+  let piName: string | null = null;
+  const keptPi = (id: number | null) => Boolean(before && id && before.pi && Number(before.pi.id) === id);
+  if (input.piUserId || input.piName) {
+    const options = await listPiOptions(q);
+    if (input.piUserId) {
+      const pi = options.find((o) => Number(o.id) === input.piUserId);
+      if (pi) piName = pi.name;
+      else if (keptPi(input.piUserId)) piName = before!.pi!.name; // the PI already on the project stays accepted
+      else errors.piUserId = PI_ROLE_MESSAGE;
+    } else if (before && !before.pi && before.piName && before.piName === input.piName) {
+      piName = input.piName; // an older project's PI by name, unchanged
+    } else {
+      const key = String(input.piName).trim().toLowerCase().replace(/\s+/g, ' ');
+      const matches = options.filter((o) => o.name.trim().toLowerCase().replace(/\s+/g, ' ') === key);
+      if (matches.length === 1) { input = { ...input, piUserId: Number(matches[0].id), piName: null }; piName = matches[0].name; }
+      else errors.piUserId = matches.length ? 'More than one PMS Reporting Manager has this name; choose the PI from the list.' : PI_ROLE_MESSAGE;
+    }
+  }
+  if (input.coPiUserIds.length) {
+    const found = await rows(q, "SELECT id FROM users WHERE id IN (?) AND is_system = 0 AND LOWER(status) = 'active'", [input.coPiUserIds]);
+    const ok = new Set(found.map((u) => Number(u.id)));
+    if (input.coPiUserIds.some((u) => !ok.has(u))) errors.coPiUserIds = 'Choose active employees as Co-PIs.';
+  }
   const [dupCode] = await rows(q, 'SELECT id FROM projects WHERE LOWER(code) = LOWER(?) AND id <> ? LIMIT 1', [input.code, selfId ?? 0]);
   if (dupCode) errors.code = 'Another project already has this code.';
   const [dupTitle] = await rows(q, 'SELECT id FROM projects WHERE LOWER(name) = LOWER(?) AND id <> ? LIMIT 1', [input.title, selfId ?? 0]);
   if (dupTitle) errors.title = 'Another project already has this title.';
   if (Object.keys(errors).length) throw badRequest('Please correct the highlighted fields.', errors);
-  return { piName: input.piUserId ? nameOf.get(input.piUserId) ?? null : null };
+  return { input, piName };
+}
+
+/**
+ * The next automatic code, WII-PRJ-0001, WII-PRJ-0002 … (a project entered with its title and PI only). Inside the
+ * caller's transaction, so the rows of one import get consecutive codes.
+ */
+async function nextCode(q: Q): Promise<string> {
+  const [row] = await rows(q, "SELECT MAX(CAST(SUBSTRING(code, 9) AS UNSIGNED)) AS n FROM projects WHERE code REGEXP '^WII-PRJ-[0-9]+$'");
+  let n = Number(row?.n ?? 0) + 1;
+  for (;;) {
+    const code = `WII-PRJ-${String(n).padStart(4, '0')}`;
+    const [taken] = await rows(q, 'SELECT id FROM projects WHERE LOWER(code) = LOWER(?) LIMIT 1', [code]);
+    if (!taken) return code;
+    n += 1;
+  }
 }
 
 const COLUMNS = (input: ProjectInput, piName: string | null, actor: string) => [
@@ -157,7 +206,10 @@ async function saveCoPis(q: Q, projectId: number, ids: number[]): Promise<void> 
 
 /** Inserts one project inside the caller's transaction (the form and the bulk import). */
 export async function insertProject(conn: Q, req: Request, input: ProjectInput, reason: string | null = null): Promise<Project> {
-  const { piName } = await checkReferences(conn, input, null);
+  if (!input.code) input = { ...input, code: await nextCode(conn) };
+  const checked = await checkReferences(conn, input, null);
+  input = checked.input;
+  const { piName } = checked;
   const actor = String(req.auth?.account.biometricId ?? '');
   const [result] = await conn.query<import('mysql2').ResultSetHeader>(
     `INSERT INTO projects (name, code, pi_name, short_name, category, funding_agency_id, scheme, sanction_order_no, sanction_date,
@@ -180,19 +232,22 @@ export async function createProject(req: Request, body: unknown): Promise<Projec
 }
 
 export async function updateProject(req: Request, id: number, body: unknown): Promise<Project> {
-  const input = parseProjectInput(body);
+  let input = parseProjectInput(body);
   return inTransaction(async (conn) => {
     await rows(conn, 'SELECT id FROM projects WHERE id = ? FOR UPDATE', [id]);
     const before = await getProject(conn, id);
+    if (!input.code) input = { ...input, code: before.code }; // a blank code keeps the present one
     // Employee profiles and career histories point to a project by its title: then title and code stay as they are.
-    if ((before.title !== input.title || before.code.toLowerCase() !== input.code.toLowerCase()) && before.staff > 0) {
+    if ((before.title !== input.title || before.code.toLowerCase() !== input.code!.toLowerCase()) && before.staff > 0) {
       throw badRequest('Please correct the highlighted fields.', {
         [before.title !== input.title ? 'title' : 'code']: `${before.staff} employee profile(s) name this project, so its title and code cannot be changed.`,
       });
     }
     const [history] = before.title !== input.title ? await rows(conn, 'SELECT COUNT(*) AS n FROM user_histories WHERE project_name = ?', [before.title]) : [{ n: 0 }];
     if (Number(history?.n ?? 0) > 0) throw badRequest('Please correct the highlighted fields.', { title: 'Career histories name this project, so its title cannot be changed.' });
-    const { piName } = await checkReferences(conn, input, id);
+    const checked = await checkReferences(conn, input, id, before);
+    input = checked.input;
+    const { piName } = checked;
     const actor = String(req.auth?.account.biometricId ?? '');
     // The stage is changed on its own (changeStage), with its rules; the form keeps it.
     await conn.query(

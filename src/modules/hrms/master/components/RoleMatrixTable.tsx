@@ -83,7 +83,7 @@ export const ROLE_MATRIX_CELL_MAP: Record<Tier, Record<EnterpriseModuleId, strin
   },
   l2: {
     lams: 'hrms_reviewing',
-    pms: 'pms_pi',
+    pms: '', // PMS has no HoD role
     sims: 'sims_approver',
     finance: 'fin_officer',
     fms: 'fms_officer'
