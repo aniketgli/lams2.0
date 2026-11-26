@@ -78,7 +78,7 @@ async function parse(csv: string): Promise<Parsed[]> {
       code, title, shortName: get('Short_Name'), category: category ?? '', fundingAgencyId: agency ? String(agency.id) : '',
       scheme: get('Scheme'), sanctionOrderNo: get('Sanction_Order_No'), sanctionDate: date('Sanction_Date') ?? '',
       sanctionedAmount: get('Sanctioned_Amount'), startDate: date('Start_Date') ?? '', endDate: date('End_Date') ?? '',
-      piUserId: pi ? String(pi.id) : '', coPiUserIds: co.filter((c) => c.u).map((c) => String(c.u!.id)),
+      piUserId: pi ? String(pi.id) : '', piName: pi ? '' : get('PI_Name'), coPiUserIds: co.filter((c) => c.u).map((c) => String(c.u!.id)),
       department: get('Department'), sites: get('Sites'), objectives: get('Objectives'), remarks: get('Remarks'), stage: stage ?? '',
     };
     let input: ProjectInput | null = null;
@@ -92,7 +92,8 @@ async function parse(csv: string): Promise<Parsed[]> {
     const codeKey = code.toLowerCase(), titleKey = title.toLowerCase();
     if (code && seenCode.has(codeKey)) problems.push('Project_Code: twice in this file.');
     if (title && seenTitle.has(titleKey)) problems.push('Title: twice in this file.');
-    seenCode.add(codeKey); seenTitle.add(titleKey);
+    if (code) seenCode.add(codeKey);
+    if (title) seenTitle.add(titleKey);
     out.push({ line, input: problems.length ? null : input, code, title, error: problems.length ? problems.join(' ') : null });
   });
   return out;
@@ -106,9 +107,9 @@ async function existing(): Promise<{ codes: Set<string>; titles: Set<string> }> 
 function review(parsed: Parsed[], have: { codes: Set<string>; titles: Set<string> }): ProjectImportReview {
   const rows: ProjectImportRow[] = parsed.map((p) => {
     const problems = p.error ? [p.error] : [];
-    if (have.codes.has(p.code.toLowerCase())) problems.push('Project_Code: a project with this code already exists.');
+    if (p.code && have.codes.has(p.code.toLowerCase())) problems.push('Project_Code: a project with this code already exists.');
     if (have.titles.has(p.title.toLowerCase())) problems.push('Title: a project with this title already exists.');
-    return { line: p.line, code: p.code, title: p.title, status: problems.length ? 'error' : 'ok', error: problems.length ? problems.join(' ') : null };
+    return { line: p.line, code: p.code || '(automatic)', title: p.title, status: problems.length ? 'error' : 'ok', error: problems.length ? problems.join(' ') : null };
   });
   const ok = rows.filter((r) => r.status === 'ok').length;
   return { summary: { rows: rows.length, ok, errors: rows.length - ok }, rows };

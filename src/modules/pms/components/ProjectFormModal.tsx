@@ -24,14 +24,14 @@ interface Props {
 
 const EMPTY: ProjectForm = {
   code: '', title: '', shortName: '', category: '', fundingAgencyId: '', scheme: '', sanctionOrderNo: '', sanctionDate: '',
-  sanctionedAmount: '', startDate: '', endDate: '', piUserId: '', coPiUserIds: [], department: '', sites: '', objectives: '', remarks: '', stage: 'proposed',
+  sanctionedAmount: '', startDate: '', endDate: '', piUserId: '', piName: '', coPiUserIds: [], department: '', sites: '', objectives: '', remarks: '', stage: 'proposed',
 };
 
 const fromProject = (p: Project): ProjectForm => ({
   code: p.code, title: p.title, shortName: p.shortName ?? '', category: p.category ?? '', fundingAgencyId: p.fundingAgencyId ?? '',
   scheme: p.scheme ?? '', sanctionOrderNo: p.sanctionOrderNo ?? '', sanctionDate: p.sanctionDate ?? '',
   sanctionedAmount: p.sanctionedAmount === null ? '' : String(p.sanctionedAmount), startDate: p.startDate ?? '', endDate: p.endDate ?? '',
-  piUserId: p.pi?.id ?? '', coPiUserIds: p.coPis.map((c) => c.id), department: p.department ?? '', sites: p.sites ?? '',
+  piUserId: p.pi?.id ?? '', piName: p.pi ? '' : p.piName ?? '', coPiUserIds: p.coPis.map((c) => c.id), department: p.department ?? '', sites: p.sites ?? '',
   objectives: p.objectives ?? '', remarks: p.remarks ?? '', stage: p.stage,
 });
 
@@ -104,7 +104,7 @@ export const ProjectFormModal: React.FC<Props> = ({ open, project, agencies, sta
       size="2xl"
       icon={project ? Pencil : FolderPlus}
       title={project ? `Edit project ${project.code}` : 'New project'}
-      subtitle="RC office: the project's record. Fields marked * are required."
+      subtitle="RC office: the project's record. Only the title is required; the rest can be filled in later."
       footer={(
         <div className="flex justify-end gap-2 w-full">
           <Button variant="outline" size="sm" onClick={onClose} disabled={busy}>Cancel</Button>
@@ -115,8 +115,8 @@ export const ProjectFormModal: React.FC<Props> = ({ open, project, agencies, sta
       <div className="space-y-4 text-xs">
         {message && <div role="alert" className="px-3 py-2 rounded-xl border bg-error-subtle border-error-border text-error font-semibold">{message}</div>}
         <Section title="Basic">
-          <Label text="Project code" required error={errors.code}>
-            <Input value={form.code} onChange={(e) => set('code', e.target.value)} placeholder="e.g. WII-DST-2024-09" size="sm" />
+          <Label text="Project code" error={errors.code}>
+            <Input value={form.code} onChange={(e) => set('code', e.target.value)} placeholder={project ? 'e.g. WII-DST-2024-09' : 'Blank: given automatically (WII-PRJ-0001 …)'} size="sm" />
           </Label>
           <Label text="Short name" error={errors.shortName}>
             <Input value={form.shortName} onChange={(e) => set('shortName', e.target.value)} placeholder="e.g. Tiger Genetics" size="sm" />
@@ -152,8 +152,13 @@ export const ProjectFormModal: React.FC<Props> = ({ open, project, agencies, sta
 
         <Section title="People">
           <Label text="PI (Principal Investigator)" error={errors.piUserId}>
-            <AppSelect value={form.piUserId} onChange={(v) => set('piUserId', v)} searchable placeholder="Choose the PI" options={[{ value: '', label: '—' }, ...people]} />
+            <AppSelect value={form.piUserId} onChange={(v) => { set('piUserId', v); if (v) set('piName', ''); }} searchable placeholder="Choose the PI from the employees" options={[{ value: '', label: '—' }, ...people]} />
           </Label>
+          {!form.piUserId && (
+            <Label text="…or the PI's name" error={errors.piName}>
+              <Input value={form.piName} onChange={(e) => set('piName', e.target.value)} placeholder="When the PI is not in the employee list" size="sm" />
+            </Label>
+          )}
           <Label text="Department / Faculty" error={errors.department}>
             <Input value={form.department} onChange={(e) => set('department', e.target.value)} size="sm" />
           </Label>

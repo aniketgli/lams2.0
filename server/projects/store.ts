@@ -141,7 +141,23 @@ async function checkReferences(q: Q, input: ProjectInput, selfId: number | null)
   const [dupTitle] = await rows(q, 'SELECT id FROM projects WHERE LOWER(name) = LOWER(?) AND id <> ? LIMIT 1', [input.title, selfId ?? 0]);
   if (dupTitle) errors.title = 'Another project already has this title.';
   if (Object.keys(errors).length) throw badRequest('Please correct the highlighted fields.', errors);
-  return { piName: input.piUserId ? nameOf.get(input.piUserId) ?? null : null };
+  // The PI is an employee (their name is kept with the project) or only a name typed on the form / import.
+  return { piName: input.piUserId ? nameOf.get(input.piUserId) ?? null : input.piName };
+}
+
+/**
+ * The next automatic code, WII-PRJ-0001, WII-PRJ-0002 … (a project entered with its title and PI only). Inside the
+ * caller's transaction, so the rows of one import get consecutive codes.
+ */
+async function nextCode(q: Q): Promise<string> {
+  const [row] = await rows(q, "SELECT MAX(CAST(SUBSTRING(code, 9) AS UNSIGNED)) AS n FROM projects WHERE code REGEXP '^WII-PRJ-[0-9]+$'");
+  let n = Number(row?.n ?? 0) + 1;
+  for (;;) {
+    const code = `WII-PRJ-${String(n).padStart(4, '0')}`;
+    const [taken] = await rows(q, 'SELECT id FROM projects WHERE LOWER(code) = LOWER(?) LIMIT 1', [code]);
+    if (!taken) return code;
+    n += 1;
+  }
 }
 
 const COLUMNS = (input: ProjectInput, piName: string | null, actor: string) => [
@@ -157,6 +173,7 @@ async function saveCoPis(q: Q, projectId: number, ids: number[]): Promise<void> 
 
 /** Inserts one project inside the caller's transaction (the form and the bulk import). */
 export async function insertProject(conn: Q, req: Request, input: ProjectInput, reason: string | null = null): Promise<Project> {
+  if (!input.code) input = { ...input, code: await nextCode(conn) };
   const { piName } = await checkReferences(conn, input, null);
   const actor = String(req.auth?.account.biometricId ?? '');
   const [result] = await conn.query<import('mysql2').ResultSetHeader>(
@@ -180,12 +197,13 @@ export async function createProject(req: Request, body: unknown): Promise<Projec
 }
 
 export async function updateProject(req: Request, id: number, body: unknown): Promise<Project> {
-  const input = parseProjectInput(body);
+  let input = parseProjectInput(body);
   return inTransaction(async (conn) => {
     await rows(conn, 'SELECT id FROM projects WHERE id = ? FOR UPDATE', [id]);
     const before = await getProject(conn, id);
+    if (!input.code) input = { ...input, code: before.code }; // a blank code keeps the present one
     // Employee profiles and career histories point to a project by its title: then title and code stay as they are.
-    if ((before.title !== input.title || before.code.toLowerCase() !== input.code.toLowerCase()) && before.staff > 0) {
+    if ((before.title !== input.title || before.code.toLowerCase() !== input.code!.toLowerCase()) && before.staff > 0) {
       throw badRequest('Please correct the highlighted fields.', {
         [before.title !== input.title ? 'title' : 'code']: `${before.staff} employee profile(s) name this project, so its title and code cannot be changed.`,
       });

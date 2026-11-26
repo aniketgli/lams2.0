@@ -24,7 +24,7 @@ export interface Agency { id: string; name: string; code: string; status: 'ACTIV
 export interface ProjectForm {
   code: string; title: string; shortName: string; category: Category | ''; fundingAgencyId: string; scheme: string;
   sanctionOrderNo: string; sanctionDate: string; sanctionedAmount: string; startDate: string; endDate: string;
-  piUserId: string; coPiUserIds: string[]; department: string; sites: string; objectives: string; remarks: string; stage: Stage;
+  piUserId: string; piName: string; coPiUserIds: string[]; department: string; sites: string; objectives: string; remarks: string; stage: Stage;
 }
 
 export interface ProjectImportReview {

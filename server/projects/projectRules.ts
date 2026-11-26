@@ -52,9 +52,12 @@ export const CATEGORY_LABELS: Record<Category, string> = {
 };
 
 export interface ProjectInput {
-  code: string; title: string; shortName: string | null; category: Category | null; fundingAgencyId: number | null;
+  /** Null: given automatically on create (WII-PRJ-0001 …); kept as it is on edit. */
+  code: string | null; title: string; shortName: string | null; category: Category | null; fundingAgencyId: number | null;
   scheme: string | null; sanctionOrderNo: string | null; sanctionDate: string | null; sanctionedAmount: number | null;
-  startDate: string | null; endDate: string | null; piUserId: number | null; coPiUserIds: number[];
+  startDate: string | null; endDate: string | null; piUserId: number | null;
+  /** The PI's name when the PI is not chosen from the employees (not an employee, or not known yet). */
+  piName: string | null; coPiUserIds: number[];
   department: string | null; sites: string | null; objectives: string | null; remarks: string | null; stage: Stage;
 }
 
@@ -69,7 +72,8 @@ const id = (v: unknown): number | null => {
 /** The form (create / edit). A new project starts as Proposed unless the RC office chooses another stage. */
 export function parseProjectInput(body: unknown): ProjectInput {
   const v = new Validator(body);
-  const code = v.string('code', { max: 100, pattern: CODE_PATTERN, patternMessage: 'Use letters, digits and - _ / . (e.g. WII-DST-2024-09).' });
+  // Optional: a project may start with only its title and PI; the code is then given automatically.
+  const code = v.optionalString('code', { max: 100, pattern: CODE_PATTERN, patternMessage: 'Use letters, digits and - _ / . (e.g. WII-DST-2024-09).' });
   const title = v.string('title', { max: 255 });
   const shortName = v.optionalString('shortName', { max: 100 });
   const category = v.oneOf('category', CATEGORIES, false);
@@ -90,6 +94,7 @@ export function parseProjectInput(body: unknown): ProjectInput {
   if (startDate && endDate && endDate < startDate) v.errors.endDate ||= 'The end date must be on or after the start date.';
   const piUserId = id(raw.piUserId);
   if (raw.piUserId && !piUserId) v.errors.piUserId ||= 'Choose the PI from the list.';
+  const piName = piUserId ? null : v.optionalString('piName', { max: 255 });
   const coPiUserIds = Array.isArray(raw.coPiUserIds) ? [...new Set(raw.coPiUserIds.map(id).filter((x): x is number => x !== null))] : [];
   if (coPiUserIds.length > 20) v.errors.coPiUserIds ||= 'At most 20 Co-PIs.';
   if (piUserId && coPiUserIds.includes(piUserId)) v.errors.coPiUserIds ||= 'The PI cannot also be a Co-PI.';
@@ -99,7 +104,7 @@ export function parseProjectInput(body: unknown): ProjectInput {
   const remarks = v.optionalString('remarks', { max: 2000 });
   const stage = (v.oneOf('stage', STAGES, false) ?? 'proposed') as Stage;
   v.assert();
-  return { code, title, shortName, category, fundingAgencyId, scheme, sanctionOrderNo, sanctionDate, sanctionedAmount, startDate, endDate, piUserId, coPiUserIds, department, sites, objectives, remarks, stage };
+  return { code, title, shortName, category, fundingAgencyId, scheme, sanctionOrderNo, sanctionDate, sanctionedAmount, startDate, endDate, piUserId, piName, coPiUserIds, department, sites, objectives, remarks, stage };
 }
 
 // ---------------------------------------------------------------------------
@@ -111,7 +116,7 @@ export const MAX_PROJECT_IMPORT_ROWS = 1000;
 export interface ImportColumn { header: string; key: keyof ProjectInput | 'fundingAgency' | 'piBiometricId' | 'coPiBiometricIds'; required: boolean; example: string; help: string }
 
 export const IMPORT_COLUMNS: ImportColumn[] = [
-  { header: 'Project_Code', key: 'code', required: true, example: 'WII-DST-2024-09', help: 'Unique; letters, digits and - _ / .' },
+  { header: 'Project_Code', key: 'code', required: false, example: 'WII-DST-2024-09', help: 'Unique; blank: given automatically (WII-PRJ-0001 …)' },
   { header: 'Title', key: 'title', required: true, example: 'National Tiger Population Genetics', help: 'Unique' },
   { header: 'Short_Name', key: 'shortName', required: false, example: 'Tiger Genetics', help: '' },
   { header: 'Category', key: 'category', required: false, example: 'Externally funded', help: 'Externally funded / Grant-in-aid / Consultancy / In-house' },
@@ -122,7 +127,8 @@ export const IMPORT_COLUMNS: ImportColumn[] = [
   { header: 'Sanctioned_Amount', key: 'sanctionedAmount', required: false, example: '38500000', help: 'Rupees' },
   { header: 'Start_Date', key: 'startDate', required: false, example: '01-04-2024', help: 'DD-MM-YYYY' },
   { header: 'End_Date', key: 'endDate', required: false, example: '31-03-2027', help: 'DD-MM-YYYY' },
-  { header: 'PI_Biometric_ID', key: 'piBiometricId', required: false, example: '0130', help: 'Biometric ID of the PI' },
+  { header: 'PI_Name', key: 'piName', required: false, example: 'Dr. Y.V. Jhala', help: 'The PI by name (when PI_Biometric_ID is blank)' },
+  { header: 'PI_Biometric_ID', key: 'piBiometricId', required: false, example: '0130', help: 'Biometric ID of the PI, when an employee' },
   { header: 'CoPI_Biometric_IDs', key: 'coPiBiometricIds', required: false, example: '0339;SAC1013', help: 'Separated by ;' },
   { header: 'Department', key: 'department', required: false, example: 'Animal Ecology', help: '' },
   { header: 'Sites', key: 'sites', required: false, example: 'Madhya Pradesh; Maharashtra', help: '' },

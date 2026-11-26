@@ -473,6 +473,17 @@ async function main(): Promise<void> {
     const listed = await req('GET', '/api/pms/projects');
     check('Projects: the list has both projects with their agency', listed.status === 200 && (listed.body?.projects ?? []).filter((p: any) => String(p.code).startsWith('CI-PRJ-2026-') && p.fundingAgency === 'CI Science Fund').length === 2,
       `${listed.status} ${(listed.body?.projects ?? []).length}`);
+    const minimal = await req('POST', '/api/pms/projects', { title: 'CI Only Title And PI', piName: 'Dr. CI Outside PI' });
+    check('Projects: only the title and a typed PI name are enough; the code is given automatically', minimal.status === 201
+      && /^WII-PRJ-\d{4}$/.test(String(minimal.body?.project?.code ?? '')) && minimal.body?.project?.piName === 'Dr. CI Outside PI' && minimal.body?.project?.pi === null,
+      `${minimal.status} ${minimal.text.slice(0, 200)}`);
+    const minimalCsv = ['Title,PI_Name', 'CI Imported Title Only,Dr. CI Typed PI', 'CI Imported Second,'].join('\n');
+    const minimalImport = await req('POST', '/api/pms/projects/import', { csv: minimalCsv });
+    const listed2 = await req('GET', '/api/pms/projects');
+    const auto = (listed2.body?.projects ?? []).filter((p: any) => String(p.title).startsWith('CI Imported '));
+    check('Projects: an import with only Title and PI_Name works, each row gets its own code', minimalImport.status === 201 && minimalImport.body?.summary?.ok === 2
+      && auto.length === 2 && new Set(auto.map((p: any) => p.code)).size === 2 && auto.every((p: any) => /^WII-PRJ-\d{4}$/.test(String(p.code))),
+      `${minimalImport.status} ${minimalImport.text.slice(0, 200)} · ${auto.map((p: any) => p.code).join(',')}`);
     // ---- PMS Master Settings: only the masters PMS uses ---------------------------------------------------------
     const pmsCat = await req('GET', '/api/hrms/masters/catalog');
     const catKeys = (pmsCat.body?.masters ?? []).map((m: any) => m.key);

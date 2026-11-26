@@ -14,7 +14,7 @@ import { ProjectImportReview, projectsApi } from '../projectsApi';
 interface Props { open: boolean; onClose: () => void; onImported: (message: string) => void }
 
 type Row = ProjectImportReview['rows'][number];
-const REQUIRED = ['Project_Code', 'Title'];
+const REQUIRED = ['Title'];
 
 export const ProjectImportModal: React.FC<Props> = ({ open, onClose, onImported }) => {
   const [csv, setCsv] = useState<string | null>(null);
@@ -130,8 +130,9 @@ export const ProjectImportModal: React.FC<Props> = ({ open, onClose, onImported 
               <FileText className="w-3.5 h-3.5" />Projects template (CSV)
             </button>
             <p className="text-[11px] text-slate-500 mt-2">
-              Fill one row per project below the two rows that start with #. Dates as DD-MM-YYYY; Funding_Agency by its name or code
-              (Funding Agencies tab); PI and Co-PIs by biometric ID (Co-PIs separated by ;). Codes and titles must be new: existing projects are edited one by one.
+              Fill one row per project below the two rows that start with #. Only Title is required: with just the title and PI_Name a
+              project is created and its code given automatically (WII-PRJ-0001 …); fill the other columns when known. Dates as DD-MM-YYYY;
+              Funding_Agency by its name or code; an employee PI / Co-PIs by biometric ID (Co-PIs separated by ;). Titles and codes must be new.
             </p>
           </section>
 
@@ -147,7 +148,7 @@ export const ProjectImportModal: React.FC<Props> = ({ open, onClose, onImported 
               <div className="mx-auto mb-3 w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">{fileName ? <FileSpreadsheet className="w-5 h-5 text-blue-600" /> : <Upload className="w-5 h-5 text-blue-600" />}</div>
               <p className="text-sm font-bold text-slate-900">{fileName || 'Click to upload or drag & drop CSV file'}</p>
               <p className="text-[11px] text-slate-500 mt-1">{fileName ? 'Click to choose another file' : 'Accepts standard CSV or Tab-delimited files (.csv, .tsv, .txt)'}</p>
-              <p className="inline-block mt-3 text-[11px] text-slate-600 border border-slate-200 rounded-md px-2 py-1 bg-white">Required Headers: {REQUIRED.join(', ')} · the other columns of the template are optional</p>
+              <p className="inline-block mt-3 text-[11px] text-slate-600 border border-slate-200 rounded-md px-2 py-1 bg-white">Required Header: {REQUIRED.join(', ')} · the other columns of the template are optional</p>
               <input ref={input} type="file" accept=".csv,.tsv,.txt,text/csv,text/plain" className="hidden" onChange={(e) => { void readFile(e.target.files?.[0]); e.target.value = ''; }} />
             </div>
           </section>
