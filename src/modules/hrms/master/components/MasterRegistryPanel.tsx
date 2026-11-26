@@ -3,6 +3,7 @@ import { Pencil, Plus, Power, Search, Trash2 } from 'lucide-react';
 import { Button, DataTable, Input, Modal, Select } from '../../../../shared/components';
 import type { ColumnDef } from '../../../../shared/components';
 import { ApiError } from '../../../../shared/services/api';
+import { usePeopleModule } from '../../../../shared/hooks/usePeopleModule';
 import {
   MasterCatalog, MasterDefinition, MasterFieldDef, MasterInput, MasterRecord, MasterStatus, announceMastersChanged, masterApi,
 } from '../masterApi';
@@ -49,6 +50,7 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
   const [notice, showNotice, clearNotice] = useNotice();
 
   // Options for fields that point at another list/master (active values only).
+  const peopleModule = usePeopleModule();
   const [fieldOptions, setFieldOptions] = useState<Record<string, { label: string; value: string }[]>>({});
 
   // Editor
@@ -97,11 +99,15 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
       const out: Record<string, { label: string; value: string }[]> = {};
       for (const field of needs) {
         if (field.type === 'lookup' || field.type === 'multi') {
-          const source = catalog.masters.find((m) => m.kind === 'lookup' && m.lookupType === field.lookupType);
-          // Some fields accept only employee types whose form uses them (e.g. designation → staff types).
+          const sourceKey = catalog.optionSources?.[field.lookupType ?? '']
+            ?? catalog.masters.find((m) => m.kind === 'lookup' && m.lookupType === field.lookupType)?.key;
+          // Some fields accept only employee types whose form uses them (e.g. designation → staff types),
+          // and only this module's employee types (HRMS: Permanent / Trainee; PMS: Project Staff, Contractual …).
           const allowed = field.allowedLayouts;
-          out[field.key] = (source ? opts[source.key] ?? [] : [])
-            .filter((r) => !allowed || allowed.includes(r.fields?.formLayout ?? ''))
+          const ownType = (r: { fields?: Record<string, string> }) =>
+            field.lookupType !== 'employee_type' || !r.fields?.module || r.fields.module.toUpperCase() === peopleModule;
+          out[field.key] = (sourceKey ? opts[sourceKey] ?? [] : [])
+            .filter((r) => (!allowed || allowed.includes(r.fields?.formLayout ?? '')) && ownType(r))
             .map((r) => ({ label: r.name, value: r.code }));
         } else {
           out[field.key] = (opts[field.masterKey!] ?? []).map((r) => ({ label: r.name, value: r.name }));
@@ -110,7 +116,7 @@ export const MasterRegistryPanel: React.FC<Props> = ({ catalog, group, readOnly 
       setFieldOptions(out);
     }).catch(() => { if (!cancelled) setFieldOptions({}); });
     return () => { cancelled = true; };
-  }, [def, catalog, shownFields]);
+  }, [def, catalog, shownFields, peopleModule]);
 
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();

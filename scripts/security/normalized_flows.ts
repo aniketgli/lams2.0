@@ -501,6 +501,13 @@ async function main(): Promise<void> {
     const banks = await req('GET', '/api/hrms/masters/banks');
     check('PMS Master Settings: only the PMS masters (designations, M.Sc, PhD); banks stay in HRMS', pmsCat.status === 200 && catKeys.includes('designations') && catKeys.includes('phdEnrollment') && !catKeys.includes('banks') && banks.status === 403,
       `${pmsCat.status} ${catKeys.join(',')} · banks ${banks.status}`);
+    // The designation form's "Employment type" list: read from /options through optionSources, also in PMS.
+    const typeKey = pmsCat.body?.optionSources?.employee_type;
+    const pmsOpts = await req('GET', '/api/hrms/masters/options');
+    const typeList = (typeKey ? pmsOpts.body?.[typeKey] ?? [] : []) as any[];
+    check('PMS designation form: the employment type list is there and has the PMS types', typeKey === 'employeeType' && pmsOpts.status === 200
+      && typeList.some((t) => t.code === 'project' && String(t.fields?.module).toUpperCase() === 'PMS'),
+      `${typeKey} · ${pmsOpts.status} · ${typeList.map((t) => `${t.code}:${t.fields?.module}`).join(',')}`);
     const pmsDesig = await req('POST', '/api/hrms/masters/designations', { name: 'CI Project Associate', code: 'CIPA', status: 'ACTIVE', fields: { empType: 'project', cadre: '' } });
     const hrmsDesig = await req('POST', '/api/hrms/masters/designations', { name: 'CI Scientist Z', code: 'CISZ', status: 'ACTIVE', fields: { empType: 'permanent', cadre: '' } });
     const desigList = await req('GET', '/api/hrms/masters/designations');
